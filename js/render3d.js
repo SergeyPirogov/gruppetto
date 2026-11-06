@@ -4,6 +4,7 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
+import { loadRiderModel, ModelRider } from './rider-model.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
 const AHEAD = 7, BEHIND = 1;   // chunks kept around the rider
@@ -199,7 +200,7 @@ function shape(geom, f) {
 const lerp = (a, b, t) => a + (b - a) * t;
 
 class Rider3D {
-  constructor(jersey, stripe, label) {
+  constructor(jersey, stripe, label, withBody = true) {
     this.group = new THREE.Group();
     const mat = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp() });
     this.mats = {
@@ -238,6 +239,14 @@ class Rider3D {
     tube([0.43, 0.95, 0], [0.5, 0.97, 0], 0.018, M.dark);
     for (const z of [-0.2, 0.2]) tube([0.5, 0.97, z], [0.55, 0.9, z], 0.015, M.dark);
 
+    this.cranks = [-1, 1].map((side) => ({ side, mesh: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark) }));
+    this.legs = [];
+    if (withBody) this._body(add, capsule, M);
+    if (label) this._label(label);
+    this.pose(0);
+  }
+
+  _body(add, capsule, M) {
     // torso: narrow waist, broad shoulders, flatter back
     const hip = new THREE.Vector3(-0.15, 1.04, 0), shoulder = new THREE.Vector3(0.31, 1.36, 0);
     const tl = hip.distanceTo(shoulder) - 0.16;
@@ -277,9 +286,11 @@ class Rider3D {
       shin: capsule(0.056, 0.27, M.skin, calfShape),
       sock: add(cyl(0.044, 0.04, 0.1, 12), M.sock),
       shoe: add(shape(new THREE.CapsuleGeometry(0.042, 0.17, 6, 12), (t) => [1, lerp(1.05, 0.85, t)]), M.shoe),
-      crank: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark),
     }));
-    if (label) {
+  }
+
+  _label(label) {
+    {
       const c = document.createElement('canvas');
       c.width = 256; c.height = 64;
       const g = c.getContext('2d');
@@ -293,7 +304,6 @@ class Rider3D {
       sprite.position.set(0.2, 2.0, 0);
       this.group.add(sprite);
     }
-    this.pose(0);
   }
 
   /** Place a y-aligned mesh between a and b (no scaling). */
@@ -308,6 +318,11 @@ class Rider3D {
   pose(angle) {
     const { L1, L2 } = this;
     const bb = new THREE.Vector3(0, 0.29, 0);
+    for (const c of this.cranks) {
+      const a = angle + (c.side > 0 ? 0 : Math.PI);
+      c.mesh.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, c.side * 0.11);
+      c.mesh.rotation.set(0, 0, a - Math.PI / 2);
+    }
     for (const leg of this.legs) {
       const a = angle + (leg.side > 0 ? 0 : Math.PI);
       const z = leg.side * 0.1;
@@ -326,8 +341,6 @@ class Rider3D {
       this._orient(leg.sock, knee.clone().lerp(ankle, 0.8), ankle);
       leg.shoe.position.set(ankle.x + 0.05, ankle.y - 0.04, z);
       leg.shoe.rotation.set(0, 0, -Math.PI / 2 - 0.15);
-      leg.crank.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, leg.side * 0.11);
-      leg.crank.rotation.set(0, 0, a - Math.PI / 2);
     }
   }
 }
@@ -349,6 +362,13 @@ export class Scene3D {
     this.riders = new Map();
     this.routeId = null;
     this.clock = 0;
+    this.riderModel = null;
+    loadRiderModel().then((m) => {
+      if (!m) return;
+      this.riderModel = m;
+      for (const R of this.riders.values()) this.scene.remove(R.group);
+      this.riders.clear(); // rebuilt with the custom character on the next frame
+    });
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -739,9 +759,10 @@ export class Scene3D {
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
-        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name);
+        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, !this.riderModel);
         this.riders.set(key, R);
         this.scene.add(R.group);
+        if (this.riderModel) R.model = new ModelRider(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
       }
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
@@ -753,6 +774,12 @@ export class Scene3D {
       R.group.position.set(f.x + f.rx * lane, f.y + 0.05, f.z + f.rz * lane);
       R.group.rotation.set(0, -f.h, slope, 'YXZ');
       R.pose(r.pedal || 0);
+      if (R.model) {
+        const now = performance.now(), dt = R.lastT ? (now - R.lastT) / 1000 : 0;
+        const cadence = dt > 0 ? (((r.pedal || 0) - (R.lastPedal || 0)) / dt) * 60 / (Math.PI * 2) : 0;
+        R.lastT = now; R.lastPedal = r.pedal || 0;
+        R.model.pose(r.pedal || 0, dt, cadence);
+      }
       if (r.self) me = { f, lane };
     });
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
