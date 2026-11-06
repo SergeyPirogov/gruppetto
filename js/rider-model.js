@@ -39,6 +39,9 @@ const norm = (n) => n.toLowerCase().replace(/^mixamorig\d*[:_]?/, '').replace(/[
 function parseName(name) {
   const raw = name.toLowerCase();
   let core = norm(name);
+  // 3ds Max Biped (e.g. Microsoft Rocketbox): 'Bip01 L Thigh'
+  const biped = raw.match(/(^|[\s_])(l|r)([\s_])/);
+  if (biped && /bip/.test(raw)) return { side: biped[2], core: norm(name.replace(/(^|[\s_])(l|r)([\s_])/i, ' ')) };
   if (/left/.test(raw)) return { side: 'l', core: core.replace('left', '') };
   if (/right/.test(raw)) return { side: 'r', core: core.replace('right', '') };
   if (/[._\- ]l$/.test(raw)) return { side: 'l', core: core.slice(0, -1) };
@@ -57,7 +60,7 @@ const PARTS = {
   upperArm: (c) => /upperarm|uparm/.test(c) || c === 'arm',
   lowerArm: (c) => /forearm|lowerarm/.test(c),
   wrist: (c) => /wrist/.test(c),
-  hand: (c) => c === 'hand',
+  hand: (c) => /hand$/.test(c) && !/finger/.test(c),
 };
 
 export function findBones(root) {
@@ -71,7 +74,7 @@ export function findBones(root) {
     } else if (/hips|pelvis/.test(core) && !B.hips) B.hips = b;
     else if (/spine|chest/.test(core)) B.spine.push(b);
     else if (/neck/.test(core) && !B.neck) B.neck = b;
-    else if (/^head$/.test(core) && !B.head) B.head = b;
+    else if (/head$/.test(core) && !B.head) B.head = b;
   }
   for (const s of ['l', 'r']) B[s].handJoint = B[s].wrist || B[s].hand;
   return B;

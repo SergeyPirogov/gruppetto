@@ -6,7 +6,8 @@ Power Up сам розверне його по ходу руху, підбере
 нахилить корпус і крутитиме ногами педалі в такт каденсу. Якщо файлу немає — використовується вбудований велосипедист.
 
 Перевірено на скелетах Mixamo (`mixamorig:LeftUpLeg / LeftLeg / LeftFoot`) і KayKit (`upperleg.l / lowerleg.l`);
-також розпізнаються назви Blender/Rigify (`thigh.L / shin.L`) і Unity Humanoid (`LeftUpperLeg / LeftLowerLeg`).
+також розпізнаються назви Blender/Rigify (`thigh.L / shin.L`), Unity Humanoid (`LeftUpperLeg / LeftLowerLeg`)
+і 3ds Max Biped (`Bip01 L Thigh / Bip01 L Calf`, напр. Microsoft Rocketbox).
 Якщо в моделі є анімація педалювання (назва кліпу містить cycle / bike / pedal / ride), програється вона.
 
 ## Де взяти модель
