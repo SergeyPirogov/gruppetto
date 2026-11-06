@@ -1,4 +1,5 @@
-import { bluetoothAvailable, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController } from './ble.js';
+import { bluetoothAvailable, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
+import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { stepSpeed } from './physics.js';
 import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './workouts.js';
@@ -18,6 +19,8 @@ const trainer = new Trainer();
 const hrm = new HeartRateMonitor();
 const cadenceSensor = new CadenceSensor();
 const controller = new ZwiftController();
+const obc = new OpenBikeControlDevice();
+const obcState = new Map();
 const live = { power: 0, cadence: 0, hr: 0, powerAt: 0, cadAt: 0, hrAt: 0 };
 
 trainer.addEventListener('data', ({ detail: d }) => {
@@ -29,15 +32,19 @@ trainer.addEventListener('data', ({ detail: d }) => {
 hrm.addEventListener('data', ({ detail: d }) => { live.hr = d.heartRate; live.hrAt = performance.now(); });
 cadenceSensor.addEventListener('data', ({ detail: d }) => { live.cadence = d.cadence; live.cadAt = performance.now(); });
 controller.addEventListener('press', ({ detail: name }) => onControllerButton(name));
+obc.addEventListener('buttons', ({ detail: changes }) => onObcButtons(changes));
+obc.addEventListener('disconnect', () => obcState.clear());
 
 const DEVICES = [
   { dev: trainer, key: 'trainer', lost: 'Тренажер відключився' },
   { dev: hrm, key: 'hr', lost: 'Пульсометр відключився' },
   { dev: cadenceSensor, key: 'cad', lost: 'Датчик каденсу відключився' },
   { dev: controller, key: 'ctl', lost: 'Контролер відключився' },
+  { dev: obc, key: 'obc', lost: 'OpenBikeControl відключився' },
 ];
 const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: 'вимірювач потужності' };
 let lastButtonLabel = '';
+let lastObcLabel = '';
 
 for (const d of DEVICES) d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(d.lost); });
 
@@ -46,7 +53,10 @@ function deviceStatus(d) {
   if (d.dev === trainer) {
     return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${trainer.controllable ? 'керування ERG/нахил ✓' : 'лише дані'}`;
   }
-  if (d.dev === controller) return `${controller.name}${lastButtonLabel ? ` · натиснуто: ${lastButtonLabel}` : ' · натисніть будь-яку кнопку'}`;
+  if (d.dev === controller || d.dev === obc) {
+    const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
+    return `${d.dev.name}${label ? ` · натиснуто: ${label}` : ' · натисніть будь-яку кнопку'}`;
+  }
   return d.dev.name;
 }
 
@@ -443,22 +453,49 @@ const BUTTON_LABELS = {
 function onControllerButton(name) {
   lastButtonLabel = BUTTON_LABELS[name] || name;
   updateDeviceUI();
+  const intent = rideIntent(name);
+  if (intent) runIntent(intent);
+}
+
+function onObcButtons(changes) {
+  const pressed = changes.filter((c) => c.value !== 0);
+  if (pressed.length) {
+    lastObcLabel = pressed.map((c) => OBC_LABELS[c.id] || `0x${c.id.toString(16).padStart(2, '0')}`).join(' / ');
+    updateDeviceUI();
+  }
+  const intents = obcIntents(changes, obcState);
+  for (const [intent, value] of intents) runIntent(intent, value);
+  if (intents.has('harder') || intents.has('easier') || intents.has('gear')) obc.haptic(1);
+}
+
+function runIntent(intent, value) {
   if (!ride) return;
-  switch (name) {
-    case 'shiftUpL': case 'shiftUpR': case 'paddleR': case 'up': shift(+1); break;
-    case 'shiftDownL': case 'shiftDownR': case 'paddleL': case 'down': shift(-1); break;
+  switch (intent) {
+    case 'harder': shift(+1); break;
+    case 'easier': shift(-1); break;
+    case 'gear': setGear(value); break;
     case 'left': steer(-1); break;
     case 'right': steer(+1); break;
-    case 'a': togglePause(); break;
-    case 'y': skipInterval(); break;
+    case 'steer': ride.laneTarget = Math.max(-2.4, Math.min(2.4, (value / 25) * 2.4)); break;
+    case 'togglePause': togglePause(); break;
+    case 'pause': if (!ride.paused) togglePause(); break;
+    case 'resume': if (ride.paused) togglePause(); break;
+    case 'skip': skipInterval(); break;
+    case 'hud': $('ride').classList.toggle('hud-hidden'); break;
     default: break;
   }
+}
+
+function setGear(gear) {
+  if (!ride || ride.workout && !ride.workoutDone) return;
+  const g = Math.max(1, Math.min(GEARS, Math.round(gear)));
+  if (g !== ride.gear) shift(g - ride.gear);
 }
 
 function shift(dir) {
   if (!ride || ride.paused) return;
   if (ride.workout && !ride.workoutDone) {
-    ride.ergBias += dir * 5;
+    ride.ergBias += Math.sign(dir) * 5;
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
     if (t) ride.target = Math.max(0, t.watts + ride.ergBias);
     toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} Вт`);

@@ -94,3 +94,28 @@ test('Zwift Ride keypad: inverted bits and analog paddles', () => {
   assert.equal(parseRideKeypad([0x23, 0x08, ...varint(idle), 0x1a, 0x04, 0x08, 0x00, 0x10, 20]).size, 0);
   assert.equal(parseRideKeypad([0x19, 0x08, 0x50]), null);
 });
+
+import { parseObcButtons, obcIntents, obcAppInfo, OBC } from '../js/controls.js';
+
+test('OpenBikeControl: parse, de-duplicate multi-action presses, press edges', () => {
+  const prev = new Map();
+  // "Plus" button sending Shift Up + Increase Difficulty + Select in one message
+  const press = obcIntents(parseObcButtons([0x01, 0x01, 0x01, 0x30, 0x01, 0x14, 0x01]), prev);
+  assert.deepEqual([...press], [['harder', true]]);
+  // repeated "pressed" without release does not fire again
+  assert.equal(obcIntents(parseObcButtons([0x01, 0x01, 0x01]), prev).size, 0);
+  obcIntents(parseObcButtons([0x01, 0x01, 0x00, 0x30, 0x00, 0x14, 0x00]), prev);
+  assert.deepEqual([...obcIntents(parseObcButtons([0x01, 0x01, 0x01]), prev)], [['harder', true]]);
+  // direct gear selection: 0x02 = gear 1, 0x01 is a no-op
+  assert.deepEqual([...obcIntents([{ id: OBC.GEAR_SET, value: 0x0c }], prev)], [['gear', 11]]);
+  assert.equal(obcIntents([{ id: OBC.GEAR_SET, value: 0x01 }], prev).size, 0);
+  // steering angle: 0x94 = +10°, 0x00 = unavailable
+  assert.deepEqual([...obcIntents([{ id: OBC.STEERING_ANGLE, value: 0x94 }], prev)], [['steer', 10]]);
+  assert.equal(obcIntents([{ id: OBC.STEERING_ANGLE, value: 0x00 }], prev).size, 0);
+  assert.deepEqual(parseObcButtons([0x02, 0x01]), []);
+});
+
+test('OpenBikeControl app information message', () => {
+  const msg = [...obcAppInfo('zwift', '1.52.0', [0x01, 0x02, 0x10, 0x14])];
+  assert.deepEqual(msg, [0x04, 0x01, 0x05, ...Buffer.from('zwift'), 0x06, ...Buffer.from('1.52.0'), 0x04, 0x01, 0x02, 0x10, 0x14]);
+});

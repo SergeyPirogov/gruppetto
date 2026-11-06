@@ -9,7 +9,9 @@
   - старі **Wahoo KICKR v1/v2, SNAP, CORE** без FTMS — через власний протокол Wahoo (ERG і нахил);
   - вимірювачі потужності (**Cycling Power**) — потужність і каденс;
   - пульсометри (**Heart Rate**) і датчики каденсу (**CSC**) — KICKR v1 сам каденс не вимірює;
-  - контролери **Zwift Ride** (а також Play / Click на прошивках без шифрування).
+  - контролери **Zwift Ride** напряму (а також Play / Click на прошивках без шифрування);
+  - будь-які контролери за відкритим стандартом **[OpenBikeControl](https://openbikecontrol.org)** — зокрема через застосунок
+    [BikeControl](https://bikecontrol.app/), який підключає Zwift Ride/Click/Play, Elite, Wahoo, геймпади тощо.
 - **Віртуальні передачі** (24 шт.): перемикання змінює опір тренажера у вільній їзді; у тренуванні — коригує ціль ERG на ±5 Вт.
 - **3 маршрути-кільця** з поворотами й рельєфом: рівнина, хвилясті пагорби, гірський перевал.
 - **Вільна їзда**: тренажер імітує нахил дороги (налаштування «складність підйомів» 0–100%).
@@ -18,6 +20,22 @@
 - Швидкість рахується з реальної фізики (вага, нахил, опір повітря й кочення).
 - **Експорт .TCX** — завантажуйте в Strava, Garmin Connect, intervals.icu.
 - **Симулятор** — можна спробувати без тренажера (повзунок або клавіші ↑/↓, пробіл — пауза).
+
+## OpenBikeControl
+
+Підтримується BLE-транспорт протоколу [OpenBikeControl v1](https://github.com/OpenBikeControl/openbikecontrol-protocol)
+(mDNS/TCP у браузері недоступний). Застосунок надсилає контролеру App Information (`power-up`) зі списком
+підтримуваних кнопок і вібровідгук при перемиканні передач.
+
+| ID | Дія в Power Up |
+|---|---|
+| `0x01` Shift Up · `0x30` Increase Difficulty · `0x10` Up | передача важча / ERG +5 Вт |
+| `0x02` Shift Down · `0x31` Decrease Difficulty · `0x11` Down | передача легша / ERG −5 Вт |
+| `0x03` Gear Set | пряма передача 1–24 |
+| `0x12`/`0x18` Left · `0x13`/`0x19` Right · `0x1B` Steering Angle | полоса руху |
+| `0x32` Skip Interval · `0x33` Pause · `0x34` Resume · `0x44` HUD Toggle | інтервал, пауза, показ HUD |
+
+Якщо пристрій надсилає кілька дій за одне натискання (наприклад, Shift Up + Increase Difficulty), спрацьовує одна.
 
 ## Кнопки контролера Zwift Ride
 
@@ -59,7 +77,8 @@ npm test
 
 | Файл | Призначення |
 |---|---|
-| `js/ble.js` | Bluetooth: FTMS, Cycling Power, Heart Rate, ERG/симуляція |
+| `js/ble.js` | Bluetooth: FTMS, Wahoo, Cycling Power, HR, CSC, Zwift Ride, OpenBikeControl |
+| `js/controls.js` | Розбір кнопок OpenBikeControl і Zwift Ride → дії застосунку |
 | `js/physics.js` | Модель швидкості від потужності |
 | `js/routes.js` | Генерація маршрутів (висота, повороти, дерева) |
 | `js/render.js` | Псевдо-3D сцена й профіль висоти |

@@ -40,6 +40,7 @@ button.ok { background: #1f6f43; border-color: #2b8f58; }
 .card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .device { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .device small { display: block; color: var(--muted); }
+.device small.hint-sm { font-size: .78rem; opacity: .8; }
 .check { display: flex; gap: 8px; align-items: center; margin-top: 12px; color: var(--muted); }
 .warn { background: #3a2a10; color: #ffcf7a; padding: 8px 10px; border-radius: 8px; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -123,3 +124,5 @@ input[type=range] { accent-color: var(--accent); width: 100%; }
 .stats b { font-size: 1.5rem; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 .hint { color: var(--muted); }
+
+#ride.hud-hidden .hud-top, #ride.hud-hidden .workout, #ride.hud-hidden .riders, #ride.hud-hidden .grade { display: none; }

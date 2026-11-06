@@ -1,4 +1,5 @@
 // Web Bluetooth: smart trainers (FTMS), power meters (Cycling Power) and heart-rate monitors.
+import { parseObcButtons, obcAppInfo } from './controls.js';
 
 const FTMS = 0x1826;
 const INDOOR_BIKE_DATA = 0x2ad2;
@@ -17,6 +18,13 @@ const ZWIFT_SERVICE = '00000001-19ca-4651-86e5-fa29dcdd09d1';
 const ZWIFT_ASYNC = '00000002-19ca-4651-86e5-fa29dcdd09d1';
 const ZWIFT_SYNC_RX = '00000003-19ca-4651-86e5-fa29dcdd09d1';
 const ZWIFT_SYNC_TX = '00000004-19ca-4651-86e5-fa29dcdd09d1';
+// OpenBikeControl (open standard; also bridged by the BikeControl app for many controllers).
+const OBC_SERVICE = 'd273f680-d548-419d-b9d1-fa0472345229';
+const OBC_BUTTONS = 'd273f681-d548-419d-b9d1-fa0472345229';
+const OBC_HAPTIC = 'd273f682-d548-419d-b9d1-fa0472345229';
+const OBC_APP_INFO = 'd273f683-d548-419d-b9d1-fa0472345229';
+export const APP_ID = 'power-up';
+export const APP_VERSION = '0.3.0';
 
 export const bluetoothAvailable = () => typeof navigator !== 'undefined' && !!navigator.bluetooth;
 
@@ -369,5 +377,41 @@ export class ZwiftController extends Device {
     if (!now) return;
     for (const name of now) if (!this._pressed.has(name)) this.emit('press', name);
     this._pressed = now;
+  }
+}
+
+/** OpenBikeControl controller (BLE transport). Emits 'buttons' with [{id, value}] changes. */
+export class OpenBikeControlDevice extends Device {
+  constructor() {
+    super();
+    this._haptic = null;
+  }
+
+  async connect() {
+    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [OBC_SERVICE] }] });
+    this._watch(device);
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(OBC_SERVICE);
+    const buttons = await svc.getCharacteristic(OBC_BUTTONS);
+    buttons.addEventListener('characteristicvaluechanged', (e) => {
+      const changes = parseObcButtons(new Uint8Array(e.target.value.buffer));
+      if (changes.length) this.emit('buttons', changes);
+    });
+    await buttons.startNotifications();
+    try { this._haptic = await svc.getCharacteristic(OBC_HAPTIC); } catch { this._haptic = null; }
+    try {
+      const info = await svc.getCharacteristic(OBC_APP_INFO);
+      const msg = obcAppInfo(APP_ID, APP_VERSION);
+      await (info.writeValueWithoutResponse ? info.writeValueWithoutResponse(msg) : info.writeValue(msg));
+    } catch { /* optional characteristic */ }
+    return this;
+  }
+
+  /** pattern: 1 short, 2 double, 5 success, 6 warning, 7 error */
+  haptic(pattern = 1) {
+    if (!this._haptic || !this.connected) return;
+    const msg = new Uint8Array([0x03, pattern, 0x00, 0x00]);
+    const w = this._haptic.writeValueWithoutResponse ? this._haptic.writeValueWithoutResponse(msg) : this._haptic.writeValue(msg);
+    w.catch(() => {});
   }
 }
