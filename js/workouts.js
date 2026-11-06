@@ -71,8 +71,12 @@ export function targetAt(w, t, ftp) {
   return null;
 }
 
+/** Watts for a step at `frac` (0..1) of its duration; null for free-ride steps (no ERG target). */
 export function stepWatts(st, frac, ftp) {
-  if (st.watts !== undefined) return st.watts;
+  if (st.free) return null;
+  if (st.watts !== undefined) {
+    return st.wattsTo !== undefined ? Math.round(st.watts + (st.wattsTo - st.watts) * frac) : st.watts;
+  }
   const p = st.to !== undefined ? st.power + (st.to - st.power) * frac : st.power;
   return Math.round(p * ftp);
 }

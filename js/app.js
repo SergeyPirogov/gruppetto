@@ -1,5 +1,6 @@
 import { bluetoothAvailable, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
+import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed } from './physics.js';
 import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './workouts.js';
@@ -9,7 +10,10 @@ import { Scene, drawProfile } from './render.js';
 const $ = (id) => document.getElementById(id);
 
 // ---------- Settings ----------
-const DEFAULT_SETTINGS = { name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free' };
+const DEFAULT_SETTINGS = {
+  name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
+  icuKey: '', icuAthlete: '', icuUpload: true,
+};
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
 const saveSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
@@ -123,20 +127,22 @@ function initLobby() {
 
   $('btn-start').onclick = startRide;
   updateDeviceUI();
+  initIntervals();
 }
 
 function renderModes() {
   const ml = $('mode-list');
   ml.innerHTML = '';
-  const add = (id, title, sub, w) => {
+  const add = (id, title, sub, w, tag) => {
     const b = document.createElement('button');
     b.className = 'option';
     b.dataset.id = id;
-    b.innerHTML = `<b>${title}</b><small>${sub}</small>${w ? '<canvas></canvas>' : ''}`;
+    b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(title)}</b><small>${esc(sub)}</small>${w ? '<canvas></canvas>' : ''}`;
     b.onclick = () => { settings.mode = id; saveSettings(); markSelected(ml, id); };
     ml.append(b);
     if (w) requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
   };
+  for (const w of icuWorkouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} хв · ${w.description}`, w, dayLabel(w.date));
   add('free', 'Вільна їзда', 'Тренажер імітує нахил дороги.');
   for (const w of workouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} хв · ${w.description}`, w);
   markSelected(ml, settings.mode);
@@ -162,7 +168,7 @@ const recorder = new Recorder();
 
 function startRide() {
   const route = routes.find((r) => r.id === settings.routeId) || routes[0];
-  const workout = workouts.find((w) => w.id === settings.mode) || null;
+  const workout = [...icuWorkouts, ...workouts].find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   ride = {
     route, workout, simulated,
@@ -265,7 +271,13 @@ function tick(power, cadence) {
     const t = targetAt(ride.workout, ride.workoutT, settings.ftp);
     ride.workoutT += 1;
     if (t) {
-      ride.target = Math.max(0, t.watts + ride.ergBias);
+      ride.target = t.watts === null ? null : Math.max(0, t.watts + ride.ergBias);
+      if (t.index !== ride.stepIndex) {
+        ride.stepIndex = t.index;
+        if (t.step.text) toast(t.step.text);
+        else if (t.watts === null) toast('Вільний відрізок — їдьте за відчуттям');
+        updateGear();
+      }
       if (t.remaining <= 5 && t.remaining > 4) toast('Через 5 с — наступний інтервал');
     } else {
       ride.workoutDone = true;
@@ -278,7 +290,9 @@ function tick(power, cadence) {
   if (!ride.simulated && trainer.controllable) {
     if (ride.target !== null && ride.workout && !ride.workoutDone) {
       if (ride.target !== ride.lastSentTarget) { trainer.setTargetPower(ride.target); ride.lastSentTarget = ride.target; }
+      ride.lastSentGrade = null;
     } else {
+      ride.lastSentTarget = null;
       const g = Math.round((grade * 100 * (settings.difficulty / 100) + gearOffset(ride.gear)) * 10) / 10;
       const now = performance.now();
       if (g !== ride.lastSentGrade || now - ride.lastGradeSentAt > 10000) {
@@ -316,10 +330,11 @@ function updateHud(cadence, hr, grade) {
 
   if (ride.workout) {
     const t = targetAt(ride.workout, ride.workoutT, settings.ftp);
-    $('wk-target').textContent = ride.workoutDone ? '—' : ride.target ?? '—';
+    $('wk-target').textContent = ride.workoutDone ? '—' : ride.target ?? 'вільно';
     $('wk-left').textContent = t ? fmtTime(t.remaining) : '0:00';
     const next = t && ride.workout.steps[t.index + 1];
-    $('wk-next').textContent = next ? `${stepWatts(next, 0, settings.ftp)} Вт` : '—';
+    const nextW = next ? stepWatts(next, 0, settings.ftp) : null;
+    $('wk-next').textContent = next ? (nextW === null ? 'вільно' : `${nextW} Вт`) : '—';
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
@@ -355,12 +370,13 @@ function drawWorkoutChart(canvas, w, t) {
   const W = canvas.width, H = canvas.height;
   const total = totalDuration(w);
   const ftp = settings.ftp;
-  const maxW = Math.max(...w.steps.map((s) => Math.max(stepWatts(s, 0, ftp), stepWatts(s, 1, ftp)))) * 1.05;
+  const wattsOf = (s, f) => stepWatts(s, f, ftp) ?? ftp * 0.5;
+  const maxW = Math.max(...w.steps.map((s) => Math.max(wattsOf(s, 0), wattsOf(s, 1)))) * 1.05;
   let x0 = 0;
   for (const s of w.steps) {
     const x1 = x0 + s.dur;
-    const a = stepWatts(s, 0, ftp), b = stepWatts(s, 1, ftp);
-    ctx.fillStyle = zoneColor(((a + b) / 2) / ftp);
+    const a = wattsOf(s, 0), b = wattsOf(s, 1);
+    ctx.fillStyle = s.free ? '#64748b' : zoneColor(((a + b) / 2) / ftp);
     ctx.globalAlpha = t >= 0 && x1 <= t ? 0.45 : 1;
     ctx.beginPath();
     ctx.moveTo((x0 / total) * W, H);
@@ -389,6 +405,7 @@ function finishRide() {
   if (!ride) return;
   const sum = recorder.summary();
   const wasRamp = ride.workout?.ramp;
+  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null };
   ride = null;
   if (trainer.connected && trainer.controllable) trainer.setSimulation(0);
   $('ride').hidden = true;
@@ -407,6 +424,12 @@ function finishRide() {
   if (sum && wasRamp && sum.best1min) stats.push(['Оцінка FTP', `${Math.round(sum.best1min * 0.75)} Вт`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   $('btn-download').disabled = !sum;
+  const canUpload = !!(icuClient && sum && sum.duration >= 60);
+  $('btn-icu-upload').hidden = !canUpload;
+  $('btn-icu-upload').disabled = false;
+  $('btn-icu-upload').textContent = 'Надіслати в intervals.icu';
+  $('icu-upload-status').hidden = true;
+  if (canUpload && settings.icuUpload) uploadToIntervals();
 }
 
 function downloadTCX() {
@@ -417,6 +440,104 @@ function downloadTCX() {
   a.download = `powerup-${d.toISOString().slice(0, 16).replace(/[:T]/g, '-')}.tcx`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// ---------- intervals.icu ----------
+let icuClient = null;
+let icuWorkouts = [];
+let lastRide = null;
+
+function initIntervals() {
+  $('f-icu-key').value = settings.icuKey;
+  $('f-icu-athlete').value = settings.icuAthlete;
+  $('f-icu-upload').checked = settings.icuUpload;
+  $('f-icu-upload').onchange = () => { settings.icuUpload = $('f-icu-upload').checked; saveSettings(); };
+  $('btn-icu').onclick = () => connectIntervals();
+  $('btn-icu-forget').onclick = forgetIntervals;
+  $('btn-icu-upload').onclick = uploadToIntervals;
+  if (settings.icuKey) connectIntervals({ quiet: true });
+}
+
+async function connectIntervals({ quiet = false } = {}) {
+  const key = $('f-icu-key').value.trim();
+  if (!key) { $('icu-status').textContent = 'Вставте API-ключ з intervals.icu.'; return; }
+  const client = new IntervalsClient({ apiKey: key, athleteId: $('f-icu-athlete').value });
+  $('btn-icu').disabled = true;
+  $('icu-status').textContent = 'Підключення…';
+  try {
+    const athlete = await client.athlete();
+    const today = new Date();
+    const week = new Date(today.getTime() + 6 * 86400000);
+    icuWorkouts = await client.plannedWorkouts(localDate(today), localDate(week));
+    icuClient = client;
+    settings.icuKey = key;
+    settings.icuAthlete = $('f-icu-athlete').value.trim();
+    if (athlete.ftp) { settings.ftp = athlete.ftp; $('f-ftp').value = athlete.ftp; }
+    if (athlete.weight) { settings.weight = Math.round(athlete.weight); $('f-weight').value = settings.weight; }
+    if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
+    saveSettings();
+    const n = icuWorkouts.length;
+    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} Вт · ${n ? `заплановано тренувань на тиждень: ${n}` : 'на тиждень тренувань не заплановано'}`;
+    $('btn-icu').textContent = 'Оновити';
+    $('btn-icu-forget').hidden = false;
+    renderModes();
+  } catch (e) {
+    icuClient = null;
+    $('icu-status').textContent = e.message;
+  } finally {
+    $('btn-icu').disabled = false;
+  }
+}
+
+function forgetIntervals() {
+  icuClient = null;
+  icuWorkouts = [];
+  settings.icuKey = '';
+  settings.icuAthlete = '';
+  if (settings.mode.startsWith('icu:')) settings.mode = 'free';
+  saveSettings();
+  $('f-icu-key').value = '';
+  $('f-icu-athlete').value = '';
+  $('icu-status').textContent = 'Ключ видалено з цього браузера.';
+  $('btn-icu').textContent = 'Підключити';
+  $('btn-icu-forget').hidden = true;
+  renderModes();
+}
+
+async function uploadToIntervals() {
+  if (!icuClient || !lastRide?.summary || lastRide.uploadedId) return;
+  const status = $('icu-upload-status');
+  const btn = $('btn-icu-upload');
+  status.hidden = false;
+  status.textContent = 'Надсилаю в intervals.icu…';
+  btn.disabled = true;
+  const { workout, route, summary: sum } = lastRide;
+  const fromIcu = workout?.source === 'intervals';
+  const name = workout ? `Power Up: ${workout.name}` : `Power Up: ${route.name}`;
+  const description = `${route.name} · ${(sum.distance / 1000).toFixed(1)} км · сер. ${sum.avgPower} Вт · NP ${sum.normalizedPower || '—'} Вт`;
+  try {
+    const id = await icuClient.uploadActivity(recorder.toTCX(), {
+      name, description, eventId: fromIcu ? workout.eventId : undefined, filename: `powerup-${Date.now()}.tcx`,
+    });
+    lastRide.uploadedId = id || true;
+    status.innerHTML = id
+      ? `Завантажено в intervals.icu ✓${fromIcu ? ' · позначено як виконане' : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">відкрити заїзд</a>`
+      : 'Завантажено в intervals.icu ✓';
+    btn.hidden = true;
+  } catch (e) {
+    status.textContent = `Не вдалося надіслати: ${e.message}`;
+    btn.disabled = false;
+    btn.textContent = 'Спробувати ще раз';
+  }
+}
+
+function dayLabel(date) {
+  const today = localDate();
+  const tomorrow = localDate(new Date(Date.now() + 86400000));
+  if (date === today) return 'сьогодні';
+  if (date === tomorrow) return 'завтра';
+  const d = new Date(`${date}T12:00:00`);
+  return d.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'numeric' });
 }
 
 // ---------- Helpers ----------
@@ -503,18 +624,20 @@ function runIntent(intent, value) {
   }
 }
 
+const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null);
+
 function setGear(gear) {
-  if (!ride || ride.workout && !ride.workoutDone) return;
+  if (!ride || inErgStep()) return;
   const g = Math.max(1, Math.min(GEARS, Math.round(gear)));
   if (g !== ride.gear) shift(g - ride.gear);
 }
 
 function shift(dir) {
   if (!ride || ride.paused) return;
-  if (ride.workout && !ride.workoutDone) {
+  if (inErgStep()) {
     ride.ergBias += Math.sign(dir) * 5;
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
-    if (t) ride.target = Math.max(0, t.watts + ride.ergBias);
+    if (t && t.watts !== null) ride.target = Math.max(0, t.watts + ride.ergBias);
     toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} Вт`);
   } else {
     const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
@@ -545,7 +668,7 @@ function skipInterval() {
 
 function updateGear() {
   if (!ride) return;
-  const inErg = ride.workout && !ride.workoutDone;
+  const inErg = inErgStep();
   $('m-gear-label').textContent = inErg ? 'ERG' : 'Передача';
   $('m-gear').textContent = inErg ? `${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias}` : ride.gear;
   $('m-gear-unit').textContent = inErg ? 'Вт' : `/${GEARS}`;

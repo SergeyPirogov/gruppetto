@@ -119,3 +119,35 @@ test('OpenBikeControl app information message', () => {
   const msg = [...obcAppInfo('zwift', '1.52.0', [0x01, 0x02, 0x10, 0x14])];
   assert.deepEqual(msg, [0x04, 0x01, 0x05, ...Buffer.from('zwift'), 0x06, ...Buffer.from('1.52.0'), 0x04, 0x01, 0x02, 0x10, 0x14]);
 });
+
+import { convertSteps, eventToWorkout } from '../js/intervals.js';
+import { stepWatts } from '../js/workouts.js';
+
+test('intervals.icu workout_doc conversion', () => {
+  const doc = [
+    { duration: 600, power: { start: 50, end: 75, units: '%ftp' }, ramp: true, warmup: true },
+    { reps: 3, text: '3x', steps: [
+      { duration: 300, power: { value: 95, units: '%ftp' }, text: 'Тримай!' },
+      { duration: 120, power: { value: 150, units: 'w' } },
+    ] },
+    { duration: 240, power: { min: 88, max: 94, units: '%ftp' } },
+    { duration: 300, power: { value: 2, units: 'power_zone' } },
+    { duration: 180, hr: { value: 80, units: '%lthr' } },
+    { duration: 60, power: { start: 100, end: 200, units: 'w' } },
+    { duration: 0, power: { value: 50 } },
+  ];
+  const s = convertSteps(doc);
+  assert.equal(s.length, 1 + 6 + 4);
+  assert.deepEqual(s[0], { dur: 600, power: 0.5, to: 0.75, text: '' });
+  assert.equal(s[1].text, 'Тримай!');
+  assert.equal(stepWatts(s[1], 0, 200), 190);
+  assert.equal(stepWatts(s[2], 0.5, 200), 150);
+  assert.equal(stepWatts(s[7], 0, 200), 182);       // midpoint of 88–94 %
+  assert.equal(stepWatts(s[8], 0, 200), 130);       // Z2 ≈ 65 %
+  assert.equal(stepWatts(s[9], 0, 200), null);      // HR target → free ride
+  assert.equal(stepWatts(s[10], 0.5, 200), 150);    // watts ramp
+  const w = eventToWorkout({ id: 42, name: 'Sweet spot', start_date_local: '2026-11-06T00:00:00', workout_doc: { steps: doc } });
+  assert.equal(w.id, 'icu:42');
+  assert.equal(w.eventId, 42);
+  assert.equal(w.date, '2026-11-06');
+});

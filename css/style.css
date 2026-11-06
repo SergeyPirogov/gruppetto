@@ -42,11 +42,16 @@ button.ok { background: #1f6f43; border-color: #2b8f58; }
 .device small { display: block; color: var(--muted); }
 .device small.hint-sm { font-size: .78rem; opacity: .8; }
 .check { display: flex; gap: 8px; align-items: center; margin-top: 12px; color: var(--muted); }
+.muted { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
+.icu-row { align-items: center; margin-top: 12px; }
+.icu-row .muted { margin: 0; }
+.hint a { color: var(--accent2); }
+.option .tag { display: inline-block; font-size: .7rem; font-weight: 700; color: #1a1205; background: var(--accent2); border-radius: 999px; padding: 1px 8px; margin-bottom: 6px; }
 .warn { background: #3a2a10; color: #ffcf7a; padding: 8px 10px; border-radius: 8px; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fields label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: .9rem; }
 .fields label:last-child { grid-column: 1 / -1; }
-input[type=number], input:not([type]) {
+input[type=number], input[type=password], input:not([type]) {
   font: inherit; color: var(--text); background: #0f1522; border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px;
 }

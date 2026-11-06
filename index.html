@@ -53,6 +53,22 @@
         </div>
       </div>
 
+      <div class="card" id="icu-card">
+        <h2>intervals.icu</h2>
+        <p class="muted">Беріть заплановані тренування з календаря й автоматично завантажуйте виконані.
+          API-ключ знаходиться в intervals.icu → Settings → Developer Settings.</p>
+        <div class="fields">
+          <label>API-ключ <input id="f-icu-key" type="password" autocomplete="off" spellcheck="false"></label>
+          <label>ID атлета <input id="f-icu-athlete" placeholder="необов’язково, напр. i123456" spellcheck="false"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="f-icu-upload"> Завантажувати заїзд в intervals.icu після завершення</label>
+        <div class="row icu-row">
+          <button id="btn-icu">Підключити</button>
+          <button id="btn-icu-forget" hidden>Забути ключ</button>
+          <span id="icu-status" class="muted"></span>
+        </div>
+      </div>
+
       <div class="card">
         <h2>3. Маршрут</h2>
         <div id="route-list" class="options"></div>
@@ -128,8 +144,10 @@
       <div id="sum-stats" class="stats"></div>
       <div class="row">
         <button id="btn-download" class="primary">Завантажити .TCX</button>
+        <button id="btn-icu-upload" hidden>Надіслати в intervals.icu</button>
         <button id="btn-again">До лобі</button>
       </div>
+      <p id="icu-upload-status" class="hint" hidden></p>
       <p class="hint">Файл .TCX можна завантажити в Strava, Garmin Connect або intervals.icu.</p>
     </div>
   </section>
