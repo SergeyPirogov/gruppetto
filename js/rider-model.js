@@ -112,6 +112,101 @@ function solveJoint(root, target, l1, l2, bendDir) {
 const wp = (o) => o.getWorldPosition(new THREE.Vector3());
 
 /**
+ * The bone at the top of the skull (Mixamo: HeadTop_End). FBX rigs can also give the head a
+ * zero-length child with the head's own name, so pick by name, else the farthest bone below the head.
+ */
+function findHeadTop(head) {
+  if (!head) return null;
+  const bones = [];
+  head.traverse((o) => { if (o.isBone && o !== head) bones.push(o); });
+  const named = bones.find((b) => /headtop|head_?end|top_?end/i.test(b.name));
+  if (named) return named;
+  const h = wp(head);
+  let best = null, bestD = 1e-6;
+  for (const b of bones) { const d = wp(b).distanceTo(h); if (d > bestD) { best = b; bestD = d; } }
+  return best;
+}
+
+/**
+ * Measures the skull from the skinned vertices that follow the head bone (hair excluded, it is hidden
+ * under the helmet). Returns, in head-bone space: center, unit axes (forward, up, side) and the
+ * half-extents of the skull along them. `forward`/`up` are world directions at rest pose.
+ */
+function measureHead(root, head, headTop, forward) {
+  const headBones = new Set();
+  head.traverse((o) => { if (o.isBone) headBones.add(o); });
+  root.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(head.matrixWorld).invert();
+  const pts = [], v = new THREE.Vector3();
+  root.traverse((o) => {
+    if (!o.isSkinnedMesh || /hair|eyelash|brow/i.test(o.name)) return;
+    const idx = o.skeleton.bones.map((b) => headBones.has(b));
+    const { position, skinIndex, skinWeight } = o.geometry.attributes;
+    if (!skinIndex || !skinWeight) return;
+    for (let i = 0; i < position.count; i++) {
+      let w = 0;
+      for (let k = 0; k < 4; k++) if (idx[skinIndex.getComponent(i, k)]) w += skinWeight.getComponent(i, k);
+      if (w < 0.6) continue;
+      o.getVertexPosition(i, v);
+      pts.push(v.applyMatrix4(o.matrixWorld).applyMatrix4(inv).clone());
+    }
+  });
+  if (pts.length < 50) return null;
+  // axes in head-bone space: up toward the top of the skull, forward = the character's facing
+  const qInv = head.getWorldQuaternion(new THREE.Quaternion()).invert();
+  const up = wp(headTop).applyMatrix4(inv).normalize();
+  const fwd = forward.clone().applyQuaternion(qInv);
+  fwd.addScaledVector(up, -fwd.dot(up)).normalize();
+  const side = new THREE.Vector3().crossVectors(fwd, up).normalize();
+  const axes = [fwd, up, side];
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (const p of pts) axes.forEach((ax, k) => { const d = p.dot(ax); lo[k] = Math.min(lo[k], d); hi[k] = Math.max(hi[k], d); });
+  // ellipsoid of the cranium: front/back and sides from the full head, height from the brow up
+  const center = new THREE.Vector3();
+  axes.forEach((ax, k) => center.addScaledVector(ax, k === 1 ? hi[1] - (hi[1] - lo[1]) * 0.42 : (lo[k] + hi[k]) / 2));
+  const half = [(hi[0] - lo[0]) / 2, (hi[1] - lo[1]) * 0.42, (hi[2] - lo[2]) / 2];
+  return { center, axes, half };
+}
+
+/**
+ * Road helmet as a child of the head bone, sized to the measured skull: an elongated shell that
+ * covers the forehead and dips lower at the back, dark vent channels running front to back and
+ * a dark rim. Built on a unit sphere (+x forward, +y up, +z side) and scaled to the skull.
+ */
+function buildHelmet(fit, scale = 1) {
+  const shellMat = new THREE.MeshStandardMaterial({ color: '#f4f5f7', roughness: 0.38, metalness: 0.05, side: THREE.DoubleSide });
+  const darkMat = new THREE.MeshStandardMaterial({ color: '#1f2228', roughness: 0.6, side: THREE.DoubleSide });
+  const cut = Math.PI * 0.6; // how far down the shell reaches (from the crown)
+  const unit = new THREE.Group();
+  unit.add(new THREE.Mesh(new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, cut), shellMat));
+  unit.add(new THREE.Mesh(new THREE.SphereGeometry(1.012, 40, 2, 0, Math.PI * 2, cut - 0.07, 0.07), darkMat)); // rim
+  for (const t of [-0.42, -0.14, 0.14, 0.42]) { // vent channels over the top, front to back
+    const g = new THREE.SphereGeometry(1.01, 28, 1, Math.PI + 0.55, Math.PI - 1.1, Math.PI / 2 + t - 0.045, 0.09);
+    g.rotateX(Math.PI / 2);
+    unit.add(new THREE.Mesh(g, darkMat));
+  }
+  // longer, slightly drawn-out tail like a road helmet
+  unit.traverse((o) => {
+    if (!o.isMesh) return;
+    const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) if (pos.getX(i) < 0) pos.setX(i, pos.getX(i) * 1.14);
+    o.geometry.computeVertexNormals();
+  });
+  // unit sphere -> skull ellipsoid with a little padding; tilt so the back sits lower than the brow
+  const [a, b, c] = fit.half;
+  unit.scale.set(a * 1.12 * scale, b * 1.12 * scale, c * 1.14 * scale);
+  unit.rotation.z = 0.66;
+  unit.position.set(-a * 0.08, -b * 0.02, 0);
+  const helmet = new THREE.Group();
+  helmet.add(unit);
+  const [fx, uy, sz] = fit.axes;
+  helmet.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(fx, uy, sz));
+  helmet.position.copy(fit.center);
+  helmet.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return helmet;
+}
+
+/**
  * A custom character attached to a rider group (bike in local space, forward = +x, up = +y).
  * `group` must already be in the scene graph when pose() is called.
  */
@@ -124,10 +219,14 @@ export class ModelRider {
       if (!o.isMesh) return;
       o.castShadow = true;
       o.frustumCulled = false; // skinned bounds don't follow IK poses
+      // Clothing is found by material name or by mesh name: Mixamo characters often share
+      // one texture atlas between all clothes, but keep separate meshes (Ch08_Hoodie, Ch08_Pants).
+      const meshName = (o.name || '').toLowerCase();
       const recolor = (m) => {
-        const name = (m.name || '').toLowerCase();
-        const isJersey = (cfg.jerseyMaterials || []).some((n) => n.toLowerCase() === name) || (!cfg.jerseyMaterials && /shirt|jersey|top|torso|upper|cloth/.test(name));
-        const isShorts = (cfg.shortsMaterials || []).some((n) => n.toLowerCase() === name) || (!cfg.shortsMaterials && /pant|short|bottom|lower|trouser/.test(name));
+        const names = [(m.name || '').toLowerCase(), meshName];
+        const listed = (list) => (list || []).some((n) => names.includes(n.toLowerCase()));
+        const isJersey = listed(cfg.jerseyMaterials) || (!cfg.jerseyMaterials && names.some((n) => /shirt|jersey|hood|top|torso|upper|cloth/.test(n)));
+        const isShorts = listed(cfg.shortsMaterials) || (!cfg.shortsMaterials && names.some((n) => /pant|short|bottom|lower|trouser/.test(n)));
         if (!isJersey && !isShorts) return m;
         const c = m.clone();
         c.color = new THREE.Color(isJersey ? jersey : '#1d1f26');
@@ -161,6 +260,17 @@ export class ModelRider {
       this.action.play();
       this.clipCadence = cfg.clipCadence || 90;
     }
+    // helmet: built to the measured skull and parented to the head bone, so it follows every pose;
+    // the model's own hair is hidden so it can't poke through
+    this.headTop = findHeadTop(this.bones.head);
+    if (this.bones.head && this.headTop && cfg.helmet !== false) {
+      const fwdWorld = new THREE.Vector3(1, 0, 0).applyQuaternion(group.getWorldQuaternion(new THREE.Quaternion()));
+      const fit = measureHead(this.root, this.bones.head, this.headTop, fwdWorld);
+      if (fit) {
+        this.bones.head.add(buildHelmet(fit, cfg.helmetScale || 1));
+        this.root.traverse((o) => { if (o.isMesh && /hair/i.test(o.name)) o.visible = false; });
+      }
+    }
     this.rest = new Map();
     this.root.traverse((o) => { if (o.isBone) this.rest.set(o, o.quaternion.clone()); });
     this.ok = !!(this.bones.hips && this.bones.l.upperLeg && this.bones.l.lowerLeg && this.bones.l.foot && this.bones.r.upperLeg);
@@ -172,7 +282,9 @@ export class ModelRider {
     // put the hips on the saddle
     this.group.updateMatrixWorld(true);
     const hips = this.group.worldToLocal(wp(this.bones.hips));
-    this.root.position.add(new THREE.Vector3(-0.2 - hips.x, 1.04 - hips.y, -hips.z));
+    // The hips bone sits above the sit bones, so it goes a little below the saddle height
+    // (saddle top ≈ 1.03) to seat the rider instead of leaving him standing on straight legs.
+    this.root.position.add(new THREE.Vector3(-0.22 - hips.x, 0.97 - hips.y, -hips.z));
     this.group.updateMatrixWorld(true);
     const len = (a, b) => (a && b ? wp(a).distanceTo(wp(b)) : 0);
     this.len = {};
@@ -206,19 +318,29 @@ export class ModelRider {
     if (spine && top) {
       const base = wp(spine);
       const torsoLen = base.distanceTo(wp(top));
-      const lean = THREE.MathUtils.degToRad(42);
+      const lean = THREE.MathUtils.degToRad(34); // torso angle above horizontal: low, flat road-bike back
       aim(spine, top, base.clone().addScaledVector(fwd, Math.cos(lean) * torsoLen).addScaledVector(up, Math.sin(lean) * torsoLen));
     }
-    // head: look up the road
-    if (B.head) {
-      B.head.rotateOnWorldAxis(L(0, 0, 1).sub(L(0, 0, 0)).normalize(), THREE.MathUtils.degToRad(32));
-      B.head.updateMatrixWorld(true);
+    // neck and head: aim them in world space (rotateOnWorldAxis is wrong here, it assumes an
+    // unrotated parent and would roll the head sideways). The neck rises more steeply than the
+    // torso, and the top of the head points up and slightly forward, so the face looks up the road.
+    const dirAt = (deg) => fwd.clone().multiplyScalar(Math.cos(THREE.MathUtils.degToRad(deg)))
+      .addScaledVector(up, Math.sin(THREE.MathUtils.degToRad(deg)));
+    if (B.neck && B.head) {
+      const base = wp(B.neck);
+      aim(B.neck, B.head, base.clone().addScaledVector(dirAt(55), base.distanceTo(wp(B.head))));
+    }
+    const headTop = this.headTop;
+    if (B.head && headTop) {
+      const base = wp(B.head);
+      aim(B.head, headTop, base.clone().addScaledVector(dirAt(72), base.distanceTo(wp(headTop))));
     }
     // legs: feet on the pedals, knees forward
     const sideOfBone = (b) => Math.sign(G.worldToLocal(wp(b)).z) || 1;
     for (const s of ['l', 'r']) {
       const side = sideOfBone(B[s].upperLeg);
-      const a = angle + (side > 0 ? Math.PI : 0);
+      // forward = +x, so the crank turns clockwise seen from the +z side: the top foot moves forward
+      const a = -angle + (side > 0 ? Math.PI : 0);
       const foot = L(Math.cos(a) * 0.17 - 0.02, 0.29 + Math.sin(a) * 0.17 + 0.08, side * 0.11);
       const hip = wp(B[s].upperLeg);
       const { leg1, leg2 } = this.len[s];
