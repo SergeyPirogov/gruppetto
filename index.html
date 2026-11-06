@@ -71,39 +71,50 @@
   <section id="ride" class="screen" hidden>
     <canvas id="scene"></canvas>
 
-    <div class="hud-top">
-      <div class="tile big"><label>Потужність</label><b id="m-power">0</b><span>Вт</span><small id="m-wkg">0.0 Вт/кг</small></div>
-      <div class="tile"><label>Каденс</label><b id="m-cad">0</b><span>об/хв</span></div>
-      <div class="tile"><label>Пульс</label><b id="m-hr">—</b><span>уд/хв</span></div>
-      <div class="tile"><label>Швидкість</label><b id="m-speed">0.0</b><span>км/год</span></div>
-      <div class="tile"><label>Дистанція</label><b id="m-dist">0.00</b><span>км</span></div>
-      <div class="tile"><label>Час</label><b id="m-time">0:00</b></div>
-      <div class="tile"><label>Набір</label><b id="m-gain">0</b><span>м</span></div>
-      <div class="tile"><label id="m-gear-label">Передача</label><b id="m-gear">12</b><span id="m-gear-unit">/24</span></div>
+    <div class="hud-left">
+      <div class="pill big"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><b id="m-power">0</b><span>Вт</span><small id="m-wkg">0.0 Вт/кг</small></div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><b id="m-hr">—</b><span>уд/хв</span></div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><b id="m-cad">0</b><span>об/хв</span></div>
+      <ol id="riders" class="riders"></ol>
     </div>
 
-    <div id="grade" class="grade">0.0%</div>
-
-    <div id="workout-panel" class="workout" hidden>
-      <div class="wk-head">
-        <div><label>Ціль</label><b id="wk-target">0</b> Вт</div>
-        <div><label>Інтервал</label><b id="wk-left">0:00</b></div>
-        <div><label>Далі</label><b id="wk-next">—</b></div>
+    <div class="hud-center">
+      <div class="pill wide">
+        <svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><b id="m-speed">0.0</b><span>км/год</span>
+        <i class="sep"></i><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b>
+        <i class="sep"></i><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>км</span>
       </div>
-      <canvas id="wk-chart"></canvas>
+      <div id="workout-panel" class="workout" hidden>
+        <div class="wk-head">
+          <div><label>Ціль</label><b id="wk-target">0</b> Вт</div>
+          <div><label>Інтервал</label><b id="wk-left">0:00</b></div>
+          <div><label>Далі</label><b id="wk-next">—</b></div>
+        </div>
+        <canvas id="wk-chart"></canvas>
+      </div>
     </div>
 
-    <ol id="riders" class="riders"></ol>
+    <div class="hud-right">
+      <div id="grade" class="pill grade">0.0%</div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><label id="m-gear-label">Передача</label><b id="m-gear">12</b><span id="m-gear-unit">/24</span></div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M2 20 9 8l4 6 3-4 6 10z"/></svg><b id="m-gain">0</b><span>м</span></div>
+    </div>
 
     <div class="hud-bottom">
-      <canvas id="profile"></canvas>
-      <div class="controls">
-        <div id="sim-ctl" class="sim" hidden>
-          <label>Симулятор: <b id="sim-val">150</b> Вт</label>
-          <input id="sim-power" type="range" min="0" max="600" step="5" value="150">
+      <div class="bottom-left">
+        <canvas id="profile"></canvas>
+        <div class="controls">
+          <button id="btn-pause" class="pill-btn">Пауза</button>
+          <button id="btn-finish" class="pill-btn danger">Завершити</button>
         </div>
-        <button id="btn-pause">Пауза</button>
-        <button id="btn-finish" class="danger">Завершити</button>
+      </div>
+      <div id="sim-ctl" class="pill sim" hidden>
+        <label>Симулятор <b id="sim-val">150</b> Вт</label>
+        <input id="sim-power" type="range" min="0" max="600" step="5" value="150">
+      </div>
+      <div class="progress">
+        <div id="progress-label" class="progress-label">Коло 1</div>
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
       </div>
     </div>
     <div id="paused" class="paused" hidden>ПАУЗА</div>

@@ -148,12 +148,13 @@ function markSelected(list, id) {
 
 // ---------- Ride ----------
 const BOTS = [
-  { name: 'Оля', wkg: 2.2, color: '#22c55e' },
-  { name: 'Тарас', wkg: 2.7, color: '#3b82f6' },
-  { name: 'Ірина', wkg: 3.1, color: '#a855f7' },
-  { name: 'Богдан', wkg: 3.6, color: '#ef4444' },
+  { name: 'Оля', wkg: 2.2, color: '#e5484d', stripe: '#ffffff' },
+  { name: 'Тарас', wkg: 2.7, color: '#2563eb', stripe: '#facc15' },
+  { name: 'Ірина', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0' },
+  { name: 'Богдан', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a' },
 ];
-const ME_COLOR = '#ff7a1a';
+const ME_COLOR = '#16a0a8';
+const ME_STRIPE = '#ff8a1f';
 
 let ride = null;
 let scene = null;
@@ -169,7 +170,7 @@ function startRide() {
     gain: 0, lastElev: route.elevAt(0), laps: 0,
     paused: false, pedal: 0, lastFrame: performance.now(),
     powerHist: [], target: workout ? targetAt(workout, 0, settings.ftp).watts : null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
-    gear: 12, ergBias: 0, lane: 0.9, laneTarget: 0.9,
+    gear: 12, ergBias: 0, lane: 0, laneTarget: 0,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
   };
   trainer.riderWeight = settings.weight + 8;
@@ -239,7 +240,7 @@ function frame(now) {
   }
 
   const riders = [
-    { dist: ride.dist, color: ME_COLOR, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
+    { dist: ride.dist, color: ME_COLOR, stripe: ME_STRIPE, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
     ...ride.bots,
   ];
   scene.render(route, ride.dist, riders, moved);
@@ -308,6 +309,7 @@ function updateHud(cadence, hr, grade) {
   $('m-dist').textContent = (ride.dist / 1000).toFixed(2);
   $('m-time').textContent = fmtTime(ride.elapsed);
   $('m-gain').textContent = Math.round(ride.gain);
+  updateProgress();
   const gEl = $('grade');
   gEl.textContent = `${grade >= 0 ? '' : '−'}${Math.abs(grade * 100).toFixed(1)}%`;
   gEl.style.color = grade > 0.06 ? '#ef4444' : grade > 0.03 ? '#f97316' : grade < -0.02 ? '#60a5fa' : '#e8edf5';
@@ -328,6 +330,21 @@ function updateHud(cadence, hr, grade) {
   $('riders').innerHTML = list.map((r) => `<li class="${r.me ? 'me' : ''}"><i style="background:${r.color}"></i><span>${esc(r.name)}</span><em>${r.me ? '' : fmtGap(r.gap, ride.v)}</em></li>`).join('');
 
   drawProfile($('profile'), ride.route, [...ride.bots, { dist: ride.dist, color: ME_COLOR, self: true }]);
+}
+
+function updateProgress() {
+  let frac, label;
+  if (ride.workout && !ride.workoutDone) {
+    const total = totalDuration(ride.workout);
+    frac = Math.min(1, ride.workoutT / total);
+    label = `${ride.workout.name} · ${Math.round(frac * 100)}%`;
+  } else {
+    const L = ride.route.length;
+    frac = (ride.dist % L) / L;
+    label = `Коло ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} км`;
+  }
+  $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
+  $('progress-label').textContent = label;
 }
 
 function drawWorkoutChart(canvas, w, t) {
