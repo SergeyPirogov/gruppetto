@@ -8,6 +8,7 @@
   --accent2: #ffb000;
   --danger: #e5484d;
   --hud: rgba(12, 16, 26, 0.72);
+  color-scheme: dark;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 

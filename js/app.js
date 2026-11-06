@@ -47,7 +47,10 @@ async function toggleDevice(dev, btn) {
     await dev.connect();
     if (dev === trainer) $('sim').checked = false;
   } catch (e) {
-    if (e.name !== 'NotFoundError') alert(`Не вдалося підключитися: ${e.message}`);
+    if (e.name !== 'NotFoundError') {
+      const status = dev === trainer ? $('trainer-status') : $('hr-status');
+      setTimeout(() => { status.textContent = `Не вдалося підключитися: ${e.message}`; }, 0);
+    }
   } finally {
     btn.disabled = false;
     updateDeviceUI();
@@ -390,7 +393,13 @@ const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 
 // ---------- Wire up ----------
 $('btn-pause').onclick = togglePause;
-$('btn-finish').onclick = () => { if (confirm('Завершити заїзд?')) finishRide(); };
+let finishArmed = null;
+$('btn-finish').onclick = () => {
+  const btn = $('btn-finish');
+  if (finishArmed) { clearTimeout(finishArmed); finishArmed = null; btn.textContent = 'Завершити'; finishRide(); return; }
+  btn.textContent = 'Точно? Ще раз';
+  finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = 'Завершити'; }, 3000);
+};
 $('btn-download').onclick = downloadTCX;
 $('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; };
 $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value; };
