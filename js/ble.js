@@ -28,6 +28,17 @@ export const APP_VERSION = '0.3.0';
 
 export const bluetoothAvailable = () => typeof navigator !== 'undefined' && !!navigator.bluetooth;
 
+// Diagnostic mode: list every nearby Bluetooth device instead of filtering by service.
+let showAllDevices = false;
+export const setShowAllDevices = (on) => { showAllDevices = !!on; };
+
+/** requestDevice with the service filters, or every device in diagnostic mode. */
+function requestDevice({ filters, optionalServices = [] }) {
+  if (!showAllDevices) return navigator.bluetooth.requestDevice({ filters, optionalServices });
+  const services = [...new Set([...filters.flatMap((f) => f.services || []), ...optionalServices])];
+  return navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: services });
+}
+
 // ---------- Pure parsers (unit-tested) ----------
 
 /** FTMS Indoor Bike Data (0x2AD2). */
@@ -182,7 +193,7 @@ export class Trainer extends Device {
   }
 
   async connect() {
-    const device = await navigator.bluetooth.requestDevice({
+    const device = await requestDevice({
       filters: [{ services: [FTMS] }, { services: [CPS] }],
       optionalServices: [FTMS, CPS],
     });
@@ -322,7 +333,7 @@ export class Trainer extends Device {
 
 export class HeartRateMonitor extends Device {
   async connect() {
-    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [HRS] }] });
+    const device = await requestDevice({ filters: [{ services: [HRS] }] });
     this._watch(device);
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(HRS);
@@ -335,7 +346,7 @@ export class HeartRateMonitor extends Device {
 
 export class CadenceSensor extends Device {
   async connect() {
-    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [CSC] }] });
+    const device = await requestDevice({ filters: [{ services: [CSC] }] });
     this._watch(device);
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(CSC);
@@ -363,7 +374,7 @@ export class ZwiftController extends Device {
   }
 
   async connect() {
-    const device = await navigator.bluetooth.requestDevice({
+    const device = await requestDevice({
       filters: [{ services: [ZWIFT_RIDE_SERVICE] }, { services: [ZWIFT_SERVICE] }, { namePrefix: 'Zwift' }],
       optionalServices: [ZWIFT_RIDE_SERVICE, ZWIFT_SERVICE],
     });
@@ -400,7 +411,7 @@ export class OpenBikeControlDevice extends Device {
   }
 
   async connect() {
-    const device = await navigator.bluetooth.requestDevice({ filters: [{ services: [OBC_SERVICE] }] });
+    const device = await requestDevice({ filters: [{ services: [OBC_SERVICE] }] });
     this._watch(device);
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(OBC_SERVICE);

@@ -1,4 +1,4 @@
-import { bluetoothAvailable, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
+import { bluetoothAvailable, setShowAllDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed } from './physics.js';
@@ -93,11 +93,16 @@ async function toggleDevice(d) {
     await d.dev.connect();
     if (d.dev === trainer) $('sim').checked = false;
   } catch (e) {
-    if (e.name !== 'NotFoundError') error = e;
+    if (!(e.name === 'NotFoundError' && /cancel/i.test(e.message))) error = e; // ignore only a cancelled chooser
   } finally {
     btn.disabled = false;
     updateDeviceUI();
-    if (error) $(`${d.key}-status`).textContent = `Не вдалося підключитися: ${error.message}`;
+    if (error) {
+      const noService = error.name === 'NotFoundError' || /service|characteristic/i.test(error.message);
+      $(`${d.key}-status`).textContent = noService && $('show-all').checked
+        ? 'Цей пристрій не має потрібного сервісу — оберіть інший'
+        : `Не вдалося підключитися: ${error.message}`;
+    }
   }
 }
 
@@ -109,6 +114,7 @@ function initLobby() {
     $('sim').checked = true;
   }
   for (const d of DEVICES) $(`btn-${d.key}`).onclick = () => toggleDevice(d);
+  $('show-all').onchange = () => setShowAllDevices($('show-all').checked);
 
   const bind = (id, key, num = true) => {
     const el = $(id);
