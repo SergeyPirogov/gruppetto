@@ -363,6 +363,7 @@ class Rider3D {
   pose(angle) {
     const { L1, L2 } = this;
     const bb = new THREE.Vector3(0, 0.29, 0);
+    angle = -angle; // forward = +x: the top pedal must move forward, i.e. clockwise seen from +z
     for (const c of this.cranks) {
       const a = angle + (c.side > 0 ? 0 : Math.PI);
       c.mesh.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, c.side * 0.11);
