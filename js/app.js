@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 const DEFAULT_SETTINGS = {
   name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
-  chainring: 34, shiftMode: 'wheel',
+  chainring: 34, shiftMode: 'wheel', graphics: '3d',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -115,6 +115,7 @@ function initLobby() {
   bind('f-diff', 'difficulty');
   bind('f-chainring', 'chainring');
   bind('f-shift', 'shiftMode', false);
+  bind('f-graphics', 'graphics', false);
   const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); };
   refreshDiff();
 
@@ -169,9 +170,36 @@ const ME_STRIPE = '#ff8a1f';
 
 let ride = null;
 let scene = null;
+let sceneKind = null;
+
+/** Creates the 3D or 2D renderer (a canvas can hold only one kind of context). */
+async function ensureScene() {
+  let want = settings.graphics === '2d' ? '2d' : '3d';
+  if (want === sceneKind) { scene.resize(); return; }
+  const old = $('scene');
+  const canvas = old.cloneNode(false);
+  old.replaceWith(canvas);
+  if (want === '3d') {
+    try {
+      const { Scene3D, webglAvailable } = await import('./render3d.js');
+      if (!webglAvailable()) throw new Error('WebGL недоступний');
+      scene = new Scene3D(canvas);
+    } catch (e) {
+      console.warn('3D unavailable, falling back to 2D', e);
+      toast('3D-графіка недоступна в цьому браузері — використовую 2D');
+      want = '2d';
+      const fresh = canvas.cloneNode(false);
+      canvas.replaceWith(fresh);
+      scene = new Scene(fresh);
+    }
+  } else {
+    scene = new Scene(canvas);
+  }
+  sceneKind = want;
+}
 const recorder = new Recorder();
 
-function startRide() {
+async function startRide() {
   const route = routes.find((r) => r.id === settings.routeId) || routes[0];
   const workout = [...icuWorkouts, ...workouts].find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
@@ -195,8 +223,7 @@ function startRide() {
   $('workout-panel').hidden = !workout;
   $('paused').hidden = true;
   $('btn-pause').textContent = 'Пауза';
-  if (!scene) scene = new Scene($('scene'));
-  else scene.resize();
+  await ensureScene();
   if (simulated) toast('Режим симулятора: потужність — повзунок або ↑/↓');
   requestAnimationFrame(frame);
 }
