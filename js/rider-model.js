@@ -8,27 +8,119 @@ import { FBXLoader } from '../vendor/three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 
 const URL_CFG = 'assets/rider.json';
-// glTF, or FBX straight from Mixamo (embedded textures included) — no conversion needed.
+const TRANSPARENT_PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
+// Default hero: Microsoft Rocketbox "Sports_Male_04" (MIT, see assets/default-rider/LICENSE.md).
+// Its FBX points at .tga files on the author's disk; they are served as compact JPEGs next to it.
+const DEFAULT_DIR = 'assets/default-rider/';
+const DEFAULT_TEXTURES = { m026_body_color: 'body.jpg', m026_head_color: 'head.jpg' };
+const DEFAULT_CFG = {
+  height: 1.78,
+  // Recolour the kit in the body texture atlas (UV rectangles, 0..1 from the top-left).
+  kit: { jerseyHue: [195, 245], shorts: [[0, 0, 0.31, 0.185], [0.7, 0, 1, 0.185]], stripes: [[0.205, 0.255], [0.68, 0.73]], shirtX: [0.32, 0.69] },
+};
+
+function defaultManager() {
+  const manager = new THREE.LoadingManager();
+  manager.setURLModifier((url) => {
+    if (url.startsWith('data:') || url.startsWith('blob:') || url.endsWith('.fbx')) return url;
+    const m = url.split(/[\\/]/).pop().match(/^([A-Za-z0-9_\-]+)\.(tga|png|jpe?g)/i);
+    const file = m && DEFAULT_TEXTURES[m[1]];
+    return file ? DEFAULT_DIR + file : TRANSPARENT_PX; // normal/specular maps are not shipped
+  });
+  // FBXLoader asks for a dedicated .tga handler; a plain texture loader goes through the URL map above
+  manager.addHandler(/\.tga$/i, new THREE.TextureLoader(manager));
+  return manager;
+}
+
+// Your own model wins: glTF, or FBX straight from Mixamo (embedded textures) — no conversion needed.
 const CANDIDATES = [
   { url: 'assets/rider.glb', load: async (u) => new GLTFLoader().loadAsync(u) },
   { url: 'assets/rider.fbx', load: async (u) => { const g = await new FBXLoader().loadAsync(u); return { scene: g, animations: g.animations || [] }; } },
+  {
+    url: `${DEFAULT_DIR}Sports_Male_04.fbx`,
+    builtin: true,
+    load: async (u) => {
+      const manager = defaultManager();
+      const texturesDone = new Promise((resolve) => { manager.onLoad = resolve; manager.onError = () => {}; });
+      const g = await new FBXLoader(manager).loadAsync(u);
+      await Promise.race([texturesDone, new Promise((r) => setTimeout(r, 8000))]); // paint only once images exist
+      g.traverse((o) => {
+        if (!o.isMesh) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          m.normalMap = null; m.specularMap = null; m.bumpMap = null; m.vertexColors = false;
+          m.shininess = 6; m.specular?.set('#111111'); m.color?.set('#ffffff');
+          if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
+          m.needsUpdate = true;
+        }
+      });
+      return { scene: g, animations: g.animations || [] };
+    },
+  },
 ];
 
-/** Loads the model once; resolves to null when there is no custom rider. */
+/** Loads the model once: your assets/rider.(glb|fbx) if present, otherwise the built-in hero. */
 export async function loadRiderModel() {
   for (const c of CANDIDATES) {
     try {
       const head = await fetch(c.url, { method: 'HEAD' });
       if (!head.ok) continue;
-      let cfg = {};
-      try { const r = await fetch(URL_CFG); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
+      let cfg = c.builtin ? { ...DEFAULT_CFG } : {};
+      if (!c.builtin) { try { const r = await fetch(URL_CFG); if (r.ok) cfg = await r.json(); } catch { /* optional */ } }
       const gltf = await c.load(c.url);
       return { gltf, cfg };
     } catch (e) {
-      console.warn(`Custom rider model ${c.url} not loaded`, e);
+      console.warn(`Rider model ${c.url} not loaded`, e);
     }
   }
   return null;
+}
+
+/**
+ * Paint a cycling kit into a texture atlas: jersey pixels (by hue) take the jersey colour with
+ * the original shading, a stripe band is added across the jersey, and the shorts turn black.
+ */
+export function paintKit(image, kit, jerseyHex, stripeHex) {
+  const w = image.width, h = image.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const g = canvas.getContext('2d');
+  g.drawImage(image, 0, 0);
+  const img = g.getImageData(0, 0, w, h), d = img.data;
+  const jc = new THREE.Color(jerseyHex), sc = new THREE.Color(stripeHex || '#ff8a1f');
+  const toByte = (c) => { const x = c.getHex(); return [(x >> 16) & 255, (x >> 8) & 255, x & 255]; }; // sRGB bytes
+  const J = toByte(jc), S = toByte(sc);
+  const inRect = (x, y, r) => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
+  for (let y = 0; y < h; y++) {
+    const v = y / h;
+    for (let x = 0; x < w; x++) {
+      const u = x / w, i = (y * w + x) * 4;
+      const r = d[i], gg = d[i + 1], b = d[i + 2];
+      const max = Math.max(r, gg, b), min = Math.min(r, gg, b), l = (max + min) / 510, sat = max ? (max - min) / max : 0;
+      let hue = 0;
+      if (max !== min) {
+        if (max === r) hue = 60 * (((gg - b) / (max - min)) % 6);
+        else if (max === gg) hue = 60 * ((b - r) / (max - min) + 2);
+        else hue = 60 * ((r - gg) / (max - min) + 4);
+        if (hue < 0) hue += 360;
+      }
+      if (sat > 0.35 && hue >= kit.jerseyHue[0] && hue <= kit.jerseyHue[1]) {
+        const stripe = u >= kit.shirtX[0] && u <= kit.shirtX[1] && kit.stripes.some(([a, bb]) => v >= a && v <= bb);
+        const C = stripe ? S : J;
+        const shade = Math.min(1.25, 0.45 + l * 1.6);
+        d[i] = Math.min(255, C[0] * shade); d[i + 1] = Math.min(255, C[1] * shade); d[i + 2] = Math.min(255, C[2] * shade);
+      } else if (kit.shorts.some((rc) => inRect(u, v, rc)) && sat < 0.25 && l > 0.45) {
+        const k = 0.12 + (l - 0.45) * 0.25; // keep the folds visible
+        d[i] = d[i + 1] = d[i + 2] = Math.round(255 * k);
+        d[i + 2] = Math.round(255 * (k + 0.02));
+      }
+    }
+  }
+  g.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.flipY = true;
+  return tex;
 }
 
 // ---------- bone lookup ----------
@@ -223,6 +315,12 @@ export class ModelRider {
       // one texture atlas between all clothes, but keep separate meshes (Ch08_Hoodie, Ch08_Pants).
       const meshName = (o.name || '').toLowerCase();
       const recolor = (m) => {
+        if (cfg.kit && m.map?.image?.width && /body/.test(m.map.image.src || '')) {
+          const c = m.clone();
+          c.map = paintKit(m.map.image, cfg.kit, jersey, stripe);
+          c.map.flipY = m.map.flipY;
+          return c;
+        }
         const names = [(m.name || '').toLowerCase(), meshName];
         const listed = (list) => (list || []).some((n) => names.includes(n.toLowerCase()));
         const isJersey = listed(cfg.jerseyMaterials) || (!cfg.jerseyMaterials && names.some((n) => /shirt|jersey|hood|top|torso|upper|cloth/.test(n)));
