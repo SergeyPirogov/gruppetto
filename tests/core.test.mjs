@@ -151,3 +151,11 @@ test('intervals.icu workout_doc conversion', () => {
   assert.equal(w.eventId, 42);
   assert.equal(w.date, '2026-11-06');
 });
+
+import { THEMES } from '../js/themes.js';
+
+test('10 routes, each with an existing theme and distinct name', () => {
+  assert.equal(routes.length, 10);
+  assert.equal(new Set(routes.map((r) => r.name)).size, 10);
+  for (const r of routes) assert.ok(THEMES[r.theme], `${r.id} theme ${r.theme}`);
+});

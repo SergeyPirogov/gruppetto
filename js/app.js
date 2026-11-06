@@ -6,6 +6,7 @@ import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './workouts.js';
 import { Recorder } from './recorder.js';
 import { Scene, drawProfile } from './render.js';
+import { themeFor } from './themes.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -121,7 +122,7 @@ function initLobby() {
     b.innerHTML = `<b>${r.name}</b><small>${(r.length / 1000).toFixed(0)} км · ↗ ${Math.round(r.elevationGain)} м</small><small>${r.description}</small><canvas></canvas>`;
     b.onclick = () => { settings.routeId = r.id; saveSettings(); markSelected(rl, r.id); };
     rl.append(b);
-    requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, []));
+    requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`));
   }
   markSelected(rl, settings.routeId);
 
