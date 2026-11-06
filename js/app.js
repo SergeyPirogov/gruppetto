@@ -326,7 +326,11 @@ function tick(power, cadence, hr) {
   if (elev > ride.lastElev) ride.gain += elev - ride.lastElev;
   ride.lastElev = elev;
   const laps = Math.floor(ride.dist / route.length);
-  if (laps > ride.laps) { ride.laps = laps; toast(`Коло ${laps} пройдено! 🎉`); }
+  if (laps > ride.laps) {
+    ride.laps = laps;
+    toast(`Коло ${laps} пройдено! 🎉`);
+    if (!ride.workout || ride.workoutDone) recorder.markLap();
+  }
 
   // workout / trainer control
   const grade = route.gradeAt(ride.dist);
@@ -336,6 +340,7 @@ function tick(power, cadence, hr) {
     if (t) {
       ride.target = t.watts === null ? null : Math.max(0, t.watts + ride.ergBias);
       if (t.index !== ride.stepIndex) {
+        if (ride.stepIndex !== undefined) recorder.markLap();
         ride.stepIndex = t.index;
         if (t.step.text) toast(t.step.text);
         else if (t.watts === null) toast('Вільний відрізок — їдьте за відчуттям');
@@ -345,6 +350,7 @@ function tick(power, cadence, hr) {
     } else {
       ride.workoutDone = true;
       ride.target = null;
+      recorder.markLap();
       toast('Тренування виконано! Далі — вільна їзда 🏁');
       updateGear();
       if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
@@ -497,6 +503,7 @@ function finishRide() {
   if (sum && wasRamp && sum.best1min) stats.push(['Оцінка FTP', `${Math.round(sum.best1min * 0.75)} Вт`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   $('btn-download').disabled = !sum;
+  $('btn-download-tcx').disabled = !sum;
   const canUpload = !!(icuClient && sum && sum.duration >= 60);
   $('btn-icu-upload').hidden = !canUpload;
   $('btn-icu-upload').disabled = false;
@@ -505,12 +512,13 @@ function finishRide() {
   if (canUpload && settings.icuUpload) uploadToIntervals();
 }
 
-function downloadTCX() {
-  const blob = new Blob([recorder.toTCX()], { type: 'application/vnd.garmin.tcx+xml' });
-  const a = document.createElement('a');
+function download(kind) {
   const d = recorder.startTime || new Date();
+  const fit = kind === 'fit';
+  const blob = fit ? new Blob([recorder.toFIT()], { type: 'application/vnd.ant.fit' }) : new Blob([recorder.toTCX()], { type: 'application/vnd.garmin.tcx+xml' });
+  const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `powerup-${d.toISOString().slice(0, 16).replace(/[:T]/g, '-')}.tcx`;
+  a.download = `powerup-${d.toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${fit ? 'fit' : 'tcx'}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -589,8 +597,8 @@ async function uploadToIntervals() {
   const name = workout ? `Power Up: ${workout.name}` : `Power Up: ${route.name}`;
   const description = `${route.name} · ${(sum.distance / 1000).toFixed(1)} км · сер. ${sum.avgPower} Вт · NP ${sum.normalizedPower || '—'} Вт`;
   try {
-    const id = await icuClient.uploadActivity(recorder.toTCX(), {
-      name, description, eventId: fromIcu ? workout.eventId : undefined, filename: `powerup-${Date.now()}.tcx`,
+    const id = await icuClient.uploadActivity(recorder.toFIT(), {
+      name, description, eventId: fromIcu ? workout.eventId : undefined, filename: `powerup-${Date.now()}.fit`,
     });
     lastRide.uploadedId = id || true;
     status.innerHTML = id
@@ -662,7 +670,8 @@ $('btn-finish').onclick = () => {
   btn.textContent = 'Точно? Ще раз';
   finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = 'Завершити'; }, 3000);
 };
-$('btn-download').onclick = downloadTCX;
+$('btn-download').onclick = () => download('fit');
+$('btn-download-tcx').onclick = () => download('tcx');
 $('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; };
 $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value; };
 // ---------- Virtual gears & controller actions ----------

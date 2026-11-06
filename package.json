@@ -1,1 +1,1 @@
-{"name":"power-up","private":true,"type":"module","scripts":{"start":"python3 -m http.server 8000","test":"node --test tests/*.test.mjs"}}
+{"name":"power-up","private":true,"type":"module","scripts":{"start":"python3 -m http.server 8000","test":"node --test tests/*.test.mjs"},"devDependencies":{"@garmin/fitsdk":"^21.221.0"}}

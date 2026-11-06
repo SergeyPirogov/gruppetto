@@ -1,4 +1,5 @@
-// Records one sample per second and exports TCX (accepted by Strava, Garmin Connect, intervals.icu).
+// Records one sample per second and exports FIT (virtual ride, like Zwift) or TCX.
+import { encodeActivity } from './fit.js';
 
 export class Recorder {
   constructor() { this.reset(); }
@@ -6,10 +7,21 @@ export class Recorder {
   reset() {
     this.samples = [];
     this.startTime = null;
+    this.lapStarts = [0];
+  }
+
+  /** Start a new lap at the next sample (workout interval or route lap). */
+  markLap() {
+    const i = this.samples.length;
+    if (i > 0 && this.lapStarts[this.lapStarts.length - 1] !== i) this.lapStarts.push(i);
+  }
+
+  toFIT() {
+    return encodeActivity(this.samples, { start: this.startTime || new Date(), lapStarts: this.lapStarts, normalizedPower });
   }
 
   add(sample) {
-    if (!this.startTime) this.startTime = new Date();
+    if (!this.startTime) this.startTime = new Date(Date.now() - 1000);
     this.samples.push(sample);
   }
 

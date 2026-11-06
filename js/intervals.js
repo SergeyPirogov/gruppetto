@@ -57,10 +57,11 @@ export class IntervalsClient {
       .filter((w) => w.steps.length);
   }
 
-  /** Upload a TCX file; pairs it with the planned workout when eventId is given. Returns the new activity id. */
-  async uploadActivity(tcx, { name, description, eventId, filename = 'powerup.tcx' }) {
+  /** Upload a FIT (or TCX) file; pairs it with the planned workout when eventId is given. Returns the new activity id. */
+  async uploadActivity(data, { name, description, eventId, filename = 'powerup.fit' }) {
     const form = new FormData();
-    form.append('file', new Blob([tcx], { type: 'application/vnd.garmin.tcx+xml' }), filename);
+    const type = filename.endsWith('.tcx') ? 'application/vnd.garmin.tcx+xml' : 'application/vnd.ant.fit';
+    form.append('file', new Blob([data], { type }), filename);
     const res = await this.request('/activities', {
       method: 'POST',
       body: form,

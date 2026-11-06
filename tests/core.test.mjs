@@ -188,3 +188,56 @@ test('Per-second averaging of sensor samples', () => {
   assert.equal(s.mean(5000, 6000), 400);
   assert.ok(s.has(5000, 6000) && !s.has(2000, 4000));
 });
+
+import { Decoder, Stream } from '@garmin/fitsdk';
+
+test('FIT export decodes with the official Garmin SDK as a virtual ride', () => {
+  const rec = new Recorder();
+  for (let i = 0; i < 600; i++) {
+    if (i === 300) rec.markLap();
+    rec.add({
+      power: i < 300 ? 200 : 300, cadence: 90, heartRate: 130 + (i % 10), speed: 9 + (i % 3),
+      distance: i * 9.5, altitude: 100 + i * 0.05, elevationGain: i * 0.05,
+    });
+  }
+  rec.startTime = new Date('2026-11-06T10:00:00Z');
+  const bytes = rec.toFIT();
+  const stream = Stream.fromByteArray(Array.from(bytes));
+  assert.ok(Decoder.isFIT(stream));
+  const decoder = new Decoder(stream);
+  assert.ok(decoder.checkIntegrity(), 'CRC and header are valid');
+  const { messages, errors } = decoder.read();
+  assert.deepEqual(errors, []);
+  assert.equal(messages.fileIdMesgs[0].type, 'activity');
+  assert.equal(messages.recordMesgs.length, 600);
+  const r = messages.recordMesgs[450];
+  assert.equal(r.power, 300);
+  assert.equal(r.cadence, 90);
+  assert.equal(r.heartRate, 130);
+  assert.equal(Math.round(r.distance * 10) / 10, 4275);
+  assert.equal(r.timestamp.toISOString(), '2026-11-06T10:07:30.000Z');
+  const s = messages.sessionMesgs[0];
+  assert.equal(s.sport, 'cycling');
+  assert.equal(s.subSport, 'virtualActivity');
+  assert.equal(s.avgPower, 250);
+  assert.equal(s.maxPower, 300);
+  assert.equal(s.totalTimerTime, 600);
+  assert.equal(s.numLaps, 2);
+  assert.ok(s.normalizedPower >= 260 && s.normalizedPower <= 268, `NP ${s.normalizedPower}`); // (0.5·200⁴ + 0.5·300⁴)^¼ ≈ 264
+  assert.equal(s.totalWork, 150000);
+  assert.equal(messages.lapMesgs.length, 2);
+  assert.equal(messages.lapMesgs[0].avgPower, 200);
+  assert.equal(messages.lapMesgs[1].avgPower, 300);
+  assert.equal(messages.lapMesgs[1].totalTimerTime, 300);
+  assert.equal(messages.activityMesgs[0].numSessions, 1);
+});
+
+test('FIT export omits HR and cadence when no sensor provided them', () => {
+  const rec = new Recorder();
+  for (let i = 0; i < 60; i++) rec.add({ power: 150, cadence: 0, heartRate: 0, speed: 8, distance: i * 8, altitude: 100, elevationGain: 0 });
+  const { messages, errors } = new Decoder(Stream.fromByteArray(Array.from(rec.toFIT()))).read();
+  assert.deepEqual(errors, []);
+  assert.equal(messages.recordMesgs[10].heartRate, undefined);
+  assert.equal(messages.recordMesgs[10].cadence, undefined);
+  assert.equal(messages.sessionMesgs[0].avgPower, 150);
+});

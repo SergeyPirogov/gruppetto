@@ -147,13 +147,19 @@ function buildModels(theme) {
 
 // ---------- Rider ----------
 
-const SKIN = '#e2a87a', SHORTS = '#202228', SOCK = '#f5f5f5', SHOE = '#1e1e22';
+const SKIN = '#e0a47a', SHORTS = '#1d1f26', SOCK = '#f5f5f5', SHOE = '#22242a';
 
 class Rider3D {
   constructor(jersey, stripe, label) {
     this.group = new THREE.Group();
-    const mat = (c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true });
-    this.mats = { frame: mat('#3a4a52'), tyre: mat('#1b1b1e'), jersey: mat(jersey), stripe: mat(stripe), skin: mat(SKIN), shorts: mat(SHORTS), sock: mat(SOCK), shoe: mat(SHOE), helmet: mat('#f4f4f4') };
+    const mat = (c, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.65, metalness: 0, ...extra });
+    this.mats = {
+      frame: mat('#2f3e48', { roughness: 0.35, metalness: 0.4 }), tyre: mat('#18181b', { roughness: 0.9 }), rim: mat('#3a3d44', { roughness: 0.3, metalness: 0.6 }),
+      jersey: mat(jersey), stripe: mat(stripe), sleeve: mat(jersey), skin: mat(SKIN, { roughness: 0.75 }),
+      shorts: mat(SHORTS, { roughness: 0.5 }), sock: mat(SOCK), shoe: mat(SHOE, { roughness: 0.4 }), helmet: mat('#f6f6f6', { roughness: 0.35 }),
+      dark: mat('#2a2c31', { roughness: 0.5 }),
+    };
+    const M = this.mats;
     const add = (geom, m, pos, rot) => {
       const mesh = new THREE.Mesh(geom, m);
       if (pos) mesh.position.set(...pos);
@@ -162,37 +168,62 @@ class Rider3D {
       this.group.add(mesh);
       return mesh;
     };
-    for (const x of [-0.5, 0.5]) add(new THREE.TorusGeometry(0.33, 0.028, 6, 18), this.mats.tyre, [x, 0.34, 0]);
-    const tube = (a, b, r, m) => this._link(add(cyl(r, r, 1, 5), m), new THREE.Vector3(...a), new THREE.Vector3(...b));
-    tube([-0.5, 0.34, 0], [0, 0.3, 0], 0.02, this.mats.frame);
-    tube([0, 0.3, 0], [-0.12, 0.95, 0], 0.025, this.mats.frame);
-    tube([-0.5, 0.34, 0], [-0.12, 0.92, 0], 0.018, this.mats.frame);
-    tube([0, 0.3, 0], [0.42, 0.9, 0], 0.028, this.mats.frame);
-    tube([-0.12, 0.92, 0], [0.42, 0.92, 0], 0.024, this.mats.frame);
-    tube([0.42, 0.9, 0], [0.5, 0.34, 0], 0.02, this.mats.frame);
-    add(new THREE.BoxGeometry(0.26, 0.04, 0.1), this.mats.tyre, [-0.15, 1.0, 0]);
-    add(cyl(0.018, 0.018, 0.44, 5), this.mats.tyre, [0.5, 1.0, 0], [Math.PI / 2, 0, 0]);
-    // torso, stripe, head
-    const torso = add(new THREE.BoxGeometry(0.62, 0.3, 0.36), this.mats.jersey);
-    this._place(torso, new THREE.Vector3(-0.1, 1.06, 0), new THREE.Vector3(0.33, 1.42, 0), 'x');
-    const band = add(new THREE.BoxGeometry(0.1, 0.31, 0.37), this.mats.stripe);
-    this._place(band, new THREE.Vector3(0.06, 1.22, 0), new THREE.Vector3(0.14, 1.29, 0), 'x', true);
-    add(new THREE.SphereGeometry(0.1, 8, 6), this.mats.skin, [0.45, 1.54, 0]);
-    add(new THREE.SphereGeometry(0.13, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), this.mats.helmet, [0.44, 1.57, 0], [0, 0, -0.35]);
-    add(new THREE.SphereGeometry(0.16, 8, 6), this.mats.shorts, [-0.13, 1.03, 0], null).scale.set(1, 0.7, 1.2);
-    // arms
-    for (const z of [-0.17, 0.17]) {
-      tube([0.3, 1.4, z], [0.42, 1.18, z * 1.15], 0.045, this.mats.jersey);
-      tube([0.42, 1.18, z * 1.15], [0.5, 1.0, z * 1.25], 0.038, this.mats.skin);
+    const capsule = (r, len, m) => add(new THREE.CapsuleGeometry(r, len, 6, 12), m);
+
+    // wheels: tyre, deep rim, hub
+    for (const x of [-0.5, 0.5]) {
+      add(new THREE.TorusGeometry(0.335, 0.017, 10, 40), M.tyre, [x, 0.34, 0]);
+      add(new THREE.TorusGeometry(0.3, 0.022, 8, 40), M.rim, [x, 0.34, 0]).scale.set(1, 1, 0.6);
+      add(cyl(0.025, 0.025, 0.1, 10), M.dark, [x, 0.34, 0], [Math.PI / 2, 0, 0]);
     }
-    // legs (updated every frame)
+    const tube = (a, b, r, m) => this._orient(add(cyl(r, r, new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)), 10), m), new THREE.Vector3(...a), new THREE.Vector3(...b));
+    tube([-0.5, 0.34, 0.03], [0, 0.29, 0.02], 0.014, M.frame);
+    tube([-0.5, 0.34, -0.03], [0, 0.29, -0.02], 0.014, M.frame);
+    tube([0, 0.29, 0], [-0.13, 0.9, 0], 0.024, M.frame);
+    tube([-0.5, 0.34, 0], [-0.12, 0.86, 0], 0.013, M.frame);
+    tube([0, 0.29, 0], [0.4, 0.84, 0], 0.03, M.frame);
+    tube([-0.13, 0.86, 0], [0.4, 0.88, 0], 0.022, M.frame);
+    tube([0.4, 0.84, 0], [0.43, 0.95, 0], 0.024, M.frame);
+    tube([0.43, 0.95, 0], [0.5, 0.34, 0], 0.016, M.frame);
+    tube([-0.13, 0.9, 0], [-0.15, 0.99, 0], 0.014, M.dark);
+    add(new THREE.CapsuleGeometry(0.035, 0.18, 4, 8), M.dark, [-0.16, 1.0, 0], [0, 0, Math.PI / 2]).scale.set(1, 1, 1.6);
+    add(cyl(0.014, 0.014, 0.42, 8), M.dark, [0.5, 0.97, 0], [Math.PI / 2, 0, 0]);
+    tube([0.43, 0.95, 0], [0.5, 0.97, 0], 0.016, M.dark);
+    for (const z of [-0.2, 0.2]) tube([0.5, 0.97, z], [0.55, 0.9, z], 0.013, M.dark); // drops
+
+    // body
+    const hip = new THREE.Vector3(-0.14, 1.03, 0), shoulder = new THREE.Vector3(0.32, 1.36, 0);
+    this.torso = capsule(0.15, hip.distanceTo(shoulder) - 0.12, M.jersey);
+    this._orient(this.torso, hip, shoulder);
+    this.torso.scale.set(1, 1, 1.28);
+    const band = add(new THREE.CylinderGeometry(0.153, 0.153, 0.075, 20, 1, true), M.stripe);
+    this._orient(band, hip.clone().lerp(shoulder, 0.5), hip.clone().lerp(shoulder, 0.62));
+    band.scale.set(1, 1, 1.28);
+    band.material.side = THREE.DoubleSide;
+    add(new THREE.SphereGeometry(0.15, 16, 12), M.shorts, [-0.16, 1.02, 0]).scale.set(1, 0.85, 1.25);
+    const neck = capsule(0.045, 0.06, M.skin);
+    this._orient(neck, new THREE.Vector3(0.36, 1.4, 0), new THREE.Vector3(0.42, 1.46, 0));
+    add(new THREE.SphereGeometry(0.098, 16, 12), M.skin, [0.45, 1.48, 0]).scale.set(1.05, 1, 0.92);
+    const helmet = add(new THREE.SphereGeometry(0.125, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), M.helmet, [0.44, 1.5, 0], [0, 0, -0.45]);
+    helmet.scale.set(1.3, 0.9, 1.0);
+    add(new THREE.BoxGeometry(0.2, 0.012, 0.02), M.dark, [0.43, 1.59, 0], [0, 0, -0.35]); // vent strip
+    // arms: sleeve, forearm, glove
+    for (const z of [-0.16, 0.16]) {
+      const sh = new THREE.Vector3(0.3, 1.36, z), el = new THREE.Vector3(0.42, 1.16, z * 1.2), hand = new THREE.Vector3(0.5, 0.99, z * 1.25);
+      this._orient(capsule(0.052, sh.distanceTo(el) - 0.06, M.sleeve), sh, el);
+      this._orient(capsule(0.04, el.distanceTo(hand) - 0.05, M.skin), el, hand);
+      add(new THREE.SphereGeometry(0.042, 10, 8), M.dark, [hand.x, hand.y, hand.z]);
+    }
+    // legs (posed every frame)
+    this.L1 = 0.45; this.L2 = 0.45;
     this.legs = [-1, 1].map((side) => ({
       side,
-      thighS: add(cyl(0.07, 0.065, 1, 6), this.mats.shorts),
-      thigh: add(cyl(0.062, 0.055, 1, 6), this.mats.skin),
-      shin: add(cyl(0.05, 0.04, 1, 6), this.mats.skin),
-      sock: add(cyl(0.042, 0.04, 1, 6), this.mats.sock),
-      shoe: add(new THREE.BoxGeometry(0.22, 0.07, 0.08), this.mats.shoe),
+      shorts: capsule(0.078, 0.2, M.shorts),
+      thigh: capsule(0.064, 0.16, M.skin),
+      shin: capsule(0.052, 0.26, M.skin),
+      sock: add(cyl(0.046, 0.042, 0.1, 10), M.sock),
+      shoe: add(new THREE.CapsuleGeometry(0.04, 0.16, 4, 8), M.shoe),
+      crank: add(new THREE.BoxGeometry(0.03, 0.17, 0.015), M.dark),
     }));
     if (label) {
       const c = document.createElement('canvas');
@@ -205,47 +236,44 @@ class Rider3D {
       tex.colorSpace = THREE.SRGBColorSpace;
       const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
       sprite.scale.set(1.6, 0.4, 1);
-      sprite.position.set(0.2, 2.05, 0);
+      sprite.position.set(0.2, 2.0, 0);
       this.group.add(sprite);
     }
     this.pose(0);
   }
 
-  _link(mesh, a, b) {
+  /** Place a y-aligned mesh between a and b (no scaling). */
+  _orient(mesh, a, b) {
     const d = new THREE.Vector3().subVectors(b, a);
     mesh.position.copy(a).addScaledVector(d, 0.5);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
-    mesh.scale.set(1, d.length(), 1);
+    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
     return mesh;
-  }
-
-  _place(mesh, a, b, axis, keepLen) {
-    const d = new THREE.Vector3().subVectors(b, a);
-    mesh.position.copy(a).addScaledVector(d, 0.5);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), d.clone().normalize());
-    if (!keepLen) mesh.scale.set(d.length() / 0.62, 1, 1);
   }
 
   /** Pedalling pose: feet on the crank circle, knees by two-bone IK. */
   pose(angle) {
-    const L1 = 0.45, L2 = 0.45;
+    const { L1, L2 } = this;
+    const bb = new THREE.Vector3(0, 0.29, 0);
     for (const leg of this.legs) {
       const a = angle + (leg.side > 0 ? 0 : Math.PI);
-      const z = leg.side * 0.11;
-      const hip = new THREE.Vector3(-0.13, 1.0, z);
-      const foot = new THREE.Vector3(Math.cos(a) * 0.17, 0.3 + Math.sin(a) * 0.17, z);
-      const d = Math.min(hip.distanceTo(foot), L1 + L2 - 0.001);
+      const z = leg.side * 0.1;
+      const hip = new THREE.Vector3(-0.14, 1.0, z);
+      const pedal = new THREE.Vector3(Math.cos(a) * 0.17, bb.y + Math.sin(a) * 0.17, leg.side * 0.13);
+      const foot = new THREE.Vector3(pedal.x - 0.02, pedal.y + 0.07, z);
+      const d = Math.min(hip.distanceTo(foot), L1 + L2 - 0.002);
       const base = Math.atan2(foot.y - hip.y, foot.x - hip.x);
-      const k = Math.acos((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d));
-      const ka = base + k; // knee forward
+      const k = Math.acos(Math.max(-1, Math.min(1, (L1 * L1 + d * d - L2 * L2) / (2 * L1 * d))));
+      const ka = base + k; // knee in front
       const knee = new THREE.Vector3(hip.x + Math.cos(ka) * L1, hip.y + Math.sin(ka) * L1, z);
-      const mid = hip.clone().lerp(knee, 0.5);
-      const sock = knee.clone().lerp(foot, 0.72);
-      this._link(leg.thighS, hip, mid);
-      this._link(leg.thigh, mid, knee);
-      this._link(leg.shin, knee, sock);
-      this._link(leg.sock, sock, foot);
-      leg.shoe.position.set(foot.x + 0.04, foot.y - 0.02, z);
+      const ankle = knee.clone().add(new THREE.Vector3().subVectors(foot, knee).setLength(L2));
+      this._orient(leg.shorts, hip, hip.clone().lerp(knee, 0.62));
+      this._orient(leg.thigh, hip.clone().lerp(knee, 0.5), knee);
+      this._orient(leg.shin, knee, knee.clone().lerp(ankle, 0.8));
+      this._orient(leg.sock, knee.clone().lerp(ankle, 0.8), ankle);
+      leg.shoe.position.set(ankle.x + 0.05, ankle.y - 0.04, z);
+      leg.shoe.rotation.set(0, 0, Math.PI / 2 - 0.15);
+      leg.crank.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, leg.side * 0.11);
+      leg.crank.rotation.set(0, 0, a - Math.PI / 2);
     }
   }
 }
@@ -676,8 +704,11 @@ export class Scene3D {
     if (me) {
       const back = this.frame(dist - 4.6);
       const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 1.95, back.z + back.rz * me.lane * 0.8);
+      const nowMs = performance.now();
+      const dt = this.lastCam ? Math.min(0.5, (nowMs - this.lastCam) / 1000) : 1;
+      this.lastCam = nowMs;
       if (!this.camPos || target.distanceTo(this.camPos) > 30) this.camPos = target.clone();
-      this.camPos.lerp(target, 0.12);
+      this.camPos.lerp(target, 1 - Math.exp(-dt * 8)); // ~0.13 per frame at 60 fps, same feel at any frame rate
       this.camera.position.copy(this.camPos);
       const look = this.frame(dist + 8);
       this.camera.lookAt(look.x + look.rx * me.lane * 0.5, look.y + 1.05, look.z + look.rz * me.lane * 0.5);
