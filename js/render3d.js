@@ -97,6 +97,41 @@ const cyl = (rt, rb, h, s = 6) => new THREE.CylinderGeometry(rt, rb, h, s);
 const cone = (r, h, s = 7) => new THREE.ConeGeometry(r, h, s);
 const ico = (r, d = 0) => new THREE.IcosahedronGeometry(r, d);
 
+/** Small repeatable surface maps; no downloads or canvas readback required. */
+function surfaceTexture(water = false) {
+  const size = 128, data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const u = x / size * Math.PI * 2, v = y / size * Math.PI * 2;
+    const value = water
+      ? 128 + Math.sin(u * 3 + Math.sin(v * 2)) * 42 + Math.sin(v * 5 + u * 2) * 22
+      : 224 + hash2(x, y) * 31;
+    const i = (y * size + x) * 4;
+    data[i] = data[i + 1] = data[i + 2] = value; data[i + 3] = 255;
+  }
+  const texture = new THREE.DataTexture(data, size, size);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function sunGlowTexture() {
+  const size = 64, data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const r = Math.hypot((x + 0.5) / size * 2 - 1, (y + 0.5) / size * 2 - 1);
+    const i = (y * size + x) * 4;
+    data[i] = 255; data[i + 1] = 214; data[i + 2] = 154;
+    data[i + 3] = Math.pow(Math.max(0, 1 - r), 3) * 150;
+  }
+  const texture = new THREE.DataTexture(data, size, size);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.magFilter = texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function buildModels(theme) {
   const p = theme.palette;
   const M = {};
@@ -159,7 +194,17 @@ function buildModels(theme) {
     { geom: cyl(0.09, 0.09, 0.07, 8), color: '#6b4423', pos: [0.08, 1.73, 0], rot: [0, 0, Math.PI / 2 - 0.3] },
   ]);
   M.flower = merge([{ geom: ico(0.11), color: '#ffffff', pos: [0, 0.35, 0] }, { geom: cyl(0.01, 0.015, 0.35, 3), color: '#5c9a3a', pos: [0, 0.17, 0] }]);
-  M.tuft = merge([{ geom: cone(0.18, 0.5, 4), color: p.flowers.blades[0], pos: [0, 0.25, 0] }, { geom: cone(0.12, 0.4, 4), color: p.flowers.blades[1], pos: [0.12, 0.2, 0.05] }]);
+  M.tuft = merge(Array.from({ length: 7 }, (_, i) => {
+    const h = 0.22 + hash(i + 4) * 0.32, a = i * 2.4;
+    return { geom: cone(0.035, h, 3), color: p.flowers.blades[i % 2],
+      pos: [Math.cos(a) * 0.15, h * 0.44, Math.sin(a) * 0.15],
+      rot: [Math.sin(a) * 0.3, a, Math.cos(a) * 0.3] };
+  }));
+  M.delineator = merge([
+    { geom: new THREE.BoxGeometry(0.12, 0.9, 0.16), color: '#eeeade', pos: [0, 0.45, 0], flat: true },
+    { geom: new THREE.BoxGeometry(0.135, 0.19, 0.175), color: '#29333c', pos: [0, 0.68, 0], flat: true },
+    { geom: new THREE.BoxGeometry(0.145, 0.075, 0.1), color: '#ffc06b', pos: [0, 0.69, 0], flat: true },
+  ]);
   M.post = merge([{ geom: new THREE.BoxGeometry(0.16, 1.15, 0.16), color: '#ffffff', pos: [0, 0.575, 0], flat: true }]);
   M.rail = merge([{ geom: new THREE.BoxGeometry(1, 0.13, 0.07), color: '#ffffff', flat: true }]);
   M.lupine = merge([
@@ -354,7 +399,7 @@ export class Scene3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.15;
+    this.renderer.toneMappingExposure = 1.05;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.3, 4000);
     this.camPos = null;
@@ -388,7 +433,23 @@ export class Scene3D {
     this.chunks.clear();
     for (const r of this.riders.values()) this.scene.remove(r.group);
     this.riders.clear();
-    while (this.scene.children.length) this.scene.remove(this.scene.children[0]);
+    // Release route-specific GPU resources when changing scenery. Shared rider
+    // model resources are already detached above and remain available for reuse.
+    const geometries = new Set(Object.values(this.models || {}));
+    const materials = new Set([this.mat, this.roadMat].filter(Boolean));
+    const textures = new Set();
+    this.scene.traverse((o) => {
+      if (o.geometry) geometries.add(o.geometry);
+      if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
+      o.shadow?.dispose();
+    });
+    for (const g of geometries) g.dispose();
+    for (const m of materials) {
+      for (const value of Object.values(m)) if (value?.isTexture) textures.add(value);
+      m.dispose();
+    }
+    for (const texture of textures) texture.dispose();
+    this.scene.clear();
 
     this.route = route;
     this.routeId = route.id;
@@ -396,6 +457,10 @@ export class Scene3D {
     this.t3 = T3[route.theme] || T3.meadow;
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    const asphalt = surfaceTexture();
+    asphalt.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    this.roadMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: asphalt,
+      bumpMap: asphalt, bumpScale: 0.025, roughness: 0.96, metalness: 0 });
     this.path = { x: [], z: [], h: [] };
     this.minElev = route.minElev;
 
@@ -403,13 +468,17 @@ export class Scene3D {
     this.scene.fog = new THREE.Fog(fogColor, 150, 1500);
     this.scene.background = col(this.t.sky[1]);
 
-    this.hemi = new THREE.HemisphereLight(col(this.t.sky[0]), rgb(this.t.grass[0]), 1.4);
+    this.hemi = new THREE.HemisphereLight(col(this.t.sky[1]), rgb(this.t.grass[0]).multiplyScalar(0.65), 1.15);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(this.t.sun ? '#ffd8a8' : '#fff6e6', this.t.sun ? 1.6 : 2.2);
+    this.sunDirection = this.t.sun
+      ? new THREE.Vector3(Math.cos((this.t.sun.x - 0.5) * 2), 0.16, Math.sin((this.t.sun.x - 0.5) * 2)).normalize()
+      : new THREE.Vector3(-0.55, 0.8, 0.35).normalize();
+    this.sun = new THREE.DirectionalLight(this.t.sun ? '#ffc48f' : '#fff2dc', this.t.sun ? 2.0 : 2.6);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 400 });
     this.sun.shadow.bias = -0.0005;
+    this.sun.shadow.normalBias = 0.025;
     this.scene.add(this.sun, this.sun.target);
 
     this._sky();
@@ -417,7 +486,9 @@ export class Scene3D {
     this._clouds();
     const sea = this.t.layers.find((l) => l.kind === 'sea');
     if (this.t3.dip) {
-      this.water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshPhongMaterial({ color: sea ? sea.color : '#3a8fc4', shininess: 80, specular: '#bfe8ff', transparent: true, opacity: 0.92 }));
+      const ripples = surfaceTexture(true);
+      ripples.repeat.set(700, 700);
+      this.water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshPhongMaterial({ color: sea ? sea.color : '#3a8fc4', shininess: 100, specular: '#bfe8ff', bumpMap: ripples, bumpScale: 0.1, transparent: true, opacity: 0.96 }));
       this.water.rotation.x = -Math.PI / 2;
       this.water.receiveShadow = true;
       this.scene.add(this.water);
@@ -426,7 +497,7 @@ export class Scene3D {
   }
 
   _sky() {
-    const g = new THREE.SphereGeometry(3500, 24, 12);
+    const g = new THREE.SphereGeometry(3500, 48, 32);
     const top = col(this.t.sky[0]), bottom = col(this.t.sky[1]);
     const cs = [];
     const p = g.attributes.position;
@@ -436,14 +507,17 @@ export class Scene3D {
       cs.push(c.r, c.g, c.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3));
-    this.sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+    this.sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false, toneMapped: false }));
     this.sky.renderOrder = -10;
     this.scene.add(this.sky);
-    if (this.t.sun) {
-      const sunMesh = new THREE.Mesh(new THREE.CircleGeometry(110, 32), new THREE.MeshBasicMaterial({ color: this.t.sun.color, fog: false }));
-      this.sunDisk = sunMesh;
-      this.scene.add(sunMesh);
-    } else this.sunDisk = null;
+    this.sunDisk = new THREE.Mesh(new THREE.CircleGeometry(this.t.sun ? 110 : 38, 48),
+      new THREE.MeshBasicMaterial({ color: this.t.sun?.color || '#fff5db', fog: false, toneMapped: false, depthWrite: false }));
+    this.sunDisk.renderOrder = -8;
+    this.sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunGlowTexture(),
+      transparent: true, fog: false, depthWrite: false, toneMapped: false }));
+    this.sunGlow.scale.setScalar(this.t.sun ? 1100 : 650);
+    this.sunGlow.renderOrder = -9;
+    this.scene.add(this.sunGlow, this.sunDisk);
   }
 
   _mountains() {
@@ -492,8 +566,9 @@ export class Scene3D {
 
   _clouds() {
     this.cloudGroup = new THREE.Group();
-    const top = new THREE.MeshBasicMaterial({ color: '#ffffff', fog: false });
-    const under = new THREE.MeshBasicMaterial({ color: '#d9e6f1', fog: false });
+    const top = new THREE.MeshBasicMaterial({ color: col('#ffffff').lerp(rgb(this.t.fog), 0.25), fog: false });
+    const under = new THREE.MeshBasicMaterial({ color: col('#c4d3e3').lerp(rgb(this.t.fog), 0.5), fog: false });
+    const puff = new THREE.SphereGeometry(1, 12, 8);
     const n = this.t.clouds * 3;
     for (let i = 0; i < n; i++) {
       const cl = new THREE.Group();
@@ -501,12 +576,12 @@ export class Scene3D {
       for (let k = 0; k < parts; k++) {
         const r = 70 + Math.sin((k / (parts - 1)) * Math.PI) * 60 + hash(i * 7 + k) * 30;
         const x = (k - (parts - 1) / 2) * 85;
-        const b = new THREE.Mesh(ico(r, 1), top);
+        const b = new THREE.Mesh(puff, top);
         b.position.set(x, Math.sin((k / (parts - 1)) * Math.PI) * 45, (hash(i + k) - 0.5) * 60);
-        b.scale.y = 0.65;
-        const u = new THREE.Mesh(ico(r * 0.95, 1), under);
+        b.scale.set(r, r * 0.65, r);
+        const u = new THREE.Mesh(puff, under);
         u.position.set(x, b.position.y - r * 0.28, b.position.z);
-        u.scale.set(1, 0.4, 1);
+        u.scale.set(r * 0.95, r * 0.38, r * 0.95);
         cl.add(u, b);
       }
       const a = hash(i * 3.7) * Math.PI * 2, rr = 1600 + hash(i * 5.1) * 1000;
@@ -615,28 +690,33 @@ export class Scene3D {
     group.add(terrain);
 
     // road ribbon + edge lines
-    const ribbon = (o1, o2, lift, color) => {
-      const p = [], cs = [];
+    const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false) => {
+      const p = [], cs = [], uv = [];
       const cc = color instanceof THREE.Color ? color : col(color);
       for (let r = 0; r < rows - 1; r++) {
+        if (dashed && ((a0 + r) % 3 + 3) % 3 !== 0) continue;
         const f1 = frames[r], f2 = frames[r + 1];
         const v = (f, o) => [f.x + f.rx * o, f.y + lift, f.z + f.rz * o];
         const A = v(f1, o1), B = v(f1, o2), C = v(f2, o1), D = v(f2, o2);
         p.push(...A, ...B, ...C, ...B, ...D, ...C);
+        // World-space coordinates keep the asphalt continuous across chunks.
+        for (const v of [A, B, C, B, D, C]) uv.push(v[0] / 4, v[2] / 4);
         for (let k = 0; k < 6; k++) cs.push(cc.r, cc.g, cc.b);
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
       g.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
       g.computeVertexNormals();
-      const m = new THREE.Mesh(g, this.mat);
+      const m = new THREE.Mesh(g, material);
       m.receiveShadow = true;
       group.add(m);
     };
     ribbon(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, 0.02, verge.clone().multiplyScalar(0.85));
-    ribbon(-ROAD_HALF, ROAD_HALF, 0.05, rgb(T.road[0]));
+    ribbon(-ROAD_HALF, ROAD_HALF, 0.05, rgb(T.road[0]), this.roadMat);
     ribbon(-ROAD_HALF * 0.9 - 0.07, -ROAD_HALF * 0.9 + 0.07, 0.07, rgb(T.line));
     ribbon(ROAD_HALF * 0.9 - 0.07, ROAD_HALF * 0.9 + 0.07, 0.07, rgb(T.line));
+    ribbon(-0.055, 0.055, 0.075, rgb(T.line), this.mat, true);
 
     // scenery placements
     const place = {};
@@ -655,6 +735,18 @@ export class Scene3D {
     for (let r = 0; r < rows - 1; r++) {
       const a = a0 + r, idxN = ((a % n) + n) % n, f = frames[r];
       for (const side of [-1, 1]) {
+        if (((a % 5) + 5) % 5 === 0) {
+          const o = side * (ROAD_HALF + 0.45);
+          put('delineator', mtx(f.x + f.rx * o, heightAt(r, o), f.z + f.rz * o, -f.h, 1));
+        }
+        if (!T.snowfall && !T3c.beach && this.route.theme !== 'desert') {
+          for (let q = 0; q < 3; q++) {
+            const seed = a * 13.7 + side * 31 + q * 7.3;
+            const o = side * (4.6 + hash(seed) * 5.0);
+            const ff = this.frame(a * SEG + hash(seed + 1) * SEG);
+            put('tuft', mtx(ff.x + ff.rx * o, heightAt(r, o), ff.z + ff.rz * o, hash(seed + 2) * 6.28, 0.65 + hash(seed + 3) * 0.7));
+          }
+        }
         T.scenery.forEach((sc, j) => {
           const h = (k) => hash(idxN * 7.13 + side * 3.7 + (j * 4 + k) * 19.1);
           if (h(0) >= sc.prob) return;
@@ -749,7 +841,10 @@ export class Scene3D {
   render(route, dist, riders, dtDist) {
     if (route.id !== this.routeId) this._setup(route);
     this._updateChunks(dist);
-    this.clock += 1 / 60;
+    const now = performance.now();
+    const dt = this.lastFrameTime === undefined ? 0 : Math.min(0.1, (now - this.lastFrameTime) / 1000);
+    this.lastFrameTime = now;
+    this.clock += dt;
 
     // riders
     const seen = new Set();
@@ -798,15 +893,21 @@ export class Scene3D {
       this.sky.position.set(cx, cy, cz);
       for (const ring of this.rings) ring.position.set(cx, cy - 40, cz);
       this.cloudGroup.position.set(cx, cy, cz);
-      this.cloudGroup.rotation.y += 0.00002;
-      this.sun.position.set(me.f.x - 70, me.f.y + 110, me.f.z + 50);
+      this.cloudGroup.rotation.y += dt * 0.0012;
+      this.sun.position.copy(this.sunDirection).multiplyScalar(140).add(new THREE.Vector3(me.f.x, me.f.y, me.f.z));
       this.sun.target.position.set(me.f.x, me.f.y, me.f.z);
       if (this.sunDisk) {
-        const a = (this.t.sun.x - 0.5) * 2;
-        this.sunDisk.position.set(cx + Math.cos(a) * 3000, cy + 260, cz + Math.sin(a) * 3000);
+        this.sunDisk.position.copy(this.sunDirection).multiplyScalar(3000).add(new THREE.Vector3(cx, cy, cz));
+        this.sunGlow.position.copy(this.sunDisk.position);
         this.sunDisk.lookAt(this.camera.position);
       }
-      if (this.water) this.water.position.set(cx, me.f.y - 6, cz);
+      if (this.water) {
+        this.water.position.set(cx, me.f.y - 6, cz);
+        // Compensate for the moving water plane so the pattern stays in world
+        // space, then add a gentle time-based drift independent of frame rate.
+        this.water.material.bumpMap.offset.set(cx / 5000 * 700 + this.clock * 0.012,
+          -cz / 5000 * 700 + this.clock * 0.006);
+      }
       if (this.snow) {
         this.snow.position.set(cx, cy - 5, cz);
         const p = this.snow.geometry.attributes.position;
