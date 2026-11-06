@@ -4,24 +4,31 @@
 // cycling animation clip, that clip is played instead, its speed following cadence.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { FBXLoader } from '../vendor/three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 
-const URL_GLB = 'assets/rider.glb';
 const URL_CFG = 'assets/rider.json';
+// glTF, or FBX straight from Mixamo (embedded textures included) — no conversion needed.
+const CANDIDATES = [
+  { url: 'assets/rider.glb', load: async (u) => new GLTFLoader().loadAsync(u) },
+  { url: 'assets/rider.fbx', load: async (u) => { const g = await new FBXLoader().loadAsync(u); return { scene: g, animations: g.animations || [] }; } },
+];
 
 /** Loads the model once; resolves to null when there is no custom rider. */
 export async function loadRiderModel() {
-  try {
-    const head = await fetch(URL_GLB, { method: 'HEAD' });
-    if (!head.ok) return null;
-    let cfg = {};
-    try { const r = await fetch(URL_CFG); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
-    const gltf = await new GLTFLoader().loadAsync(URL_GLB);
-    return { gltf, cfg };
-  } catch (e) {
-    console.warn('Custom rider model not loaded', e);
-    return null;
+  for (const c of CANDIDATES) {
+    try {
+      const head = await fetch(c.url, { method: 'HEAD' });
+      if (!head.ok) continue;
+      let cfg = {};
+      try { const r = await fetch(URL_CFG); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
+      const gltf = await c.load(c.url);
+      return { gltf, cfg };
+    } catch (e) {
+      console.warn(`Custom rider model ${c.url} not loaded`, e);
+    }
   }
+  return null;
 }
 
 // ---------- bone lookup ----------
