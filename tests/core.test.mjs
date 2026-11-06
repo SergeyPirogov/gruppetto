@@ -175,3 +175,16 @@ test('Virtual gears for Zwift Cog', () => {
   assert.equal(ratioOf(99), 5.49);
   assert.deepEqual(wahoo.wheelCircumference(2096), [0x48, 0xe0, 0x51]); // 20960
 });
+
+import { Sampler } from '../js/sampler.js';
+
+test('Per-second averaging of sensor samples', () => {
+  const s = new Sampler(3000);
+  s.add(100, 200); s.add(350, 300); s.add(600, 250); s.add(850, 250);
+  assert.equal(s.mean(0, 1000), 250);          // average, not the last snapshot
+  assert.equal(s.mean(1000, 2000), 250);       // no new samples: fresh latest value
+  assert.equal(s.mean(4000, 5000), 0);         // stale after 3 s without data
+  s.add(5200, 400);
+  assert.equal(s.mean(5000, 6000), 400);
+  assert.ok(s.has(5000, 6000) && !s.has(2000, 4000));
+});

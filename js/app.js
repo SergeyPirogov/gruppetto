@@ -5,6 +5,7 @@ import { stepSpeed } from './physics.js';
 import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './workouts.js';
 import { Recorder } from './recorder.js';
+import { Sampler } from './sampler.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
@@ -30,14 +31,19 @@ const obc = new OpenBikeControlDevice();
 const obcState = new Map();
 const live = { power: 0, cadence: 0, hr: 0, powerAt: 0, cadAt: 0, hrAt: 0 };
 
+const powerSamples = new Sampler(3000);
+const cadenceSamples = new Sampler(3000);
+const hrSamples = new Sampler(5000);
+
 trainer.addEventListener('data', ({ detail: d }) => {
   const now = performance.now();
-  if (d.power !== undefined) { live.power = Math.max(0, d.power); live.powerAt = now; }
-  if (d.cadence !== undefined && !cadenceSensor.connected) { live.cadence = d.cadence; live.cadAt = now; }
-  if (d.heartRate && !hrm.connected) { live.hr = d.heartRate; live.hrAt = now; }
+  if (d.power !== undefined) { live.power = Math.max(0, d.power); live.powerAt = now; powerSamples.add(now, live.power); }
+  if (d.cadence !== undefined && !cadenceSensor.connected) { live.cadence = d.cadence; live.cadAt = now; cadenceSamples.add(now, d.cadence); }
+  if (d.heartRate && !hrm.connected) { live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); }
+  advance(now); // keeps the ride clock running even when the tab is hidden and frames stop
 });
-hrm.addEventListener('data', ({ detail: d }) => { live.hr = d.heartRate; live.hrAt = performance.now(); });
-cadenceSensor.addEventListener('data', ({ detail: d }) => { live.cadence = d.cadence; live.cadAt = performance.now(); });
+hrm.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); });
+cadenceSensor.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.cadence = d.cadence; live.cadAt = now; cadenceSamples.add(now, d.cadence); });
 controller.addEventListener('press', ({ detail: name }) => onControllerButton(name));
 obc.addEventListener('buttons', ({ detail: changes }) => onObcButtons(changes));
 obc.addEventListener('disconnect', () => obcState.clear());
@@ -169,6 +175,7 @@ const ME_COLOR = '#16a0a8';
 const ME_STRIPE = '#ff8a1f';
 
 let ride = null;
+let rideTimer = null;
 let scene = null;
 let sceneKind = null;
 
@@ -207,7 +214,7 @@ async function startRide() {
     route, workout, simulated,
     dist: 0, v: 0, elapsed: 0, secAcc: 0, workoutT: 0, workoutDone: false,
     gain: 0, lastElev: route.elevAt(0), laps: 0,
-    paused: false, pedal: 0, lastFrame: performance.now(),
+    paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
     powerHist: [], target: workout ? targetAt(workout, 0, settings.ftp).watts : null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
     gear: DEFAULT_GEAR, ergBias: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: 0, laneTarget: 0,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
@@ -224,46 +231,62 @@ async function startRide() {
   $('paused').hidden = true;
   $('btn-pause').textContent = 'Пауза';
   await ensureScene();
+  ride.lastSim = performance.now();
+  clearInterval(rideTimer);
+  rideTimer = setInterval(() => advance(), 250);
+  keepAwake(true);
   if (simulated) toast('Режим симулятора: потужність — повзунок або ↑/↓');
   requestAnimationFrame(frame);
 }
 
-function currentPower() {
-  const now = performance.now();
+/** Power (W) for physics at time t: the trainer's reading averaged over the last second. */
+function powerAt(t) {
   if (ride.simulated) {
     if (ride.workout && ride.target !== null) return ride.target;
     return Number($('sim-power').value);
   }
-  return now - live.powerAt < 3000 ? live.power : 0;
+  return powerSamples.mean(t - 1000, t);
 }
 
-function currentCadence(power) {
+function cadenceAt(t, power) {
   if (ride.simulated) return power > 0 ? 88 + Math.sin(ride.elapsed / 7) * 4 : 0;
-  return performance.now() - live.cadAt < 3000 ? live.cadence : 0;
+  return cadenceSamples.mean(t - 1000, t);
 }
 
-function currentHr() {
-  return performance.now() - live.hrAt < 5000 ? live.hr : 0;
-}
+const hrAt = (t) => hrSamples.latest(t);
 
-function frame(now) {
+const MAX_GAP_S = 15;
+
+/**
+ * Advances the ride to wall-clock time `now`: physics in small steps and one recorded sample per
+ * elapsed second. Driven by animation frames, a timer and incoming trainer data, so a hidden tab or
+ * a stalled frame never loses time. A long gap with no trainer data (laptop asleep, sensor lost)
+ * is skipped instead of being recorded as zeros.
+ */
+function advance(now = performance.now()) {
   if (!ride) return;
-  const dt = Math.min(0.1, (now - ride.lastFrame) / 1000);
-  ride.lastFrame = now;
+  const from = ride.lastSim;
+  let left = (now - from) / 1000;
+  ride.lastSim = now;
+  if (left <= 0 || ride.paused) return;
+  if (left > MAX_GAP_S && !ride.simulated && !powerSamples.has(from, now)) {
+    toast(`Немає даних від тренажера ${Math.round(left)} с — цей проміжок пропущено`);
+    return;
+  }
   const { route } = ride;
-  let moved = 0;
-
-  const power = currentPower();
-  const cadence = currentCadence(power);
-
-  if (!ride.paused) {
+  let t = from;
+  while (left > 1e-6) {
+    const dt = Math.min(0.1, left, 1 - ride.secAcc);
+    t += dt * 1000;
+    const power = powerAt(t);
+    const cadence = cadenceAt(t, power);
     const grade = route.gradeAt(ride.dist);
     ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight);
-    moved = ride.v * dt;
+    const moved = ride.v * dt;
     ride.dist += moved;
+    ride.moved += moved;
     ride.pedal += (cadence / 60) * Math.PI * 2 * dt;
     ride.lane += (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
-
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
       const p = b.wkg * 75 * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
@@ -271,24 +294,32 @@ function frame(now) {
       b.dist += b.v * dt;
       b.pedal += (90 / 60) * Math.PI * 2 * dt;
     }
-
     ride.elapsed += dt;
     ride.secAcc += dt;
-    while (ride.secAcc >= 1) { ride.secAcc -= 1; tick(power, cadence); }
+    left -= dt;
+    if (ride.secAcc >= 1 - 1e-9) {
+      ride.secAcc = 0;
+      const p1 = powerAt(t);
+      tick(p1, cadenceAt(t, p1), hrAt(t));
+    }
   }
+}
 
+function frame(now) {
+  if (!ride) return;
+  advance(now);
   const riders = [
     { dist: ride.dist, color: ME_COLOR, stripe: ME_STRIPE, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
     ...ride.bots,
   ];
-  scene.render(route, ride.dist, riders, moved);
+  scene.render(ride.route, ride.dist, riders, ride.moved);
+  ride.moved = 0;
   requestAnimationFrame(frame);
 }
 
 /** Called once per second of riding. */
-function tick(power, cadence) {
+function tick(power, cadence, hr) {
   const { route } = ride;
-  const hr = currentHr();
 
   // elevation & laps
   const elev = route.elevAt(ride.dist);
@@ -430,13 +461,18 @@ function drawWorkoutChart(canvas, w, t) {
 
 function togglePause() {
   if (!ride) return;
+  advance();
   ride.paused = !ride.paused;
+  ride.lastSim = performance.now();
   $('paused').hidden = !ride.paused;
   $('btn-pause').textContent = ride.paused ? 'Продовжити' : 'Пауза';
 }
 
 function finishRide() {
   if (!ride) return;
+  advance();
+  clearInterval(rideTimer);
+  keepAwake(false);
   const sum = recorder.summary();
   const wasRamp = ride.workout?.ramp;
   lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null };
@@ -576,6 +612,22 @@ function dayLabel(date) {
   const d = new Date(`${date}T12:00:00`);
   return d.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'numeric' });
 }
+
+// ---------- Screen wake lock ----------
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } else if (!on && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch { /* not supported or refused: the ride still works */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (ride && document.visibilityState === 'visible') { advance(); keepAwake(true); }
+});
 
 // ---------- Helpers ----------
 let toastTimer = null;
