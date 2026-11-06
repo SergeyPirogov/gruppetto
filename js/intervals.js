@@ -115,9 +115,21 @@ export function convertSteps(steps, out = []) {
     let dur = Math.round(s.duration || 0);
     if (!dur && s.distance) dur = Math.round((distanceMetres(s.distance) / 1000) / 30 * 3600); // ~30 km/h
     if (dur <= 0) continue;
-    out.push({ dur, ...convertTarget(s), text: s.text || s.description || '' });
+    const step = { dur, ...convertTarget(s), text: s.text || s.description || '' };
+    const cad = convertCadence(s.cadence);
+    if (cad) step.cad = cad;
+    out.push(step);
   }
   return out;
+}
+
+/** Cadence target as [low, high] rpm, or null. */
+function convertCadence(c) {
+  if (!c) return null;
+  if (c.min !== undefined && c.max !== undefined) return [Math.round(c.min), Math.round(c.max)];
+  if (c.start !== undefined && c.end !== undefined) return [Math.round(Math.min(c.start, c.end)), Math.round(Math.max(c.start, c.end))];
+  if (c.value !== undefined) return [Math.round(c.value) - 3, Math.round(c.value) + 3];
+  return null;
 }
 
 function distanceMetres(d) {

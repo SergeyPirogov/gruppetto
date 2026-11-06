@@ -1,4 +1,4 @@
-import { bluetoothAvailable, setShowAllDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
+import { bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed } from './physics.js';
@@ -6,6 +6,7 @@ import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './workouts.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
+import { unlockAudio, beep, say, spokenDuration } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
@@ -17,6 +18,7 @@ const DEFAULT_SETTINGS = {
   name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
+  intensity: 100, sound: true, voice: true,
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -59,9 +61,36 @@ const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: 'вимірюв�
 let lastButtonLabel = '';
 let lastObcLabel = '';
 
-for (const d of DEVICES) d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(d.lost); });
+const reconnecting = new Map(); // key -> attempt number
+
+for (const d of DEVICES) {
+  d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(`${d.lost} — перепідключаюсь…`); });
+  d.dev.addEventListener('reconnecting', ({ detail: n }) => { reconnecting.set(d.key, n); updateDeviceUI(); });
+  d.dev.addEventListener('reconnected', () => {
+    reconnecting.delete(d.key);
+    if (d.dev === trainer) resyncTrainer();
+    updateDeviceUI();
+    toast(`${d.dev.name}: зв’язок відновлено ✓`);
+  });
+  d.dev.addEventListener('reconnect-failed', () => {
+    reconnecting.delete(d.key);
+    updateDeviceUI();
+    toast(`${d.dev.name}: не вдалося перепідключитися — натисніть «Підключити» в лобі`);
+  });
+}
+
+/** After the trainer comes back, send the current mode and target again. */
+function resyncTrainer() {
+  trainer.riderWeight = settings.weight + 8;
+  trainer.resetMode();
+  if (!ride) return;
+  ride.lastSentTarget = null;
+  ride.lastSentGrade = null;
+  ride.lastSentWheel = null;
+}
 
 function deviceStatus(d) {
+  if (reconnecting.has(d.key)) return `${d.dev.name} · зв’язок втрачено, перепідключення (спроба ${reconnecting.get(d.key)})…`;
   if (!d.dev.connected) return 'не підключено';
   if (d.dev === trainer) {
     return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${trainer.controllable ? 'керування ERG/нахил ✓' : 'лише дані'}`;
@@ -82,15 +111,44 @@ function updateDeviceUI() {
   }
 }
 
+/** Remembered device ids per slot (the browser decides whether it still allows them). */
+const rememberDevice = (d) => { settings.devices = { ...(settings.devices || {}), [d.key]: d.dev.device?.id }; saveSettings(); };
+const forgetDevice = (d) => { if (settings.devices) { delete settings.devices[d.key]; saveSettings(); } };
+
+/** Try to connect a remembered device without the chooser. */
+async function reopenRemembered(d) {
+  const id = settings.devices?.[d.key];
+  if (!id) return false;
+  const known = (await knownDevices()).find((k) => k.id === id);
+  if (!known) return false;
+  try {
+    if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
+    await d.dev.reopen(known);
+    return true;
+  } catch { return false; }
+}
+
+/** On page load: quietly reconnect every remembered device that is in range. */
+async function autoConnectRemembered() {
+  for (const d of DEVICES) {
+    if (d.dev.connected || !settings.devices?.[d.key]) continue;
+    $(`${d.key}-status`).textContent = 'підключаю запам’ятований пристрій…';
+    const ok = await reopenRemembered(d);
+    if (ok && d.dev === trainer) $('sim').checked = false;
+    updateDeviceUI();
+  }
+}
+
 async function toggleDevice(d) {
   const btn = $(`btn-${d.key}`);
-  if (d.dev.connected) { d.dev.disconnect(); updateDeviceUI(); return; }
+  if (d.dev.connected || reconnecting.has(d.key)) { d.dev.disconnect(); reconnecting.delete(d.key); forgetDevice(d); updateDeviceUI(); return; }
   btn.disabled = true;
   btn.textContent = 'Пошук…';
   let error = null;
   try {
     if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
-    await d.dev.connect();
+    if (!(await reopenRemembered(d))) await d.dev.connect();
+    rememberDevice(d);
     if (d.dev === trainer) $('sim').checked = false;
   } catch (e) {
     if (!(e.name === 'NotFoundError' && /cancel/i.test(e.message))) error = e; // ignore only a cancelled chooser
@@ -115,6 +173,7 @@ function initLobby() {
   }
   for (const d of DEVICES) $(`btn-${d.key}`).onclick = () => toggleDevice(d);
   $('show-all').onchange = () => setShowAllDevices($('show-all').checked);
+  if (bluetoothAvailable()) autoConnectRemembered();
 
   const bind = (id, key, num = true) => {
     const el = $(id);
@@ -221,10 +280,14 @@ async function startRide() {
     dist: 0, v: 0, elapsed: 0, secAcc: 0, workoutT: 0, workoutDone: false,
     gain: 0, lastElev: route.elevAt(0), laps: 0,
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
-    powerHist: [], target: workout ? targetAt(workout, 0, settings.ftp).watts : null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
-    gear: DEFAULT_GEAR, ergBias: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: 0, laneTarget: 0,
+    powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
+    gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: 0, laneTarget: 0,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
   };
+  if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
+  unlockAudio();
+  $('wk-int').textContent = `${settings.intensity}%`;
+  $('wk-sound').textContent = settings.sound ? 'Звук: увімк' : 'Звук: вимк';
   trainer.riderWeight = settings.weight + 8;
   trainer.resetMode();
   recorder.reset();
@@ -344,27 +407,34 @@ function tick(power, cadence, hr) {
     const t = targetAt(ride.workout, ride.workoutT, settings.ftp);
     ride.workoutT += 1;
     if (t) {
-      ride.target = t.watts === null ? null : Math.max(0, t.watts + ride.ergBias);
+      ride.target = ergTarget(t);
       if (t.index !== ride.stepIndex) {
-        if (ride.stepIndex !== undefined) recorder.markLap();
+        if (ride.stepIndex !== undefined) { recorder.markLap(); cueBeep(1040, 0.35); }
         ride.stepIndex = t.index;
         if (t.step.text) toast(t.step.text);
         else if (t.watts === null) toast('Вільний відрізок — їдьте за відчуттям');
+        if (t.step.dur >= 20) cueSay(describeStep(t.step, ride.target));
         updateGear();
       }
-      if (t.remaining <= 5 && t.remaining > 4) toast('Через 5 с — наступний інтервал');
+      if (t.remaining <= 3 && t.remaining >= 1) cueBeep(660, 0.12);
+      const next = ride.workout.steps[t.index + 1];
+      if (next && t.remaining === 10 && t.step.dur >= 30) cueSay(`Через 10 секунд: ${describeStep(next, ergTarget({ watts: stepWatts(next, 0, settings.ftp) }))}`);
     } else {
       ride.workoutDone = true;
       ride.target = null;
       recorder.markLap();
+      cueBeep(1040, 0.5);
+      cueSay('Тренування виконано. Чудова робота!');
       toast('Тренування виконано! Далі — вільна їзда 🏁');
       updateGear();
       if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
     }
   }
+  updateSpiralGuard(power, cadence);
   if (!ride.simulated && trainer.controllable) {
     if (ride.target !== null && ride.workout && !ride.workoutDone) {
-      if (ride.target !== ride.lastSentTarget) { trainer.setTargetPower(ride.target); ride.lastSentTarget = ride.target; }
+      const sendW = effectiveTarget();
+      if (sendW !== ride.lastSentTarget) { trainer.setTargetPower(sendW); ride.lastSentTarget = sendW; }
       ride.lastSentGrade = null;
     } else {
       ride.lastSentTarget = null;
@@ -406,11 +476,26 @@ function updateHud(cadence, hr, grade) {
   gEl.style.color = grade > 0.06 ? '#ef4444' : grade > 0.03 ? '#f97316' : grade < -0.02 ? '#60a5fa' : '#e8edf5';
 
   if (ride.workout) {
-    const t = targetAt(ride.workout, ride.workoutT, settings.ftp);
-    $('wk-target').textContent = ride.workoutDone ? '—' : ride.target ?? 'вільно';
-    $('wk-left').textContent = t ? fmtTime(t.remaining) : '0:00';
+    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+    const target = ride.workoutDone ? null : ride.target;
+    const tEl = $('wk-target');
+    tEl.textContent = ride.workoutDone ? '—' : target ?? 'вільно';
+    // compliance: green within ±5 %, amber within ±10 %, red beyond
+    const dev = target ? (p3 - target) / target : 0;
+    const cls = !target ? '' : Math.abs(dev) <= 0.05 ? 'c-ok' : Math.abs(dev) <= 0.1 ? 'c-warn' : 'c-bad';
+    tEl.className = cls;
+    $('m-power').className = cls;
+    $('wk-diff').textContent = target ? `${p3 - target >= 0 ? '+' : '−'}${Math.abs(Math.round(p3 - target))}` : '';
+    $('wk-diff').className = cls;
+    if (ride.ergFactor < 1 && target) $('wk-diff').textContent = `ERG ${Math.round(ride.ergFactor * 100)}%`;
+    $('wk-left').textContent = t ? fmtTime(ride.workoutDone ? 0 : t.remaining - 1) : '0:00';
+    const cad = t?.step?.cad;
+    const cadEl = $('wk-cad');
+    cadEl.textContent = cad ? `${cad[0]}–${cad[1]}` : '—';
+    cadEl.className = cad && cadence > 0 ? (cadence >= cad[0] - 2 && cadence <= cad[1] + 2 ? 'c-ok' : 'c-warn') : '';
+    $('m-cad').className = cadEl.className;
     const next = t && ride.workout.steps[t.index + 1];
-    const nextW = next ? stepWatts(next, 0, settings.ftp) : null;
+    const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
     $('wk-next').textContent = next ? (nextW === null ? 'вільно' : `${nextW} Вт`) : '—';
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
@@ -447,7 +532,7 @@ function drawWorkoutChart(canvas, w, t) {
   const W = canvas.width, H = canvas.height;
   const total = totalDuration(w);
   const ftp = settings.ftp;
-  const wattsOf = (s, f) => stepWatts(s, f, ftp) ?? ftp * 0.5;
+  const wattsOf = (s, f) => scaleW(stepWatts(s, f, ftp)) ?? ftp * 0.5;
   const maxW = Math.max(...w.steps.map((s) => Math.max(wattsOf(s, 0), wattsOf(s, 1)))) * 1.05;
   let x0 = 0;
   for (const s of w.steps) {
@@ -681,6 +766,14 @@ $('btn-finish').onclick = () => {
   finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = 'Завершити'; }, 3000);
 };
 $('btn-download').onclick = () => download('fit');
+$('wk-int-down').onclick = () => changeIntensity(-5);
+$('wk-int-up').onclick = () => changeIntensity(+5);
+$('wk-sound').onclick = () => {
+  settings.sound = settings.voice = !settings.sound;
+  saveSettings();
+  $('wk-sound').textContent = settings.sound ? 'Звук: увімк' : 'Звук: вимк';
+  if (settings.sound) { unlockAudio(); beep(880, 0.1); }
+};
 $('btn-download-tcx').onclick = () => download('tcx');
 $('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; };
 $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value; };
@@ -744,6 +837,59 @@ function sendVirtualGear() {
   });
 }
 
+// ---------- ERG helpers ----------
+const scaleW = (w) => (w === null || w === undefined ? null : Math.round((w * settings.intensity) / 100));
+
+/** ERG target for a workout position: plan × intensity + manual bias; null for free-ride steps. */
+function ergTarget(t) {
+  const w = scaleW(t.watts);
+  return w === null ? null : Math.max(0, w + (ride?.ergBias || 0));
+}
+
+/** Target actually sent to the trainer (reduced while the spiral guard is active). */
+const effectiveTarget = () => (ride.target === null ? null : Math.round(ride.target * ride.ergFactor));
+
+/**
+ * "Spiral of death" guard: when cadence (or, without a cadence source, power) collapses in ERG,
+ * halve the target so the legs can spin up again, then restore it over ~5 s.
+ */
+function updateSpiralGuard(power, cadence) {
+  if (!inErgStep() || ride.simulated) { ride.ergFactor = 1; ride.lowFor = 0; return; }
+  const eff = effectiveTarget();
+  const hasCadence = live.cadAt > 0 && performance.now() - live.cadAt < 5000; // a cadence source is actually reporting
+  const low = hasCadence ? cadence < 55 : eff > 60 && power < eff * 0.6;
+  ride.lowFor = low ? ride.lowFor + 1 : 0;
+  if (ride.lowFor >= 3 && ride.ergFactor > 0.5) {
+    ride.ergFactor = 0.5;
+    toast(hasCadence ? 'Низький каденс — ERG тимчасово знижено' : 'Потужність провалилась — ERG тимчасово знижено');
+    cueSay('Розкрутіть педалі');
+  } else if (ride.ergFactor < 1) {
+    // restore only once the rider has clearly recovered (hysteresis avoids bouncing)
+    const recovered = hasCadence ? cadence >= 70 : power >= eff * 0.85;
+    if (recovered) ride.ergFactor = Math.min(1, Math.round((ride.ergFactor + 0.1) * 10) / 10);
+  }
+}
+
+function describeStep(step, watts) {
+  const what = watts === null || watts === undefined ? 'вільна їзда' : `${watts} ват`;
+  const cad = step.cad ? `, каденс ${step.cad[0]}–${step.cad[1]}` : '';
+  return `${what}, ${spokenDuration(step.dur)}${cad}${step.text ? `. ${step.text}` : ''}`;
+}
+
+const cueBeep = (f, d) => { if (settings.sound) beep(f, d); };
+const cueSay = (text) => { if (settings.voice) say(text); };
+
+function changeIntensity(delta) {
+  settings.intensity = Math.max(50, Math.min(150, settings.intensity + delta));
+  saveSettings();
+  if (ride?.workout && !ride.workoutDone) {
+    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+    if (t) ride.target = ergTarget(t);
+  }
+  $('wk-int').textContent = `${settings.intensity}%`;
+  if (ride?.workout) drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
+}
+
 const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null);
 
 function setGear(gear) {
@@ -757,7 +903,7 @@ function shift(dir) {
   if (inErgStep()) {
     ride.ergBias += Math.sign(dir) * 5;
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
-    if (t && t.watts !== null) ride.target = Math.max(0, t.watts + ride.ergBias);
+    if (t && t.watts !== null) ride.target = ergTarget(t);
     toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} Вт`);
   } else {
     const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
