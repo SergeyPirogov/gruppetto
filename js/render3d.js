@@ -64,6 +64,7 @@ function merge(parts) {
       }
     }
     g.computeVertexNormals();
+    if (!p.flat) smoothNormals(g);
     pos.push(...g.attributes.position.array);
     nor.push(...g.attributes.normal.array);
     const c = p.color instanceof THREE.Color ? p.color : col(p.color);
@@ -74,6 +75,21 @@ function merge(parts) {
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   out.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
   return out;
+}
+
+/** Average normals of coincident vertices so blobs look soft instead of faceted. */
+function smoothNormals(g) {
+  const p = g.attributes.position, nrm = g.attributes.normal, acc = new Map();
+  const key = (i) => `${Math.round(p.getX(i) * 1000)},${Math.round(p.getY(i) * 1000)},${Math.round(p.getZ(i) * 1000)}`;
+  for (let i = 0; i < p.count; i++) {
+    const k = key(i), a = acc.get(k) || [0, 0, 0];
+    a[0] += nrm.getX(i); a[1] += nrm.getY(i); a[2] += nrm.getZ(i);
+    acc.set(k, a);
+  }
+  for (let i = 0; i < p.count; i++) {
+    const a = acc.get(key(i)), l = Math.hypot(a[0], a[1], a[2]) || 1;
+    nrm.setXYZ(i, a[0] / l, a[1] / l, a[2] / l);
+  }
 }
 
 const cyl = (rt, rb, h, s = 6) => new THREE.CylinderGeometry(rt, rb, h, s);
@@ -96,23 +112,26 @@ function buildModels(theme) {
   ]);
   M.oak = merge([
     { geom: cyl(0.3, 0.45, 3.4), color: p.oak.trunk, pos: [0, 1.7, 0] },
-    { geom: ico(2.6), color: p.oak.mid, pos: [0, 5.0, 0], jitter: 0.25 },
-    { geom: ico(1.9), color: p.oak.dark, pos: [1.6, 4.3, 0.7], jitter: 0.25 },
-    { geom: ico(2.0), color: p.oak.dark, pos: [-1.5, 4.5, -0.6], jitter: 0.25 },
-    { geom: ico(1.6), color: p.oak.light, pos: [0.3, 6.6, 0.4], jitter: 0.25 },
+    { geom: ico(2.6, 1), color: p.oak.mid, pos: [0, 5.0, 0], jitter: 0.18 },
+    { geom: ico(1.9, 1), color: p.oak.dark, pos: [1.7, 4.3, 0.7], jitter: 0.18 },
+    { geom: ico(2.0, 1), color: p.oak.dark, pos: [-1.6, 4.5, -0.6], jitter: 0.18 },
+    { geom: ico(1.7, 1), color: p.oak.light, pos: [0.3, 6.6, 0.4], jitter: 0.18 },
+    { geom: ico(1.4, 1), color: p.oak.light, pos: [-0.9, 6.0, 1.1], jitter: 0.18 },
+    { geom: ico(1.5, 1), color: p.oak.mid, pos: [1.0, 5.6, -1.2], jitter: 0.18 },
   ]);
   M.birch = merge([
     { geom: cyl(0.14, 0.2, 7), color: '#efede6', pos: [0, 3.5, 0] },
     { geom: new THREE.BoxGeometry(0.42, 0.08, 0.42), color: '#2b2b2b', pos: [0, 2.0, 0] },
     { geom: new THREE.BoxGeometry(0.4, 0.07, 0.4), color: '#2b2b2b', pos: [0, 3.4, 0] },
-    { geom: ico(1.5), color: p.birch.mid, pos: [0, 7.0, 0], jitter: 0.3 },
-    { geom: ico(1.1), color: p.birch.dark, pos: [0.8, 6.0, 0.3], jitter: 0.3 },
-    { geom: ico(1.0), color: p.birch.light, pos: [-0.6, 8.0, -0.2], jitter: 0.3 },
+    { geom: ico(1.5, 1), color: p.birch.mid, pos: [0, 7.0, 0], jitter: 0.3 },
+    { geom: ico(1.1, 1), color: p.birch.dark, pos: [0.8, 6.0, 0.3], jitter: 0.3 },
+    { geom: ico(1.0, 1), color: p.birch.light, pos: [-0.6, 8.0, -0.2], jitter: 0.3 },
   ]);
-  M.rock = merge([{ geom: new THREE.DodecahedronGeometry(1, 0), color: p.rock.base, pos: [0, 0.4, 0], scale: [1.4, 0.9, 1.1], jitter: 0.35 }]);
+  M.rock = merge([{ geom: new THREE.DodecahedronGeometry(1, 1), color: p.rock.base, pos: [0, 0.35, 0], scale: [1.5, 0.85, 1.15], jitter: 0.22 }]);
   M.bush = merge([
-    { geom: ico(0.9), color: p.bush.mid, pos: [0, 0.6, 0], scale: [1.3, 0.8, 1.1], jitter: 0.3 },
-    { geom: ico(0.7), color: p.bush.dark, pos: [0.7, 0.45, 0.2], jitter: 0.3 },
+    { geom: ico(0.9, 1), color: p.bush.mid, pos: [0, 0.6, 0], scale: [1.3, 0.8, 1.1], jitter: 0.2 },
+    { geom: ico(0.7, 1), color: p.bush.dark, pos: [0.75, 0.45, 0.2], jitter: 0.2 },
+    { geom: ico(0.6, 1), color: p.bush.mid, pos: [-0.7, 0.4, -0.2], jitter: 0.2 },
   ]);
   M.cactus = merge([
     { geom: cyl(0.32, 0.36, 4.2, 8), color: '#3f7a3a', pos: [0, 2.1, 0] },
@@ -140,8 +159,12 @@ function buildModels(theme) {
   ]);
   M.flower = merge([{ geom: ico(0.11), color: '#ffffff', pos: [0, 0.35, 0] }, { geom: cyl(0.01, 0.015, 0.35, 3), color: '#5c9a3a', pos: [0, 0.17, 0] }]);
   M.tuft = merge([{ geom: cone(0.18, 0.5, 4), color: p.flowers.blades[0], pos: [0, 0.25, 0] }, { geom: cone(0.12, 0.4, 4), color: p.flowers.blades[1], pos: [0.12, 0.2, 0.05] }]);
-  M.post = merge([{ geom: new THREE.BoxGeometry(0.13, 1.15, 0.13), color: '#ffffff', pos: [0, 0.575, 0] }]);
-  M.rail = merge([{ geom: new THREE.BoxGeometry(1, 0.09, 0.06), color: '#ffffff' }]);
+  M.post = merge([{ geom: new THREE.BoxGeometry(0.16, 1.15, 0.16), color: '#ffffff', pos: [0, 0.575, 0], flat: true }]);
+  M.rail = merge([{ geom: new THREE.BoxGeometry(1, 0.13, 0.07), color: '#ffffff', flat: true }]);
+  M.lupine = merge([
+    { geom: cyl(0.012, 0.016, 0.7, 4), color: '#5c9a3a', pos: [0, 0.35, 0] },
+    ...Array.from({ length: 7 }, (_, k) => ({ geom: ico(0.055 - k * 0.004, 0), color: k % 2 ? '#8a6cc4' : '#a68ae0', pos: [0, 0.42 + k * 0.06, 0] })),
+  ]);
   return M;
 }
 
@@ -149,15 +172,39 @@ function buildModels(theme) {
 
 const SKIN = '#e0a47a', SHORTS = '#1d1f26', SOCK = '#f5f5f5', SHOE = '#22242a';
 
+/** Three-tone ramp for the illustrated (toon) look. */
+let TOON_RAMP = null;
+function toonRamp() {
+  if (TOON_RAMP) return TOON_RAMP;
+  const data = new Uint8Array([110, 110, 110, 255, 185, 185, 185, 255, 255, 255, 255, 255]);
+  TOON_RAMP = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+  TOON_RAMP.minFilter = TOON_RAMP.magFilter = THREE.NearestFilter;
+  TOON_RAMP.needsUpdate = true;
+  return TOON_RAMP;
+}
+
+/** Scale a y-aligned geometry's cross-section along its length: f(t) -> [sx, sz], t = 0 (bottom) .. 1 (top). */
+function shape(geom, f) {
+  geom.computeBoundingBox();
+  const { min, max } = geom.boundingBox, p = geom.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const t = (p.getY(i) - min.y) / (max.y - min.y || 1);
+    const [sx, sz] = f(t);
+    p.setX(i, p.getX(i) * sx);
+    p.setZ(i, p.getZ(i) * sz);
+  }
+  geom.computeVertexNormals();
+  return geom;
+}
+const lerp = (a, b, t) => a + (b - a) * t;
+
 class Rider3D {
   constructor(jersey, stripe, label) {
     this.group = new THREE.Group();
-    const mat = (c, extra = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.65, metalness: 0, ...extra });
+    const mat = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp() });
     this.mats = {
-      frame: mat('#2f3e48', { roughness: 0.35, metalness: 0.4 }), tyre: mat('#18181b', { roughness: 0.9 }), rim: mat('#3a3d44', { roughness: 0.3, metalness: 0.6 }),
-      jersey: mat(jersey), stripe: mat(stripe), sleeve: mat(jersey), skin: mat(SKIN, { roughness: 0.75 }),
-      shorts: mat(SHORTS, { roughness: 0.5 }), sock: mat(SOCK), shoe: mat(SHOE, { roughness: 0.4 }), helmet: mat('#f6f6f6', { roughness: 0.35 }),
-      dark: mat('#2a2c31', { roughness: 0.5 }),
+      frame: mat('#2c4650'), tyre: mat('#1a1a1d'), rim: mat('#33363d'), jersey: mat(jersey), stripe: mat(stripe),
+      skin: mat(SKIN), shorts: mat(SHORTS), sock: mat(SOCK), shoe: mat(SHOE), helmet: mat('#f7f7f7'), dark: mat('#26282d'),
     };
     const M = this.mats;
     const add = (geom, m, pos, rot) => {
@@ -168,62 +215,69 @@ class Rider3D {
       this.group.add(mesh);
       return mesh;
     };
-    const capsule = (r, len, m) => add(new THREE.CapsuleGeometry(r, len, 6, 12), m);
+    const capsule = (r, len, m, f) => add(f ? shape(new THREE.CapsuleGeometry(r, len, 8, 16), f) : new THREE.CapsuleGeometry(r, len, 8, 16), m);
 
-    // wheels: tyre, deep rim, hub
+    // bike
     for (const x of [-0.5, 0.5]) {
-      add(new THREE.TorusGeometry(0.335, 0.017, 10, 40), M.tyre, [x, 0.34, 0]);
-      add(new THREE.TorusGeometry(0.3, 0.022, 8, 40), M.rim, [x, 0.34, 0]).scale.set(1, 1, 0.6);
-      add(cyl(0.025, 0.025, 0.1, 10), M.dark, [x, 0.34, 0], [Math.PI / 2, 0, 0]);
+      add(new THREE.TorusGeometry(0.335, 0.024, 12, 48), M.tyre, [x, 0.34, 0]);
+      add(new THREE.TorusGeometry(0.295, 0.024, 8, 48), M.rim, [x, 0.34, 0]).scale.set(1, 1, 0.55);
+      add(cyl(0.028, 0.028, 0.1, 12), M.dark, [x, 0.34, 0], [Math.PI / 2, 0, 0]);
     }
-    const tube = (a, b, r, m) => this._orient(add(cyl(r, r, new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)), 10), m), new THREE.Vector3(...a), new THREE.Vector3(...b));
-    tube([-0.5, 0.34, 0.03], [0, 0.29, 0.02], 0.014, M.frame);
-    tube([-0.5, 0.34, -0.03], [0, 0.29, -0.02], 0.014, M.frame);
-    tube([0, 0.29, 0], [-0.13, 0.9, 0], 0.024, M.frame);
-    tube([-0.5, 0.34, 0], [-0.12, 0.86, 0], 0.013, M.frame);
-    tube([0, 0.29, 0], [0.4, 0.84, 0], 0.03, M.frame);
-    tube([-0.13, 0.86, 0], [0.4, 0.88, 0], 0.022, M.frame);
-    tube([0.4, 0.84, 0], [0.43, 0.95, 0], 0.024, M.frame);
-    tube([0.43, 0.95, 0], [0.5, 0.34, 0], 0.016, M.frame);
-    tube([-0.13, 0.9, 0], [-0.15, 0.99, 0], 0.014, M.dark);
-    add(new THREE.CapsuleGeometry(0.035, 0.18, 4, 8), M.dark, [-0.16, 1.0, 0], [0, 0, Math.PI / 2]).scale.set(1, 1, 1.6);
-    add(cyl(0.014, 0.014, 0.42, 8), M.dark, [0.5, 0.97, 0], [Math.PI / 2, 0, 0]);
-    tube([0.43, 0.95, 0], [0.5, 0.97, 0], 0.016, M.dark);
-    for (const z of [-0.2, 0.2]) tube([0.5, 0.97, z], [0.55, 0.9, z], 0.013, M.dark); // drops
+    const tube = (a, b, r, m) => this._orient(add(cyl(r, r, new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)), 12), m), new THREE.Vector3(...a), new THREE.Vector3(...b));
+    tube([-0.5, 0.34, 0.035], [0, 0.29, 0.02], 0.016, M.frame);
+    tube([-0.5, 0.34, -0.035], [0, 0.29, -0.02], 0.016, M.frame);
+    tube([0, 0.29, 0], [-0.13, 0.9, 0], 0.028, M.frame);
+    tube([-0.5, 0.34, 0], [-0.12, 0.86, 0], 0.015, M.frame);
+    tube([0, 0.29, 0], [0.4, 0.84, 0], 0.035, M.frame);
+    tube([-0.13, 0.86, 0], [0.4, 0.88, 0], 0.026, M.frame);
+    tube([0.4, 0.84, 0], [0.43, 0.95, 0], 0.028, M.frame);
+    tube([0.43, 0.95, 0], [0.5, 0.34, 0], 0.018, M.frame);
+    tube([-0.13, 0.9, 0], [-0.15, 0.99, 0], 0.015, M.dark);
+    add(new THREE.CapsuleGeometry(0.035, 0.18, 4, 10), M.dark, [-0.16, 1.0, 0], [0, 0, Math.PI / 2]).scale.set(1, 1, 1.6);
+    add(cyl(0.016, 0.016, 0.42, 10), M.dark, [0.5, 0.97, 0], [Math.PI / 2, 0, 0]);
+    tube([0.43, 0.95, 0], [0.5, 0.97, 0], 0.018, M.dark);
+    for (const z of [-0.2, 0.2]) tube([0.5, 0.97, z], [0.55, 0.9, z], 0.015, M.dark);
 
-    // body
-    const hip = new THREE.Vector3(-0.14, 1.03, 0), shoulder = new THREE.Vector3(0.32, 1.36, 0);
-    this.torso = capsule(0.15, hip.distanceTo(shoulder) - 0.12, M.jersey);
-    this._orient(this.torso, hip, shoulder);
-    this.torso.scale.set(1, 1, 1.28);
-    const band = add(new THREE.CylinderGeometry(0.153, 0.153, 0.075, 20, 1, true), M.stripe);
-    this._orient(band, hip.clone().lerp(shoulder, 0.5), hip.clone().lerp(shoulder, 0.62));
-    band.scale.set(1, 1, 1.28);
+    // torso: narrow waist, broad shoulders, flatter back
+    const hip = new THREE.Vector3(-0.15, 1.04, 0), shoulder = new THREE.Vector3(0.31, 1.36, 0);
+    const tl = hip.distanceTo(shoulder) - 0.16;
+    const torsoShape = (t) => [lerp(0.95, 0.78, t), lerp(1.05, 1.55, Math.pow(t, 1.4))];
+    this._orient(capsule(0.16, tl, M.jersey, torsoShape), hip, shoulder);
+    // stripe band across the middle of the back (same profile, slightly larger)
+    const bandGeom = shape(new THREE.CylinderGeometry(0.163, 0.163, 0.11, 24, 4, true), (t) => torsoShape(0.42 + t * 0.2));
+    const band = add(bandGeom, M.stripe);
+    this._orient(band, hip.clone().lerp(shoulder, 0.46), hip.clone().lerp(shoulder, 0.66));
     band.material.side = THREE.DoubleSide;
-    add(new THREE.SphereGeometry(0.15, 16, 12), M.shorts, [-0.16, 1.02, 0]).scale.set(1, 0.85, 1.25);
-    const neck = capsule(0.045, 0.06, M.skin);
-    this._orient(neck, new THREE.Vector3(0.36, 1.4, 0), new THREE.Vector3(0.42, 1.46, 0));
-    add(new THREE.SphereGeometry(0.098, 16, 12), M.skin, [0.45, 1.48, 0]).scale.set(1.05, 1, 0.92);
-    const helmet = add(new THREE.SphereGeometry(0.125, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.56), M.helmet, [0.44, 1.5, 0], [0, 0, -0.45]);
-    helmet.scale.set(1.3, 0.9, 1.0);
-    add(new THREE.BoxGeometry(0.2, 0.012, 0.02), M.dark, [0.43, 1.59, 0], [0, 0, -0.35]); // vent strip
-    // arms: sleeve, forearm, glove
-    for (const z of [-0.16, 0.16]) {
-      const sh = new THREE.Vector3(0.3, 1.36, z), el = new THREE.Vector3(0.42, 1.16, z * 1.2), hand = new THREE.Vector3(0.5, 0.99, z * 1.25);
-      this._orient(capsule(0.052, sh.distanceTo(el) - 0.06, M.sleeve), sh, el);
-      this._orient(capsule(0.04, el.distanceTo(hand) - 0.05, M.skin), el, hand);
-      add(new THREE.SphereGeometry(0.042, 10, 8), M.dark, [hand.x, hand.y, hand.z]);
+    // glutes / shorts
+    add(new THREE.SphereGeometry(0.15, 20, 14), M.shorts, [-0.17, 1.02, 0]).scale.set(1.05, 0.85, 1.32);
+    // neck, head, helmet with vents and straps
+    this._orient(capsule(0.045, 0.06, M.skin), new THREE.Vector3(0.35, 1.4, 0), new THREE.Vector3(0.41, 1.47, 0));
+    add(new THREE.SphereGeometry(0.098, 20, 14), M.skin, [0.45, 1.49, 0]).scale.set(1.05, 1, 0.92);
+    const helmet = add(new THREE.SphereGeometry(0.13, 24, 14, 0, Math.PI * 2, 0, Math.PI * 0.64), M.helmet, [0.425, 1.495, 0], [0, 0, -0.42]);
+    helmet.scale.set(1.34, 0.95, 1.05);
+    for (const z of [-0.05, 0, 0.05]) add(new THREE.BoxGeometry(0.17, 0.015, 0.018), M.dark, [0.41, 1.615, z], [0, 0, -0.32]);
+    for (const z of [-0.085, 0.085]) add(new THREE.BoxGeometry(0.012, 0.11, 0.01), M.dark, [0.47, 1.45, z * 1.08], [0, 0, 0.2]);
+    // arms: short jersey sleeve, bare forearm, black glove
+    for (const z of [-0.17, 0.17]) {
+      const sh = new THREE.Vector3(0.29, 1.35, z * 1.05), el = new THREE.Vector3(0.41, 1.15, z * 1.22), hand = new THREE.Vector3(0.5, 0.99, z * 1.2);
+      add(new THREE.SphereGeometry(0.066, 16, 12), M.jersey, [sh.x, sh.y, sh.z]);
+      this._orient(capsule(0.06, 0.08, M.jersey), sh, sh.clone().lerp(el, 0.5));
+      this._orient(capsule(0.047, sh.distanceTo(el) * 0.5, M.skin, (t) => [lerp(0.95, 1.1, t), lerp(0.95, 1.1, t)]), sh.clone().lerp(el, 0.45), el);
+      this._orient(capsule(0.04, el.distanceTo(hand) - 0.05, M.skin, (t) => [lerp(0.8, 1.1, t), lerp(0.8, 1.1, t)]), el, hand);
+      add(new THREE.SphereGeometry(0.044, 12, 10), M.dark, [hand.x, hand.y, hand.z]);
     }
-    // legs (posed every frame)
+    // legs: muscular thigh, calf bulge, sock, shoe
     this.L1 = 0.45; this.L2 = 0.45;
+    const thighShape = (t) => [lerp(0.82, 1.12, t), lerp(0.85, 1.08, t)];
+    const calfShape = (t) => { const b = Math.exp(-((t - 0.72) ** 2) / 0.04); return [0.72 + b * 0.42, 0.72 + b * 0.3]; };
     this.legs = [-1, 1].map((side) => ({
       side,
-      shorts: capsule(0.078, 0.2, M.shorts),
-      thigh: capsule(0.064, 0.16, M.skin),
-      shin: capsule(0.052, 0.26, M.skin),
-      sock: add(cyl(0.046, 0.042, 0.1, 10), M.sock),
-      shoe: add(new THREE.CapsuleGeometry(0.04, 0.16, 4, 8), M.shoe),
-      crank: add(new THREE.BoxGeometry(0.03, 0.17, 0.015), M.dark),
+      shorts: capsule(0.083, 0.21, M.shorts, thighShape),
+      thigh: capsule(0.066, 0.15, M.skin, thighShape),
+      shin: capsule(0.056, 0.27, M.skin, calfShape),
+      sock: add(cyl(0.044, 0.04, 0.1, 12), M.sock),
+      shoe: add(shape(new THREE.CapsuleGeometry(0.042, 0.17, 6, 12), (t) => [1, lerp(1.05, 0.85, t)]), M.shoe),
+      crank: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark),
     }));
     if (label) {
       const c = document.createElement('canvas');
@@ -257,7 +311,7 @@ class Rider3D {
     for (const leg of this.legs) {
       const a = angle + (leg.side > 0 ? 0 : Math.PI);
       const z = leg.side * 0.1;
-      const hip = new THREE.Vector3(-0.14, 1.0, z);
+      const hip = new THREE.Vector3(-0.15, 1.0, z);
       const pedal = new THREE.Vector3(Math.cos(a) * 0.17, bb.y + Math.sin(a) * 0.17, leg.side * 0.13);
       const foot = new THREE.Vector3(pedal.x - 0.02, pedal.y + 0.07, z);
       const d = Math.min(hip.distanceTo(foot), L1 + L2 - 0.002);
@@ -268,10 +322,10 @@ class Rider3D {
       const ankle = knee.clone().add(new THREE.Vector3().subVectors(foot, knee).setLength(L2));
       this._orient(leg.shorts, hip, hip.clone().lerp(knee, 0.62));
       this._orient(leg.thigh, hip.clone().lerp(knee, 0.5), knee);
-      this._orient(leg.shin, knee, knee.clone().lerp(ankle, 0.8));
+      this._orient(leg.shin, ankle.clone().lerp(knee, 0.0).lerp(knee, 0.2), knee); // calf bulge near the knee end
       this._orient(leg.sock, knee.clone().lerp(ankle, 0.8), ankle);
       leg.shoe.position.set(ankle.x + 0.05, ankle.y - 0.04, z);
-      leg.shoe.rotation.set(0, 0, Math.PI / 2 - 0.15);
+      leg.shoe.rotation.set(0, 0, -Math.PI / 2 - 0.15);
       leg.crank.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, leg.side * 0.11);
       leg.crank.rotation.set(0, 0, a - Math.PI / 2);
     }
@@ -286,6 +340,8 @@ export class Scene3D {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.15;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.3, 4000);
     this.camPos = null;
@@ -319,7 +375,7 @@ export class Scene3D {
     this.t = themeFor(route.theme);
     this.t3 = T3[route.theme] || T3.meadow;
     this.models = buildModels(this.t);
-    this.mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.path = { x: [], z: [], h: [] };
     this.minElev = route.minElev;
 
@@ -533,8 +589,7 @@ export class Scene3D {
     tg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     tg.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     tg.setIndex(idx);
-    tg = tg.toNonIndexed();
-    tg.computeVertexNormals();
+    tg.computeVertexNormals(); // smooth rolling hills
     const terrain = new THREE.Mesh(tg, this.mat);
     terrain.receiveShadow = true;
     group.add(terrain);
@@ -588,8 +643,10 @@ export class Scene3D {
           const ff = this.frame(a * SEG + along);
           const x = ff.x + ff.rx * o, z = ff.z + ff.rz * o, y = heightAt(r, o);
           if (sc.type === 'flowers') {
-            for (let q = 0; q < 7; q++) flowers.push([x + (hash(a + q) - 0.5) * 2.5, y, z + (hash(a * 3 + q) - 0.5) * 2.5, flowerPalette[(q + j) % flowerPalette.length]]);
+            for (let q = 0; q < 14; q++) flowers.push([x + (hash(a + q) - 0.5) * 3.2, y, z + (hash(a * 3 + q) - 0.5) * 3.2, flowerPalette[(q + j) % flowerPalette.length]]);
             put('tuft', mtx(x, y, z, h(2) * 6, 0.8 + h(2)));
+            put('tuft', mtx(x + 0.8, y, z - 0.6, h(4) * 6, 0.7 + h(4)));
+            if (flowerPalette.includes('#9b7fd1')) for (let q = 0; q < 3; q++) put('lupine', mtx(x + (hash(a * 9 + q) - 0.5) * 2, y, z + (hash(a * 11 + q) - 0.5) * 2, 0, 0.8 + hash(a + q * 3) * 0.6));
           } else if (sc.type === 'sunflowers') {
             for (let q = 0; q < 5; q++) put('sunflowers', mtx(x + (hash(a * 5 + q) - 0.5) * 3, y, z + (hash(a * 7 + q) - 0.5) * 3, Math.PI + h(2) * 0.5, 0.9 + hash(q + a) * 0.25));
           } else {
@@ -616,7 +673,7 @@ export class Scene3D {
       if (!geom || !list.length) continue;
       const im = new THREE.InstancedMesh(geom, this.mat, list.length);
       list.forEach((m, i) => im.setMatrixAt(i, m));
-      im.castShadow = !['tuft', 'sunflowers'].includes(type);
+      im.castShadow = !['tuft', 'sunflowers', 'lupine'].includes(type);
       im.receiveShadow = true;
       group.add(im);
     }
@@ -702,16 +759,13 @@ export class Scene3D {
 
     // chase camera
     if (me) {
-      const back = this.frame(dist - 4.6);
-      const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 1.95, back.z + back.rz * me.lane * 0.8);
-      const nowMs = performance.now();
-      const dt = this.lastCam ? Math.min(0.5, (nowMs - this.lastCam) / 1000) : 1;
-      this.lastCam = nowMs;
-      if (!this.camPos || target.distanceTo(this.camPos) > 30) this.camPos = target.clone();
-      this.camPos.lerp(target, 1 - Math.exp(-dt * 8)); // ~0.13 per frame at 60 fps, same feel at any frame rate
+      const back = this.frame(dist - 5.4);
+      const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.55, back.z + back.rz * me.lane * 0.8);
+      // follow the rider rigidly along the road (lane changes are already eased by the app)
+      this.camPos = target;
       this.camera.position.copy(this.camPos);
-      const look = this.frame(dist + 8);
-      this.camera.lookAt(look.x + look.rx * me.lane * 0.5, look.y + 1.05, look.z + look.rz * me.lane * 0.5);
+      const look = this.frame(dist + 11);
+      this.camera.lookAt(look.x + look.rx * me.lane * 0.5, look.y + 0.55, look.z + look.rz * me.lane * 0.5);
 
       const cx = this.camera.position.x, cz = this.camera.position.z, cy = me.f.y;
       this.sky.position.set(cx, cy, cz);
