@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseIndoorBikeData, parseCyclingPower, parseHeartRate, cadenceFromCrank } from '../js/ble.js';
+import { parseIndoorBikeData, parseCyclingPower, parseHeartRate, cadenceFromCrank, parseCSC, wahoo, parseRideKeypad } from '../js/ble.js';
 import { steadySpeed } from '../js/physics.js';
 import { routes } from '../js/routes.js';
 import { workouts, targetAt, totalDuration } from '../js/workouts.js';
@@ -64,4 +64,33 @@ test('Recorder: NP, best average, TCX', () => {
   const xml = rec.toTCX();
   assert.match(xml, /<ns3:Watts>200<\/ns3:Watts>/);
   assert.equal((xml.match(/<Trackpoint>/g) || []).length, 5);
+});
+
+test('Wahoo legacy control encoding', () => {
+  assert.deepEqual(wahoo.unlock(), [0x20, 0xee, 0xfc]);
+  assert.deepEqual(wahoo.erg(250), [0x42, 0xfa, 0x00]);
+  assert.deepEqual(wahoo.simMode(83, 0.004, 0.51), [0x43, 0x6c, 0x20, 0x04, 0x00, 0xfe, 0x01]); // 8300, 4, 510
+  assert.deepEqual(wahoo.grade(0), [0x46, 0xff, 0x7f]);   // 32767
+  assert.deepEqual(wahoo.grade(5), [0x46, 0x65, 0x86]);   // floor(1.05 * 32767.5) = 34405
+  assert.deepEqual(wahoo.grade(-100), [0x46, 0x00, 0x00]);
+});
+
+test('CSC crank cadence', () => {
+  const m = parseCSC(dv([0x02, 0x0a, 0x00, 0x00, 0x04]));
+  assert.deepEqual(m, { crankRevs: 10, crankTime: 1024 });
+  assert.deepEqual(parseCSC(dv([0x01, 1, 0, 0, 0, 0, 0])), {});
+});
+
+test('Zwift Ride keypad: inverted bits and analog paddles', () => {
+  const varint = (v) => { const out = []; while (v > 0x7f) { out.push((v & 0x7f) | 0x80); v >>>= 7; } out.push(v); return out; };
+  const idle = 0xffff;
+  assert.equal(parseRideKeypad([0x23, 0x08, ...varint(idle)]).size, 0);
+  const shiftUpR = idle & ~0x1000;
+  assert.deepEqual([...parseRideKeypad([0x23, 0x08, ...varint(shiftUpR)])], ['shiftUpR']);
+  // right paddle pulled to -60 (zigzag 119)
+  const withPaddle = parseRideKeypad([0x23, 0x08, ...varint(idle), 0x1a, 0x04, 0x08, 0x01, 0x10, 119]);
+  assert.deepEqual([...withPaddle], ['paddleR']);
+  // small paddle drift is ignored
+  assert.equal(parseRideKeypad([0x23, 0x08, ...varint(idle), 0x1a, 0x04, 0x08, 0x00, 0x10, 20]).size, 0);
+  assert.equal(parseRideKeypad([0x19, 0x08, 0x50]), null);
 });

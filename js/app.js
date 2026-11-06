@@ -1,4 +1,4 @@
-import { bluetoothAvailable, Trainer, HeartRateMonitor } from './ble.js';
+import { bluetoothAvailable, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController } from './ble.js';
 import { stepSpeed } from './physics.js';
 import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './workouts.js';
@@ -16,44 +16,65 @@ const saveSettings = () => { try { localStorage.setItem('powerup.settings', JSON
 // ---------- Devices & live data ----------
 const trainer = new Trainer();
 const hrm = new HeartRateMonitor();
+const cadenceSensor = new CadenceSensor();
+const controller = new ZwiftController();
 const live = { power: 0, cadence: 0, hr: 0, powerAt: 0, cadAt: 0, hrAt: 0 };
 
 trainer.addEventListener('data', ({ detail: d }) => {
   const now = performance.now();
   if (d.power !== undefined) { live.power = Math.max(0, d.power); live.powerAt = now; }
-  if (d.cadence !== undefined) { live.cadence = d.cadence; live.cadAt = now; }
+  if (d.cadence !== undefined && !cadenceSensor.connected) { live.cadence = d.cadence; live.cadAt = now; }
   if (d.heartRate && !hrm.connected) { live.hr = d.heartRate; live.hrAt = now; }
 });
 hrm.addEventListener('data', ({ detail: d }) => { live.hr = d.heartRate; live.hrAt = performance.now(); });
-trainer.addEventListener('disconnect', () => { updateDeviceUI(); toast('Тренажер відключився'); });
-hrm.addEventListener('disconnect', () => { updateDeviceUI(); toast('Пульсометр відключився'); });
+cadenceSensor.addEventListener('data', ({ detail: d }) => { live.cadence = d.cadence; live.cadAt = performance.now(); });
+controller.addEventListener('press', ({ detail: name }) => onControllerButton(name));
 
-function updateDeviceUI() {
-  $('trainer-status').textContent = trainer.connected
-    ? `${trainer.name} · ${trainer.controllable ? 'керування ERG/нахил ✓' : 'лише дані'}`
-    : 'не підключено';
-  $('btn-trainer').textContent = trainer.connected ? 'Відключити' : 'Підключити';
-  $('btn-trainer').classList.toggle('ok', trainer.connected);
-  $('hr-status').textContent = hrm.connected ? hrm.name : 'не підключено';
-  $('btn-hr').textContent = hrm.connected ? 'Відключити' : 'Підключити';
-  $('btn-hr').classList.toggle('ok', hrm.connected);
+const DEVICES = [
+  { dev: trainer, key: 'trainer', lost: 'Тренажер відключився' },
+  { dev: hrm, key: 'hr', lost: 'Пульсометр відключився' },
+  { dev: cadenceSensor, key: 'cad', lost: 'Датчик каденсу відключився' },
+  { dev: controller, key: 'ctl', lost: 'Контролер відключився' },
+];
+const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: 'вимірювач потужності' };
+let lastButtonLabel = '';
+
+for (const d of DEVICES) d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(d.lost); });
+
+function deviceStatus(d) {
+  if (!d.dev.connected) return 'не підключено';
+  if (d.dev === trainer) {
+    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${trainer.controllable ? 'керування ERG/нахил ✓' : 'лише дані'}`;
+  }
+  if (d.dev === controller) return `${controller.name}${lastButtonLabel ? ` · натиснуто: ${lastButtonLabel}` : ' · натисніть будь-яку кнопку'}`;
+  return d.dev.name;
 }
 
-async function toggleDevice(dev, btn) {
-  if (dev.connected) { dev.disconnect(); updateDeviceUI(); return; }
+function updateDeviceUI() {
+  for (const d of DEVICES) {
+    const btn = $(`btn-${d.key}`);
+    $(`${d.key}-status`).textContent = deviceStatus(d);
+    btn.textContent = d.dev.connected ? 'Відключити' : 'Підключити';
+    btn.classList.toggle('ok', d.dev.connected);
+  }
+}
+
+async function toggleDevice(d) {
+  const btn = $(`btn-${d.key}`);
+  if (d.dev.connected) { d.dev.disconnect(); updateDeviceUI(); return; }
   btn.disabled = true;
   btn.textContent = 'Пошук…';
+  let error = null;
   try {
-    await dev.connect();
-    if (dev === trainer) $('sim').checked = false;
+    if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
+    await d.dev.connect();
+    if (d.dev === trainer) $('sim').checked = false;
   } catch (e) {
-    if (e.name !== 'NotFoundError') {
-      const status = dev === trainer ? $('trainer-status') : $('hr-status');
-      setTimeout(() => { status.textContent = `Не вдалося підключитися: ${e.message}`; }, 0);
-    }
+    if (e.name !== 'NotFoundError') error = e;
   } finally {
     btn.disabled = false;
     updateDeviceUI();
+    if (error) $(`${d.key}-status`).textContent = `Не вдалося підключитися: ${error.message}`;
   }
 }
 
@@ -61,12 +82,10 @@ async function toggleDevice(dev, btn) {
 function initLobby() {
   if (!bluetoothAvailable()) {
     $('bt-warning').hidden = false;
-    $('btn-trainer').disabled = true;
-    $('btn-hr').disabled = true;
+    for (const d of DEVICES) $(`btn-${d.key}`).disabled = true;
     $('sim').checked = true;
   }
-  $('btn-trainer').onclick = () => toggleDevice(trainer, $('btn-trainer'));
-  $('btn-hr').onclick = () => toggleDevice(hrm, $('btn-hr'));
+  for (const d of DEVICES) $(`btn-${d.key}`).onclick = () => toggleDevice(d);
 
   const bind = (id, key, num = true) => {
     const el = $(id);
@@ -140,9 +159,13 @@ function startRide() {
     gain: 0, lastElev: route.elevAt(0), laps: 0,
     paused: false, pedal: 0, lastFrame: performance.now(),
     powerHist: [], target: workout ? targetAt(workout, 0, settings.ftp).watts : null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
+    gear: 12, ergBias: 0, lane: 0.9, laneTarget: 0.9,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
   };
+  trainer.riderWeight = settings.weight + 8;
+  trainer.resetMode();
   recorder.reset();
+  updateGear();
   $('lobby').hidden = true;
   $('summary').hidden = true;
   $('ride').hidden = false;
@@ -190,6 +213,7 @@ function frame(now) {
     moved = ride.v * dt;
     ride.dist += moved;
     ride.pedal += (cadence / 60) * Math.PI * 2 * dt;
+    ride.lane += (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
 
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
@@ -205,7 +229,7 @@ function frame(now) {
   }
 
   const riders = [
-    { dist: ride.dist, color: ME_COLOR, pedal: ride.pedal, self: true, name: settings.name },
+    { dist: ride.dist, color: ME_COLOR, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
     ...ride.bots,
   ];
   scene.render(route, ride.dist, riders, moved);
@@ -230,12 +254,13 @@ function tick(power, cadence) {
     const t = targetAt(ride.workout, ride.workoutT, settings.ftp);
     ride.workoutT += 1;
     if (t) {
-      ride.target = t.watts;
+      ride.target = Math.max(0, t.watts + ride.ergBias);
       if (t.remaining <= 5 && t.remaining > 4) toast('Через 5 с — наступний інтервал');
     } else {
       ride.workoutDone = true;
       ride.target = null;
       toast('Тренування виконано! Далі — вільна їзда 🏁');
+      updateGear();
       if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
     }
   }
@@ -243,7 +268,7 @@ function tick(power, cadence) {
     if (ride.target !== null && ride.workout && !ride.workoutDone) {
       if (ride.target !== ride.lastSentTarget) { trainer.setTargetPower(ride.target); ride.lastSentTarget = ride.target; }
     } else {
-      const g = Math.round(grade * 100 * (settings.difficulty / 100) * 10) / 10;
+      const g = Math.round((grade * 100 * (settings.difficulty / 100) + gearOffset(ride.gear)) * 10) / 10;
       const now = performance.now();
       if (g !== ride.lastSentGrade || now - ride.lastGradeSentAt > 10000) {
         trainer.setSimulation(g);
@@ -403,9 +428,83 @@ $('btn-finish').onclick = () => {
 $('btn-download').onclick = downloadTCX;
 $('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; };
 $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value; };
+// ---------- Virtual gears & controller actions ----------
+const GEARS = 24, NEUTRAL_GEAR = 12;
+/** Extra simulated grade (percent) per virtual gear: harder gear = more resistance. */
+const gearOffset = (gear) => (gear - NEUTRAL_GEAR) * 0.6;
+
+const BUTTON_LABELS = {
+  shiftUpL: 'перемикач ліво +', shiftDownL: 'перемикач ліво −', shiftUpR: 'перемикач право +', shiftDownR: 'перемикач право −',
+  paddleL: 'лівий підрульовий', paddleR: 'правий підрульовий',
+  up: '▲', down: '▼', left: '◀', right: '▶', a: 'A', b: 'B', y: 'Y', z: 'Z',
+  powerUpL: 'Power-up ліво', powerUpR: 'Power-up право', onOffL: 'вкл. ліво', onOffR: 'вкл. право',
+};
+
+function onControllerButton(name) {
+  lastButtonLabel = BUTTON_LABELS[name] || name;
+  updateDeviceUI();
+  if (!ride) return;
+  switch (name) {
+    case 'shiftUpL': case 'shiftUpR': case 'paddleR': case 'up': shift(+1); break;
+    case 'shiftDownL': case 'shiftDownR': case 'paddleL': case 'down': shift(-1); break;
+    case 'left': steer(-1); break;
+    case 'right': steer(+1); break;
+    case 'a': togglePause(); break;
+    case 'y': skipInterval(); break;
+    default: break;
+  }
+}
+
+function shift(dir) {
+  if (!ride || ride.paused) return;
+  if (ride.workout && !ride.workoutDone) {
+    ride.ergBias += dir * 5;
+    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+    if (t) ride.target = Math.max(0, t.watts + ride.ergBias);
+    toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} Вт`);
+  } else {
+    const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
+    if (next === ride.gear) return;
+    ride.gear = next;
+    ride.lastSentGrade = null; // send the new resistance on the next tick
+    if (ride.simulated) {
+      const s = $('sim-power');
+      s.value = Number(s.value) + dir * 10;
+      s.oninput();
+    }
+  }
+  updateGear();
+}
+
+function steer(dir) {
+  if (!ride) return;
+  ride.laneTarget = Math.max(-2.4, Math.min(2.4, ride.laneTarget + dir * 1.2));
+}
+
+function skipInterval() {
+  if (!ride?.workout || ride.workoutDone) return;
+  const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+  if (!t) return;
+  ride.workoutT = Math.max(0, ride.workoutT - 1) + t.remaining;
+  toast('Інтервал пропущено ⏭');
+}
+
+function updateGear() {
+  if (!ride) return;
+  const inErg = ride.workout && !ride.workoutDone;
+  $('m-gear-label').textContent = inErg ? 'ERG' : 'Передача';
+  $('m-gear').textContent = inErg ? `${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias}` : ride.gear;
+  $('m-gear-unit').textContent = inErg ? 'Вт' : `/${GEARS}`;
+}
+
 window.addEventListener('keydown', (e) => {
   if (!ride) return;
   if (e.code === 'Space') { e.preventDefault(); togglePause(); }
+  if (e.code === 'BracketRight') shift(+1);
+  if (e.code === 'BracketLeft') shift(-1);
+  if (e.code === 'ArrowLeft') { e.preventDefault(); steer(-1); }
+  if (e.code === 'ArrowRight') { e.preventDefault(); steer(+1); }
+  if (e.code === 'KeyN') skipInterval();
   if (ride.simulated && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
     e.preventDefault();
     const s = $('sim-power');

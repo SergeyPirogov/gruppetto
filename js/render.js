@@ -131,7 +131,7 @@ export class Scene {
       const sy = a.sy + (b.sy - a.sy) * tt;
       const sx = a.sx + (b.sx - a.sx) * tt;
       const sc = a.s + (b.s - a.s) * tt;
-      drawCyclist(ctx, sx + 0.9 * sc * W / 2, sy, sc * W / 2 * 1.8, me.color, me.pedal, 0, null);
+      drawCyclist(ctx, sx + (me.lane ?? 0.9) * sc * W / 2, sy, sc * W / 2 * 1.8, me.color, me.pedal, 0, null);
     }
   }
 
