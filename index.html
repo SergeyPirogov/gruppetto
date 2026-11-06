@@ -48,6 +48,19 @@
             <label>Ім’я <input id="f-name" maxlength="16"></label>
             <label>Вага, кг <input id="f-weight" type="number" min="30" max="200"></label>
             <label>FTP, Вт <input id="f-ftp" type="number" min="50" max="600"></label>
+            <label>Передня зірка (Zwift Cog 14T)
+              <select id="f-chainring">
+                <option value="34">34</option><option value="36">36</option><option value="39">39</option>
+                <option value="42">42</option><option value="46">46</option><option value="50">50</option>
+                <option value="52">52</option><option value="53">53</option>
+              </select>
+            </label>
+            <label>Віртуальні передачі
+              <select id="f-shift">
+                <option value="wheel">Як у Zwift (окружність колеса)</option>
+                <option value="grade">Через нахил (сумісніше)</option>
+              </select>
+            </label>
             <label>Складність підйомів <span id="diff-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
           </div>
         </div>

@@ -96,6 +96,7 @@ export const wahoo = {
   simMode: (weightKg, crr = 0.004, cw = 0.51) => [
     0x43, ...u16(Math.round(weightKg * 100)), ...u16(Math.round(crr * 1000)), ...u16(Math.round(cw * 1000)),
   ],
+  wheelCircumference: (mm) => [0x48, ...u16(Math.round(mm * 10))],
   /** grade in percent; encoded as (fraction + 1) * 65535 / 2 */
   grade: (gradePercent) => {
     const f = Math.max(-1, Math.min(1, gradePercent / 100));
@@ -261,6 +262,17 @@ export class Trainer extends Device {
     });
     this._queue = this._queue.then(run, run);
     return this._queue;
+  }
+
+  /**
+   * Wheel circumference in mm (used for virtual gears). Resolves true if the trainer accepted it.
+   * FTMS opcode 0x12, Wahoo legacy opcode 0x48.
+   */
+  setWheelCircumference(mm) {
+    if (!this.controllable) return Promise.resolve(false);
+    if (this.protocol === 'wahoo') return this._write(wahoo.wheelCircumference(mm)).then(() => true, () => false);
+    const v = Math.round(mm * 10);
+    return this._command([0x12, v & 0xff, (v >> 8) & 0xff]).catch(() => false);
   }
 
   /** Forces the trainer mode (and rider weight) to be re-sent with the next command. */

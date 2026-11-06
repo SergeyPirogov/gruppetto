@@ -159,3 +159,19 @@ test('10 routes, each with an existing theme and distinct name', () => {
   assert.equal(new Set(routes.map((r) => r.name)).size, 10);
   for (const r of routes) assert.ok(THEMES[r.theme], `${r.id} theme ${r.theme}`);
 });
+
+import { GEAR_RATIOS, virtualWheelMm, gearGradeOffset, ratioOf } from '../js/gears.js';
+
+test('Virtual gears for Zwift Cog', () => {
+  assert.equal(GEAR_RATIOS.length, 24);
+  for (let i = 1; i < 24; i++) assert.ok(GEAR_RATIOS[i] > GEAR_RATIOS[i - 1]);
+  // gear whose ratio equals the physical 34/14 gives the real wheel size
+  assert.equal(virtualWheelMm(12, 34), Math.round(2096 * 2.40 / (34 / 14)));
+  // harder gear => bigger virtual wheel => more speed and resistance at the same cadence
+  assert.ok(virtualWheelMm(20, 34) > virtualWheelMm(12, 34));
+  assert.ok(virtualWheelMm(1, 50) >= 300 && virtualWheelMm(24, 34) <= 6500);
+  assert.equal(gearGradeOffset(12), 0);
+  assert.ok(gearGradeOffset(24) > 0 && gearGradeOffset(1) < 0);
+  assert.equal(ratioOf(99), 5.49);
+  assert.deepEqual(wahoo.wheelCircumference(2096), [0x48, 0xe0, 0x51]); // 20960
+});

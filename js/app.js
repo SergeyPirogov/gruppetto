@@ -7,6 +7,7 @@ import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './worko
 import { Recorder } from './recorder.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
+import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -14,6 +15,7 @@ const $ = (id) => document.getElementById(id);
 const DEFAULT_SETTINGS = {
   name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
+  chainring: 34, shiftMode: 'wheel',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -111,6 +113,8 @@ function initLobby() {
   bind('f-weight', 'weight');
   bind('f-ftp', 'ftp');
   bind('f-diff', 'difficulty');
+  bind('f-chainring', 'chainring');
+  bind('f-shift', 'shiftMode', false);
   const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); };
   refreshDiff();
 
@@ -177,7 +181,7 @@ function startRide() {
     gain: 0, lastElev: route.elevAt(0), laps: 0,
     paused: false, pedal: 0, lastFrame: performance.now(),
     powerHist: [], target: workout ? targetAt(workout, 0, settings.ftp).watts : null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
-    gear: 12, ergBias: 0, lane: 0, laneTarget: 0,
+    gear: DEFAULT_GEAR, ergBias: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: 0, laneTarget: 0,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
   };
   trainer.riderWeight = settings.weight + 8;
@@ -294,7 +298,9 @@ function tick(power, cadence) {
       ride.lastSentGrade = null;
     } else {
       ride.lastSentTarget = null;
-      const g = Math.round((grade * 100 * (settings.difficulty / 100) + gearOffset(ride.gear)) * 10) / 10;
+      if (ride.shiftMode === 'wheel') sendVirtualGear();
+      const offset = ride.shiftMode === 'wheel' ? 0 : gearGradeOffset(ride.gear);
+      const g = Math.round((grade * 100 * (settings.difficulty / 100) + offset) * 10) / 10;
       const now = performance.now();
       if (g !== ride.lastSentGrade || now - ride.lastGradeSentAt > 10000) {
         trainer.setSimulation(g);
@@ -408,7 +414,10 @@ function finishRide() {
   const wasRamp = ride.workout?.ramp;
   lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null };
   ride = null;
-  if (trainer.connected && trainer.controllable) trainer.setSimulation(0);
+  if (trainer.connected && trainer.controllable) {
+    trainer.setSimulation(0);
+    if (settings.shiftMode === 'wheel') trainer.setWheelCircumference(BASE_WHEEL_MM);
+  }
   $('ride').hidden = true;
   $('summary').hidden = false;
   const stats = sum ? [
@@ -578,9 +587,6 @@ $('btn-download').onclick = downloadTCX;
 $('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; };
 $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value; };
 // ---------- Virtual gears & controller actions ----------
-const GEARS = 24, NEUTRAL_GEAR = 12;
-/** Extra simulated grade (percent) per virtual gear: harder gear = more resistance. */
-const gearOffset = (gear) => (gear - NEUTRAL_GEAR) * 0.6;
 
 const BUTTON_LABELS = {
   shiftUpL: 'перемикач ліво +', shiftDownL: 'перемикач ліво −', shiftUpR: 'перемикач право +', shiftDownR: 'перемикач право −',
@@ -623,6 +629,21 @@ function runIntent(intent, value) {
     case 'hud': $('ride').classList.toggle('hud-hidden'); break;
     default: break;
   }
+}
+
+/** Sends the virtual gear as a wheel circumference; falls back to grade offsets if the trainer refuses. */
+function sendVirtualGear() {
+  if (ride.gear === ride.lastSentWheel || ride.wheelPending) return;
+  const gear = ride.gear;
+  ride.wheelPending = true;
+  trainer.setWheelCircumference(virtualWheelMm(gear, settings.chainring)).then((ok) => {
+    if (!ride) return;
+    ride.wheelPending = false;
+    if (ok) { ride.lastSentWheel = gear; return; }
+    ride.shiftMode = 'grade';
+    ride.lastSentGrade = null;
+    toast('Тренажер не приймає окружність колеса — передачі через нахил');
+  });
 }
 
 const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null);
@@ -672,7 +693,7 @@ function updateGear() {
   const inErg = inErgStep();
   $('m-gear-label').textContent = inErg ? 'ERG' : 'Передача';
   $('m-gear').textContent = inErg ? `${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias}` : ride.gear;
-  $('m-gear-unit').textContent = inErg ? 'Вт' : `/${GEARS}`;
+  $('m-gear-unit').textContent = inErg ? 'Вт' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
 }
 
 window.addEventListener('keydown', (e) => {

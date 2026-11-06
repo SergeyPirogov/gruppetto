@@ -51,7 +51,7 @@ button.ok { background: #1f6f43; border-color: #2b8f58; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fields label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: .9rem; }
 .fields label:last-child { grid-column: 1 / -1; }
-input[type=number], input[type=password], input:not([type]) {
+input[type=number], input[type=password], input:not([type]), select {
   font: inherit; color: var(--text); background: #0f1522; border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px;
 }
