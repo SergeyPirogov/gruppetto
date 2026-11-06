@@ -563,8 +563,12 @@ async function connectIntervals({ quiet = false } = {}) {
     if (athlete.weight) { settings.weight = Math.round(athlete.weight); $('f-weight').value = settings.weight; }
     if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
     saveSettings();
-    const n = icuWorkouts.length;
-    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} Вт · ${n ? `заплановано тренувань на тиждень: ${n}` : 'на тиждень тренувань не заплановано'}`;
+    const n = icuWorkouts.length, st = icuWorkouts.stats || {};
+    const notes = [];
+    if (st.otherSport) notes.push(`інших видів спорту пропущено: ${st.otherSport}`);
+    if (st.unstructured) notes.push(`без інтервалів (вільна їзда): ${st.unstructured}`);
+    const found = n ? `велотренувань на 7 днів: ${n} — вони перші в розділі «Режим»` : 'на 7 днів велотренувань у календарі немає';
+    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} Вт · ${found}${notes.length ? ` (${notes.join(', ')})` : ''}`;
     $('btn-icu').textContent = 'Оновити';
     $('btn-icu-forget').hidden = false;
     renderModes();

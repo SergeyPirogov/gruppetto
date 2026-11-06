@@ -48,13 +48,29 @@ export class IntervalsClient {
     };
   }
 
-  /** Planned cycling workouts between two local dates (YYYY-MM-DD), converted to Power Up workouts. */
+  /**
+   * Planned cycling workouts between two local dates (YYYY-MM-DD), converted to Power Up workouts.
+   * The returned array carries `stats` explaining what was found and skipped.
+   */
   async plannedWorkouts(oldest, newest) {
-    const events = await this.request('/events', { params: { oldest, newest, category: 'WORKOUT' } });
-    return (events || [])
-      .filter((e) => (!e.type || RIDE_TYPES.has(e.type)) && e.workout_doc?.steps?.length)
-      .map(eventToWorkout)
-      .filter((w) => w.steps.length);
+    const events = (await this.request('/events', { params: { oldest, newest, category: 'WORKOUT' } })) || [];
+    const stats = { total: events.length, otherSport: 0, unstructured: 0 };
+    const out = [];
+    for (const e of events) {
+      if (e.type && !RIDE_TYPES.has(e.type)) { stats.otherSport++; continue; }
+      const w = eventToWorkout(e);
+      if (!w.steps.length) {
+        // no structured steps (e.g. "1 h Z2" or text only): ride it as a free ride of the planned length
+        const dur = Math.round(e.moving_time || e.time_target || 3600);
+        w.steps = [{ dur, free: true, text: e.name || '' }];
+        w.description = `Без інтервалів — вільна їзда ${Math.round(dur / 60)} хв`;
+        stats.unstructured++;
+      }
+      out.push(w);
+    }
+    out.sort((a, b) => a.date.localeCompare(b.date));
+    out.stats = stats;
+    return out;
   }
 
   /** Upload a FIT (or TCX) file; pairs it with the planned workout when eventId is given. Returns the new activity id. */
@@ -75,7 +91,7 @@ export class IntervalsClient {
 export const activityUrl = (id) => `https://intervals.icu/activities/${id}`;
 
 export function eventToWorkout(e) {
-  const steps = convertSteps(e.workout_doc.steps);
+  const steps = convertSteps(e.workout_doc?.steps || []);
   const date = (e.start_date_local || '').slice(0, 10);
   return {
     id: `icu:${e.id}`,

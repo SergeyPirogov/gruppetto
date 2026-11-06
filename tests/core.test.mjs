@@ -241,3 +241,18 @@ test('FIT export omits HR and cadence when no sensor provided them', () => {
   assert.equal(messages.recordMesgs[10].cadence, undefined);
   assert.equal(messages.sessionMesgs[0].avgPower, 150);
 });
+
+import { IntervalsClient } from '../js/intervals.js';
+
+test('intervals.icu planned workouts: filters other sports, keeps unstructured rides as free rides', async () => {
+  const client = new IntervalsClient({ apiKey: 'k' });
+  client.request = async () => [
+    { id: 1, type: 'Ride', name: 'SS', start_date_local: '2026-11-08T00:00:00', workout_doc: { steps: [{ duration: 600, power: { value: 90, units: '%ftp' } }] } },
+    { id: 2, type: 'Run', name: 'Run', start_date_local: '2026-11-07T00:00:00', workout_doc: { steps: [{ duration: 600 }] } },
+    { id: 3, type: 'VirtualRide', name: 'Z2 1h', start_date_local: '2026-11-07T00:00:00', moving_time: 3600 },
+  ];
+  const list = await client.plannedWorkouts('2026-11-06', '2026-11-12');
+  assert.deepEqual(list.map((w) => w.eventId), [3, 1]); // sorted by date
+  assert.deepEqual(list.stats, { total: 3, otherSport: 1, unstructured: 1 });
+  assert.deepEqual(list[0].steps, [{ dur: 3600, free: true, text: 'Z2 1h' }]);
+});
