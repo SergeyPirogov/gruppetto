@@ -18,7 +18,7 @@ touch "$out/.nojekyll" # serve every file as is
 
 cd "$out"
 git init -q -b gh-pages
-git add -A
+git add -A && git add -f assets/bike/bike.glb assets/rider/dummy.gltf assets/rider/dummy.bin assets/rider/head.glb # git-ignored in the source repo
 git -c user.name="$(git -C "$root" config user.name)" -c user.email="$(git -C "$root" config user.email)" \
   commit -q -m "Deploy $(git -C "$root" rev-parse --short HEAD)"
 git push -q -f "$(git -C "$root" remote get-url origin)" gh-pages
