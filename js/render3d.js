@@ -518,7 +518,7 @@ export class Scene3D {
   _makeLoader(parent) {
     const el = document.createElement('div');
     el.className = 'ride-loader';
-    el.innerHTML = '<div class="ride-loader-wheel"></div><div class="ride-loader-text">Готуємо трасу…</div>';
+    el.innerHTML = '<div class="ride-loader-wheel"></div><div class="ride-loader-text">Preparing the route…</div>';
     parent?.appendChild(el);
     return el;
   }
@@ -579,7 +579,7 @@ export class Scene3D {
     const P = this.pixel;
     P.target?.dispose();
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    const VIRTUAL_W = 480; // width of the pixel grid (height follows the aspect ratio)
+    const VIRTUAL_W = 540; // width of the pixel grid (height follows the aspect ratio); fewer = chunkier
     const w = VIRTUAL_W, h = Math.max(1, Math.round((size.y / Math.max(1, size.x)) * VIRTUAL_W));
     P.target = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: THREE.HalfFloatType });
     P.target.depthTexture = new THREE.DepthTexture(w, h);
@@ -616,19 +616,21 @@ export class Scene3D {
             e = max(e, abs(z + viewZ(uv + vec2(0.0, px.y))));
             e = max(e, abs(z + viewZ(uv - vec2(px.x, 0.0))));
             e = max(e, abs(z + viewZ(uv - vec2(0.0, px.y))));
-            if (z < 900.0 && e > 0.06 * z + 0.4) c *= 0.38;
-            // warm grade: cooler shadows, golden highlights, a touch more saturation
+            if (z < 900.0 && e > 0.06 * z + 0.4) c *= vec3(0.62, 0.58, 0.66);   // soft, cool-dark outline
+            // painterly golden-hour grade (like hand-made pixel art): muted, earthy colours, warm light,
+            // lilac shadows, and a fine speckle that gives large flat areas (road, grass) a texture
             float l = dot(c, vec3(0.299, 0.587, 0.114));
-            c = mix(c, c * vec3(0.9, 0.9, 1.1), (1.0 - l) * 0.4);
-            c = mix(c, c * vec3(1.08, 1.0, 0.84), l * 0.3);
-            c = mix(vec3(l), c, 1.12);
+            c = mix(vec3(l), c, 0.82);                                   // less saturated
+            c = mix(c, c * vec3(0.92, 0.88, 1.08), (1.0 - l) * 0.45);    // lilac shadows
+            c = mix(c, c * vec3(1.12, 1.0, 0.8), l * 0.45);              // golden light
+            c *= 1.0 + (fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.07; // speckle
             // painterly bands: quantise brightness, keep the hue; dither only near band edges
             l = dot(c, vec3(0.299, 0.587, 0.114));
             vec3 chroma = c - l;
-            float bands = 12.0, t = l * bands, f = fract(t);
-            float edge = clamp((f - 0.5) / 0.28 + 0.5, 0.0, 1.0);   // solid inside a band, ramp near its edge
+            float bands = 20.0, t = l * bands, f = fract(t);
+            float edge = clamp((f - 0.5) / 0.35 + 0.5, 0.0, 1.0);   // solid inside a band, ramp near its edge
             float lq = (floor(t) + step(bayer4(cell) + 0.5, edge)) / bands;
-            chroma = floor(chroma * 28.0 + 0.5) / 28.0;
+            chroma = floor(chroma * 48.0 + 0.5) / 48.0;
             c = lq + chroma;
             gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
           }`,
