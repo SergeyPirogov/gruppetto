@@ -9,6 +9,7 @@ import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
 import { t } from './i18n.js';
+import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
 const AHEAD = 7, BEHIND = 1;   // chunks kept around the rider
@@ -225,6 +226,13 @@ function buildModels(theme) {
   M.lupine = merge([
     { geom: cyl(0.012, 0.016, 0.7, 4), color: '#5c9a3a', pos: [0, 0.35, 0] },
     ...Array.from({ length: 7 }, (_, k) => ({ geom: ico(0.055 - k * 0.004, 0), color: k % 2 ? '#8a6cc4' : '#a68ae0', pos: [0, 0.42 + k * 0.06, 0] })),
+  ]);
+  // a house for imported routes' buildings: 8 m wide, 6 m deep, walls and a pitched roof
+  M.house = merge([
+    { geom: new THREE.BoxGeometry(8, 4.6, 6), color: '#ece3d2', pos: [0, 2.3, 0], flat: true },
+    { geom: new THREE.CylinderGeometry(4.6, 4.6, 8.6, 3), color: '#b5543a', pos: [0, 4.6, 0], rot: [0, 0, Math.PI / 2], scale: [1, 1, 0.78], flat: true },
+    { geom: new THREE.BoxGeometry(1.0, 1.7, 0.08), color: '#6b4a32', pos: [1.6, 0.85, 3.02], flat: true },
+    { geom: new THREE.BoxGeometry(1.2, 1.0, 0.08), color: '#9cc3d8', pos: [-1.8, 2.4, 3.02], flat: true },
   ]);
   return M;
 }
@@ -707,6 +715,9 @@ export class Scene3D {
     // a real road bends and doubles back: gentle side hills, and the land never reaches over another stretch
     if (route.custom) this.t3 = { ...this.t3, amp: 6, far: 0.2, wall: 0, rock: 0, snow: 0, dip: null, beach: false };
     this.reach = null;
+    // imported routes with OpenStreetMap data: woods, water and buildings where they really are
+    this.land = route.land || null;
+    this.buildings = route.buildings || [];
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.natureMats = this.nature ? natureMaterials(this.nature) : null;
@@ -928,6 +939,16 @@ export class Scene3D {
     return { lim, other }; // [left, right]
   }
 
+  /** The real land beside an imported road at segment a and offset o: '.' open, 'f' wood, 'w' water. */
+  _landAt(a, o) {
+    if (!this.land || Math.abs(o) < 11) return '.';
+    const n = LAND_OFFSETS.length, rows = this.land.length / n;
+    const row = Math.max(0, Math.min(rows - 1, Math.round((a * SEG) / LAND_STEP)));
+    let best = 0, bd = Infinity;
+    for (let i = 0; i < n; i++) { const d = Math.abs(LAND_OFFSETS[i] - o); if (d < bd) { bd = d; best = i; } }
+    return Math.sign(LAND_OFFSETS[best]) === Math.sign(o) ? this.land[row * n + best] : '.';
+  }
+
   // ----- chunks -----
 
   _buildChunk(c) {
@@ -936,6 +957,7 @@ export class Scene3D {
     const n = this.route.segments.length;
     const T = this.t, T3c = this.t3;
     const grassA = rgb(T.grass[0]), grassB = rgb(T.grass[1]), verge = rgb(T.verge[0]);
+    const waterC = col('#4f93c4');
     const sand = col('#e2cc96'), rockC = col(T3c.rockColor || '#8d8f8c'), snowC = col('#f2f6f9');
     const frames = [];
     for (let r = 0; r < rows; r++) frames.push(this.frame((a0 + r) * SEG));
@@ -952,6 +974,8 @@ export class Scene3D {
         const o = Math.sign(COLS[k]) * Math.min(Math.abs(COLS[k]), lim);
         const x = f.x + f.rx * o, z = f.z + f.rz * o;
         let y = this._terrainY(f.y, o, x, z);
+        const lc = this.land ? this._landAt(a0 + r, o) : '.';
+        if (lc === 'w') y = Math.min(y, f.y - 1.3); // a lake or a wide river: flat, a little below the road
         // between two stretches of the same road the land slopes to meet halfway, at the mean height
         const oy = reach[r]?.other[sd];
         if (oy !== null && oy !== undefined) {
@@ -964,6 +988,8 @@ export class Scene3D {
         let cc = grassA.clone().lerp(grassB, vnoise(x / 30, z / 30));
         cc.multiplyScalar(0.92 + vnoise(x / 9, z / 9) * 0.16);
         if (Math.abs(o) < 8) cc = verge.clone();
+        if (lc === 'f') cc.multiplyScalar(0.72);
+        if (lc === 'w') cc = waterC.clone().lerp(cc, vnoise(x / 40, z / 40) * 0.08);
         const rel = y - f.y;
         if (T3c.rock && rel > T3c.rock) cc = rockC.clone().lerp(cc, 0.3);
         if (T3c.snow && rel > T3c.snow) cc = snowC.clone();
@@ -1047,6 +1073,7 @@ export class Scene3D {
           }
         }
         T.scenery.forEach((sc, j) => {
+          if (this.land && TREE_TYPES.includes(sc.type)) return; // trees stand where the map has woods
           const h = (k) => hash(idxN * 7.13 + side * 3.7 + (j * 4 + k) * 19.1);
           if (h(0) >= sc.prob) return;
           const o = side * (sc.off[0] + h(1) * (sc.off[1] - sc.off[0])) * ROAD_HALF;
@@ -1079,7 +1106,7 @@ export class Scene3D {
         if (T.fence && hash(Math.floor(idxN / 50) * 3.1 + side * 11.7) < T.fence.prob) fenceSides.push([r, side]);
       }
       // far forest
-      if (treeTypes.length) {
+      if (treeTypes.length && !this.land) {
         for (let q = 0; q < 3; q++) {
           const hq = (k) => hash(idxN * 3.31 + q * 51.7 + k * 7.9);
           if (hq(0) > T3c.far) continue;
@@ -1092,6 +1119,43 @@ export class Scene3D {
         }
       }
     }
+    // imported routes: woods and buildings from the map
+    if (this.land) {
+      const types = treeTypes.length ? treeTypes.map((x) => x.type) : ['pine', 'oak', 'birch'];
+      const sides = [-1, 1].map((sd) => LAND_OFFSETS.map((o, i) => [o, i]).filter(([o]) => Math.sign(o) === sd).sort((p, q) => Math.abs(p[0]) - Math.abs(q[0])));
+      for (let r = 0; r < rows - 1; r++) {
+        const a = a0 + r;
+        for (const list of sides) {
+          list.forEach(([o], i) => {
+            if (this._landAt(a, o) !== 'f') return;
+            // the band this cell stands for: halfway to its neighbours across the road
+            const ao = Math.abs(o), sd = Math.sign(o);
+            const inner = i ? (Math.abs(list[i - 1][0]) + ao) / 2 : Math.max(ROAD_HALF + 4, ao - 8);
+            const outer = i < list.length - 1 ? (Math.abs(list[i + 1][0]) + ao) / 2 : ao + 40;
+            const spacing = ao < 70 ? 7 : 13, n = ((outer - inner) * SEG) / (spacing * spacing);
+            const lim = reach[r] ? reach[r].lim[sd > 0 ? 1 : 0] : Infinity;
+            for (let q = 0; q < Math.ceil(n); q++) {
+              const hq = (k) => hash(a * 7.31 + o * 1.13 + q * 13.7 + k * 3.1);
+              if (hq(0) > n - q) continue; // the fractional last tree
+              const oo = sd * (inner + hq(1) * (outer - inner));
+              if (Math.abs(oo) > lim - 3) continue;
+              const ff = this.frame(a * SEG + hq(2) * SEG);
+              const tt = types[Math.floor(hq(3) * types.length)];
+              put(Math.abs(oo) < 60 ? tt : `${tt}@far`, mtx(ff.x + ff.rx * oo, heightAt(r, oo), ff.z + ff.rz * oo, hq(4) * 6.28, 0.8 + hq(5) * 0.6));
+            }
+          });
+        }
+      }
+      const d0 = a0 * SEG, d1 = (a0 + rows - 1) * SEG;
+      for (const [d, o, size, ang] of this.buildings) {
+        if (d < d0 || d >= d1) continue;
+        const r = Math.floor(d / SEG) - a0, lim = reach[r] ? reach[r].lim[o > 0 ? 1 : 0] : Infinity;
+        if (Math.abs(o) > lim - size / 2) continue;
+        const f = this.frame(d);
+        put('house', mtx(f.x + f.rx * o, heightAt(r, o) - 0.2, f.z + f.rz * o, -f.h - ang, size / 8));
+      }
+    }
+
     for (const [key, list] of Object.entries(place)) {
       const [type, far] = key.split('@');
       if (!list.length) continue;

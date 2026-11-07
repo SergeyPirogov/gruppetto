@@ -22,6 +22,8 @@ export const UK = {
   'Imported from GPX. Point to point, finish at {km} km.': 'Імпортовано з GPX. З точки до точки, фініш на {km} км.',
   'Imported from GPX (no elevation in the file: flat). Point to point, finish at {km} km.': 'Імпортовано з GPX (у файлі немає висот: рівна дорога). З точки до точки, фініш на {km} км.',
   'Imported from GPX (elevation from a terrain model). Point to point, finish at {km} km.': 'Імпортовано з GPX (висоти з карти рельєфу). З точки до точки, фініш на {km} км.',
+  'Map data': 'Дані карти', 'contributors': 'учасники',
+  'Loading terrain and map…': 'Завантажую рельєф і карту…', 'map ✓': 'карта ✓',
   'Loading terrain…': 'Завантажую рельєф…', 'Loading terrain… {done}/{total}': 'Завантажую рельєф… {done}/{total}',
   'Free ride': 'Вільна їзда', 'The trainer simulates the road grade.': 'Тренажер імітує нахил дороги.',
   'Workouts': 'Тренування', 'Workout': 'Тренування', 'Choose': 'Обрати',

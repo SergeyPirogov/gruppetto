@@ -554,3 +554,5 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .stat .grade-next { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; color: #9fb0c6; font-size: .66rem; white-space: nowrap; line-height: 1.2; }
 .grade-next b { font-weight: 700; font-size: .74rem; }
 .lobby-msg.info { background: rgba(47, 212, 240, .1); border-color: rgba(47, 212, 240, .45); }
+.osm-attr { display: block; margin-top: 6px; font-size: .72rem; opacity: .75; }
+.osm-attr a { color: inherit; }

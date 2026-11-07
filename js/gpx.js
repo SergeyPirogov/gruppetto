@@ -2,6 +2,7 @@
 // per-segment elevation and curvature a built-in route has, so the renderer and physics need no
 // special case. GPX elevations are noisy, so they are smoothed before any grade is read from them.
 import { SEG } from './routes.js';
+import { landFromOsm } from './osm.js';
 
 const TURN = 2.5;          // the 3D renderer multiplies curvature by this; divide it back out
 const MAX_KM = 150;
@@ -58,10 +59,11 @@ function median(a, r) {
 /**
  * A route definition from track points: elevation (m) and curvature per SEG-metre segment.
  * `elevation(lat, lon)`, when given, is a terrain model sampled every SEG metres along the road
- * (null where it has no data); otherwise the track's own elevations are used.
+ * (null where it has no data); otherwise the track's own elevations are used. `osm`: Overpass JSON
+ * of the area, turned into road-relative woods, water and buildings.
  * Throws when the track is too short or too long.
  */
-export function routeFromTrack({ name, points }, fileName = '', { elevation } = {}) {
+export function routeFromTrack({ name, points }, fileName = '', { elevation, osm } = {}) {
   // local flat projection in metres (fine for a ride-sized area)
   const lat0 = points[0].lat * Math.PI / 180, R = 6371000;
   const xy = points.map((p) => [p.lon * Math.PI / 180 * R * Math.cos(lat0), p.lat * Math.PI / 180 * R]);
@@ -117,7 +119,9 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation } = 
   const curve = dh.map((a) => (-a * SEG) / TURN);
 
   const title = name || fileName.replace(/\.gpx$/i, '') || 'My route';
+  const scenery = osm ? landFromOsm(osm, (la, lo) => [lo * Math.PI / 180 * R * Math.cos(lat0), la * Math.PI / 180 * R], sx, sy, head, SEG) : null;
   return {
+    ...(scenery || {}),
     id: `gpx-${Date.now().toString(36)}`,
     name: title.slice(0, 40),
     description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. Point to point, finish at ${(total / 1000).toFixed(1)} km.`,

@@ -405,3 +405,32 @@ test('terrain model: Terrarium tiles sampled along a track, bridge dips removed 
   assert.ok(Math.abs(r.gradeAt(2000)) < 0.06, `bridge grade ${r.gradeAt(2000)}`);
   assert.ok(r.elevationGain < 130, `gain ${r.elevationGain}`); // ~120 m, not 120 + 2×25
 });
+
+test('OSM scenery: woods, water and buildings laid out relative to the road (#25 step 3)', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  const { OFFSETS, LAND_STEP, overpassQuery } = await import('../js/osm.js');
+  const m = 1 / 111320, lat0 = 48.45, lon0 = 24.55, mx = 1 / (111320 * Math.cos((lat0 * Math.PI) / 180));
+  const at = (north, east) => ({ lat: lat0 + north * m, lon: lon0 + east * mx });
+  const box = (n0, n1, e0, e1) => [at(n0, e0), at(n0, e1), at(n1, e1), at(n1, e0), at(n0, e0)];
+  const pts = [];
+  for (let d = 0; d <= 3000; d += 50) pts.push({ ...at(d, 0), ele: 300 });
+  const osm = { elements: [
+    { type: 'way', tags: { landuse: 'forest' }, geometry: box(500, 2500, 10, 400) },          // right of the road (east)
+    { type: 'relation', tags: { natural: 'water' }, members: [                               // left: a lake in two pieces
+      { type: 'way', role: 'outer', geometry: [at(500, -10), at(500, -400), at(2500, -400)] },
+      { type: 'way', role: 'outer', geometry: [at(2500, -400), at(2500, -10), at(500, -10)] },
+    ] },
+    { type: 'way', tags: { building: 'house' }, geometry: box(1495, 1505, 35, 47) },           // a house 41 m to the right
+  ] };
+  const def = routeFromTrack({ name: 't', points: pts }, '', { osm });
+  const row = (d) => def.land.slice(Math.round(d / LAND_STEP) * OFFSETS.length, Math.round(d / LAND_STEP + 1) * OFFSETS.length);
+  const at1500 = row(1500);
+  OFFSETS.forEach((o, i) => assert.equal(at1500[i], o > 0 ? 'f' : 'w', `offset ${o}: ${at1500}`));
+  assert.equal(row(100), '.'.repeat(OFFSETS.length)); // open land before the wood and the lake
+  assert.equal(def.buildings.length, 1);
+  const [d, off] = def.buildings[0];
+  assert.ok(Math.abs(d - 1500) < 15 && Math.abs(off - 41) < 3, `building at ${d} m, ${off} m`);
+  const q = overpassQuery([[48.45, 24.55], [48.46, 24.56]]);
+  assert.match(q, /way\["landuse"="forest"\]\(48\.44,24\.52,48\.48,24\.56\)/); // the box the road runs through
+  assert.match(q, /way\["building"\]\(around:150,48\.45000,24\.55000,48\.46000,24\.56000\)/);
+});

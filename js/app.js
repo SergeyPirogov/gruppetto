@@ -5,6 +5,7 @@ import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
 import { routes, Route, ROUTE_GROUPS } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
+import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
 import { Recorder } from './recorder.js';
@@ -345,12 +346,17 @@ async function importGpx(ev) {
   try {
     const track = parseGpx(await file.text());
     // real elevations from a terrain model along the road (#25); without a network, the file's own
-    let elevation = null;
-    try {
-      infoBox(tr('Loading terrain…'));
-      elevation = await loadTerrain(track.points, { onProgress: (done, total) => infoBox(tr('Loading terrain… {done}/{total}', { done, total })) });
-    } catch (err) { console.info('Terrain model unavailable, using the GPX elevations', err); }
-    const def = routeFromTrack(track, file.name, { elevation });
+    // and the woods, water and buildings beside it from OpenStreetMap; each is optional
+    infoBox(tr('Loading terrain and map…'));
+    let tiles = '', map = '…';
+    const show = () => infoBox(`${tr('Loading terrain and map…')} ${tiles}${map === '…' ? '' : ` · ${map}`}`);
+    const [elevation, osm] = await Promise.all([
+      loadTerrain(track.points, { onProgress: (done, total) => { tiles = `${done}/${total}`; show(); } })
+        .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); return null; }),
+      fetchOsm(track.points).then((d) => { map = tr('map ✓'); show(); return d; })
+        .catch((err) => { console.info('Map data unavailable, generic scenery', err); return null; }),
+    ]);
+    const def = routeFromTrack(track, file.name, { elevation, osm });
     $('lobby-msg').hidden = true;
     const route = new Route(def);
     localizeClimbs(route);
@@ -443,6 +449,8 @@ function showRoute() {
   $('rh-name').textContent = r.name;
   $('rh-meta').textContent = `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}`;
   $('rh-desc').textContent = r.description;
+  // OpenStreetMap's licence (ODbL) asks for the attribution wherever its data shows
+  if (r.land) $('rh-desc').insertAdjacentHTML('beforeend', ` <small class="osm-attr">${tr('Map data')} © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> ${tr('contributors')}</small>`);
   renderGhostPicker();
   // the timed climbs, with this device's record on each
   $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} ${U.km} · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
