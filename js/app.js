@@ -338,6 +338,7 @@ async function startRide() {
   $('workout-panel').hidden = !workout;
   $('paused').hidden = true;
   $('btn-pause').textContent = 'Pause';
+  $('ride').classList.remove('show-controls');
   await ensureScene();
   scene.setStyle?.(settings.style);
   scene.setCamera?.(settings.camera);
@@ -602,6 +603,7 @@ function togglePause() {
   ride.lastSim = performance.now();
   $('paused').hidden = !ride.paused;
   $('btn-pause').textContent = ride.paused ? 'Resume' : 'Pause';
+  if (ride.paused) showControls(0); else showControls();
 }
 
 function finishRide() {
@@ -973,8 +975,30 @@ function updateGear() {
   $('m-gear-unit').textContent = inErg ? 'W' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
 }
 
+// Pause / Finish stay hidden while riding: they show when the mouse moves (for a few seconds, or as
+// long as it rests on them), on a tap, while paused, and Esc toggles them.
+let controlsTimer = 0, controlsPinned = false;
+function showControls(ms = 3000) {
+  $('ride').classList.add('show-controls');
+  clearTimeout(controlsTimer);
+  if (ms) controlsTimer = setTimeout(() => { if (!controlsPinned && !ride?.paused) $('ride').classList.remove('show-controls'); }, ms);
+}
+function hideControls() {
+  clearTimeout(controlsTimer);
+  controlsPinned = false;
+  if (!ride?.paused) $('ride').classList.remove('show-controls');
+}
+$('ride').addEventListener('mousemove', () => showControls());
+$('ride').addEventListener('touchstart', () => showControls(4000), { passive: true });
+document.querySelector('#ride .controls').addEventListener('mouseenter', () => { controlsPinned = true; showControls(0); });
+document.querySelector('#ride .controls').addEventListener('mouseleave', () => { controlsPinned = false; showControls(); });
+
 window.addEventListener('keydown', (e) => {
   if (!ride) return;
+  if (e.code === 'Escape') {
+    if ($('ride').classList.contains('show-controls')) hideControls();
+    else { showControls(0); $('btn-pause').focus(); }
+  }
   if (e.code === 'Space') { e.preventDefault(); togglePause(); }
   if (e.code === 'BracketRight') shift(+1);
   if (e.code === 'BracketLeft') shift(-1);
