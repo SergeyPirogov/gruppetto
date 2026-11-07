@@ -3,7 +3,7 @@ import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed } from './physics.js';
 import { routes } from './routes.js';
-import { workouts, targetAt, totalDuration, stepWatts, zoneColor } from './workouts.js';
+import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration } from './sound.js';
@@ -568,6 +568,16 @@ function updateHud(cadence, hr, grade) {
   const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
   $('m-power').textContent = p3;
   $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} W/kg`;
+  // power zone: the board's bar and a Z1–Z7 tag take the zone's colour (in a workout the number itself
+  // shows how close you are to the target, below)
+  const zone = powerZone(p3 / Math.max(1, settings.ftp));
+  const powerRow = document.querySelector('.stat.power');
+  powerRow.style.setProperty('--c', zone.color);
+  $('m-zone').textContent = `Z${zone.z}`;
+  $('m-zone').style.background = zone.color;
+  $('m-zone').title = zone.name;
+  if (!ride.workout || ride.workoutDone) $('m-power').style.color = p3 > 0 ? zone.color : '';
+  else $('m-power').style.color = '';
   $('m-cad').textContent = Math.round(cadence);
   $('m-hr').textContent = hr ? Math.round(hr) : '—';
   const A = ride.avg;

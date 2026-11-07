@@ -81,6 +81,22 @@ export function stepWatts(st, frac, ftp) {
   return Math.round(p * ftp);
 }
 
+/** Power zones by fraction of FTP (Coggan's seven, as Zwift and TrainingPeaks use them). */
+export const POWER_ZONES = [
+  { z: 1, name: 'Recovery', upTo: 0.55, color: '#8a94a6' },
+  { z: 2, name: 'Endurance', upTo: 0.75, color: '#3b82f6' },
+  { z: 3, name: 'Tempo', upTo: 0.9, color: '#22c55e' },
+  { z: 4, name: 'Threshold', upTo: 1.05, color: '#eab308' },
+  { z: 5, name: 'VO2max', upTo: 1.2, color: '#f97316' },
+  { z: 6, name: 'Anaerobic', upTo: 1.5, color: '#ef4444' },
+  { z: 7, name: 'Neuromuscular', upTo: Infinity, color: '#a855f7' },
+];
+
+/** The zone for a power as a fraction of FTP. */
+export function powerZone(frac) {
+  return POWER_ZONES.find((z) => frac < z.upTo) || POWER_ZONES[POWER_ZONES.length - 1];
+}
+
 /** Zone colour by fraction of FTP. */
 export function zoneColor(frac) {
   if (frac < 0.6) return '#8a94a6';

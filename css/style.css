@@ -241,7 +241,8 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 }
 .stat + .stat { border-top: 1px solid rgba(255, 255, 255, 0.08); }
 .stat .ic { width: 16px; height: 16px; }
-.stat.power { --c: #ffc21a; }
+.stat.power { --c: #8a94a6; transition: border-color .4s; }
+.zone-tag { display: inline-block; margin-left: 6px; padding: 0 6px; border-radius: 4px; color: #0f1420; font-size: .6rem; font-weight: 800; letter-spacing: .04em; vertical-align: 1px; transition: background .4s; }
 .stat.hr { --c: #ff4d5e; }
 .stat.cad { --c: #2fd4f0; }
 .stat.grade-st { --c: #f97316; }
