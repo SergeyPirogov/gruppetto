@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, style: 'cartoon', camera: 'chase',
+  intensity: 100, sound: true, voice: true, style: 'cartoon', camera: 'chase', font: 'auto',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -215,8 +215,17 @@ function initLobby() {
   bind('f-graphics', 'graphics', false);
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
+  bind('f-font', 'font', false);
   // the pixel 3D style dresses the whole interface in pixels too (font, square corners, hard shadows)
-  const pixelUi = () => document.body.classList.toggle('pixel-ui', settings.style === 'pixel' && settings.graphics !== '2d');
+  const pixelUi = () => {
+    const pixel = settings.style === 'pixel' && settings.graphics !== '2d';
+    document.body.classList.toggle('pixel-ui', pixel);
+    // interface font: "auto" = DotGothic16 with the Pixel style, the system font otherwise
+    const f = settings.font || 'auto';
+    const family = f === 'auto' ? (pixel ? 'DotGothic16' : null) : f === 'system' ? null : f;
+    if (family) document.body.style.setProperty('--ui-font', `"${family}", ui-monospace, monospace`);
+    else document.body.style.removeProperty('--ui-font');
+  };
   const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); pixelUi(); };
   refreshDiff();
 
