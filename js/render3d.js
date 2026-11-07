@@ -579,7 +579,7 @@ export class Scene3D {
     const P = this.pixel;
     P.target?.dispose();
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    const VIRTUAL_W = 540; // width of the pixel grid (height follows the aspect ratio); fewer = chunkier
+    const VIRTUAL_W = 1000; // width of the pixel grid (height follows the aspect ratio); fewer = chunkier
     const w = VIRTUAL_W, h = Math.max(1, Math.round((size.y / Math.max(1, size.x)) * VIRTUAL_W));
     P.target = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: THREE.HalfFloatType });
     P.target.depthTexture = new THREE.DepthTexture(w, h);
@@ -623,7 +623,7 @@ export class Scene3D {
             c = mix(vec3(l), c, 0.82);                                   // less saturated
             c = mix(c, c * vec3(0.92, 0.88, 1.08), (1.0 - l) * 0.45);    // lilac shadows
             c = mix(c, c * vec3(1.12, 1.0, 0.8), l * 0.45);              // golden light
-            c *= 1.0 + (fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.07; // speckle
+            c *= 1.0 + (fract(sin(dot(cell, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.03; // speckle
             // painterly bands: quantise brightness, keep the hue; dither only near band edges
             l = dot(c, vec3(0.299, 0.587, 0.114));
             vec3 chroma = c - l;
