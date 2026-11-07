@@ -125,6 +125,11 @@
         <div class="stat hr"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><div class="st-body"><label>Heart rate</label><div class="st-val"><b id="m-hr">—</b><span>bpm</span></div></div></div>
         <div class="stat cad"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><div class="st-body"><label>Cadence</label><div class="st-val"><b id="m-cad">0</b><span>rpm</span></div></div></div>
       </div>
+      <div id="wk-intensity" class="board intensity" hidden>
+        <button id="wk-int-down" class="pill-btn" aria-label="Decrease intensity">−</button>
+        <span>Intensity <b id="wk-int">100%</b></span>
+        <button id="wk-int-up" class="pill-btn" aria-label="Increase intensity">+</button>
+      </div>
     </div>
 
     <div class="hud-center">
@@ -143,9 +148,6 @@
         </div>
         <canvas id="wk-chart"></canvas>
         <div class="wk-ctl">
-          <button id="wk-int-down" class="pill-btn" aria-label="Decrease intensity">−</button>
-          <span>Intensity <b id="wk-int">100%</b></span>
-          <button id="wk-int-up" class="pill-btn" aria-label="Increase intensity">+</button>
           <button id="wk-sound" class="pill-btn">Sound: on</button>
         </div>
       </div>

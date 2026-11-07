@@ -326,6 +326,7 @@ async function startRide() {
   $('ride').hidden = false;
   $('sim-ctl').hidden = !simulated;
   $('workout-panel').hidden = !workout;
+  $('wk-intensity').hidden = !workout;
   $('paused').hidden = true;
   $('btn-pause').textContent = 'Pause';
   $('ride').classList.remove('show-controls');
