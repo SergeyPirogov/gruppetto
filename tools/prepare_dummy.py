@@ -40,7 +40,7 @@ JOINTS = {  # app joint name -> source joint ball
     'shoulderR': 'Right_Shoulder_Upper_Arm_Joint', 'elbowR': 'Right_Elbow_Upper_Arm_Joint', 'wristR': 'Right_Wrist_Hand_Joint',
 }
 MATERIALS = ['skin', 'jersey', 'stripe', 'shorts', 'sock', 'shoe', 'sole', 'hair']
-SOCK = (0.58, 0.63)    # sock top (accent cuff between the two) along knee→ankle
+SOCK = (0.58,)         # sock top along knee→ankle
 SHOE = (0.2, 0.8)      # sole line and shoe collar, as fractions of the foot's height
 
 COMP = {5126: ('f', 4), 5125: ('I', 4), 5123: ('H', 2), 5121: ('B', 1)}
@@ -222,7 +222,7 @@ def classify(part, c, J):
         return 'shorts' if along(c, J['hip' + s], J['knee' + s]) < 0.78 else 'skin'
     if part.startswith('lowerLeg'):
         t = along(c, J['knee' + s], J['ankle' + s])
-        return 'skin' if t < SOCK[0] else 'stripe' if t < SOCK[1] else 'sock'
+        return 'skin' if t < SOCK[0] else 'sock'  # plain white sock, no cuff
     if part.startswith('foot'):
         # road shoe: stiff white sole and a dark upper; the sock shows above the shoe's collar
         h = along(c, J['footBase' + s], J['footTop' + s])   # 0 at the sole .. 1 at the top
