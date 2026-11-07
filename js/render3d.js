@@ -8,6 +8,7 @@ import { loadRiderModel, ModelRider } from './rider-model.js';
 import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
+import { t } from './i18n.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
 const AHEAD = 7, BEHIND = 1;   // chunks kept around the rider
@@ -543,7 +544,7 @@ export class Scene3D {
   _makeLoader(parent) {
     const el = document.createElement('div');
     el.className = 'ride-loader';
-    el.innerHTML = '<div class="ride-loader-wheel"></div><div class="ride-loader-text">Preparing the route…</div>';
+    el.innerHTML = `<div class="ride-loader-wheel"></div><div class="ride-loader-text">${t('Preparing the route…')}</div>`;
     parent?.appendChild(el);
     return el;
   }

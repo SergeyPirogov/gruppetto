@@ -1,4 +1,5 @@
-// Interval cues: short beeps (Web Audio) and spoken prompts (speech synthesis, English).
+// Interval cues: short beeps (Web Audio) and spoken prompts (speech synthesis, in the interface language).
+import { lang, plural } from './i18n.js';
 
 let ctx = null;
 
@@ -26,8 +27,8 @@ export function beep(freq = 880, dur = 0.12, vol = 0.18) {
 export function say(text) {
   if (!text || typeof speechSynthesis === 'undefined') return;
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'en-US';
-  const voice = speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith('en'));
+  u.lang = lang === 'uk' ? 'uk-UA' : 'en-US';
+  const voice = speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith(lang));
   if (voice) u.voice = voice;
   u.rate = 1.05;
   speechSynthesis.cancel();
@@ -38,8 +39,11 @@ export function say(text) {
 export function spokenDuration(sec) {
   sec = Math.round(sec);
   const m = Math.floor(sec / 60), s = sec % 60;
-  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
-  if (!m) return plural(s, 'second');
-  if (!s) return plural(m, 'minute');
-  return `${plural(m, 'minute')} ${plural(s, 'second')}`;
+  const words = lang === 'uk'
+    ? { minute: ['хвилина', 'хвилини', 'хвилин'], second: ['секунда', 'секунди', 'секунд'] }
+    : { minute: ['minute', 'minutes', 'minutes'], second: ['second', 'seconds', 'seconds'] };
+  const say = (n, w) => `${n} ${lang === 'uk' ? plural(n, words[w]) : words[w][n === 1 ? 0 : 1]}`;
+  if (!m) return say(s, 'second');
+  if (!s) return say(m, 'minute');
+  return `${say(m, 'minute')} ${say(s, 'second')}`;
 }

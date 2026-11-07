@@ -4,6 +4,7 @@ import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
 import { routes, Route, ROUTE_GROUPS } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
+import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
@@ -13,6 +14,8 @@ import { themeFor } from './themes.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
 
 const $ = (id) => document.getElementById(id);
+// units in the interface language
+const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm'), min: tr('min'), wkg: tr('W/kg') };
 
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
@@ -91,31 +94,31 @@ obc.addEventListener('buttons', ({ detail: changes }) => onObcButtons(changes));
 obc.addEventListener('disconnect', () => obcState.clear());
 
 const DEVICES = [
-  { dev: trainer, key: 'trainer', lost: 'Trainer disconnected' },
-  { dev: hrm, key: 'hr', lost: 'Heart rate monitor disconnected' },
-  { dev: cadenceSensor, key: 'cad', lost: 'Cadence sensor disconnected' },
-  { dev: controller, key: 'ctl', lost: 'Controller disconnected' },
-  { dev: obc, key: 'obc', lost: 'OpenBikeControl disconnected' },
+  { dev: trainer, key: 'trainer', lost: tr('Trainer disconnected') },
+  { dev: hrm, key: 'hr', lost: tr('Heart rate monitor disconnected') },
+  { dev: cadenceSensor, key: 'cad', lost: tr('Cadence sensor disconnected') },
+  { dev: controller, key: 'ctl', lost: tr('Controller disconnected') },
+  { dev: obc, key: 'obc', lost: tr('OpenBikeControl disconnected') },
 ];
-const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: 'power meter' };
+const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: tr('power meter') };
 let lastButtonLabel = '';
 let lastObcLabel = '';
 
 const reconnecting = new Map(); // key -> attempt number
 
 for (const d of DEVICES) {
-  d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(`${d.lost} — reconnecting…`); });
+  d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
   d.dev.addEventListener('reconnecting', ({ detail: n }) => { reconnecting.set(d.key, n); updateDeviceUI(); });
   d.dev.addEventListener('reconnected', () => {
     reconnecting.delete(d.key);
     if (d.dev === trainer) resyncTrainer();
     updateDeviceUI();
-    toast(`${d.dev.name}: connection restored ✓`);
+    toast(tr('{name}: connection restored ✓', { name: d.dev.name }));
   });
   d.dev.addEventListener('reconnect-failed', () => {
     reconnecting.delete(d.key);
     updateDeviceUI();
-    toast(`${d.dev.name}: could not reconnect — press “Connect” in the lobby`);
+    toast(tr('{name}: could not reconnect — press “Connect” in the lobby', { name: d.dev.name }));
   });
 }
 
@@ -130,23 +133,23 @@ function resyncTrainer() {
 }
 
 function deviceStatus(d) {
-  if (reconnecting.has(d.key)) return `${d.dev.name} · connection lost, reconnecting (attempt ${reconnecting.get(d.key)})…`;
+  if (reconnecting.has(d.key)) return `${d.dev.name} · ${tr('connection lost, reconnecting (attempt {n})…', { n: reconnecting.get(d.key) })}`;
   if (d.dev === cadenceSensor && !d.dev.connected && trainer.connected) {
     // no separate sensor: cadence comes from the trainer automatically
-    if (trainer.sendsCadence) return `from trainer · ${Math.round(fresh(live.cadence, live.cadAt))} rpm`;
-    return 'from trainer · start pedaling (if cadence stays at 0, connect a separate sensor)';
+    if (trainer.sendsCadence) return `${tr('from trainer')} · ${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`;
+    return tr('from trainer · start pedaling (if cadence stays at 0, connect a separate sensor)');
   }
-  if (!d.dev.connected) return 'not connected';
+  if (!d.dev.connected) return tr('not connected');
   if (d.dev === trainer) {
-    const resistance = trainer.controllable ? 'resistance: controlled by the app ✓' : 'data only, no resistance control';
-    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${resistance} · ${Math.round(fresh(live.power, live.powerAt))} W`;
+    const resistance = trainer.controllable ? tr('resistance: controlled by the app ✓') : tr('data only, no resistance control');
+    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${resistance} · ${Math.round(fresh(live.power, live.powerAt))} ${U.W}`;
   }
   if (d.dev === controller || d.dev === obc) {
     const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
     const units = d.dev === controller && controller.count > 1 ? ` ×${controller.count}` : '';
     const hint = d.dev === controller && controller.count === 1 && /ride/i.test(controller.name)
-      ? ' · second controller: “+ controller”' : '';
-    return `${d.dev.name}${units}${label ? ` · pressed: ${label}` : ' · press any button'}${hint}`;
+      ? ` · ${tr('second controller: “+ controller”')}` : '';
+    return `${d.dev.name}${units}${label ? ` · ${tr('pressed: {label}', { label })}` : ` · ${tr('press any button')}`}${hint}`;
   }
   return d.dev.name;
 }
@@ -160,8 +163,8 @@ function updateDeviceUI() {
     $(`${d.key}-status`).textContent = deviceStatus(d);
     // cadence from the trainer counts as connected; the button then offers a separate sensor instead
     const viaTrainer = d.dev === cadenceSensor && !d.dev.connected && trainer.connected;
-    btn.textContent = d.dev.connected ? 'Disconnect' : viaTrainer ? 'Change' : 'Connect';
-    btn.title = viaTrainer ? 'Connect a separate cadence sensor instead of the trainer' : '';
+    btn.textContent = d.dev.connected ? tr('Disconnect') : viaTrainer ? tr('Change') : tr('Connect');
+    btn.title = viaTrainer ? tr('Connect a separate cadence sensor instead of the trainer') : '';
     btn.classList.toggle('ok', d.dev.connected || viaTrainer);
   }
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
@@ -195,7 +198,7 @@ async function reopenRemembered(d) {
 async function autoConnectRemembered() {
   for (const d of DEVICES) {
     if (d.dev.connected || !settings.devices?.[d.key]) continue;
-    $(`${d.key}-status`).textContent = 'connecting remembered device…';
+    $(`${d.key}-status`).textContent = tr('connecting remembered device…');
     const ok = await reopenRemembered(d);
     if (ok && d.dev === trainer) $('sim').checked = false;
     updateDeviceUI();
@@ -206,7 +209,7 @@ async function toggleDevice(d, { add = false } = {}) {
   const btn = add ? $('btn-ctl-add') : $(`btn-${d.key}`);
   if (!add && (d.dev.connected || reconnecting.has(d.key))) { d.dev.disconnect(); reconnecting.delete(d.key); forgetDevice(d); updateDeviceUI(); return; }
   btn.disabled = true;
-  btn.textContent = 'Searching…';
+  btn.textContent = tr('Searching…');
   let error = null;
   try {
     if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
@@ -218,13 +221,13 @@ async function toggleDevice(d, { add = false } = {}) {
     if (!(e.name === 'NotFoundError' && /cancel/i.test(e.message))) error = e; // ignore only a cancelled chooser
   } finally {
     btn.disabled = false;
-    if (add) btn.textContent = '+ controller';
+    if (add) btn.textContent = tr('+ controller');
     updateDeviceUI();
     if (error) {
       const noService = error.name === 'NotFoundError' || /service|characteristic/i.test(error.message);
       $(`${d.key}-status`).textContent = noService && $('show-all').checked
-        ? 'This device does not have the required service — choose another one'
-        : `Could not connect: ${error.message}`;
+        ? tr('This device does not have the required service — choose another one')
+        : tr('Could not connect: {error}', { error: error.message });
     }
   }
 }
@@ -235,7 +238,7 @@ function initLobby() {
   if (bluetoothAvailable() && !navigator.bluetooth.getDevices) {
     $('autoconnect-hint').hidden = false;
     $('copy-flag').onclick = async () => {
-      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = 'Copied — paste it in the address bar'; } catch { /* clipboard blocked */ }
+      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = tr('Copied — paste it in the address bar'); } catch { /* clipboard blocked */ }
     };
   }
   if (!bluetoothAvailable()) {
@@ -290,14 +293,14 @@ function renderRouteList() {
     if (!list.length && g.id !== 'mine') continue;
     const sec = document.createElement('div');
     sec.className = 'route-group';
-    sec.innerHTML = `<h3>${g.name}<small>${list.length || ''}</small></h3><div class="options route-cards"></div>`;
+    sec.innerHTML = `<h3>${tr(g.name)}<small>${list.length || ''}</small></h3><div class="options route-cards"></div>`;
     const box = sec.querySelector('.route-cards');
     for (const r of list) {
       const b = document.createElement('button');
       b.className = 'option';
       b.dataset.id = r.id;
-      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom ? 1 : 0)} km · ↗ ${Math.round(r.elevationGain)} m</small><small>${esc(r.description)}</small><canvas></canvas>`
-        + (r.custom ? `<span class="rc-del" title="Delete this route" role="button">✕</span>` : '');
+      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}</small><small>${esc(r.description)}</small><canvas></canvas>`
+        + (r.custom ? `<span class="rc-del" title="${tr('Delete this route')}" role="button">✕</span>` : '');
       b.onclick = (ev) => {
         if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
         settings.routeId = r.id; saveSettings(); markRoute(); showRoute();
@@ -308,13 +311,22 @@ function renderRouteList() {
     if (g.id === 'mine') {
       const add = document.createElement('label');
       add.className = 'option rc-import';
-      add.innerHTML = '<b>＋ Import GPX</b><small>A real road from Strava, Komoot or Garmin, up to 150 km</small>';
+      add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 150 km')}</small>`;
       add.htmlFor = 'gpx-file';
       box.append(add);
     }
     rl.append(sec);
   }
   markRoute();
+}
+
+/** Climb names in the interface language ("Climb 2" -> "Підйом 2"), and an imported route's description. */
+function localizeClimbs(r) {
+  if (r.custom) {
+    const flat = /no elevation/.test(r.description);
+    r.description = tr(flat ? 'Imported from GPX (no elevation in the file: flat). Point to point, finish at {km} km.' : 'Imported from GPX. Point to point, finish at {km} km.', { km: (r.length / 1000).toFixed(1) });
+  }
+  for (const c of r.climbs) { const m = /^Climb (\d+)$/.exec(c.name); c.name = m ? tr('Climb {n}', { n: m[1] }) : tr(c.name); }
 }
 
 function markRoute() {
@@ -328,19 +340,20 @@ async function importGpx(ev) {
   try {
     const def = routeFromTrack(parseGpx(await file.text()), file.name);
     const route = new Route(def);
+    localizeClimbs(route);
     customDefs.push(def);
-    if (!saveCustomRoutes()) { customDefs.pop(); throw new Error('Not enough browser storage for this route'); }
+    if (!saveCustomRoutes()) { customDefs.pop(); throw new Error(tr('Not enough browser storage for this route')); }
     routes.push(route);
     settings.routeId = route.id; saveSettings();
     renderRouteList(); showRoute();
     $('route-list').querySelector('.sel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   } catch (e) {
-    alertBox(`Could not import ${file.name}: ${e.message}`);
+    alertBox(tr('Could not import {file}: {error}', { file: file.name, error: tr(e.message) }));
   }
 }
 
 function deleteCustomRoute(r) {
-  if (!confirm(`Delete “${r.name}”? Its records stay in your ride history.`)) return;
+  if (!confirm(tr('Delete “{name}”? Its records stay in your ride history.', { name: r.name }))) return;
   const i = customDefs.findIndex((d) => d.id === r.id);
   if (i >= 0) customDefs.splice(i, 1);
   saveCustomRoutes();
@@ -366,14 +379,14 @@ function renderModes() {
   const free = document.createElement('button');
   free.className = 'option';
   free.dataset.id = 'free';
-  free.innerHTML = '<b>Free ride</b><small>The trainer simulates the road grade.</small>';
+  free.innerHTML = `<b>${tr('Free ride')}</b><small>${tr('The trainer simulates the road grade.')}</small>`;
   free.onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); };
   const wb = document.createElement('button');
   wb.className = 'option wk-pick';
   wb.dataset.id = 'workout';
   wb.innerHTML = w
-    ? `<span class="wk-pick-head"><b>${esc(w.name)}</b><span class="wk-change">Workouts ›</span></span><small>${Math.round(totalDuration(w) / 60)} min · ${esc(w.description)}</small><canvas></canvas>`
-    : '<span class="wk-pick-head"><b>Workout</b><span class="wk-change">Choose ›</span></span><small>Structured intervals in ERG: the trainer holds the target power.</small>';
+    ? `<span class="wk-pick-head"><b>${esc(w.name)}</b><span class="wk-change">${tr('Workouts')} ›</span></span><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`
+    : `<span class="wk-pick-head"><b>${tr('Workout')}</b><span class="wk-change">${tr('Choose')} ›</span></span><small>${tr('Structured intervals in ERG: the trainer holds the target power.')}</small>`;
   wb.onclick = (ev) => {
     if (w && settings.mode !== w.id && !ev.target.closest('.wk-change')) { settings.mode = w.id; saveSettings(); renderModes(); return; }
     openWorkoutMenu();
@@ -393,7 +406,7 @@ function openWorkoutMenu() {
     const b = document.createElement('button');
     b.className = 'option';
     b.dataset.id = w.id;
-    b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} min · ${esc(w.description)}</small><canvas></canvas>`;
+    b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`;
     b.onclick = () => { settings.mode = w.id; settings.lastWorkout = w.id; saveSettings(); closeWorkoutMenu(); renderModes(); };
     b.classList.toggle('sel', w.id === settings.mode);
     list.append(b);
@@ -410,12 +423,12 @@ function showRoute() {
   const r = routes.find((x) => x.id === settings.routeId) || routes[0];
   if (!r) return;
   $('rh-name').textContent = r.name;
-  $('rh-meta').textContent = `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} km · ↗ ${Math.round(r.elevationGain)} m`;
+  $('rh-meta').textContent = `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}`;
   $('rh-desc').textContent = r.description;
   renderGhostPicker();
   // the timed climbs, with this device's record on each
-  $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} km · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
-    + (records.lap[r.id] ? `<li><b>⏱ ${r.oneWay ? 'Best time' : 'Best lap'}</b> <span class="pb">${fmtTime(records.lap[r.id])}</span></li>` : '');
+  $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} ${U.km} · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
+    + (records.lap[r.id] ? `<li><b>⏱ ${r.oneWay ? tr('Best time') : tr('Best lap')}</b> <span class="pb">${fmtTime(records.lap[r.id])}</span></li>` : '');
   requestAnimationFrame(() => drawProfile($('rh-profile'), r, [], `${themeFor(r.theme).accent}cc`));
   updateSummary();
 }
@@ -427,7 +440,7 @@ function updateSummary() {
   const r = routes.find((x) => x.id === settings.routeId);
   const sel = document.querySelector('#mode-list .sel b');
   const g = r && pickGhost(r.id);
-  el.textContent = [r?.name, sel?.textContent, g ? `👻 ${settings.ghost === 'last' ? 'last ride' : 'your best'}` : null].filter(Boolean).join(' · ');
+  el.textContent = [r?.name, sel?.textContent, g ? `👻 ${settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null].filter(Boolean).join(' · ');
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
@@ -501,7 +514,7 @@ async function ensureScene() {
       scene = new Scene3D(canvas);
     } catch (e) {
       console.warn('3D unavailable, falling back to 2D', e);
-      toast('3D graphics are not available in this browser — using 2D');
+      toast(tr('3D graphics are not available in this browser — using 2D'));
       want = '2d';
       const fresh = canvas.cloneNode(false);
       canvas.replaceWith(fresh);
@@ -526,10 +539,10 @@ async function startRide() {
     powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
     cda: riderCdA(settings.height, settings.weight), // air drag from your height and weight
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
-    bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
+    bots: BOTS.map((b, i) => ({ ...b, name: tr(b.name), dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
-    ghost: (() => { const g = pickGhost(route.id); return g ? { entry: g, name: settings.ghost === 'last' ? 'Last ride' : 'Your best', color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
-    pacer: workout ? { name: settings.pacerName?.trim() || 'Pacer', color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true } : null,
+    ghost: (() => { const g = pickGhost(route.id); return g ? { entry: g, name: settings.ghost === 'last' ? tr('Last ride') : tr('Your best'), color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
+    pacer: workout ? { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true } : null,
   };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
@@ -546,7 +559,7 @@ async function startRide() {
   $('wk-intensity').hidden = !workout;
   $('wk-pacer-btn').classList.toggle('on', settings.pacer !== false);
   $('paused').hidden = true;
-  $('btn-pause').textContent = 'Pause';
+  $('btn-pause').textContent = tr('Pause');
   $('ride').classList.remove('show-controls');
   await ensureScene();
   scene.setStyle?.(settings.style);
@@ -555,8 +568,8 @@ async function startRide() {
   clearInterval(rideTimer);
   rideTimer = setInterval(() => advance(), 250);
   keepAwake(true);
-  if (simulated) toast('Simulator mode: set power with the slider or ↑/↓');
-  if (scene.orbit) setTimeout(() => toast('Camera: drag to orbit, scroll to zoom, double-click to reset'), simulated ? 3500 : 0);
+  if (simulated) toast(tr('Simulator mode: set power with the slider or ↑/↓'));
+  if (scene.orbit) setTimeout(() => toast(tr('Camera: drag to orbit, scroll to zoom, double-click to reset')), simulated ? 3500 : 0);
   requestAnimationFrame(frame);
 }
 
@@ -591,7 +604,7 @@ function advance(now = performance.now()) {
   ride.lastSim = now;
   if (left <= 0 || ride.paused) return;
   if (left > MAX_GAP_S && !ride.simulated && !powerSamples.has(from, now)) {
-    toast(`No data from the trainer for ${Math.round(left)} s — this gap was skipped`);
+    toast(tr('No data from the trainer for {s} s — this gap was skipped', { s: Math.round(left) }));
     return;
   }
   const { route } = ride;
@@ -703,7 +716,7 @@ function updateAhead() {
   $('ahead').hidden = !ahead.length;
   $('ahead-rows').innerHTML = ahead.map(({ r, gap }) => {
     const wkg = r.wkg ?? (r.power ? r.power / settings.weight : 0);
-    return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}s</span><small>${Math.round(gap)} m${wkg ? ` · ${wkg.toFixed(1)} W/kg` : ''}</small></div>`;
+    return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}${tr('s')}</span><small>${Math.round(gap)} ${U.m}${wkg ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''}</small></div>`;
   }).join('');
 }
 
@@ -767,7 +780,7 @@ function tick(power, cadence, hr) {
       const t = ride.elapsed, best = records.lap[route.id];
       ride.lapTimes.push(t);
       if (!best || t < best) { records.lap[route.id] = t; saveRecords(); }
-      toast(!best ? `Finish! ${fmtTime(t)} 🏁` : t < best ? `Finish! ${fmtTime(t)} — new record! (${fmtDelta(t - best)}) 🏆` : `Finish! ${fmtTime(t)} (${fmtDelta(t - best)} vs best)`);
+      toast(!best ? tr('Finish! {time} 🏁', { time: fmtTime(t) }) : t < best ? tr('Finish! {time} — new record! ({delta}) 🏆', { time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('Finish! {time} ({delta} vs best)', { time: fmtTime(t), delta: fmtDelta(t - best) }));
       cueBeep(1180, 0.3);
       setTimeout(() => { if (ride?.finished) finishRide(); }, 2500);
     }
@@ -780,8 +793,8 @@ function tick(power, cadence, hr) {
     ride.lapTimes.push(t);
     if (!best || t < best) {
       records.lap[route.id] = t; saveRecords();
-      toast(best ? `Lap ${laps}: ${fmtTime(t)} — new best lap! (${fmtDelta(t - best)}) 🏆` : `Lap ${laps}: ${fmtTime(t)} — first lap on this route 🎉`);
-    } else toast(`Lap ${laps}: ${fmtTime(t)} (${fmtDelta(t - best)} vs best)`);
+      toast(best ? tr('Lap {n}: {time} — new best lap! ({delta}) 🏆', { n: laps, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('Lap {n}: {time} — first lap on this route 🎉', { n: laps, time: fmtTime(t) }));
+    } else toast(tr('Lap {n}: {time} ({delta} vs best)', { n: laps, time: fmtTime(t), delta: fmtDelta(t - best) }));
     if (!ride.workout || ride.workoutDone) recorder.markLap();
   }
   updateSegments();
@@ -797,7 +810,7 @@ function tick(power, cadence, hr) {
         if (ride.stepIndex !== undefined) { recorder.markLap(); cueBeep(1040, 0.35); }
         ride.stepIndex = t.index;
         if (t.step.text) toast(t.step.text);
-        else if (t.watts === null) toast('Free segment — ride by feel');
+        else if (t.watts === null) toast(tr('Free segment — ride by feel'));
         if (t.step.dur >= 20) cueSay(describeStep(t.step, ride.target));
         updateGear();
       }
@@ -810,7 +823,7 @@ function tick(power, cadence, hr) {
       recorder.markLap();
       cueBeep(1040, 0.5);
       cueSay('Workout complete. Great job!');
-      toast('Workout complete! Free ride from here 🏁');
+      toast(tr('Workout complete! Free ride from here 🏁'));
       updateGear();
       if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
     }
@@ -855,7 +868,7 @@ function tick(power, cadence, hr) {
 function updateHud(cadence, hr, grade) {
   const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
   $('m-power').textContent = p3;
-  $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} W/kg`;
+  $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} ${U.wkg}`;
   // power zone: the board's bar and a Z1–Z7 tag take the zone's colour (in a workout the number itself
   // shows how close you are to the target, below)
   const zone = powerZone(p3 / Math.max(1, settings.ftp));
@@ -863,20 +876,20 @@ function updateHud(cadence, hr, grade) {
   powerRow.style.setProperty('--c', zone.color);
   $('m-zone').textContent = `Z${zone.z}`;
   $('m-zone').style.background = zone.color;
-  $('m-zone').title = zone.name;
+  $('m-zone').title = tr(zone.name);
   if (!ride.workout || ride.workoutDone) $('m-power').style.color = p3 > 0 ? zone.color : '';
   else $('m-power').style.color = '';
   $('m-cad').textContent = Math.round(cadence);
   $('m-hr').textContent = hr ? Math.round(hr) : '—';
   const A = ride.avg;
-  $('m-hr-avg').textContent = A?.hrN ? `avg ${Math.round(A.hr / A.hrN)}` : '';
-  $('m-cad-avg').textContent = A?.cadN ? `avg ${Math.round(A.cad / A.cadN)}` : '';
+  $('m-hr-avg').textContent = A?.hrN ? `${tr('avg')} ${Math.round(A.hr / A.hrN)}` : '';
+  $('m-cad-avg').textContent = A?.cadN ? `${tr('avg')} ${Math.round(A.cad / A.cadN)}` : '';
   $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
   updateAhead();
   const df = ride.draft || 0;
   $('draft-tag').hidden = df < 0.03;
   if (df >= 0.03) {
-    $('draft-tag').textContent = `🌀 Drafting · −${Math.round(df * 100)}% drag`;
+    $('draft-tag').textContent = `🌀 ${tr('Drafting · −{n}% drag', { n: Math.round(df * 100) })}`;
     $('draft-tag').style.setProperty('--d', df / 0.33);
   }
   if (ride.ghost) {
@@ -884,7 +897,7 @@ function updateHud(cadence, hr, grade) {
     const secs = tg === null ? null : Math.round(tg - ride.elapsed); // + = you got here sooner
     $('ghost-tag').hidden = false;
     $('ghost-tag').className = `ghost-tag ${gap >= 0 ? 'c-ok' : 'c-bad'}`;
-    $('ghost-tag').textContent = `👻 ${G.name}: ${Math.abs(gap) < 2 ? 'level' : `${Math.round(Math.abs(gap))} m ${gap > 0 ? 'ahead' : 'behind'}`}${secs !== null && Math.abs(gap) >= 2 ? ` · ${secs >= 0 ? '−' : '+'}${fmtTime(Math.abs(secs))}` : ''}`;
+    $('ghost-tag').textContent = `👻 ${G.name}: ${Math.abs(gap) < 2 ? tr('level') : (gap > 0 ? tr('{n} m ahead', { n: Math.round(Math.abs(gap)) }) : tr('{n} m behind', { n: Math.round(Math.abs(gap)) }))}${secs !== null && Math.abs(gap) >= 2 ? ` · ${secs >= 0 ? '−' : '+'}${fmtTime(Math.abs(secs))}` : ''}`;
   } else $('ghost-tag').hidden = true;
   $('m-dist').textContent = (ride.dist / 1000).toFixed(2);
   $('m-time').textContent = fmtTime(ride.elapsed);
@@ -900,13 +913,13 @@ function updateHud(cadence, hr, grade) {
   };
   const fmtG = (g) => g === null ? '' : `<b style="color:${gradeColor(g)}">${g < 0 ? '−' : ''}${Math.abs(g * 100).toFixed(1)}%</b>`;
   const g2 = ahead(200, 50), g10 = ahead(1000, 1000);
-  $('grade-next').innerHTML = (g2 === null ? '' : `<span>200 m ${fmtG(g2)}</span>`) + (g10 === null ? '' : `<span>1 km ${fmtG(g10)}</span>`);
+  $('grade-next').innerHTML = (g2 === null ? '' : `<span>200 ${U.m} ${fmtG(g2)}</span>`) + (g10 === null ? '' : `<span>1 ${U.km} ${fmtG(g10)}</span>`);
 
   if (ride.workout) {
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
     const target = ride.workoutDone ? null : ride.target;
     const tEl = $('wk-target');
-    tEl.textContent = ride.workoutDone ? '—' : target ?? 'free';
+    tEl.textContent = ride.workoutDone ? '—' : target ?? tr('free');
     // compliance: green within ±5 %, amber within ±10 %, red beyond
     const dev = target ? (p3 - target) / target : 0;
     const cls = !target ? '' : Math.abs(dev) <= 0.05 ? 'c-ok' : Math.abs(dev) <= 0.1 ? 'c-warn' : 'c-bad';
@@ -916,7 +929,7 @@ function updateHud(cadence, hr, grade) {
     $('wk-pacer').hidden = !(P && settings.pacer);
     if (P && settings.pacer) {
       const gap = Math.round(ride.dist - P.dist);
-      $('wk-pacer').textContent = Math.abs(gap) < 3 ? `With ${P.name}` : gap > 0 ? `${P.name} ${gap} m behind` : `${P.name} ${-gap} m ahead`;
+      $('wk-pacer').textContent = Math.abs(gap) < 3 ? tr('With {name}', { name: P.name }) : gap > 0 ? `${P.name} ${tr('{n} m behind', { n: gap })}` : `${P.name} ${tr('{n} m ahead', { n: -gap })}`;
       $('wk-pacer').className = `pacer-tag ${gap >= -3 ? 'c-ok' : gap >= -25 ? 'c-warn' : 'c-bad'}`;
     }
     $('wk-diff').textContent = target ? `${p3 - target >= 0 ? '+' : '−'}${Math.abs(Math.round(p3 - target))}` : '';
@@ -930,7 +943,7 @@ function updateHud(cadence, hr, grade) {
     $('m-cad').className = cadEl.className;
     const next = t && ride.workout.steps[t.index + 1];
     const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
-    $('wk-next').textContent = next ? (nextW === null ? 'free' : `${nextW} W`) : '—';
+    $('wk-next').textContent = next ? (nextW === null ? tr('free') : `${nextW} ${U.W}`) : '—';
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
@@ -954,7 +967,7 @@ function updateSegments() {
         saveRecords();
       }
       ride.climbGhost = null;
-      toast(!best ? `${S.climb.name}: ${fmtTime(t)} — first time up 🎉` : t < best ? `${S.climb.name}: ${fmtTime(t)} — new record! (${fmtDelta(t - best)}) 🏆` : `${S.climb.name}: ${fmtTime(t)} (${fmtDelta(t - best)} vs best)`);
+      toast(!best ? tr('{name}: {time} — first time up 🎉', { name: S.climb.name, time: fmtTime(t) }) : t < best ? tr('{name}: {time} — new record! ({delta}) 🏆', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('{name}: {time} ({delta} vs best)', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }));
       cueBeep(t < (best || Infinity) ? 1180 : 760, 0.25);
       ride.seg = null;
     } else if (done < -5) { ride.seg = null; ride.climbGhost = null; } // rolled back past the start
@@ -974,8 +987,8 @@ function updateSegments() {
       ride.seg = { climb: c, t0: ride.elapsed, d0: cur - (((cur - c.start) % L) + L) % L, trace: [0], lastT: 0, lastOff: 0 };
       // your record on this climb starts beside you and rides it at its own pace (#26)
       const best = records.seg[c.id];
-      ride.climbGhost = best ? { name: 'Climb record', ghost: true, climb: true, color: settings.jersey, stripe: settings.stripe, dist: ride.seg.d0, pedal: 0.6, lane: START_LANE + 1.1, trace: records.segTrace[c.id] || null, best, length: c.length } : null;
-      toast(`${c.name} — ${(c.length / 1000).toFixed(1)} km at ${(c.grade * 100).toFixed(1)}%. Go! ⛰️`);
+      ride.climbGhost = best ? { name: tr('Climb record'), ghost: true, climb: true, color: settings.jersey, stripe: settings.stripe, dist: ride.seg.d0, pedal: 0.6, lane: START_LANE + 1.1, trace: records.segTrace[c.id] || null, best, length: c.length } : null;
+      toast(tr('{name} — {km} km at {grade}%. Go! ⛰️', { name: c.name, km: (c.length / 1000).toFixed(1), grade: (c.grade * 100).toFixed(1) }));
     }
   }
   const panel = $('seg-panel');
@@ -985,8 +998,8 @@ function updateSegments() {
     const frac = Math.min(1, (cur - S.d0) / S.climb.length);
     $('seg-name').textContent = S.climb.name;
     $('seg-time').textContent = fmtTime(t);
-    $('seg-left').textContent = `${Math.max(0, Math.round((S.climb.length - (cur - S.d0))))} m to the top`;
-    $('seg-best').textContent = best ? `best ${fmtTime(best)}` : 'no record yet';
+    $('seg-left').textContent = tr('{n} m to the top', { n: Math.max(0, Math.round((S.climb.length - (cur - S.d0)))) });
+    $('seg-best').textContent = best ? tr('best {time}', { time: fmtTime(best) }) : tr('no record yet');
     // on pace: compare with the best time scaled to the distance done so far
     const pace = best ? t - traceTime(records.segTrace[S.climb.id], best, S.climb.length, cur - S.d0) : 0;
     $('seg-pace').textContent = best && frac > 0.05 ? fmtDelta(pace) : '';
@@ -1000,12 +1013,12 @@ function updateProgress() {
   const L = ride.route.length, frac = ride.route.oneWay ? Math.min(1, ride.dist / L) : (ride.dist % L) / L;
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
   const best = records.lap[ride.route.id];
-  if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} km · ${fmtTime(ride.elapsed)}${best ? ` (best ${fmtTime(best)})` : ''}`;
-  else $('progress-label').textContent = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (best ${fmtTime(best)})` : ''}`;
+  if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} ${U.km} · ${fmtTime(ride.elapsed)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
+  else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   if (ride.workout) {
     const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
     $('wk-name').textContent = ride.workout.name;
-    $('wk-pct').textContent = ride.workoutDone ? 'done' : `${Math.round(done * 100)}%`;
+    $('wk-pct').textContent = ride.workoutDone ? tr('done') : `${Math.round(done * 100)}%`;
   }
 }
 
@@ -1047,7 +1060,7 @@ function togglePause() {
   ride.paused = !ride.paused;
   ride.lastSim = performance.now();
   $('paused').hidden = !ride.paused;
-  $('btn-pause').textContent = ride.paused ? 'Resume' : 'Pause';
+  $('btn-pause').textContent = ride.paused ? tr('Resume') : tr('Pause');
   if (ride.paused) showControls(0); else showControls();
 }
 
@@ -1160,39 +1173,39 @@ function showSummary(e, { live = false } = {}) {
   const sum = e.summary;
   $('lobby').hidden = true;
   $('summary').hidden = false;
-  $('sum-kicker').textContent = live ? 'Ride complete' : new Date(e.date).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  $('sum-name').textContent = [e.routeName, e.workoutName || 'Free ride'].filter(Boolean).join(' · ');
+  $('sum-kicker').textContent = live ? tr('Ride complete') : new Date(e.date).toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  $('sum-name').textContent = [e.routeName, e.workoutName || tr('Free ride')].filter(Boolean).join(' · ');
   const hero = sum ? [
-    ['Time', fmtTime(sum.duration), ''],
-    ['Distance', (sum.distance / 1000).toFixed(2), 'km'],
-    ['Avg power', sum.avgPower, 'W'],
-    ['Avg heart rate', sum.avgHr || '—', sum.avgHr ? 'bpm' : ''],
-  ] : [['Time', '0:00', '']];
+    [tr('Time'), fmtTime(sum.duration), ''],
+    [tr('Distance'), (sum.distance / 1000).toFixed(2), U.km],
+    [tr('Avg power'), sum.avgPower, U.W],
+    [tr('Avg heart rate'), sum.avgHr || '—', sum.avgHr ? U.bpm : ''],
+  ] : [[tr('Time'), '0:00', '']];
   $('sum-hero').innerHTML = hero.map(([k, v, u]) => `<div><label>${k}</label><b>${v}</b><span>${u}</span></div>`).join('');
   const chartSamples = e.chart.pw.map((p, i) => ({ power: p, heartRate: e.chart.hr[i] }));
   requestAnimationFrame(() => drawSummaryChart($('sum-chart'), chartSamples, 2, e.ftp || settings.ftp));
   const stats = sum ? [
-    ['Elevation gain', `${Math.round(sum.elevationGain)} m`],
-    ['NP', sum.normalizedPower ? `${sum.normalizedPower} W` : '—'],
+    [tr('Elevation gain'), `${Math.round(sum.elevationGain)} ${U.m}`],
+    ['NP', sum.normalizedPower ? `${sum.normalizedPower} ${U.W}` : '—'],
     ['TSS', e.tss || '—'],
-    ['Max power', `${sum.maxPower} W`],
-    ['Max heart rate', sum.maxHr ? `${sum.maxHr} bpm` : '—'],
-    ['Avg cadence', `${sum.avgCadence} rpm`],
-    ['Work', `${sum.kj} kJ`],
+    [tr('Max power'), `${sum.maxPower} ${U.W}`],
+    [tr('Max heart rate'), sum.maxHr ? `${sum.maxHr} ${U.bpm}` : '—'],
+    [tr('Avg cadence'), `${sum.avgCadence} ${U.rpm}`],
+    [tr('Work'), `${sum.kj} ${tr('kJ')}`],
   ] : [];
-  if (sum && e.ramp && sum.best1min) stats.push(['Estimated FTP', `${Math.round(sum.best1min * 0.75)} W`]);
-  if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([`vs ${e.ghostName || 'ghost'}`, `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} m ${e.ghostGap >= 0 ? '🏆' : ''}`]);
+  if (sum && e.ramp && sum.best1min) stats.push([tr('Estimated FTP'), `${Math.round(sum.best1min * 0.75)} ${U.W}`]);
+  if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([tr('vs {name}', { name: e.ghostName || tr('ghost') }), `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} ${U.m} ${e.ghostGap >= 0 ? '🏆' : ''}`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   // laps and climbs of this ride, with personal bests
   const rows = [
-    ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? 'Finish' : `Lap ${i + 1}`, t, null]),
+    ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? tr('Finish') : tr('Lap {n}', { n: i + 1 }), t, null]),
     ...e.efforts.map((x) => [x.name, x.time, x]),
   ];
   $('sum-segments').hidden = !rows.length;
   $('sum-seg-rows').innerHTML = rows.map(([name, t, x]) => {
     const pb = x ? x.pb : t <= (records.lap[e.routeId] ?? Infinity);
     const vs = x && x.best ? fmtDelta(t - x.best) : '';
-    return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? '<span class="pb">🏆 best</span>' : vs}</td></tr>`;
+    return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>` : vs}</td></tr>`;
   }).join('');
   // files and intervals.icu only for the ride just finished (older rides keep a summary, not the full record)
   for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !live; $(id).disabled = !sum; }
@@ -1200,11 +1213,11 @@ function showSummary(e, { live = false } = {}) {
   const canUpload = !!(live && icuClient && sum && sum.duration >= 60);
   $('btn-icu-upload').hidden = !canUpload;
   $('btn-icu-upload').disabled = false;
-  $('btn-icu-upload').textContent = 'Upload to intervals.icu';
+  $('btn-icu-upload').textContent = tr('Upload to intervals.icu');
   $('icu-upload-status').hidden = true;
   $('btn-delete-ride').hidden = live;
   $('btn-delete-ride').dataset.id = e.id;
-  $('btn-delete-ride').textContent = 'Delete ride';
+  $('btn-delete-ride').textContent = tr('Delete ride');
   if (canUpload && settings.icuUpload) uploadToIntervals();
 }
 
@@ -1212,14 +1225,14 @@ function showSummary(e, { live = false } = {}) {
 function renderHistory() {
   const row = (e) => {
     const s = e.summary || {};
-    const day = new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${esc(e.workoutName || 'Free ride')}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} km</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} W</b><small>TSS ${e.tss || 0}</small></span></button>`;
+    const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
   };
   $('history-recent').innerHTML = history.slice(0, 5).map(row).join('');
   $('history-box').hidden = !history.length;
-  $('history-all').innerHTML = history.length ? history.map(row).join('') : '<p class="muted">No rides yet. Finished rides show up here.</p>';
+  $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
   const week = history.filter((e) => Date.now() - Date.parse(e.date) < 7 * 864e5);
-  $('history-week').textContent = week.length ? `This week: ${week.length} ride${week.length > 1 ? 's' : ''} · ${fmtTime(week.reduce((a, e) => a + (e.summary?.duration || 0), 0))} · TSS ${week.reduce((a, e) => a + (e.tss || 0), 0)}` : '';
+  $('history-week').textContent = week.length ? `${tr('This week')}: ${week.length} ${lang === 'uk' ? plural(week.length, ['заїзд', 'заїзди', 'заїздів']) : `ride${week.length > 1 ? 's' : ''}`} · ${fmtTime(week.reduce((a, e) => a + (e.summary?.duration || 0), 0))} · TSS ${week.reduce((a, e) => a + (e.tss || 0), 0)}` : '';
   for (const b of document.querySelectorAll('.hist-row')) {
     b.onclick = () => { $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e); };
   }
@@ -1289,10 +1302,10 @@ function initIntervals() {
 
 async function connectIntervals({ quiet = false } = {}) {
   const key = $('f-icu-key').value.trim();
-  if (!key) { $('icu-status').textContent = 'Paste your intervals.icu API key.'; return; }
+  if (!key) { $('icu-status').textContent = tr('Paste your intervals.icu API key.'); return; }
   const client = new IntervalsClient({ apiKey: key, athleteId: $('f-icu-athlete').value });
   $('btn-icu').disabled = true;
-  $('icu-status').textContent = 'Connecting…';
+  $('icu-status').textContent = tr('Connecting…');
   try {
     const athlete = await client.athlete();
     const today = new Date();
@@ -1307,11 +1320,11 @@ async function connectIntervals({ quiet = false } = {}) {
     saveSettings();
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};
     const notes = [];
-    if (st.otherSport) notes.push(`other sports skipped: ${st.otherSport}`);
-    if (st.unstructured) notes.push(`without intervals (free ride): ${st.unstructured}`);
-    const found = n ? `cycling workouts in the next 7 days: ${n} — listed first under “Mode”` : 'no cycling workouts in your calendar for the next 7 days';
-    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} W · ${found}${notes.length ? ` (${notes.join(', ')})` : ''}`;
-    $('btn-icu').textContent = 'Refresh';
+    if (st.otherSport) notes.push(tr('other sports skipped: {n}', { n: st.otherSport }));
+    if (st.unstructured) notes.push(tr('without intervals (free ride): {n}', { n: st.unstructured }));
+    const found = n ? tr('cycling workouts in the next 7 days: {n} — listed first in “Workouts”', { n }) : tr('no cycling workouts in your calendar for the next 7 days');
+    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} ${U.W} · ${found}${notes.length ? ` (${notes.join(', ')})` : ''}`;
+    $('btn-icu').textContent = tr('Refresh');
     $('btn-icu-forget').hidden = false;
     renderModes();
   } catch (e) {
@@ -1331,8 +1344,8 @@ function forgetIntervals() {
   saveSettings();
   $('f-icu-key').value = '';
   $('f-icu-athlete').value = '';
-  $('icu-status').textContent = 'Key removed from this browser.';
-  $('btn-icu').textContent = 'Connect';
+  $('icu-status').textContent = tr('Key removed from this browser.');
+  $('btn-icu').textContent = tr('Connect');
   $('btn-icu-forget').hidden = true;
   renderModes();
 }
@@ -1342,7 +1355,7 @@ async function uploadToIntervals() {
   const status = $('icu-upload-status');
   const btn = $('btn-icu-upload');
   status.hidden = false;
-  status.textContent = 'Uploading to intervals.icu…';
+  status.textContent = tr('Uploading to intervals.icu…');
   btn.disabled = true;
   const { workout, route, summary: sum } = lastRide;
   const fromIcu = workout?.source === 'intervals';
@@ -1354,13 +1367,13 @@ async function uploadToIntervals() {
     });
     lastRide.uploadedId = id || true;
     status.innerHTML = id
-      ? `Uploaded to intervals.icu ✓${fromIcu ? ' · marked as completed' : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">open ride</a>`
-      : 'Uploaded to intervals.icu ✓';
+      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>`
+      : tr('Uploaded to intervals.icu ✓');
     btn.hidden = true;
   } catch (e) {
-    status.textContent = `Upload failed: ${e.message}`;
+    status.textContent = tr('Upload failed: {error}', { error: e.message });
     btn.disabled = false;
-    btn.textContent = 'Try again';
+    btn.textContent = tr('Try again');
   }
 }
 
@@ -1412,9 +1425,9 @@ $('btn-pause').onclick = togglePause;
 let finishArmed = null;
 $('btn-finish').onclick = () => {
   const btn = $('btn-finish');
-  if (finishArmed) { clearTimeout(finishArmed); finishArmed = null; btn.textContent = 'Finish'; finishRide(); return; }
-  btn.textContent = 'Sure? Tap again';
-  finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = 'Finish'; }, 3000);
+  if (finishArmed) { clearTimeout(finishArmed); finishArmed = null; btn.textContent = tr('Finish'); finishRide(); return; }
+  btn.textContent = tr('Sure? Tap again');
+  finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = tr('Finish'); }, 3000);
 };
 $('btn-download').onclick = () => download('fit');
 $('wk-int-down').onclick = () => changeIntensity(-5);
@@ -1430,8 +1443,8 @@ function togglePacer() {
   $('f-pacer').checked = settings.pacer;
   $('wk-pacer-btn').classList.toggle('on', settings.pacer);
   if (ride?.pacer && settings.pacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } // rejoin beside you
-  const who = settings.pacerName?.trim() || 'Pacer';
-  toast(settings.pacer ? `${who} is riding with you` : `${who} dropped back`);
+  const who = settings.pacerName?.trim() || tr('Pacer');
+  toast(settings.pacer ? tr('{name} is riding with you', { name: who }) : tr('{name} dropped back', { name: who }));
 }
 $('f-sound').checked = !!settings.sound;
 $('f-sound').onchange = () => {
@@ -1443,7 +1456,7 @@ $('btn-download-tcx').onclick = () => download('tcx');
 $('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
 $('btn-delete-ride').onclick = () => {
   const b = $('btn-delete-ride');
-  if (b.textContent !== 'Tap again to delete') { b.textContent = 'Tap again to delete'; return; }
+  if (b.textContent !== tr('Tap again to delete')) { b.textContent = tr('Tap again to delete'); return; }
   history = history.filter((e) => e.id !== b.dataset.id);
   saveHistory();
   renderHistory();
@@ -1506,7 +1519,7 @@ function sendVirtualGear() {
     if (ok) { ride.lastSentWheel = gear; return; }
     ride.shiftMode = 'grade';
     ride.lastSentGrade = null;
-    toast('The trainer does not accept wheel circumference — using grade-based gears');
+    toast(tr('The trainer does not accept wheel circumference — using grade-based gears'));
   });
 }
 
@@ -1534,8 +1547,8 @@ function updateSpiralGuard(power, cadence) {
   ride.lowFor = low ? ride.lowFor + 1 : 0;
   if (ride.lowFor >= 3 && ride.ergFactor > 0.5) {
     ride.ergFactor = 0.5;
-    toast(hasCadence ? 'Low cadence — ERG temporarily reduced' : 'Power dropped — ERG temporarily reduced');
-    cueSay('Spin up your cadence');
+    toast(hasCadence ? tr('Low cadence — ERG temporarily reduced') : tr('Power dropped — ERG temporarily reduced'));
+    cueSay(tr('Spin up your cadence'));
   } else if (ride.ergFactor < 1) {
     // restore only once the rider has clearly recovered (hysteresis avoids bouncing)
     const recovered = hasCadence ? cadence >= 70 : power >= eff * 0.85;
@@ -1544,8 +1557,8 @@ function updateSpiralGuard(power, cadence) {
 }
 
 function describeStep(step, watts) {
-  const what = watts === null || watts === undefined ? 'free ride' : `${watts} watts`;
-  const cad = step.cad ? `, cadence ${step.cad[0]} to ${step.cad[1]}` : '';
+  const what = watts === null || watts === undefined ? tr('free ride') : tr('{n} watts', { n: watts });
+  const cad = step.cad ? `, ${tr('cadence {a} to {b}', { a: step.cad[0], b: step.cad[1] })}` : '';
   return `${what}, ${spokenDuration(step.dur)}${cad}${step.text ? `. ${step.text}` : ''}`;
 }
 
@@ -1577,7 +1590,7 @@ function shift(dir) {
     ride.ergBias += Math.sign(dir) * 5;
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
     if (t && t.watts !== null) ride.target = ergTarget(t);
-    toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} W`);
+    toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} ${U.W}`);
   } else {
     const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
     if (next === ride.gear) return;
@@ -1603,15 +1616,15 @@ function skipInterval() {
   const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
   if (!t) return;
   ride.workoutT = Math.max(0, ride.workoutT - 1) + t.remaining;
-  toast('Interval skipped ⏭');
+  toast(tr('Interval skipped ⏭'));
 }
 
 function updateGear() {
   if (!ride) return;
   const inErg = inErgStep();
-  $('m-gear-label').textContent = inErg ? 'ERG' : 'Gear';
+  $('m-gear-label').textContent = inErg ? 'ERG' : tr('Gear');
   $('m-gear').textContent = inErg ? `${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias}` : ride.gear;
-  $('m-gear-unit').textContent = inErg ? 'W' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
+  $('m-gear-unit').textContent = inErg ? U.W : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
 }
 
 // Pause / Finish and the simulator slider stay hidden while riding: they show when the mouse moves (for a few seconds, or as
@@ -1652,7 +1665,7 @@ window.addEventListener('keydown', (e) => {
     settings.camera = order[(order.indexOf(settings.camera) + 1) % order.length];
     saveSettings();
     scene.setCamera(settings.camera);
-    toast({ chase: 'Camera: chase', iso: 'Camera: isometric', side: 'Camera: side view' }[settings.camera]);
+    toast(tr({ chase: 'Camera: chase', iso: 'Camera: isometric', side: 'Camera: side view' }[settings.camera]));
   }
   if (ride.simulated && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
     e.preventDefault();
@@ -1662,4 +1675,14 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// interface language (#31): the static page, the built-in routes, climbs and workouts, power zones
+translateDom();
+for (const r of routes) {
+  if (!r.custom) { r.name = tr(r.name); r.description = tr(r.description); }
+  localizeClimbs(r);
+}
+for (const w of workouts) { w.name = tr(w.name); w.description = tr(w.description); }
+$('f-lang').innerHTML = LANGS.map((l) => `<option value="${l.id}">${l.name}</option>`).join('');
+$('f-lang').value = lang;
+$('f-lang').onchange = () => setLang($('f-lang').value);
 initLobby();
