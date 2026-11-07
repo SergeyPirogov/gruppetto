@@ -476,3 +476,8 @@ body.pixel-ui .seg-panel { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .hist-name small, .hist-nums small { color: var(--muted); font-size: .75rem; }
 .hist-nums { text-align: right; }
 @media (max-width: 520px) { .hist-row { grid-template-columns: 44px 1fr 70px; } .hist-row .hist-nums:last-child { display: none; } }
+
+/* ---------- Workout pacer ---------- */
+.pacer-tag { margin-left: auto; margin-right: 10px; font-size: .78rem; font-weight: 700; }
+.pacer-btn { opacity: .55; }
+.pacer-btn.on { opacity: 1; box-shadow: inset 0 0 0 1px #facc15; color: #facc15; }

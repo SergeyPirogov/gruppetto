@@ -134,6 +134,7 @@
               </select>
             </label>
             <label class="check"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
+            <label class="check"><input type="checkbox" id="f-pacer"> Workout pacer: a virtual partner riding the target power</label>
             <label>Climb difficulty <span id="diff-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
           </div>
         </div>
@@ -175,6 +176,7 @@
         <button id="wk-int-down" class="pill-btn" aria-label="Decrease intensity">−</button>
         <span>Intensity <b id="wk-int">100%</b></span>
         <button id="wk-int-up" class="pill-btn" aria-label="Increase intensity">+</button>
+        <button id="wk-pacer-btn" class="pill-btn pacer-btn" title="Pacer on/off (P)">Pacer</button>
       </div>
     </div>
 
@@ -190,7 +192,7 @@
         <div class="seg-track"><div id="seg-fill"></div></div>
       </div>
       <div id="workout-panel" class="workout" hidden>
-        <div class="wk-title"><b id="wk-name"></b><span id="wk-pct"></span></div>
+        <div class="wk-title"><b id="wk-name"></b><span id="wk-pacer" class="pacer-tag" hidden></span><span id="wk-pct"></span></div>
         <div class="wk-head">
           <div><label>Target, W</label><b id="wk-target">0</b> <small id="wk-diff"></small></div>
           <div><label>Interval</label><b id="wk-left">0:00</b></div>
