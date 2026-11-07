@@ -1246,12 +1246,14 @@ export class Scene3D {
       // turned slightly toward a lane change in progress
       const fa = this.frame(d - 2.5), fb = this.frame(d + 2.5);
       const head = Math.atan2(fb.z - fa.z, fb.x - fa.x);
-      if (R.lastD !== undefined && dt > 0) {
-        const ds = (d - R.lastD) / dt, dl = (lane - R.lastLane) / dt;
+      // (a frame in which the ride did not step keeps the last turn instead of snapping straight)
+      if (R.lastD !== undefined && d !== R.lastD) {
+        const span = (now - R.lastMoveT) / 1000;
+        const ds = (d - R.lastD) / span, dl = (lane - R.lastLane) / span;
         const yaw = Math.abs(ds) < 0.5 || Math.abs(ds) > 40 ? 0 : Math.atan2(dl, Math.max(2, ds));
-        R.yaw = (R.yaw || 0) + (yaw - (R.yaw || 0)) * Math.min(1, dt * 5);
+        R.yaw = (R.yaw || 0) + (yaw - (R.yaw || 0)) * Math.min(1, span * 5);
       }
-      R.lastD = d; R.lastLane = lane;
+      if (R.lastD === undefined || d !== R.lastD) { R.lastD = d; R.lastLane = lane; R.lastMoveT = now; }
       R.group.rotation.set(0, -(head + (R.yaw || 0)), slope, 'YXZ');
       R.pose(r.pedal || 0);
       R.roll?.(d);
