@@ -61,6 +61,7 @@ export const UK = {
   'Could not connect: {error}': 'Не вдалося підключити: {error}',
 
   // drawer: profile
+  'Settings': 'Налаштування',
   'Profile & settings': 'Профіль і налаштування', 'Language': 'Мова', 'Name': 'Ім\'я', 'Jersey color': 'Колір джерсі',
   'Accent color (stripe, decals)': 'Колір акценту (смуга, наліпки)', 'Weight, kg': 'Вага, кг', 'Height, cm': 'Зріст, см', 'FTP, W': 'FTP, Вт',
   'Chainring (Zwift Cog 14T)': 'Передня зірка (Zwift Cog 14T)', 'Virtual gears': 'Віртуальні передачі',

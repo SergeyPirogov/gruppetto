@@ -179,6 +179,30 @@ function updateDeviceUI() {
   document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
 }
 
+/** A setting changed during a ride: takes effect now, not at the next start. */
+function applyLive(key) {
+  if (!ride) return;
+  if (key === 'weight' || key === 'height') {
+    ride.cda = riderCdA(settings.height, settings.weight);
+    trainer.riderWeight = settings.weight + 8;
+    trainer.resetMode(); // the trainer's road model gets the new weight with the next grade
+    ride.lastSentGrade = null;
+  }
+  if (key === 'ftp' && ride.workout && !ride.workoutDone) {
+    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+    if (t) ride.target = ergTarget(t);
+    ride.lastSentTarget = null;
+  }
+  if (key === 'difficulty') ride.lastSentGrade = null;
+  if (key === 'shiftMode' || key === 'chainring') {
+    ride.shiftMode = settings.shiftMode;
+    ride.lastSentGrade = null; ride.lastSentWheel = null;
+    updateGear();
+  }
+  if (key === 'style') scene?.setStyle?.(settings.style);
+  if (key === 'camera') scene?.setCamera?.(settings.camera);
+}
+
 /** Remembered device ids per slot (the browser decides whether it still allows them). */
 const rememberDevice = (d) => { settings.devices = { ...(settings.devices || {}), [d.key]: d.dev.device?.id }; saveSettings(); };
 const forgetDevice = (d) => { if (settings.devices) { delete settings.devices[d.key]; saveSettings(); } };
@@ -256,7 +280,7 @@ function initLobby() {
   const bind = (id, key, num = true) => {
     const el = $(id);
     el.value = settings[key];
-    el.oninput = () => { settings[key] = num ? Number(el.value) : el.value; saveSettings(); refreshDiff(); };
+    el.oninput = () => { settings[key] = num ? Number(el.value) : el.value; saveSettings(); refreshDiff(); applyLive(key); };
   };
   bind('f-name', 'name', false);
   bind('f-jersey', 'jersey', false);
@@ -470,14 +494,18 @@ function updateSummary() {
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
+function openDrawer(panel) {
+  const drawer = $('drawer');
+  drawer.hidden = false;
+  drawer.classList.toggle('in-ride', !!ride);
+  for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
+  for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
+}
+
 function initDrawer() {
   const drawer = $('drawer');
-  const open = (panel) => {
-    drawer.hidden = false;
-    for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
-    for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
-  };
-  for (const el of document.querySelectorAll('#lobby [data-open]')) el.addEventListener('click', () => open(el.dataset.open));
+  const open = openDrawer;
+  for (const el of document.querySelectorAll('#lobby [data-open], #drawer [data-open]')) el.addEventListener('click', () => open(el.dataset.open));
   for (const el of drawer.querySelectorAll('[data-close]')) el.addEventListener('click', () => { drawer.hidden = true; });
   window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !drawer.hidden) drawer.hidden = true; });
   window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !$('wk-menu').hidden) closeWorkoutMenu(); });
@@ -1460,7 +1488,11 @@ $('wk-int-down').onclick = () => changeIntensity(-5);
 $('wk-int-up').onclick = () => changeIntensity(+5);
 $('f-pacer').checked = settings.pacer !== false;
 $('f-pacer-name').value = settings.pacerName || '';
-$('f-pacer-name').oninput = () => { settings.pacerName = $('f-pacer-name').value; saveSettings(); };
+$('f-pacer-name').oninput = () => {
+  settings.pacerName = $('f-pacer-name').value; saveSettings();
+  if (ride?.pacer) ride.pacer.name = settings.pacerName.trim() || tr('Pacer');
+};
+$('btn-settings').onclick = () => openDrawer('profile');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
 $('wk-pacer-btn').onclick = () => togglePacer();
 function togglePacer() {
@@ -1675,6 +1707,8 @@ for (const el of [document.querySelector('#ride .controls'), $('sim-ctl')]) {
 
 window.addEventListener('keydown', (e) => {
   if (!ride) return;
+  // settings open, or typing in a field: the keys belong to them, not to the ride
+  if (!$('drawer').hidden || e.target.closest?.('input, select, textarea')) return;
   if (e.code === 'Escape') {
     if ($('ride').classList.contains('show-controls')) hideControls();
     else { showControls(0); $('btn-pause').focus(); }
