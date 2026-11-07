@@ -9,15 +9,50 @@
 <body>
   <!-- ===== Lobby ===== -->
   <section id="lobby" class="screen">
-    <div class="lobby-inner">
-      <header class="brand">
-        <h1>Power<span>Up</span></h1>
-        <p>Simple virtual indoor cycling at home</p>
-      </header>
+    <header class="lobby-top">
+      <div class="brand"><h1>Power<span>Up</span></h1></div>
+      <div class="dev-chips">
+        <button class="dev-chip" data-key="trainer" data-open="devices"><i></i>Trainer</button>
+        <button class="dev-chip" data-key="hr" data-open="devices"><i></i>Heart rate</button>
+        <button class="dev-chip" data-key="cad" data-open="devices"><i></i>Cadence</button>
+        <button class="dev-chip" data-key="ctl" data-open="devices"><i></i>Controllers</button>
+        <button class="dev-chip sim-chip" data-key="sim" data-open="devices"><i></i>Simulator</button>
+      </div>
+      <div class="top-actions">
+        <button class="ghost" data-open="profile" id="open-profile">Profile</button>
+        <button class="ghost" data-open="icu">intervals.icu</button>
+      </div>
+    </header>
 
-      <div class="grid">
-        <div class="card">
-          <h2>1. Devices</h2>
+    <main class="lobby-main">
+      <section class="lobby-routes">
+        <div class="route-hero">
+          <div class="rh-text"><small>Route</small><b id="rh-name"></b><span id="rh-meta"></span><p id="rh-desc"></p></div>
+          <canvas id="rh-profile"></canvas>
+        </div>
+        <div id="route-list" class="options route-cards"></div>
+      </section>
+      <aside class="lobby-side">
+        <h2>Mode</h2>
+        <div id="mode-list" class="options mode-list"></div>
+        <div class="ride-box">
+          <div id="ride-summary" class="ride-summary"></div>
+          <button id="btn-start" class="primary big">Ride ▶</button>
+        </div>
+      </aside>
+    </main>
+
+    <div id="drawer" class="drawer" hidden>
+      <div class="drawer-bg" data-close></div>
+      <div class="drawer-panel">
+        <div class="drawer-tabs">
+          <button data-open="devices">Devices</button>
+          <button data-open="profile">Profile</button>
+          <button data-open="icu">intervals.icu</button>
+          <button class="drawer-close" data-close aria-label="Close">✕</button>
+        </div>
+        <div class="card" data-panel="devices">
+          <h2>Devices</h2>
           <p id="bt-warning" class="warn" hidden>This browser does not support Bluetooth. Use Chrome or Edge on a computer or Android, or the simulator mode.</p>
           <div class="device">
             <div><b>Smart trainer / power meter</b><small id="trainer-status">not connected</small></div>
@@ -45,9 +80,8 @@
           <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
           <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or ↑/↓)</label>
         </div>
-
-        <div class="card">
-          <h2>2. Profile</h2>
+        <div class="card" data-panel="profile">
+          <h2>Profile &amp; settings</h2>
           <div class="fields">
             <label>Name <input id="f-name" maxlength="16"></label>
             <label>Jersey color <input id="f-jersey" type="color"></label>
@@ -84,9 +118,7 @@
             <label>Climb difficulty <span id="diff-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
           </div>
         </div>
-      </div>
-
-      <div class="card" id="icu-card">
+        <div class="card" id="icu-card" data-panel="icu">
         <h2>intervals.icu</h2>
         <p class="muted">Pull planned workouts from your calendar and upload completed rides automatically.
           Find your API key in intervals.icu → Settings → Developer Settings.</p>
@@ -101,18 +133,7 @@
           <span id="icu-status" class="muted"></span>
         </div>
       </div>
-
-      <div class="card">
-        <h2>3. Route</h2>
-        <div id="route-list" class="options"></div>
       </div>
-
-      <div class="card">
-        <h2>4. Mode</h2>
-        <div id="mode-list" class="options"></div>
-      </div>
-
-      <button id="btn-start" class="primary big">Ride!</button>
     </div>
   </section>
 

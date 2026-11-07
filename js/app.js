@@ -130,6 +130,12 @@ function updateDeviceUI() {
   }
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
   $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
+  // lobby top bar: a dot per device, lit when connected
+  for (const d of DEVICES) {
+    const chip = document.querySelector(`.dev-chip[data-key="${d.key}"]`);
+    if (chip) chip.classList.toggle('on', d.dev.connected || (d.dev === cadenceSensor && trainer.connected));
+  }
+  document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
 }
 
 /** Remembered device ids per slot (the browser decides whether it still allows them). */
@@ -225,11 +231,14 @@ function initLobby() {
     b.className = 'option';
     b.dataset.id = r.id;
     b.innerHTML = `<b>${r.name}</b><small>${(r.length / 1000).toFixed(0)} km · ↗ ${Math.round(r.elevationGain)} m</small><small>${r.description}</small><canvas></canvas>`;
-    b.onclick = () => { settings.routeId = r.id; saveSettings(); markSelected(rl, r.id); };
+    b.onclick = () => { settings.routeId = r.id; saveSettings(); markSelected(rl, r.id); showRoute(); };
     rl.append(b);
     requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`));
   }
   markSelected(rl, settings.routeId);
+  showRoute();
+  initDrawer();
+  $('sim').addEventListener('change', updateDeviceUI);
 
   $('btn-start').onclick = startRide;
   updateDeviceUI();
@@ -244,7 +253,7 @@ function renderModes() {
     b.className = 'option';
     b.dataset.id = id;
     b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(title)}</b><small>${esc(sub)}</small>${w ? '<canvas></canvas>' : ''}`;
-    b.onclick = () => { settings.mode = id; saveSettings(); markSelected(ml, id); };
+    b.onclick = () => { settings.mode = id; saveSettings(); markSelected(ml, id); updateSummary(); };
     ml.append(b);
     if (w) requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
   };
@@ -252,6 +261,46 @@ function renderModes() {
   add('free', 'Free ride', 'The trainer simulates the road grade.');
   for (const w of workouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} min · ${w.description}`, w);
   markSelected(ml, settings.mode);
+  ml.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+  updateSummary();
+}
+
+/** The selected route, large, at the top of the lobby. */
+function showRoute() {
+  const r = routes.find((x) => x.id === settings.routeId) || routes[0];
+  if (!r) return;
+  $('rh-name').textContent = r.name;
+  $('rh-meta').textContent = `${(r.length / 1000).toFixed(0)} km · ↗ ${Math.round(r.elevationGain)} m`;
+  $('rh-desc').textContent = r.description;
+  requestAnimationFrame(() => drawProfile($('rh-profile'), r, [], `${themeFor(r.theme).accent}cc`));
+  updateSummary();
+}
+
+/** "Rolling Hills · Sweet Spot 3×10" above the Ride button. */
+function updateSummary() {
+  const el = $('ride-summary');
+  if (!el) return;
+  const r = routes.find((x) => x.id === settings.routeId);
+  const sel = document.querySelector('#mode-list .sel b');
+  el.textContent = [r?.name, sel?.textContent].filter(Boolean).join(' · ');
+}
+
+/** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
+function initDrawer() {
+  const drawer = $('drawer');
+  const open = (panel) => {
+    drawer.hidden = false;
+    for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
+    for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
+  };
+  for (const el of document.querySelectorAll('#lobby [data-open]')) el.addEventListener('click', () => open(el.dataset.open));
+  for (const el of drawer.querySelectorAll('[data-close]')) el.addEventListener('click', () => { drawer.hidden = true; });
+  window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !drawer.hidden) drawer.hidden = true; });
+  // first visit with nothing to ride on: show the devices
+  if (!trainer.connected && !$('sim').checked && !localStorage.getItem('powerup-seen-drawer')) {
+    try { localStorage.setItem('powerup-seen-drawer', '1'); } catch { /* private mode */ }
+    open('devices');
+  }
 }
 
 function markSelected(list, id) {
