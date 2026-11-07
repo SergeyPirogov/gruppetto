@@ -76,7 +76,7 @@ export class Recorder {
         <Track>${pts}
         </Track>
       </Lap>
-      <Creator><Name>Power Up</Name></Creator>
+      <Creator><Name>Gruppetto</Name></Creator>
     </Activity>
   </Activities>
 </TrainingCenterDatabase>

@@ -87,7 +87,7 @@ function stats(samples) {
  * @param samples  [{power, cadence, heartRate, speed, distance, altitude, elevationGain}] one per second
  * @param opts     {start: Date, lapStarts: number[] (sample indices), normalizedPower: fn}
  */
-export function encodeActivity(samples, { start, lapStarts = [0], normalizedPower = () => 0, productName = 'Power Up' }) {
+export function encodeActivity(samples, { start, lapStarts = [0], normalizedPower = () => 0, productName = 'Gruppetto' }) {
   const w = new FitWriter();
   const t0 = fitTime(start);
   const n = samples.length;

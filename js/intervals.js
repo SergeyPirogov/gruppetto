@@ -49,7 +49,7 @@ export class IntervalsClient {
   }
 
   /**
-   * Planned cycling workouts between two local dates (YYYY-MM-DD), converted to Power Up workouts.
+   * Planned cycling workouts between two local dates (YYYY-MM-DD), converted to Gruppetto workouts.
    * The returned array carries `stats` explaining what was found and skipped.
    */
   async plannedWorkouts(oldest, newest) {
@@ -104,7 +104,7 @@ export function eventToWorkout(e) {
   };
 }
 
-/** Flatten intervals.icu workout_doc steps (with repeats) into Power Up steps. */
+/** Flatten intervals.icu workout_doc steps (with repeats) into Gruppetto steps. */
 export function convertSteps(steps, out = []) {
   for (const s of steps || []) {
     if (Array.isArray(s.steps) && s.steps.length) {

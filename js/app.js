@@ -830,7 +830,7 @@ async function uploadToIntervals() {
   btn.disabled = true;
   const { workout, route, summary: sum } = lastRide;
   const fromIcu = workout?.source === 'intervals';
-  const name = workout ? `Power Up: ${workout.name}` : `Power Up: ${route.name}`;
+  const name = workout ? `Gruppetto: ${workout.name}` : `Gruppetto: ${route.name}`;
   const description = `${route.name} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`;
   try {
     const id = await icuClient.uploadActivity(recorder.toFIT(), {
