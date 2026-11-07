@@ -191,24 +191,25 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 
 /* ---------- Stat board (power, heart rate, cadence) ---------- */
 .board {
-  display: flex; flex-direction: column; min-width: 220px;
+  display: flex; flex-direction: column; min-width: 170px;
   background: var(--pill); border: 1px solid var(--pill-line); border-radius: 14px;
   backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(10, 20, 40, 0.18); color: #fff; overflow: hidden;
 }
 .stat {
-  display: grid; grid-template-columns: 24px 1fr auto; align-items: center; column-gap: 12px;
-  padding: 9px 14px 9px 12px; border-left: 4px solid var(--c);
+  display: grid; grid-template-columns: 18px 1fr auto; align-items: center; column-gap: 9px;
+  padding: 5px 10px 5px 9px; border-left: 3px solid var(--c);
 }
 .stat + .stat { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.stat .ic { width: 16px; height: 16px; }
 .stat.power { --c: #ffc21a; }
 .stat.hr { --c: #ff4d5e; }
 .stat.cad { --c: #2fd4f0; }
-.st-body label { display: block; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; color: #9fb0c6; }
+.st-body label { display: block; font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; color: #9fb0c6; }
 .st-val { display: flex; align-items: baseline; gap: 5px; line-height: 1; margin-top: 2px; }
-.st-val b { font-size: 1.75rem; font-weight: 700; }
-.stat.power .st-val b { font-size: 2.2rem; }
-.st-val span { font-size: .85rem; color: #c9d4e3; }
-.stat small { font-size: .8rem; color: var(--cyan); align-self: end; padding-bottom: 3px; }
+.st-val b { font-size: 1.3rem; font-weight: 700; }
+.stat.power .st-val b { font-size: 1.6rem; }
+.st-val span { font-size: .75rem; color: #c9d4e3; }
+.stat small { font-size: .72rem; color: var(--cyan); align-self: end; padding-bottom: 3px; }
 
 /* ---------- Pixel interface (3D style "Pixel"): the whole UI in pixels ---------- */
 body.pixel-ui { letter-spacing: 0.02em; }
@@ -233,5 +234,5 @@ body.pixel-ui h1, body.pixel-ui h2 { font-weight: 700; letter-spacing: 0.04em; }
 body.pixel-ui b, body.pixel-ui strong, body.pixel-ui h1, body.pixel-ui h2, body.pixel-ui .grade { font-weight: 400; }
 body.pixel-ui .board { background: rgba(22, 30, 46, 0.92); border-color: rgba(255, 255, 255, 0.22); }
 body.pixel-ui .stat + .stat { border-top: 2px dashed rgba(255, 255, 255, 0.14); }
-body.pixel-ui .st-val b { font-size: 2.1rem; }
-body.pixel-ui .stat.power .st-val b { font-size: 2.6rem; }
+body.pixel-ui .st-val b { font-size: 1.5rem; }
+body.pixel-ui .stat.power .st-val b { font-size: 1.85rem; }
