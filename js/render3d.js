@@ -439,10 +439,10 @@ export class Scene3D {
     if (this.pixel) this._setupPixel();
   }
 
-  /** 'chase' (behind the rider, default) or 'iso' (high, from the side, narrow field of view). */
+  /** 'chase' (behind the rider, default), 'iso' (high, behind and to the side) or 'side' (high, from the side). */
   setCamera(mode) {
-    this.camMode = mode === 'iso' ? 'iso' : 'chase';
-    this.camera.fov = this.camMode === 'iso' ? 30 : 62;
+    this.camMode = ['iso', 'side'].includes(mode) ? mode : 'chase';
+    this.camera.fov = this.camMode === 'chase' ? 62 : this.camMode === 'side' ? 34 : 30;
     this.camera.updateProjectionMatrix();
     this._isoHeading = undefined;
   }
@@ -971,12 +971,14 @@ export class Scene3D {
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
     // chase camera
-    if (me && this.camMode === 'iso') {
+    if (me && (this.camMode === 'iso' || this.camMode === 'side')) {
       // isometric-style view: high, from behind and to the side, narrow field of view (model-like look)
-      const target = this.frame(dist + 3);
+      const target = this.frame(dist + (this.camMode === 'side' ? 4 : 3));
       const h = this._isoHeading = this._isoHeading === undefined ? target.h : this._isoHeading + (target.h - this._isoHeading) * 0.04;
       const fx = Math.cos(h), fz = Math.sin(h), rx = -Math.sin(h), rz = Math.cos(h);
-      const yaw = THREE.MathUtils.degToRad(35), pitch = THREE.MathUtils.degToRad(40), D = 27;
+      // iso: behind-and-side; side: almost square to the road, rider crosses the screen left to right
+      const side = this.camMode === 'side';
+      const yaw = THREE.MathUtils.degToRad(side ? 78 : 35), pitch = THREE.MathUtils.degToRad(side ? 30 : 40), D = side ? 22 : 27;
       const flat = Math.cos(pitch) * D;
       const tx = target.x + target.rx * me.lane, tz = target.z + target.rz * me.lane, ty = target.y + 0.8;
       this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));

@@ -953,10 +953,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'ArrowRight') { e.preventDefault(); steer(+1); }
   if (e.code === 'KeyN') skipInterval();
   if (e.code === 'KeyC' && scene?.setCamera) {
-    settings.camera = settings.camera === 'iso' ? 'chase' : 'iso';
+    const order = ['chase', 'iso', 'side'];
+    settings.camera = order[(order.indexOf(settings.camera) + 1) % order.length];
     saveSettings();
     scene.setCamera(settings.camera);
-    toast(settings.camera === 'iso' ? 'Камера: ізометрія' : 'Камера: за спиною');
+    toast({ chase: 'Камера: за спиною', iso: 'Камера: ізометрія', side: 'Камера: зверху збоку' }[settings.camera]);
   }
   if (ride.simulated && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
     e.preventDefault();
