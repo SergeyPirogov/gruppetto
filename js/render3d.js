@@ -9,6 +9,7 @@ import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
 import { t } from './i18n.js';
+import { CSM } from '../vendor/three/addons/csm/CSM.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
@@ -35,6 +36,8 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
+const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || 2; // ?csm=3 to compare
+const CSM_FAR = 240;
 const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
 const SHOW_RIDER = typeof location === 'undefined' || new URLSearchParams(location.search).get('rider') !== '0'; // ?rider=0: bike only
 const SIZE = { oak: 1, birch: 1, pine: 1, rock: 1, bush: 1, cactus: 1, palm: 1, sunflowers: 1, flowers: 1 };
@@ -649,11 +652,31 @@ export class Scene3D {
 
   resize() {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(this._pixelRatio());
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h);
     this.camera.updateProjectionMatrix();
+    this.csm?.updateFrustums();
     if (this.pixel) this._setupPixel();
+  }
+
+  /** Device pixels per CSS pixel: the screen's, up to 2, times the adaptive quality scale. */
+  _pixelRatio() {
+    return Math.max(0.75, Math.min(window.devicePixelRatio || 1, 2) * (this.quality ?? 1));
+  }
+
+  /**
+   * Adaptive quality: when frames keep taking over ~20 ms, render fewer pixels (down to 60 %), and
+   * back up when there is room again; checked every 2 s so it never flickers.
+   */
+  _adaptQuality(dt) {
+    if (!dt || this.warming) return;
+    this.qAcc = (this.qAcc || 0) + dt; this.qN = (this.qN || 0) + 1;
+    if (this.qAcc < 2) return;
+    const avg = this.qAcc / this.qN; this.qAcc = 0; this.qN = 0;
+    const q = this.quality ?? 1;
+    const next = avg > 0.021 ? Math.max(0.6, q - 0.1) : avg < 0.0135 ? Math.min(1, q + 0.1) : q;
+    if (Math.abs(next - q) > 1e-3) { this.quality = next; this.resize(); }
   }
 
   /** 'chase' (behind the rider, default), 'iso' (high, behind and to the side) or 'side' (high, from the side). */
@@ -661,6 +684,7 @@ export class Scene3D {
     this.camMode = ['iso', 'side'].includes(mode) ? mode : 'chase';
     this.camera.fov = this.camMode === 'chase' ? 62 : this.camMode === 'side' ? 34 : 30;
     this.camera.updateProjectionMatrix();
+    this.csm?.updateFrustums();
     this._isoHeading = undefined;
   }
 
@@ -809,13 +833,17 @@ export class Scene3D {
     this.sunDirection = this.t.sun
       ? new THREE.Vector3(Math.cos((this.t.sun.x - 0.5) * 2), 0.16, Math.sin((this.t.sun.x - 0.5) * 2)).normalize()
       : new THREE.Vector3(-0.6, 0.5, 0.62).normalize(); // low raking sun: long shadows, readable volume on the rider
-    this.sun = new THREE.DirectionalLight(this.t.sun ? '#ffc48f' : '#fff2dc', this.t.sun ? 2.3 : 3.0);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(this.sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 400 });
-    this.sun.shadow.bias = -0.0005;
-    this.sun.shadow.normalBias = 0.025;
-    this.scene.add(this.sun, this.sun.target);
+    // the sun with cascaded shadow maps: crisp shadows by the rider, softer ones out to 300 m
+    // (one shadow map covered only 45 m around the rider, so distant trees stood flat)
+    if (this.csm) { this.csm.remove(); this.csm.dispose(); }
+    this.csmDone = new WeakSet();
+    this.csm = new CSM({
+      camera: this.camera, parent: this.scene, cascades: CSM_CASCADES, maxFar: CSM_FAR, mode: 'practical',
+      shadowMapSize: 2048, lightDirection: this.sunDirection.clone().negate(), lightIntensity: this.t.sun ? 2.3 : 3.0,
+      lightNear: 1, lightFar: 1500, lightMargin: 150, shadowBias: -0.0004,
+    });
+    this.csm.fade = true;
+    for (const l of this.csm.lights) { l.color.set(this.t.sun ? '#ffc48f' : '#fff2dc'); l.shadow.normalBias = 0.03; l.shadow.autoUpdate = false; }
 
     this._sky();
     this._mountains();
@@ -830,6 +858,7 @@ export class Scene3D {
       this.scene.add(this.water);
     } else this.water = null;
     if (this.t.snowfall) this._snowfall(); else this.snow = null;
+    this._csmMaterials(this.scene);
   }
 
   _sky() {
@@ -837,9 +866,17 @@ export class Scene3D {
     const top = col(this.t.sky[0]), bottom = col(this.t.sky[1]);
     const cs = [];
     const p = g.attributes.position;
+    const glow = col(this.t.sun ? '#ffb36b' : '#fff4dc'), haze = bottom.clone().lerp(col('#ffffff'), 0.35);
+    const v = new THREE.Vector3();
     for (let i = 0; i < p.count; i++) {
       const t = Math.max(0, Math.min(1, p.getY(i) / 1600));
       const c = bottom.clone().lerp(top, Math.pow(t, 0.7));
+      v.set(p.getX(i), p.getY(i), p.getZ(i)).normalize();
+      // a pale band just over the horizon, and the sky brighter and warmer on the sun's side
+      const e = Math.max(0, v.y);
+      c.lerp(haze, Math.max(0, 1 - e / 0.12) * 0.55);
+      const toSun = Math.max(0, v.x * 0.88 + v.y * 0.47); // the sun sits ~28° up on +x
+      c.lerp(glow, Math.pow(toSun, 6) * (this.t.sun ? 0.55 : 0.35));
       cs.push(c.r, c.g, c.b);
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3));
@@ -935,6 +972,24 @@ export class Scene3D {
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this.snow = new THREE.Points(g, new THREE.PointsMaterial({ color: '#ffffff', size: 0.18, transparent: true, opacity: 0.9 }));
     this.scene.add(this.snow);
+  }
+
+  /** Hook every lit material under `root` into the cascaded shadows (keeping its own shader tweaks). */
+  _csmMaterials(root) {
+    if (!this.csm) return;
+    root.traverse((o) => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (this.csmDone.has(m) || !(m.isMeshLambertMaterial || m.isMeshStandardMaterial || m.isMeshPhongMaterial)) continue;
+        this.csmDone.add(m);
+        const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey ? m.customProgramCacheKey() : '';
+        this.csm.setupMaterial(m);
+        const hook = m.onBeforeCompile;
+        m.onBeforeCompile = function (sh, r) { if (prev) prev.call(this, sh, r); hook.call(this, sh, r); };
+        m.customProgramCacheKey = () => `${prevKey}|csm`;
+        m.needsUpdate = true;
+      }
+    });
   }
 
   // ----- path -----
@@ -1429,7 +1484,7 @@ export class Scene3D {
     let built = 0;
     const budget = this.warming ? Infinity : 2; // behind the loading screen: the whole stretch at once
     for (let k = c - BEHIND; k <= c + AHEAD && built < budget; k++) {
-      if (!this.chunks.has(k)) { this.chunks.set(k, this._buildChunk(k)); built++; }
+      if (!this.chunks.has(k)) { const g = this._buildChunk(k); this._csmMaterials(g); this.chunks.set(k, g); built++; }
     }
   }
 
@@ -1443,6 +1498,7 @@ export class Scene3D {
     this.lastFrameTime = now;
     this.clock += dt;
     this.windTime.value = this.clock;
+    this._adaptQuality(dt);
 
     // riders
     const seen = new Set();
@@ -1475,6 +1531,7 @@ export class Scene3D {
           });
         }
         if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; } // saddle, hoods and pedals of this bike
+        this._csmMaterials(R.group);
       }
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
@@ -1563,8 +1620,16 @@ export class Scene3D {
       const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
       const fx = hx / hl, fz = hz / hl; // forward on the ground plane; left is (fz, -fx)
       this.sunDirection.set(fx * 0.55 + fz * 0.62, 0.48, fz * 0.55 - fx * 0.62).normalize();
-      this.sun.position.copy(this.sunDirection).multiplyScalar(140).add(new THREE.Vector3(me.f.x, me.f.y, me.f.z));
-      this.sun.target.position.set(me.f.x, me.f.y, me.f.z);
+      this.csm.lightDirection.copy(this.sunDirection).negate();
+      this.camera.updateMatrixWorld();
+      this.csm.update();
+      // the near cascade every frame, the middle one every 2nd, the far one every 4th: far shadows
+      // change slowly, and each map is read with the matrix it was drawn with, so nothing slides
+      const f = (this.shadowFrame = (this.shadowFrame || 0) + 1);
+      this.csm.lights.forEach((l, i) => { if (f % [1, 2, 4][i] === 0) l.shadow.needsUpdate = true; });
+      // the sky's glow sits on the sun's side
+      this.sky.rotation.y = Math.atan2(-this.sunDirection.z, this.sunDirection.x);
+      if ((this.csmTick = (this.csmTick || 0) + 1) % 20 === 0) this._csmMaterials(this.scene); // anything added since
       if (this.sunDisk) {
         this.sunDisk.position.copy(this.sunDirection).multiplyScalar(3000).add(new THREE.Vector3(cx, cy, cz));
         this.sunGlow.position.copy(this.sunDisk.position);
