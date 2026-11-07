@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', style: 'cartoon', camera: 'chase',
+  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', ghost: 'best', style: 'cartoon', camera: 'chase',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -288,6 +288,7 @@ function showRoute() {
   $('rh-name').textContent = r.name;
   $('rh-meta').textContent = `${(r.length / 1000).toFixed(0)} km · ↗ ${Math.round(r.elevationGain)} m`;
   $('rh-desc').textContent = r.description;
+  renderGhostPicker();
   // the timed climbs, with this device's record on each
   $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} km · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
     + (records.lap[r.id] ? `<li><b>⏱ Best lap</b> <span class="pb">${fmtTime(records.lap[r.id])}</span></li>` : '');
@@ -301,7 +302,8 @@ function updateSummary() {
   if (!el) return;
   const r = routes.find((x) => x.id === settings.routeId);
   const sel = document.querySelector('#mode-list .sel b');
-  el.textContent = [r?.name, sel?.textContent].filter(Boolean).join(' · ');
+  const g = r && pickGhost(r.id);
+  el.textContent = [r?.name, sel?.textContent, g ? `👻 ${settings.ghost === 'last' ? 'last ride' : 'your best'}` : null].filter(Boolean).join(' · ');
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
@@ -381,6 +383,7 @@ async function startRide() {
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
+    ghost: (() => { const g = pickGhost(route.id); return g ? { entry: g, name: settings.ghost === 'last' ? 'Last ride' : 'Your best', color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
     pacer: workout ? { name: settings.pacerName?.trim() || 'Pacer', color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true } : null,
   };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
@@ -463,6 +466,11 @@ function advance(now = performance.now()) {
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
     ride.pedal += (animCadence / 60) * Math.PI * 2 * dt;
     ride.lane += (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
+    if (ride.ghost) {
+      const G = ride.ghost, before = G.dist;
+      G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
+      G.pedal += ((G.dist > before ? 88 : 0) / 60) * Math.PI * 2 * dt;
+    }
     if (ride.pacer) {
       const P = ride.pacer, target = ride.workoutDone ? null : effectiveTarget();
       const pw = target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
@@ -496,6 +504,7 @@ function frame(now) {
     { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
     ...ride.bots,
     ...(ride.pacer && settings.pacer ? [ride.pacer] : []),
+    ...(ride.ghost ? [ride.ghost] : []),
   ];
   scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
@@ -616,6 +625,13 @@ function updateHud(cadence, hr, grade) {
   $('m-hr-avg').textContent = A?.hrN ? `avg ${Math.round(A.hr / A.hrN)}` : '';
   $('m-cad-avg').textContent = A?.cadN ? `avg ${Math.round(A.cad / A.cadN)}` : '';
   $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
+  if (ride.ghost) {
+    const G = ride.ghost, gap = ride.dist - G.dist, tg = ghostTimeAt(G.entry, ride.dist);
+    const secs = tg === null ? null : Math.round(tg - ride.elapsed); // + = you got here sooner
+    $('ghost-tag').hidden = false;
+    $('ghost-tag').className = `ghost-tag ${gap >= 0 ? 'c-ok' : 'c-bad'}`;
+    $('ghost-tag').textContent = `👻 ${G.name}: ${Math.abs(gap) < 2 ? 'level' : `${Math.round(Math.abs(gap))} m ${gap > 0 ? 'ahead' : 'behind'}`}${secs !== null && Math.abs(gap) >= 2 ? ` · ${secs >= 0 ? '−' : '+'}${fmtTime(Math.abs(secs))}` : ''}`;
+  } else $('ghost-tag').hidden = true;
   $('m-dist').textContent = (ride.dist / 1000).toFixed(2);
   $('m-time').textContent = fmtTime(ride.elapsed);
   $('m-gain').textContent = Math.round(ride.gain);
@@ -656,7 +672,7 @@ function updateHud(cadence, hr, grade) {
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
-  drawProfile($('profile'), ride.route, [...ride.bots, { dist: ride.dist, color: settings.jersey, self: true }]);
+  drawProfile($('profile'), ride.route, [...ride.bots, ...(ride.ghost ? [{ dist: ride.ghost.dist, color: 'rgba(255,255,255,.6)' }] : []), { dist: ride.dist, color: settings.jersey, self: true }]);
 }
 
 /** Climb segments: start the timer at the foot, stop it at the top, compare with the best. */
@@ -760,7 +776,8 @@ function finishRide() {
   clearInterval(rideTimer);
   keepAwake(false);
   const sum = recorder.summary();
-  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, efforts: ride.efforts, ramp: !!ride.workout?.ramp };
+  const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
+  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
   ride = null;
   if (trainer.connected && trainer.controllable) {
     trainer.setSimulation(0);
@@ -790,16 +807,17 @@ function tss(sum, ftp) {
 }
 
 function historyEntry(r, samples) {
-  const every = 5, pw = [], hr = [];
+  const every = 5, pw = [], hr = [], d = [];
   for (let i = 0; i < samples.length; i += every) {
     const chunk = samples.slice(i, i + every);
     const avg = (k) => { const v = chunk.map((x) => x[k] || 0).filter((x) => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
     pw.push(avg('power')); hr.push(avg('heartRate'));
+    d.push(Math.round((chunk[chunk.length - 1].distance || 0) * 10) / 10); // distance at the end of each 5 s, for ghosts
   }
   return {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, summary: r.summary,
-    tss: r.summary ? tss(r.summary, settings.ftp) : 0, lapTimes: r.lapTimes || [], efforts: r.efforts || [], chart: { every, pw, hr },
+    tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], efforts: r.efforts || [], chart: { every, pw, hr, d },
   };
 }
 
@@ -810,6 +828,50 @@ function saveToHistory(r, samples) {
   saveHistory();
   renderHistory();
   return e;
+}
+
+// ---------- Shadow ride (#24) ----------
+// Race a ghost of an earlier ride on the same route: it rides where you were at the same moment.
+/** Rides on this route that can ride as a ghost (they carry a distance trace). */
+const ghostRides = (routeId) => history.filter((e) => e.routeId === routeId && e.chart?.d?.length > 1 && e.summary?.distance > 300);
+/** The ride to chase: your fastest on this route (average speed), or the latest one. */
+function pickGhost(routeId, mode = settings.ghost) {
+  const list = ghostRides(routeId);
+  if (!list.length || mode === 'off') return null;
+  if (mode === 'last') return list[0];
+  return list.reduce((a, b) => (b.summary.distance / b.summary.duration > a.summary.distance / a.summary.duration ? b : a));
+}
+/** Where the ghost is at time t (s), between the 5 s points of its trace. */
+function ghostDistAt(e, t) {
+  const d = e.chart.d, k = t / e.chart.every - 1; // d[i] is the distance at the end of second (i+1)·every
+  if (k <= 0) return Math.max(0, d[0] * (t / e.chart.every));
+  if (k >= d.length - 1) return d[d.length - 1];
+  const i = Math.floor(k);
+  return d[i] + (d[i + 1] - d[i]) * (k - i);
+}
+/** When the ghost passed distance x (s), or null if it never got that far. */
+function ghostTimeAt(e, x) {
+  const d = e.chart.d, n = d.length;
+  if (x > d[n - 1]) return null;
+  let lo = 0, hi = n - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (d[m] < x) lo = m + 1; else hi = m; }
+  const prev = lo ? d[lo - 1] : 0, t0 = lo * e.chart.every;
+  return t0 + e.chart.every * (d[lo] > prev ? (x - prev) / (d[lo] - prev) : 0);
+}
+/** The ghost picker in the lobby: shown when the selected route has rides to chase. */
+function renderGhostPicker() {
+  const r = routes.find((x) => x.id === settings.routeId);
+  const list = r ? ghostRides(r.id) : [];
+  $('ghost-box').hidden = !list.length;
+  if (!list.length) return;
+  const best = pickGhost(r.id, 'best'), last = list[0];
+  const desc = (e) => `${new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · ${(e.summary.distance / 1000).toFixed(1)} km in ${fmtTime(e.summary.duration)}`;
+  $('ghost-best').textContent = desc(best);
+  $('ghost-last').textContent = desc(last);
+  for (const b of document.querySelectorAll('#ghost-box [data-ghost]')) {
+    b.classList.toggle('sel', b.dataset.ghost === settings.ghost);
+    b.onclick = () => { settings.ghost = b.dataset.ghost; saveSettings(); renderGhostPicker(); updateSummary(); };
+  }
 }
 
 /** The ride summary screen, for the ride just finished (live: downloads available) or one from history. */
@@ -838,6 +900,7 @@ function showSummary(e, { live = false } = {}) {
     ['Work', `${sum.kj} kJ`],
   ] : [];
   if (sum && e.ramp && sum.best1min) stats.push(['Estimated FTP', `${Math.round(sum.best1min * 0.75)} W`]);
+  if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([`vs ${e.ghostName || 'ghost'}`, `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} m ${e.ghostGap >= 0 ? '🏆' : ''}`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   // laps and climbs of this ride, with personal bests
   const rows = [

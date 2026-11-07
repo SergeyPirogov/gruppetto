@@ -1144,6 +1144,18 @@ export class Scene3D {
           R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
         }
         if (this.bikeModel) R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color });
+        // a ghost (your own earlier ride): see-through, and drawn after the solid scene
+        if (r.ghost) {
+          R.group.traverse((o) => {
+            if (!o.material) return;
+            o.material = (Array.isArray(o.material) ? o.material : [o.material]).map((m) => {
+              const c = m.clone(); c.transparent = true; c.opacity = Math.min(c.opacity ?? 1, 0.3); c.depthWrite = false; return c;
+            });
+            if (o.material.length === 1) o.material = o.material[0];
+            o.castShadow = false;
+            o.renderOrder = 2;
+          });
+        }
         if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; } // saddle, hoods and pedals of this bike
       }
       const d = r.dist;

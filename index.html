@@ -34,6 +34,14 @@
           <canvas id="rh-profile"></canvas>
           <ul id="rh-climbs" class="rh-climbs"></ul>
         </div>
+        <div id="ghost-box" class="ghost-box" hidden>
+          <h2>Shadow ride <small>race a ghost of your earlier ride</small></h2>
+          <div class="ghost-opts">
+            <button data-ghost="best"><b>👻 Your best</b><small id="ghost-best"></small></button>
+            <button data-ghost="last"><b>Last ride</b><small id="ghost-last"></small></button>
+            <button data-ghost="off"><b>Off</b><small>ride on your own</small></button>
+          </div>
+        </div>
         <div id="route-list" class="options route-cards"></div>
         <div id="history-box" class="history-box" hidden>
           <div class="hist-head"><h2>Recent rides</h2><span id="history-week"></span><button class="ghost" data-open="history">All rides</button></div>
@@ -187,6 +195,7 @@
         <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b></div>
         <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>km</span></div>
       </div>
+      <div id="ghost-tag" class="ghost-tag" hidden></div>
       <div id="seg-panel" class="seg-panel" hidden>
         <div class="seg-head"><b id="seg-name"></b><span id="seg-left"></span></div>
         <div class="seg-row"><b id="seg-time">0:00</b><span id="seg-pace"></span><small id="seg-best"></small></div>
