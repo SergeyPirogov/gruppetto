@@ -622,3 +622,10 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .board.minimap { position: relative; align-self: stretch; height: 190px; padding: 0; }
 #minimap { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); display: block; }
 @media (max-width: 760px) { .board.minimap { display: none; } }
+
+/* ---------- Plan from intervals.icu ---------- */
+.plan-box { margin-bottom: 14px; }
+.plan-box h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; }
+.plan-list .tag.plan-day { background: var(--accent2); }
+.plan-list .tag.plan-day.tomorrow { background: #9fb0c6; }
+.plan-empty { margin: 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }

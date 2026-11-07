@@ -30,7 +30,10 @@ const DEFAULT_SETTINGS = {
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
 // ?debug: reach the current ride from devtools (jump along the route when testing laps and climbs)
-if (new URLSearchParams(location.search).has('debug')) Object.defineProperty(window, '__ride', { get: () => ride });
+if (new URLSearchParams(location.search).has('debug')) {
+  Object.defineProperty(window, '__ride', { get: () => ride });
+  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true }; renderModes(); }; // try the plan box without an account
+}
 
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
 const records = (() => { try { return JSON.parse(localStorage.getItem('gruppetto.records') || '{}'); } catch { return {}; } })();
@@ -427,8 +430,30 @@ function alertBox(msg) {
 
 const allWorkouts = () => [...icuWorkouts, ...workouts];
 
+/** Today's and tomorrow's workouts from the intervals.icu calendar, right in the lobby. */
+function renderPlan() {
+  const box = $('plan-box'), list = $('plan-list');
+  if (!box) return;
+  box.hidden = !icuClient;
+  if (!icuClient) return;
+  const planned = icuWorkouts.filter((w) => ['today', 'tomorrow'].includes(dayLabel(w.date)));
+  list.innerHTML = planned.length ? '' : `<p class="muted plan-empty">${tr('Nothing planned for today or tomorrow')}</p>`;
+  for (const w of planned) {
+    const b = document.createElement('button');
+    b.className = 'option';
+    b.dataset.id = w.id;
+    const day = dayLabel(w.date);
+    b.innerHTML = `<span class="tag plan-day ${day}">${tr(day === 'today' ? 'Today' : 'Tomorrow')}</span><b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min}${w.description ? ` · ${esc(w.description)}` : ''}</small><canvas></canvas>`;
+    b.onclick = () => { settings.mode = w.id; settings.lastWorkout = w.id; saveSettings(); renderModes(); };
+    b.classList.toggle('sel', settings.mode === w.id);
+    list.append(b);
+    requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
+  }
+}
+
 /** Mode: free ride, or a workout picked in its own menu. */
 function renderModes() {
+  renderPlan();
   const ml = $('mode-list');
   ml.innerHTML = '';
   const w = allWorkouts().find((x) => x.id === settings.mode)
