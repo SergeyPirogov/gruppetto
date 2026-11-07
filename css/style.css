@@ -509,7 +509,9 @@ body.pixel-ui .ghost-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .ahead-row b { font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ahead-row span { font-weight: 700; color: var(--cyan); font-size: .85rem; }
 .ahead-row small { grid-column: 2 / 4; color: #9fb0c6; font-size: .7rem; }
-.hud-right { align-items: stretch; }
+.hud-right { align-items: stretch; width: 204px; } /* a fixed width: the column no longer jumps as the numbers change */
+.hud-right .board { min-width: 0; }
+.stat .grade-next { min-width: 0; }
 
 /* ---------- Drafting (#20) ---------- */
 .draft-tag {
