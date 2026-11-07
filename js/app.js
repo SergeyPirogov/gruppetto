@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS = {
   name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
-  intensity: 100, sound: true, voice: true,
+  intensity: 100, sound: true, voice: true, style: 'cartoon',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -187,6 +187,7 @@ function initLobby() {
   bind('f-chainring', 'chainring');
   bind('f-shift', 'shiftMode', false);
   bind('f-graphics', 'graphics', false);
+  bind('f-style', 'style', false);
   const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); };
   refreshDiff();
 
@@ -300,6 +301,7 @@ async function startRide() {
   $('paused').hidden = true;
   $('btn-pause').textContent = 'Пауза';
   await ensureScene();
+  scene.setStyle?.(settings.style);
   ride.lastSim = performance.now();
   clearInterval(rideTimer);
   rideTimer = setInterval(() => advance(), 250);

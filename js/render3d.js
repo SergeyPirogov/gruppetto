@@ -436,6 +436,75 @@ export class Scene3D {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h);
     this.camera.updateProjectionMatrix();
+    if (this.pixel) this._setupPixel();
+  }
+
+  /** 'cartoon' (default) or 'pixel': low-res render, limited palette with dithering and outlines. */
+  setStyle(style) {
+    const want = style === 'pixel';
+    if (want === !!this.pixel) return;
+    if (this.pixel) { this.pixel.target.dispose(); this.pixel.quad.material.dispose(); }
+    this.pixel = want ? {} : null;
+    if (want) this._setupPixel();
+  }
+
+  _setupPixel() {
+    const P = this.pixel;
+    P.target?.dispose();
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const VIRTUAL_H = 270; // height of the pixel grid
+    const h = VIRTUAL_H, w = Math.max(1, Math.round((size.x / Math.max(1, size.y)) * VIRTUAL_H));
+    P.target = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: THREE.HalfFloatType });
+    P.target.depthTexture = new THREE.DepthTexture(w, h);
+    if (!P.quad) {
+      P.scene = new THREE.Scene();
+      P.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      P.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+        toneMapped: false,
+        depthTest: false,
+        depthWrite: false,
+        uniforms: { tColor: { value: null }, tDepth: { value: null }, res: { value: new THREE.Vector2() }, near: { value: 0.3 }, far: { value: 4000 }, exposure: { value: 1.05 } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+        fragmentShader: `
+          uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 res; uniform float near; uniform float far; uniform float exposure;
+          varying vec2 vUv;
+          float viewZ(vec2 uv) { float d = texture2D(tDepth, uv).x; return (near * far) / ((far - near) * d - far); }
+          vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+          float bayer4(vec2 p) {
+            int x = int(mod(p.x, 4.0)), y = int(mod(p.y, 4.0)); int i = x + y * 4;
+            float m[16]; m[0]=0.;m[1]=8.;m[2]=2.;m[3]=10.;m[4]=12.;m[5]=4.;m[6]=14.;m[7]=6.;m[8]=3.;m[9]=11.;m[10]=1.;m[11]=9.;m[12]=15.;m[13]=7.;m[14]=13.;m[15]=5.;
+            for (int k = 0; k < 16; k++) if (k == i) return m[k] / 16.0 - 0.5;
+            return 0.0;
+          }
+          void main() {
+            vec2 cell = floor(vUv * res);
+            vec2 uv = (cell + 0.5) / res;                       // one colour per pixel cell
+            vec3 c = texture2D(tColor, uv).rgb;
+            c = pow(aces(c * exposure), vec3(1.0 / 2.2));       // tone map + sRGB
+            // outlines where depth jumps between neighbouring cells
+            float z = -viewZ(uv);
+            vec2 px = 1.0 / res;
+            float e = 0.0;
+            e = max(e, abs(z + viewZ(uv + vec2(px.x, 0.0))));
+            e = max(e, abs(z + viewZ(uv + vec2(0.0, px.y))));
+            e = max(e, abs(z + viewZ(uv - vec2(px.x, 0.0))));
+            e = max(e, abs(z + viewZ(uv - vec2(0.0, px.y))));
+            if (z < 900.0 && e > 0.06 * z + 0.4) c *= 0.38;
+            // limited palette with ordered dithering
+            float levels = 7.0;
+            c = floor(c * levels + 0.5 + bayer4(cell) * 0.55) / levels;
+            gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+          }`,
+      }));
+      P.scene.add(P.quad);
+    }
+    const u = P.quad.material.uniforms;
+    u.tColor.value = P.target.texture;
+    u.tDepth.value = P.target.depthTexture;
+    u.res.value.set(w, h);
+    u.near.value = this.camera.near;
+    u.far.value = this.camera.far;
+    u.exposure.value = this.renderer.toneMappingExposure;
   }
 
   // ----- world setup per route -----
@@ -933,7 +1002,14 @@ export class Scene3D {
         p.needsUpdate = true;
       }
     }
-    this.renderer.render(this.scene, this.camera);
+    if (this.pixel) {
+      this.renderer.setRenderTarget(this.pixel.target);
+      this.renderer.render(this.scene, this.camera);
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.pixel.scene, this.pixel.cam);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 }
 
