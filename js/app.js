@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
   name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
+  jersey: '#16a0a8', stripe: '#ff8a1f',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -145,6 +146,8 @@ function initLobby() {
     el.oninput = () => { settings[key] = num ? Number(el.value) : el.value; saveSettings(); refreshDiff(); };
   };
   bind('f-name', 'name', false);
+  bind('f-jersey', 'jersey', false);
+  bind('f-stripe', 'stripe', false);
   bind('f-weight', 'weight');
   bind('f-ftp', 'ftp');
   bind('f-diff', 'difficulty');
@@ -200,8 +203,8 @@ const BOTS = [
   { name: 'Ірина', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0' },
   { name: 'Богдан', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a' },
 ];
-const ME_COLOR = '#16a0a8';
-const ME_STRIPE = '#ff8a1f';
+// Riders keep right: start in the right half of the road (positive lane = right of travel).
+const START_LANE = 1.2;
 
 let ride = null;
 let rideTimer = null;
@@ -245,7 +248,7 @@ async function startRide() {
     gain: 0, lastElev: route.elevAt(0), laps: 0,
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
     powerHist: [], target: workout ? targetAt(workout, 0, settings.ftp).watts : null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
-    gear: DEFAULT_GEAR, ergBias: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: 0, laneTarget: 0,
+    gear: DEFAULT_GEAR, ergBias: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
   };
   trainer.riderWeight = settings.weight + 8;
@@ -265,6 +268,7 @@ async function startRide() {
   rideTimer = setInterval(() => advance(), 250);
   keepAwake(true);
   if (simulated) toast('Режим симулятора: потужність — повзунок або ↑/↓');
+  if (scene.orbit) setTimeout(() => toast('Камера: тягніть мишею, щоб обертати, колесо — наблизити, подвійний клік — назад'), simulated ? 3500 : 0);
   requestAnimationFrame(frame);
 }
 
@@ -341,7 +345,7 @@ function frame(now) {
   if (!ride) return;
   advance(now);
   const riders = [
-    { dist: ride.dist, color: ME_COLOR, stripe: ME_STRIPE, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
     ...ride.bots,
   ];
   scene.render(ride.route, ride.dist, riders, ride.moved);
@@ -441,13 +445,7 @@ function updateHud(cadence, hr, grade) {
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
-  const L = ride.route.length;
-  const list = [{ name: settings.name, color: ME_COLOR, dist: ride.dist, me: true }, ...ride.bots]
-    .map((r) => ({ ...r, gap: ((((r.dist - ride.dist) % L) + L * 1.5) % L) - L / 2 }))
-    .sort((a, b) => b.gap - a.gap);
-  $('riders').innerHTML = list.map((r) => `<li class="${r.me ? 'me' : ''}"><i style="background:${r.color}"></i><span>${esc(r.name)}</span><em>${r.me ? '' : fmtGap(r.gap, ride.v)}</em></li>`).join('');
-
-  drawProfile($('profile'), ride.route, [...ride.bots, { dist: ride.dist, color: ME_COLOR, self: true }]);
+  drawProfile($('profile'), ride.route, [...ride.bots, { dist: ride.dist, color: settings.jersey, self: true }]);
 }
 
 function updateProgress() {
@@ -687,12 +685,6 @@ function fmtTime(sec) {
   sec = Math.max(0, Math.floor(sec));
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function fmtGap(gap, v) {
-  const sign = gap > 0 ? '+' : '−';
-  if (v > 1) return `${sign}${Math.round(Math.abs(gap) / v)} с`;
-  return `${sign}${Math.round(Math.abs(gap))} м`;
 }
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

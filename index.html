@@ -50,6 +50,8 @@
           <h2>2. Профіль</h2>
           <div class="fields">
             <label>Ім’я <input id="f-name" maxlength="16"></label>
+            <label>Колір джерсі <input id="f-jersey" type="color"></label>
+            <label>Колір акценту (смуга, декалі) <input id="f-stripe" type="color"></label>
             <label>Вага, кг <input id="f-weight" type="number" min="30" max="200"></label>
             <label>FTP, Вт <input id="f-ftp" type="number" min="50" max="600"></label>
             <label>Передня зірка (Zwift Cog 14T)
@@ -114,7 +116,6 @@
       <div class="pill big"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><b id="m-power">0</b><span>Вт</span><small id="m-wkg">0.0 Вт/кг</small></div>
       <div class="pill"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><b id="m-hr">—</b><span>уд/хв</span></div>
       <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><b id="m-cad">0</b><span>об/хв</span></div>
-      <ol id="riders" class="riders"></ol>
     </div>
 
     <div class="hud-center">

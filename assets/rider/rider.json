@@ -1,0 +1,20 @@
+{
+  "bodyKit": true,
+  "sleeve": false,
+  "sockHeight": false,
+  "armSlim": 1,
+  "height": 1.92,
+  "vertexColors": false,
+  "hipsX": -0.19,
+  "hipsY": 1.065,
+  "torsoLean": 28,
+  "pelvisTilt": 48,
+  "clavicle": {
+    "out": 0.8,
+    "fwd": -0.6,
+    "up": -0.35
+  },
+  "neckAngle": 65,
+  "headAngle": 88,
+  "armLength": 0.86
+}

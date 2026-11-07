@@ -5,6 +5,8 @@ import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
 import { loadRiderModel, ModelRider } from './rider-model.js';
+import { loadNature, natureMaterials } from './nature.js';
+import { loadBikeModel, ModelBike } from './bike-model.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
 const AHEAD = 7, BEHIND = 1;   // chunks kept around the rider
@@ -30,6 +32,9 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
+// While the bike is being reworked the riders are hidden: only the bikes ride. Add ?rider=1 to the
+// address to see the riders again.
+const SHOW_RIDER = typeof location !== 'undefined' && new URLSearchParams(location.search).get('rider') === '1';
 const SIZE = { oak: 1, birch: 1, pine: 1, rock: 1, bush: 1, cactus: 1, palm: 1, sunflowers: 1, flowers: 1 };
 
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -42,6 +47,15 @@ function vnoise(x, z) {
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
 const fbm = (x, z) => vnoise(x / 190, z / 190) * 0.6 + vnoise(x / 70, z / 70) * 0.3 + vnoise(x / 24, z / 24) * 0.1;
+/** Leaf colour of a scenery type on this route (the Quaternius textures keep their light and shade). */
+function natureTint(theme, type) {
+  const p = theme.palette;
+  const hex = { oak: p.oak.mid, birch: p.birch?.mid || p.oak.light, pine: p.pine.light, bush: p.bush.mid }[type] || '#7dbb4a';
+  const c = new THREE.Color(hex);
+  if (type === 'pine') c.offsetHSL(0, 0, 0.08); // the palette's pine is meant for flat shading: lift it
+  if (type === 'pine' && p.pine.snow) c.lerp(new THREE.Color(p.pine.snow), 0.35);
+  return c;
+}
 const rgb = (c) => new THREE.Color().setRGB(c[0] / 255, c[1] / 255, c[2] / 255, THREE.SRGBColorSpace);
 const col = (hex) => new THREE.Color(hex);
 
@@ -244,13 +258,14 @@ function shape(geom, f) {
 }
 const lerp = (a, b, t) => a + (b - a) * t;
 
-class Rider3D {
+export class Rider3D {
   constructor(jersey, stripe, label, withBody = true) {
     this.group = new THREE.Group();
     const mat = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp() });
     this.mats = {
-      frame: mat('#2c4650'), tyre: mat('#1a1a1d'), rim: mat('#33363d'), jersey: mat(jersey), stripe: mat(stripe),
+      frame: mat('#1d2026'), tyre: mat('#141416'), rim: mat('#3a3e46'), jersey: mat(jersey), stripe: mat(stripe),
       skin: mat(SKIN), shorts: mat(SHORTS), sock: mat(SOCK), shoe: mat(SHOE), helmet: mat('#f7f7f7'), dark: mat('#26282d'),
+      decal: mat(stripe), bottle: mat('#f2f2f2'),
     };
     const M = this.mats;
     const add = (geom, m, pos, rot) => {
@@ -263,28 +278,97 @@ class Rider3D {
     };
     const capsule = (r, len, m, f) => add(f ? shape(new THREE.CapsuleGeometry(r, len, 8, 16), f) : new THREE.CapsuleGeometry(r, len, 8, 16), m);
 
-    // bike
-    for (const x of [-0.5, 0.5]) {
-      add(new THREE.TorusGeometry(0.335, 0.024, 12, 48), M.tyre, [x, 0.34, 0]);
-      add(new THREE.TorusGeometry(0.295, 0.024, 8, 48), M.rim, [x, 0.34, 0]).scale.set(1, 1, 0.55);
-      add(cyl(0.028, 0.028, 0.1, 12), M.dark, [x, 0.34, 0], [Math.PI / 2, 0, 0]);
+    // bike: road bike, forward = +x, drivetrain on the right (+z)
+    const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
+    const tube = (a, b, r, m, aero = 1) => {
+      const mesh = this._orient(add(cyl(r, r, V(...a).distanceTo(V(...b)), 14), m), V(...a), V(...b));
+      mesh.scale.z = aero; // < 1 flattens the tube sideways into an aero profile
+      return mesh;
+    };
+    const lathe = (profile, segs = 48, phi0 = 0, phiLen = Math.PI * 2) => new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segs, phi0, phiLen).rotateX(Math.PI / 2);
+    // wheels: each is its own group around the axle so it can spin (see roll())
+    this.wheels = [-0.5, 0.5].map((x) => {
+      const w = new THREE.Group();
+      w.position.set(x, 0.34, 0);
+      this.group.add(w);
+      const put = (geom, m) => { const mesh = new THREE.Mesh(geom, m); mesh.castShadow = true; w.add(mesh); return mesh; };
+      // tyre, deep carbon rim with decals, hub, and spokes as one line set
+      put(new THREE.TorusGeometry(0.326, 0.0125, 10, 56), M.tyre);
+      put(lathe([[0.262, -0.0095], [0.306, -0.0128], [0.313, 0], [0.306, 0.0128], [0.262, 0.0095], [0.262, -0.0095]]), M.rim); // ~50 mm carbon rim
+      for (const phi of [0.3, Math.PI + 0.3]) put(lathe([[0.279, -0.0113], [0.29, -0.0119], [0.29, 0.0119], [0.279, 0.0113], [0.279, -0.0113]], 16, phi, 1.4), M.decal);
+      put(cyl(0.022, 0.022, 0.09, 14), M.dark).rotation.x = Math.PI / 2;
+      const pts = [];
+      for (let i = 0; i < 20; i++) {
+        const t = (i / 20) * Math.PI * 2, side = i % 2 ? 1 : -1;
+        pts.push(V(0, 0, side * 0.035), V(Math.cos(t) * 0.263, Math.sin(t) * 0.263, side * 0.004));
+      }
+      w.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#8d9299' })));
+      return w;
+    });
+    // frame: aero race bike — deep truncated-airfoil tubes, a seat tube curved around the rear
+    // wheel, very low seat stays, deep fork blades and an aero seatpost
+    const BB = [0, 0.29, 0], HT_TOP = [0.445, 0.895, 0], HT_BOT = [0.415, 0.765, 0], ST_TOP = [-0.13, 0.82, 0], ST_MID = [-0.06, 0.47, 0];
+    const joint = (p, r) => add(new THREE.SphereGeometry(r, 16, 12), M.frame, p).scale.set(1, 1, 0.5);
+    tube(BB, HT_BOT, 0.042, M.frame, 0.38);                        // down tube, deep
+    tube(BB, ST_MID, 0.03, M.frame, 0.5);                          // seat tube, lower part
+    tube(ST_MID, ST_TOP, 0.028, M.frame, 0.5);                     // seat tube, upper part (wheel cut-out)
+    tube(ST_TOP, [0.435, 0.872, 0], 0.022, M.frame, 0.66);          // top tube, sloping
+    tube(HT_BOT, HT_TOP, 0.036, M.frame, 0.5);                     // head tube, deep
+    joint(BB, 0.045); joint(ST_MID, 0.03); joint(ST_TOP, 0.03); joint(HT_BOT, 0.04);
+    for (const z of [-0.035, 0.035]) {
+      tube([-0.5, 0.34, z * 1.3], [0, 0.29, z * 0.7], 0.014, M.frame, 0.8);       // chain stays
+      tube([-0.5, 0.34, z * 1.3], [-0.085, 0.62, z * 0.6], 0.011, M.frame, 0.8);  // dropped seat stays
+      tube([0.42, 0.775, z * 0.7], [0.5, 0.34, z * 1.35], 0.022, M.frame, 0.4);  // fork blades, deep
     }
-    const tube = (a, b, r, m) => this._orient(add(cyl(r, r, new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)), 12), m), new THREE.Vector3(...a), new THREE.Vector3(...b));
-    tube([-0.5, 0.34, 0.035], [0, 0.29, 0.02], 0.016, M.frame);
-    tube([-0.5, 0.34, -0.035], [0, 0.29, -0.02], 0.016, M.frame);
-    tube([0, 0.29, 0], [-0.13, 0.9, 0], 0.028, M.frame);
-    tube([-0.5, 0.34, 0], [-0.12, 0.86, 0], 0.015, M.frame);
-    tube([0, 0.29, 0], [0.4, 0.84, 0], 0.035, M.frame);
-    tube([-0.13, 0.86, 0], [0.4, 0.88, 0], 0.026, M.frame);
-    tube([0.4, 0.84, 0], [0.43, 0.95, 0], 0.028, M.frame);
-    tube([0.43, 0.95, 0], [0.5, 0.34, 0], 0.018, M.frame);
-    tube([-0.13, 0.9, 0], [-0.15, 0.99, 0], 0.015, M.dark);
-    add(new THREE.CapsuleGeometry(0.035, 0.18, 4, 10), M.dark, [-0.16, 1.0, 0], [0, 0, Math.PI / 2]).scale.set(1, 1, 1.6);
-    add(cyl(0.016, 0.016, 0.42, 10), M.dark, [0.5, 0.97, 0], [Math.PI / 2, 0, 0]);
-    tube([0.43, 0.95, 0], [0.5, 0.97, 0], 0.018, M.dark);
-    for (const z of [-0.2, 0.2]) tube([0.5, 0.97, z], [0.55, 0.9, z], 0.015, M.dark);
+    // decals along the down tube on both sides
+    const dtAng = Math.atan2(HT_BOT[1] - BB[1], HT_BOT[0] - BB[0]);
+    for (const z of [-0.0165, 0.0165]) {
+      add(new THREE.BoxGeometry(0.24, 0.018, 0.003), M.decal, [0.21, 0.55, z]).rotation.z = dtAng;
+      add(new THREE.BoxGeometry(0.12, 0.007, 0.003), M.bottle, [0.25, 0.6, z]).rotation.z = dtAng;
+    }
+    // seatpost and a shaped saddle (wide at the back, narrow nose)
+    tube(ST_TOP, [-0.16, 0.985, 0], 0.024, M.frame, 0.45);      // aero seatpost
+    const sOutline = new THREE.Shape();
+    sOutline.moveTo(-0.13, 0);
+    sOutline.bezierCurveTo(-0.13, 0.075, -0.06, 0.07, 0.0, 0.03);
+    sOutline.lineTo(0.13, 0.016);
+    sOutline.quadraticCurveTo(0.145, 0, 0.13, -0.016);
+    sOutline.lineTo(0.0, -0.03);
+    sOutline.bezierCurveTo(-0.06, -0.07, -0.13, -0.075, -0.13, 0);
+    const saddle = new THREE.ExtrudeGeometry(sOutline, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 3, curveSegments: 10 });
+    saddle.rotateX(Math.PI / 2);
+    add(saddle, M.dark, [-0.15, 1.01, 0]);
+    // cockpit: aero spacers, a V-shaped split stem and an integrated wing-profile bar
+    // race fit: bar ~8 cm below the saddle (saddle top ≈ 1.01)
+    tube(HT_TOP, [0.46, 0.92, 0], 0.03, M.frame, 0.5);              // aero steerer cover / spacers
+    for (const z of [-0.045, 0.045]) tube([0.46, 0.92, z * 0.15], [0.565, 0.93, z], 0.012, M.dark, 0.75); // V-stem arms
+    const tops = add(cyl(0.014, 0.014, 0.39, 16), M.dark, [0.57, 0.93, 0], [Math.PI / 2, 0, 0]);
+    tops.scale.set(1.8, 1, 0.62);                                    // slim aero wing tops (~50 x 17 mm)
+    for (const z of [-0.2, 0.2]) {
+      const drop = new THREE.CatmullRomCurve3([V(0.57, 0.93, z), V(0.63, 0.92, z * 1.03), V(0.66, 0.875, z * 1.05), V(0.64, 0.815, z * 1.06), V(0.57, 0.795, z * 1.06)]);
+      add(new THREE.TubeGeometry(drop, 20, 0.0125, 8), M.dark);
+      add(new THREE.CapsuleGeometry(0.019, 0.06, 4, 10), M.dark, [0.625, 0.943, z * 1.03], [0, 0, -1.25]).scale.set(1, 1, 0.85); // hood
+      add(new THREE.BoxGeometry(0.014, 0.1, 0.012), M.rim, [0.665, 0.88, z * 1.03], [0, 0, 0.18]);    // brake lever
+    }
+    // drivetrain on the right: chainring, cassette, chain, rear derailleur
+    add(new THREE.TorusGeometry(0.1, 0.006, 6, 40), M.rim, [0, 0.29, 0.07]);
+    add(cyl(0.04, 0.04, 0.01, 16), M.dark, [0, 0.29, 0.07], [Math.PI / 2, 0, 0]); // spider
+    for (let i = 0; i < 4; i++) { const t = i * Math.PI / 2 + 0.4; add(new THREE.BoxGeometry(0.06, 0.012, 0.006), M.dark, [Math.cos(t) * 0.065, 0.29 + Math.sin(t) * 0.065, 0.07], [0, 0, t]); }
+    add(cyl(0.055, 0.03, 0.03, 20), M.rim, [-0.5, 0.34, 0.055], [Math.PI / 2, 0, 0]);
+    tube([0, 0.39, 0.07], [-0.5, 0.39, 0.055], 0.004, M.rim);
+    tube([0, 0.19, 0.07], [-0.48, 0.27, 0.055], 0.004, M.rim);
+    add(new THREE.BoxGeometry(0.03, 0.07, 0.02), M.dark, [-0.49, 0.27, 0.06]);
+    // bottle on the down tube
+    const bottle = add(cyl(0.032, 0.032, 0.17, 14), M.bottle);
+    this._orient(bottle, V(0.16, 0.5, 0), V(0.26, 0.63, 0));
+    bottle.position.add(V(-0.03, 0.04, 0));
 
-    this.cranks = [-1, 1].map((side) => ({ side, mesh: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark) }));
+    this.cranks = [-1, 1].map((side) => ({
+      side,
+      mesh: add(new THREE.BoxGeometry(0.03, 0.17, 0.014), M.dark),
+      pedal: add(new THREE.BoxGeometry(0.08, 0.014, 0.06), M.dark),
+    }));
+    this.bikeParts = [...this.group.children]; // the built-in bike, hidden when a bike model is used
     this.legs = [];
     if (withBody) this._body(add, capsule, M);
     if (label) this._label(label);
@@ -359,6 +443,14 @@ class Rider3D {
     return mesh;
   }
 
+  /** Spin the wheels for a distance travelled (m): forward = +x, so they turn clockwise seen from +z. */
+  /** Hides the built-in bike (a bike model is shown instead). */
+  hideBike() { for (const o of this.bikeParts) o.visible = false; }
+
+  roll(dist) {
+    for (const w of this.wheels) w.rotation.z = -(dist / 0.339) % (Math.PI * 2);
+  }
+
   /** Pedalling pose: feet on the crank circle, knees by two-bone IK. */
   pose(angle) {
     const { L1, L2 } = this;
@@ -366,8 +458,9 @@ class Rider3D {
     angle = -angle; // forward = +x: the top pedal must move forward, i.e. clockwise seen from +z
     for (const c of this.cranks) {
       const a = angle + (c.side > 0 ? 0 : Math.PI);
-      c.mesh.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, c.side * 0.11);
+      c.mesh.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, c.side * 0.085); // just outside the chainring
       c.mesh.rotation.set(0, 0, a - Math.PI / 2);
+      c.pedal.position.set(Math.cos(a) * 0.17, bb.y + Math.sin(a) * 0.17, c.side * 0.11); // ~150 mm Q-factor
     }
     for (const leg of this.legs) {
       const a = angle + (leg.side > 0 ? 0 : Math.PI);
@@ -396,6 +489,8 @@ class Rider3D {
 export class Scene3D {
   constructor(canvas) {
     this.canvas = canvas;
+    this._orbitControls(canvas);
+    if (typeof window !== 'undefined' && new URLSearchParams(location.search).has('debug')) window.__scene3d = this; // for inspecting in devtools
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -409,7 +504,21 @@ export class Scene3D {
     this.routeId = null;
     this.clock = 0;
     this.riderModel = null;
-    loadRiderModel().then((m) => {
+    this.nature = null;
+    this.bikeModel = null;
+    loadBikeModel().then((m) => {
+      if (!m) return;
+      this.bikeModel = m;
+      for (const R of this.riders.values()) this.scene.remove(R.group);
+      this.riders.clear(); // rebuilt with the bike model on the next frame
+    });
+    loadNature().then((n) => {
+      if (!n) return;
+      this.nature = n;
+      this.natureKeep = new Set([...Object.values(n.textures), ...Object.values(n.types).flat(2).map((p) => p.geometry)]);
+      this.routeId = null; // rebuild the world with the models on the next frame
+    }).catch((e) => console.warn('Nature models unavailable, using built-in shapes', e));
+    (SHOW_RIDER ? loadRiderModel() : Promise.resolve(null)).then((m) => {
       if (!m) return;
       this.riderModel = m;
       for (const R of this.riders.values()) this.scene.remove(R.group);
@@ -417,6 +526,49 @@ export class Scene3D {
     });
     this.resize();
     window.addEventListener('resize', () => this.resize());
+  }
+
+  /**
+   * Camera you can turn: drag (mouse or one finger) to orbit around your rider, wheel or pinch to
+   * zoom, double-click or double-tap to go back to the chase view.
+   */
+  _orbitControls(canvas) {
+    this.orbit = { yaw: 0, pitch: 0, zoom: 1 };
+    const O = this.orbit;
+    const pts = new Map();
+    let pinch = 0, lastTap = 0;
+    const clampZoom = (z) => Math.max(0.3, Math.min(2.5, z));
+    canvas.style.touchAction = 'none';
+    canvas.style.cursor = 'grab';
+    canvas.addEventListener('pointerdown', (e) => {
+      try { canvas.setPointerCapture(e.pointerId); } catch { /* pointer already gone */ }
+      pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      canvas.style.cursor = 'grabbing';
+      if (e.pointerType === 'touch' && pts.size === 1) {
+        if (performance.now() - lastTap < 300) Object.assign(O, { yaw: 0, pitch: 0, zoom: 1 });
+        lastTap = performance.now();
+      }
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+    });
+    canvas.addEventListener('pointermove', (e) => {
+      const p = pts.get(e.pointerId);
+      if (!p) return;
+      const dx = e.clientX - p.x, dy = e.clientY - p.y;
+      p.x = e.clientX; p.y = e.clientY;
+      if (pts.size === 1) {
+        O.yaw -= dx * 0.006;
+        O.pitch = Math.max(-0.5, Math.min(1.2, O.pitch + dy * 0.004));
+      } else if (pts.size === 2) {
+        const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch) O.zoom = clampZoom(O.zoom * pinch / d);
+        pinch = d;
+      }
+    });
+    const up = (e) => { pts.delete(e.pointerId); pinch = 0; if (!pts.size) canvas.style.cursor = 'grab'; };
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', up);
+    canvas.addEventListener('wheel', (e) => { e.preventDefault(); O.zoom = clampZoom(O.zoom * Math.exp(e.deltaY * 0.0012)); }, { passive: false });
+    canvas.addEventListener('dblclick', () => Object.assign(O, { yaw: 0, pitch: 0, zoom: 1 }));
   }
 
   resize() {
@@ -444,12 +596,13 @@ export class Scene3D {
       if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) materials.add(m);
       o.shadow?.dispose();
     });
-    for (const g of geometries) g.dispose();
+    const keep = this.natureKeep || new Set();
+    for (const g of geometries) if (!keep.has(g)) g.dispose();
     for (const m of materials) {
       for (const value of Object.values(m)) if (value?.isTexture) textures.add(value);
       m.dispose();
     }
-    for (const texture of textures) texture.dispose();
+    for (const texture of textures) if (!keep.has(texture)) texture.dispose();
     this.scene.clear();
 
     this.route = route;
@@ -458,6 +611,7 @@ export class Scene3D {
     this.t3 = T3[route.theme] || T3.meadow;
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    this.natureMats = this.nature ? natureMaterials(this.nature) : null;
     const asphalt = surfaceTexture();
     asphalt.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     this.roadMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: asphalt,
@@ -755,13 +909,24 @@ export class Scene3D {
           const along = h(3) * SEG;
           const ff = this.frame(a * SEG + along);
           const x = ff.x + ff.rx * o, z = ff.z + ff.rz * o, y = heightAt(r, o);
+          // a patch scattered along and across the road, never closer than 0.8 m to the asphalt
+          const spot = (q, spread) => {
+            const oo = side * Math.max(ROAD_HALF + 0.8, Math.abs(o) + (hash(a * 3 + q * 1.7 + j) - 0.5) * spread);
+            const fq = this.frame(a * SEG + along + (hash(a + q * 2.3 + j) - 0.5) * spread);
+            return [fq.x + fq.rx * oo, heightAt(r, oo), fq.z + fq.rz * oo];
+          };
           if (sc.type === 'flowers') {
-            for (let q = 0; q < 14; q++) flowers.push([x + (hash(a + q) - 0.5) * 3.2, y, z + (hash(a * 3 + q) - 0.5) * 3.2, flowerPalette[(q + j) % flowerPalette.length]]);
+            if (this.nature) {
+              for (let q = 0; q < 7; q++) put('flower', mtx(...spot(q, 3.2), hash(a * 5 + q) * 6.28, 0.8 + hash(a * 7 + q) * 0.6));
+              for (let q = 7; q < 10; q++) put('clover', mtx(...spot(q, 2.6), hash(a + q * 9) * 6.28, 0.8 + hash(a + q) * 0.5));
+            } else {
+              for (let q = 0; q < 14; q++) flowers.push([...spot(q, 3.2), flowerPalette[(q + j) % flowerPalette.length]]);
+            }
             put('tuft', mtx(x, y, z, h(2) * 6, 0.8 + h(2)));
-            put('tuft', mtx(x + 0.8, y, z - 0.6, h(4) * 6, 0.7 + h(4)));
-            if (flowerPalette.includes('#9b7fd1')) for (let q = 0; q < 3; q++) put('lupine', mtx(x + (hash(a * 9 + q) - 0.5) * 2, y, z + (hash(a * 11 + q) - 0.5) * 2, 0, 0.8 + hash(a + q * 3) * 0.6));
+            put('tuft', mtx(...spot(20, 1.6), h(4) * 6, 0.7 + h(4)));
+            if (flowerPalette.includes('#9b7fd1')) for (let q = 0; q < 3; q++) put('lupine', mtx(...spot(30 + q, 2), 0, 0.8 + hash(a + q * 3) * 0.6));
           } else if (sc.type === 'sunflowers') {
-            for (let q = 0; q < 5; q++) put('sunflowers', mtx(x + (hash(a * 5 + q) - 0.5) * 3, y, z + (hash(a * 7 + q) - 0.5) * 3, Math.PI + h(2) * 0.5, 0.9 + hash(q + a) * 0.25));
+            for (let q = 0; q < 5; q++) put('sunflowers', mtx(...spot(40 + q, 3), Math.PI + h(2) * 0.5, 0.9 + hash(q + a) * 0.25));
           } else {
             put(sc.type, mtx(x, y, z, h(2) * 6.28, 0.75 + h(4) * 0.6));
           }
@@ -777,16 +942,20 @@ export class Scene3D {
           const y = heightAt(r, o);
           if (this.water && y < f.y - (T3c.dip?.depth || 0) * 0.3) continue;
           const tt = treeTypes[Math.floor(hq(3) * treeTypes.length)].type;
-          put(tt, mtx(f.x + f.rx * o, y, f.z + f.rz * o, hq(4) * 6.28, 0.9 + hq(4) * 0.7));
+          put(`${tt}@far`, mtx(f.x + f.rx * o, y, f.z + f.rz * o, hq(4) * 6.28, 0.9 + hq(4) * 0.7));
         }
       }
     }
-    for (const [type, list] of Object.entries(place)) {
+    for (const [key, list] of Object.entries(place)) {
+      const [type, far] = key.split('@');
+      if (!list.length) continue;
+      const castShadow = !far && !['tuft', 'sunflowers', 'lupine'].includes(type);
+      if (this.nature?.types[type]) { this._addNature(group, type, list, castShadow); continue; }
       const geom = this.models[type];
-      if (!geom || !list.length) continue;
+      if (!geom) continue;
       const im = new THREE.InstancedMesh(geom, this.mat, list.length);
       list.forEach((m, i) => im.setMatrixAt(i, m));
-      im.castShadow = !['tuft', 'sunflowers', 'lupine'].includes(type);
+      im.castShadow = castShadow;
       im.receiveShadow = true;
       group.add(im);
     }
@@ -822,9 +991,47 @@ export class Scene3D {
     return group;
   }
 
+  /** Quaternius models: one InstancedMesh per variant part, leaves tinted from the route palette. */
+  _addNature(group, type, list, castShadow) {
+    const variants = this.nature.types[type];
+    const tint = natureTint(this.t, type);
+    const byVariant = variants.map(() => []);
+    const p = new THREE.Vector3();
+    for (const m of list) {
+      p.setFromMatrixPosition(m);
+      byVariant[Math.floor(hash2(p.x * 0.37, p.z * 0.53) * variants.length) % variants.length].push(m);
+    }
+    variants.forEach((parts, v) => {
+      const mats = byVariant[v];
+      if (!mats.length) return;
+      for (const part of parts) {
+        const material = this.natureMats[part.material];
+        if (!material) continue;
+        const im = new THREE.InstancedMesh(part.geometry, material, mats.length);
+        const leaf = /^Leaves/.test(part.material);
+        const c = new THREE.Color();
+        mats.forEach((m, i) => {
+          im.setMatrixAt(i, m);
+          p.setFromMatrixPosition(m);
+          const k = hash2(p.z * 0.71, p.x * 0.29); // per-plant variation: lighter/darker, warmer/cooler
+          if (leaf) c.copy(tint).offsetHSL((k - 0.5) * 0.05, (k - 0.5) * 0.12, (k - 0.5) * 0.12);
+          else c.setScalar(0.88 + k * 0.24);
+          im.setColorAt(i, c);
+        });
+        im.castShadow = castShadow && part.material !== 'Grass';
+        im.receiveShadow = true;
+        group.add(im);
+      }
+    });
+  }
+
   _dispose(group) {
     this.scene.remove(group);
-    group.traverse((o) => { if (o.geometry && !Object.values(this.models || {}).includes(o.geometry)) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
+    const shared = new Set(Object.values(this.models || {}));
+    group.traverse((o) => {
+      if (o.geometry && !shared.has(o.geometry) && !this.natureKeep?.has(o.geometry)) o.geometry.dispose();
+      if (o.isInstancedMesh) o.dispose();
+    });
   }
 
   _updateChunks(dist) {
@@ -851,14 +1058,15 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? 'me' : r.name || i;
+      const key = r.self ? `me:${r.color}:${r.stripe}` : r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
-        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, !this.riderModel);
+        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, SHOW_RIDER && !this.riderModel);
         this.riders.set(key, R);
         this.scene.add(R.group);
         if (this.riderModel) R.model = new ModelRider(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
+        if (this.bikeModel) { R.hideBike(); R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color }); }
       }
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
@@ -870,6 +1078,8 @@ export class Scene3D {
       R.group.position.set(f.x + f.rx * lane, f.y + 0.05, f.z + f.rz * lane);
       R.group.rotation.set(0, -f.h, slope, 'YXZ');
       R.pose(r.pedal || 0);
+      R.roll(d);
+      if (R.bike) { R.bike.pose(r.pedal || 0); R.bike.roll(d); }
       if (R.model) {
         const now = performance.now(), dt = R.lastT ? (now - R.lastT) / 1000 : 0;
         const cadence = dt > 0 ? (((r.pedal || 0) - (R.lastPedal || 0)) / dt) * 60 / (Math.PI * 2) : 0;
@@ -884,11 +1094,26 @@ export class Scene3D {
     if (me) {
       const back = this.frame(dist - 5.4);
       const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.55, back.z + back.rz * me.lane * 0.8);
+      const ahead = this.frame(dist + 11);
+      const look = new THREE.Vector3(ahead.x + ahead.rx * me.lane * 0.5, ahead.y + 0.55, ahead.z + ahead.rz * me.lane * 0.5);
+      const O = this.orbit;
+      if (O.yaw || O.pitch || O.zoom !== 1) {
+        // orbit around the rider: the default chase offset turned by yaw/pitch and scaled by zoom
+        const pivot = new THREE.Vector3(me.f.x + me.f.rx * me.lane, me.f.y + 1.05, me.f.z + me.f.rz * me.lane);
+        const off = target.clone().sub(pivot);
+        const r = off.length() * O.zoom;
+        const az = Math.atan2(off.x, off.z) + O.yaw;
+        const el = Math.max(-0.05, Math.min(1.45, Math.asin(off.y / off.length()) + O.pitch));
+        target.copy(pivot).add(new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), Math.cos(az) * Math.cos(el)).multiplyScalar(r));
+        target.y = Math.max(target.y, this._roadY(dist) + 0.25);
+        // turn the view from down the road toward the rider as the orbit grows (no jump on the first drag)
+        const s = Math.min(1, Math.max(Math.abs(O.yaw) / 0.5, Math.abs(O.pitch) / 0.3, Math.abs(1 - O.zoom) / 0.4));
+        look.lerp(pivot, s);
+      }
       // follow the rider rigidly along the road (lane changes are already eased by the app)
       this.camPos = target;
       this.camera.position.copy(this.camPos);
-      const look = this.frame(dist + 11);
-      this.camera.lookAt(look.x + look.rx * me.lane * 0.5, look.y + 0.55, look.z + look.rz * me.lane * 0.5);
+      this.camera.lookAt(look);
 
       const cx = this.camera.position.x, cz = this.camera.position.z, cy = me.f.y;
       this.sky.position.set(cx, cy, cz);
