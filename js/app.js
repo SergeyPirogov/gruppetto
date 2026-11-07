@@ -363,7 +363,9 @@ function markRoute() {
   for (const el of $('route-list').querySelectorAll('.option[data-id]')) el.classList.toggle('sel', el.dataset.id === settings.routeId);
 }
 
+let restoreStart = null;
 async function importGpx(ev) {
+  restoreStart = null;
   const file = ev.target.files?.[0];
   ev.target.value = '';
   if (!file) return;
@@ -371,14 +373,18 @@ async function importGpx(ev) {
     const track = parseGpx(await file.text());
     // real elevations from a terrain model along the road (#25); without a network, the file's own
     // and the woods, water and buildings beside it from OpenStreetMap; each is optional
-    infoBox(tr('Loading terrain and map…'));
-    let tiles = '', map = '…';
-    const show = () => infoBox(`${tr('Loading terrain and map…')} ${tiles}${map === '…' ? '' : ` · ${map}`}`);
+    // no riding off on the previously chosen route while this one is still being built
+    const start = $('btn-start'), startText = start.textContent;
+    start.disabled = true; start.textContent = tr('Importing GPX…');
+    restoreStart = () => { start.disabled = false; start.textContent = startText; };
+    let tiles = '…', map = '…';
+    const show = () => infoBox(`${tr('Importing {name}', { name: track.name || file.name })}: ${tr('terrain')} ${tiles} · ${tr('map')} ${map}`);
+    show();
     const [elevation, osm] = await Promise.all([
       loadTerrain(track.points, { onProgress: (done, total) => { tiles = `${done}/${total}`; show(); } })
         .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); return null; }),
-      fetchOsm(track.points).then((d) => { map = tr('map ✓'); show(); return d; })
-        .catch((err) => { console.info('Map data unavailable, generic scenery', err); return null; }),
+      fetchOsm(track.points).then((d) => { map = '✓'; show(); return d; })
+        .catch((err) => { console.info('Map data unavailable, generic scenery', err); map = '—'; show(); return null; }),
     ]);
     const def = routeFromTrack(track, file.name, { elevation, osm });
     $('lobby-msg').hidden = true;
@@ -392,6 +398,8 @@ async function importGpx(ev) {
     $('route-list').querySelector('.sel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   } catch (e) {
     alertBox(tr('Could not import {file}: {error}', { file: file.name, error: tr(e.message) }));
+  } finally {
+    restoreStart?.();
   }
 }
 
