@@ -5,6 +5,7 @@ import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
 import { loadRiderModel, ModelRider } from './rider-model.js';
+import { loadBikeModel, ModelBike } from './bike-model.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
 const AHEAD = 7, BEHIND = 1;   // chunks kept around the rider
@@ -245,7 +246,7 @@ function shape(geom, f) {
 const lerp = (a, b, t) => a + (b - a) * t;
 
 class Rider3D {
-  constructor(jersey, stripe, label, withBody = true) {
+  constructor(jersey, stripe, label, withBody = true, withBike = true) {
     this.group = new THREE.Group();
     const mat = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp() });
     this.mats = {
@@ -263,7 +264,16 @@ class Rider3D {
     };
     const capsule = (r, len, m, f) => add(f ? shape(new THREE.CapsuleGeometry(r, len, 8, 16), f) : new THREE.CapsuleGeometry(r, len, 8, 16), m);
 
-    // bike
+    // bike (skipped when a custom assets/bike.glb is used)
+    if (withBike) this._bike(add, M);
+    this.cranks = withBike ? [-1, 1].map((side) => ({ side, mesh: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark) })) : [];
+    this.legs = [];
+    if (withBody) this._body(add, capsule, M);
+    if (label) this._label(label);
+    this.pose(0);
+  }
+
+  _bike(add, M) {
     for (const x of [-0.5, 0.5]) {
       add(new THREE.TorusGeometry(0.335, 0.024, 12, 48), M.tyre, [x, 0.34, 0]);
       add(new THREE.TorusGeometry(0.295, 0.024, 8, 48), M.rim, [x, 0.34, 0]).scale.set(1, 1, 0.55);
@@ -283,12 +293,6 @@ class Rider3D {
     add(cyl(0.016, 0.016, 0.42, 10), M.dark, [0.5, 0.97, 0], [Math.PI / 2, 0, 0]);
     tube([0.43, 0.95, 0], [0.5, 0.97, 0], 0.018, M.dark);
     for (const z of [-0.2, 0.2]) tube([0.5, 0.97, z], [0.55, 0.9, z], 0.015, M.dark);
-
-    this.cranks = [-1, 1].map((side) => ({ side, mesh: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark) }));
-    this.legs = [];
-    if (withBody) this._body(add, capsule, M);
-    if (label) this._label(label);
-    this.pose(0);
   }
 
   _body(add, capsule, M) {
@@ -409,6 +413,13 @@ export class Scene3D {
     this.routeId = null;
     this.clock = 0;
     this.riderModel = null;
+    this.bikeModel = null;
+    loadBikeModel().then((m) => {
+      if (!m) return;
+      this.bikeModel = m;
+      for (const R of this.riders.values()) this.scene.remove(R.group);
+      this.riders.clear(); // rebuilt on the custom bike on the next frame
+    });
     loadRiderModel().then((m) => {
       if (!m) return;
       this.riderModel = m;
@@ -855,9 +866,10 @@ export class Scene3D {
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
-        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, !this.riderModel);
+        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, !this.riderModel, !this.bikeModel);
         this.riders.set(key, R);
         this.scene.add(R.group);
+        if (this.bikeModel) R.bike = new ModelBike(this.bikeModel, R.group);
         if (this.riderModel) R.model = new ModelRider(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
       }
       const d = r.dist;
@@ -870,6 +882,7 @@ export class Scene3D {
       R.group.position.set(f.x + f.rx * lane, f.y + 0.05, f.z + f.rz * lane);
       R.group.rotation.set(0, -f.h, slope, 'YXZ');
       R.pose(r.pedal || 0);
+      R.bike?.pose(r.pedal || 0);
       if (R.model) {
         const now = performance.now(), dt = R.lastT ? (now - R.lastT) / 1000 : 0;
         const cadence = dt > 0 ? (((r.pedal || 0) - (R.lastPedal || 0)) / dt) * 60 / (Math.PI * 2) : 0;
