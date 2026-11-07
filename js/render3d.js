@@ -467,7 +467,9 @@ export class Scene3D {
    * pinch to zoom, double-click or double-tap to go back to the chase view.
    */
   _orbitControls(canvas) {
-    this.orbit = { yaw: 0, pitch: 0, zoom: 1 };
+    // default view: a touch farther back than the plain chase position, almost straight behind
+    const HOME = { yaw: 0.04, pitch: 0.04, zoom: 1.26 };
+    this.orbit = { ...HOME };
     const O = this.orbit;
     const pts = new Map();
     let pinch = 0, lastTap = 0;
@@ -482,7 +484,7 @@ export class Scene3D {
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       canvas.style.cursor = 'grabbing';
       if (e.pointerType === 'touch' && pts.size === 1) {
-        if (performance.now() - lastTap < 300) Object.assign(O, { yaw: 0, pitch: 0, zoom: 1 });
+        if (performance.now() - lastTap < 300) Object.assign(O, HOME);
         lastTap = performance.now();
       }
       if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
@@ -505,7 +507,7 @@ export class Scene3D {
     canvas.addEventListener('pointerup', up);
     canvas.addEventListener('pointercancel', up);
     canvas.addEventListener('wheel', (e) => { e.preventDefault(); O.zoom = clampZoom(O.zoom * Math.exp(e.deltaY * 0.0012)); }, { passive: false });
-    canvas.addEventListener('dblclick', () => Object.assign(O, { yaw: 0, pitch: 0, zoom: 1 }));
+    canvas.addEventListener('dblclick', () => Object.assign(O, HOME));
   }
 
   /** A new ride: the world is rebuilt behind the loading screen on the next frame. */
