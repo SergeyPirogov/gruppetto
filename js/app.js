@@ -275,7 +275,7 @@ let sceneKind = null;
 /** Creates the 3D or 2D renderer (a canvas can hold only one kind of context). */
 async function ensureScene() {
   let want = settings.graphics === '2d' ? '2d' : '3d';
-  if (want === sceneKind) { scene.resize(); return; }
+  if (want === sceneKind) { scene.resize(); scene.restart?.(); return; }
   const old = $('scene');
   const canvas = old.cloneNode(false);
   old.replaceWith(canvas);

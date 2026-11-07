@@ -432,11 +432,11 @@ export class Scene3D {
     this.riderModel = null;
     this.nature = null;
     this.bikeModel = null;
-    // The scene stays hidden until the bike, rider and scenery models have loaded (or failed), then
-    // fades in: no empty road first, no built-in rider or shapes swapped for the models a moment later.
+    // A loading screen covers the ride until the bike, rider and scenery models have loaded (or failed)
+    // and the visible stretch of road is fully built, then fades out: no empty road, no rider or trees
+    // popping in, no built-in shapes swapped for the models a moment later.
     this.modelsReady = false;
-    canvas.style.opacity = '0';
-    canvas.style.transition = 'opacity 0.4s ease';
+    this.loader = this._makeLoader(canvas.parentElement);
     const bikeLoad = loadBikeModel().then((m) => {
       if (!m) return;
       this.bikeModel = m;
@@ -455,11 +455,7 @@ export class Scene3D {
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the custom character on the next frame
     });
-    const ready = () => {
-      if (this.modelsReady) return;
-      this.modelsReady = true;
-      requestAnimationFrame(() => requestAnimationFrame(() => { canvas.style.opacity = '1'; })); // after the rebuilt frame
-    };
+    const ready = () => { this.modelsReady = true; };
     Promise.allSettled([bikeLoad, riderLoad, natureLoad]).then(ready);
     setTimeout(ready, 10000); // a stalled download must not hide the riders for good
     this.resize();
@@ -510,6 +506,47 @@ export class Scene3D {
     canvas.addEventListener('pointercancel', up);
     canvas.addEventListener('wheel', (e) => { e.preventDefault(); O.zoom = clampZoom(O.zoom * Math.exp(e.deltaY * 0.0012)); }, { passive: false });
     canvas.addEventListener('dblclick', () => Object.assign(O, { yaw: 0, pitch: 0, zoom: 1 }));
+  }
+
+  /** A new ride: the world is rebuilt behind the loading screen on the next frame. */
+  restart() {
+    this.routeId = null;
+    this.warmStart = 0;
+  }
+
+  /** Full-screen loading overlay over the ride view (above the HUD). */
+  _makeLoader(parent) {
+    const el = document.createElement('div');
+    el.className = 'ride-loader';
+    el.innerHTML = '<div class="ride-loader-wheel"></div><div class="ride-loader-text">Готуємо трасу…</div>';
+    parent?.appendChild(el);
+    return el;
+  }
+
+  /** Covers the scene (a new route is being built). */
+  _showLoader() {
+    this.warming = true;
+    this.warmFrames = 0;
+    if (!this.loader) return;
+    clearTimeout(this._loaderHide);
+    this.loader.style.display = '';
+    this.loader.classList.remove('done');
+  }
+
+  /** Called every frame while warming: reveals the scene once it is complete. */
+  _checkWarm(dist, me) {
+    const c = Math.floor(dist / SEG / CHUNK);
+    let built = true;
+    for (let k = c - BEHIND; k <= c + AHEAD; k++) if (!this.chunks.has(k)) built = false;
+    const timedOut = performance.now() - this.warmStart > 15000; // never hold the ride back for good
+    if (!timedOut && (!built || !this.modelsReady || !me)) { this.warmFrames = 0; return; }
+    // let a couple of complete frames render (shaders compiled, textures uploaded) before revealing
+    if (this.warmFrames++ === 0) { try { this.renderer.compile(this.scene, this.camera); } catch { /* optional */ } }
+    if (this.warmFrames < 3 && !timedOut) return;
+    this.warming = false;
+    if (!this.loader) return;
+    this.loader.classList.add('done');
+    this._loaderHide = setTimeout(() => { this.loader.style.display = 'none'; }, 600);
   }
 
   resize() {
@@ -635,6 +672,8 @@ export class Scene3D {
 
     this.route = route;
     this.routeId = route.id;
+    if (!this.warmStart || !this.warming) this.warmStart = performance.now();
+    this._showLoader();
     this.t = themeFor(route.theme);
     this.t3 = T3[route.theme] || T3.meadow;
     this.models = buildModels(this.t);
@@ -1065,9 +1104,10 @@ export class Scene3D {
   _updateChunks(dist) {
     const c = Math.floor(dist / SEG / CHUNK);
     for (const [k, g] of this.chunks) if (k < c - BEHIND || k > c + AHEAD) { this._dispose(g); this.chunks.delete(k); }
-    // build the nearest missing chunk first, at most two per frame
+    // build the nearest missing chunk first, at most two per frame while riding
     let built = 0;
-    for (let k = c - BEHIND; k <= c + AHEAD && built < 2; k++) {
+    const budget = this.warming ? Infinity : 2; // behind the loading screen: the whole stretch at once
+    for (let k = c - BEHIND; k <= c + AHEAD && built < budget; k++) {
       if (!this.chunks.has(k)) { this.chunks.set(k, this._buildChunk(k)); built++; }
     }
   }
@@ -1208,6 +1248,7 @@ export class Scene3D {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    if (this.warming) this._checkWarm(dist, me);
   }
 }
 
