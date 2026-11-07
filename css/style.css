@@ -132,6 +132,7 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 /* workout intensity, under the left board */
 .board.intensity { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; font-size: .85rem; color: #c9d4e3; }
 .board.intensity[hidden] { display: none; }
+.hud-left { align-items: stretch; } /* the board and the intensity row share one width */
 .board.intensity .pill-btn { padding: 3px 12px; }
 .board.intensity b { color: #fff; }
 
