@@ -611,3 +611,6 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .drawer .check input[type=checkbox]:checked::after { transform: translateX(16px); background: #fff; }
 .drawer .check input[type=checkbox]:focus-visible { box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); outline: none; }
 @media (max-width: 520px) { .fields-3 { grid-template-columns: 1fr 1fr; } }
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
+.icon-btn .ic { width: 20px; height: 20px; }
+.stat.gear .ic.stroke { stroke-width: 1.5; }
