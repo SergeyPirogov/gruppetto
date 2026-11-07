@@ -215,7 +215,9 @@ function initLobby() {
   bind('f-graphics', 'graphics', false);
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
-  const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); };
+  // the pixel 3D style dresses the whole interface in pixels too (font, square corners, hard shadows)
+  const pixelUi = () => document.body.classList.toggle('pixel-ui', settings.style === 'pixel' && settings.graphics !== '2d');
+  const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); pixelUi(); };
   refreshDiff();
 
   const rl = $('route-list');

@@ -188,3 +188,20 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 }
 .ride-loader-text { color: var(--text); opacity: 0.85; font-size: 18px; letter-spacing: 0.02em; }
 @keyframes ride-loader-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Pixel interface (3D style "Pixel"): the whole UI in pixels ---------- */
+body.pixel-ui { font-family: "Pixelify Sans", ui-monospace, monospace; letter-spacing: 0.02em; }
+body.pixel-ui *, body.pixel-ui *::before, body.pixel-ui *::after { border-radius: 0 !important; }
+body.pixel-ui button, body.pixel-ui input, body.pixel-ui select, body.pixel-ui textarea { font-family: inherit; }
+body.pixel-ui .pill, body.pixel-ui .workout, body.pixel-ui button, body.pixel-ui .option, body.pixel-ui section,
+body.pixel-ui input, body.pixel-ui select, body.pixel-ui .toast, body.pixel-ui .card {
+  backdrop-filter: none;
+  border-width: 2px;
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.45);
+}
+body.pixel-ui .pill { background: rgba(22, 30, 46, 0.92); border-color: rgba(255, 255, 255, 0.22); }
+body.pixel-ui button.primary { box-shadow: 4px 4px 0 #7a3a06; }
+body.pixel-ui button:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.45); }
+body.pixel-ui canvas:not(#scene) { image-rendering: pixelated; }
+body.pixel-ui .ride-loader-wheel { border-style: dashed; animation-timing-function: steps(8); }
+body.pixel-ui h1, body.pixel-ui h2 { font-weight: 700; letter-spacing: 0.04em; }
