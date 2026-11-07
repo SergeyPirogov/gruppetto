@@ -31,3 +31,15 @@ export function steadySpeed(power, grade, riderMass, opts) {
   for (let i = 0; i < 4000; i++) v = stepSpeed(v, power, grade, 0.05, riderMass, opts);
   return v;
 }
+
+/**
+ * Drafting: the share of air drag saved riding behind someone, from the gap to the wheel ahead (m) and
+ * the sideways offset (m). About a third right on the wheel, fading to nothing by 4 m back or once you
+ * are half a bike width out of their line.
+ */
+export function draftFactor(gap, sideways) {
+  if (gap <= 0.3 || gap >= 4) return 0;
+  const along = gap <= 1 ? 1 : 1 - (gap - 1) / 3;
+  const side = Math.max(0, 1 - Math.abs(sideways) / 0.8);
+  return 0.33 * along * side;
+}

@@ -15,7 +15,7 @@ const SADDLE0 = new THREE.Vector2(-0.15, 1.03);           // built-in bike, when
 const HAND0 = new THREE.Vector3(0.545, 0.97, 0.225);
 const BB = new THREE.Vector2(0, 0.29);                     // bottom bracket in the rider group
 const CRANK = 0.17;
-const KIT = { skin: '#d49a72', shorts: '#1d1f24', sock: '#f2f2f2', shoe: '#f3f4f6', sole: '#2b2e34', hair: '#2a2018' };
+const KIT = { skin: '#d49a72', shorts: '#1d1f24', sock: '#f2f2f2', shoe: '#f3f4f6', sole: '#dfe2e6', hair: '#2a2018' };
 
 /** Loads assets/rider/dummy.gltf once: { dummy: gltf, cfg }, or null when it is missing. */
 export async function loadDummyRider() {
@@ -131,7 +131,7 @@ export class DummyRider {
       if (!foot) continue;
       const dial = new THREE.Group();
       const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.0135, 0.015, 0.009, 14), mat('stripe'));
-      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.009, 0.004, 12), mat('sole'));
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.009, 0.004, 12), mat('shoe'));
       cap.position.y = 0.0055;
       dial.add(ring, cap);
       dial.position.copy(v3(d.at).sub(J[`ankle${s}`])).addScaledVector(v3(d.up), 0.002);

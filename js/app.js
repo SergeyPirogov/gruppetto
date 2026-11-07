@@ -1,7 +1,7 @@
 import { bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
-import { stepSpeed } from './physics.js';
+import { stepSpeed, draftFactor, DEFAULTS } from './physics.js';
 import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
 import { Recorder } from './recorder.js';
@@ -457,7 +457,12 @@ function advance(now = performance.now()) {
     const power = powerAt(t);
     const cadence = cadenceAt(t, power);
     const grade = route.gradeAt(ride.dist);
-    ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight);
+    // drafting: the best wheel to sit on among the riders just ahead
+    const pack = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
+    ride.draft = Math.max(0, ...pack.map((o) => draftFactor(o.dist - ride.dist, o.lane - ride.lane)));
+    ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: DEFAULTS.cda * (1 - ride.draft) });
+    // on a wheel: no riding into the back of the rider ahead (the overtake logic swings you out instead)
+    for (const o of pack) if (o.dist - ride.dist > 0 && o.dist - ride.dist < 0.9 && Math.abs(o.lane - ride.lane) < 0.8) ride.v = Math.min(ride.v, o.v ?? ride.v);
     const moved = ride.v * dt;
     ride.dist += moved;
     ride.moved += moved;
@@ -496,7 +501,10 @@ function advance(now = performance.now()) {
       const g = route.gradeAt(b.dist);
       const p = b.wkg * 75 * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
       b.power = p;
-      b.v = stepSpeed(b.v, p, g, dt, 75);
+      const wheels = [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b)];
+      const bd = Math.max(0, ...wheels.map((o) => draftFactor(o.dist - b.dist, o.lane - b.lane)));
+      b.v = stepSpeed(b.v, p, g, dt, 75, { cda: DEFAULTS.cda * (1 - bd) });
+      for (const o of wheels) if (o.dist - b.dist > 0 && o.dist - b.dist < 0.9 && Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, o === wheels[0] ? ride.v : o.v);
       b.dist += b.v * dt;
       b.pedal += (90 / 60) * Math.PI * 2 * dt;
     }
@@ -555,10 +563,10 @@ function pickLane(r, others, home) {
   const near = (lane, from, to, closing = false) => others.some((o) => o !== r
     && (Math.abs((o.laneTarget ?? o.lane) - lane) < 0.9 || Math.abs(o.lane - lane) < 0.9)
     && o.dist - r.dist > from && o.dist - r.dist < to
-    && (!closing || o.dist - r.dist < 2 || (r.v || 0) > (o.v || 0) + 0.2)); // only someone you are catching
+    && (!closing || o.dist - r.dist < 0.8 || (r.v || 0) > (o.v || 0) + 0.4)); // only someone you are catching (sitting on a wheel is fine)
   const cur = r.laneTarget ?? r.lane;
   // never change course while alongside someone: finish the pass in the lane you chose
-  if (others.some((o) => o !== r && Math.abs(o.dist - r.dist) < 3.5 && Math.abs(o.lane - r.lane) < 2)) return cur;
+  if (others.some((o) => o !== r && Math.abs(o.dist - r.dist) < 3.5 && Math.abs(o.lane - r.lane) >= 0.9 && Math.abs(o.lane - r.lane) < 2)) return cur;
   if (!near(cur, -0.5, 15, true)) return near(home, -6, 10) ? cur : home; // nobody just ahead: drift back home when it is clear
   const free = LANES.filter((l) => !near(l, -3, 15)).sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
   return free.length ? free[0] : cur;
@@ -679,6 +687,12 @@ function updateHud(cadence, hr, grade) {
   $('m-cad-avg').textContent = A?.cadN ? `avg ${Math.round(A.cad / A.cadN)}` : '';
   $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
   updateAhead();
+  const df = ride.draft || 0;
+  $('draft-tag').hidden = df < 0.03;
+  if (df >= 0.03) {
+    $('draft-tag').textContent = `🌀 Drafting · −${Math.round(df * 100)}% drag`;
+    $('draft-tag').style.setProperty('--d', df / 0.33);
+  }
   if (ride.ghost) {
     const G = ride.ghost, gap = ride.dist - G.dist, tg = ghostTimeAt(G.entry, ride.dist);
     const secs = tg === null ? null : Math.round(tg - ride.elapsed); // + = you got here sooner

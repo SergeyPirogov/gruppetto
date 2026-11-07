@@ -508,3 +508,11 @@ body.pixel-ui .ghost-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .ahead-row span { font-weight: 700; color: var(--cyan); font-size: .85rem; }
 .ahead-row small { grid-column: 2 / 4; color: #9fb0c6; font-size: .7rem; }
 .hud-right { align-items: stretch; }
+
+/* ---------- Drafting (#20) ---------- */
+.draft-tag {
+  align-self: center; padding: 4px 14px; border-radius: 999px; font-weight: 700; font-size: .85rem; color: #fff;
+  background: linear-gradient(90deg, rgba(47, 212, 240, .85) calc(var(--d, 0) * 100%), var(--pill) calc(var(--d, 0) * 100%));
+  border: 1px solid rgba(47, 212, 240, .6); font-variant-numeric: tabular-nums;
+}
+body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }

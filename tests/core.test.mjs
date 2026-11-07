@@ -291,3 +291,12 @@ test('intervals.icu cadence targets', () => {
   assert.deepEqual(s[1].cad, [85, 90]);
   assert.equal(s[2].cad, undefined);
 });
+
+test('drafting saves most drag right on the wheel and none far back or off to the side', async () => {
+  const { draftFactor } = await import('../js/physics.js');
+  assert.ok(draftFactor(0.8, 0) > 0.3);
+  assert.ok(draftFactor(2.5, 0) > 0 && draftFactor(2.5, 0) < draftFactor(1, 0));
+  assert.equal(draftFactor(5, 0), 0);
+  assert.equal(draftFactor(1, 1.2), 0);
+  assert.equal(draftFactor(-1, 0), 0);
+});
