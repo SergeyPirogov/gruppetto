@@ -616,6 +616,7 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .stat.gear .ic.stroke { stroke-width: 1.5; }
 
 /* ---------- Minimap ---------- */
-.board.minimap { padding: 6px; width: 172px; align-self: flex-end; box-sizing: border-box; }
-#minimap { display: block; width: 160px; height: 160px; }
+/* as wide as the boards above it; the canvas is laid over the box so it never sets the column's width */
+.board.minimap { position: relative; align-self: stretch; height: 190px; padding: 0; }
+#minimap { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); display: block; }
 @media (max-width: 760px) { .board.minimap { display: none; } }
