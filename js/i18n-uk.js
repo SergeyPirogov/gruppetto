@@ -21,6 +21,8 @@ export const UK = {
   'This file is not valid GPX': 'Це не коректний GPX-файл', 'No track points in this GPX file': 'У цьому GPX-файлі немає точок треку',
   'Imported from GPX. Point to point, finish at {km} km.': 'Імпортовано з GPX. З точки до точки, фініш на {km} км.',
   'Imported from GPX (no elevation in the file: flat). Point to point, finish at {km} km.': 'Імпортовано з GPX (у файлі немає висот: рівна дорога). З точки до точки, фініш на {km} км.',
+  'Imported from GPX (elevation from a terrain model). Point to point, finish at {km} km.': 'Імпортовано з GPX (висоти з карти рельєфу). З точки до точки, фініш на {km} км.',
+  'Loading terrain…': 'Завантажую рельєф…', 'Loading terrain… {done}/{total}': 'Завантажую рельєф… {done}/{total}',
   'Free ride': 'Вільна їзда', 'The trainer simulates the road grade.': 'Тренажер імітує нахил дороги.',
   'Workouts': 'Тренування', 'Workout': 'Тренування', 'Choose': 'Обрати',
   'Structured intervals in ERG: the trainer holds the target power.': 'Інтервали в режимі ERG: тренажер сам тримає цільову потужність.',

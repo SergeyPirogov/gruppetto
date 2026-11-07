@@ -43,11 +43,25 @@ function smooth(a, r, passes = 2) {
   return src;
 }
 
+/** Running median with radius r (in samples): removes dips and spikes narrower than ~2r, keeps slopes. */
+function median(a, r) {
+  const n = a.length, out = new Array(n), win = [];
+  for (let i = 0; i < n; i++) {
+    win.length = 0;
+    for (let k = Math.max(0, i - r); k <= Math.min(n - 1, i + r); k++) win.push(a[k]);
+    win.sort((x, y) => x - y);
+    out[i] = win[win.length >> 1];
+  }
+  return out;
+}
+
 /**
  * A route definition from track points: elevation (m) and curvature per SEG-metre segment.
+ * `elevation(lat, lon)`, when given, is a terrain model sampled every SEG metres along the road
+ * (null where it has no data); otherwise the track's own elevations are used.
  * Throws when the track is too short or too long.
  */
-export function routeFromTrack({ name, points }, fileName = '') {
+export function routeFromTrack({ name, points }, fileName = '', { elevation } = {}) {
   // local flat projection in metres (fine for a ride-sized area)
   const lat0 = points[0].lat * Math.PI / 180, R = 6371000;
   const xy = points.map((p) => [p.lon * Math.PI / 180 * R * Math.cos(lat0), p.lat * Math.PI / 180 * R]);
@@ -66,17 +80,25 @@ export function routeFromTrack({ name, points }, fileName = '') {
     for (let i = 0; i < ele.length; i++) { if (ele[i] === null) ele[i] = last; else last = ele[i]; }
   }
   const X = [], Y = [], E = [];
+  let fromTerrain = 0;
   for (let k = 0, j = 0; k < n; k++) {
     const d = k * SEG;
     while (j < cum.length - 2 && cum[j + 1] < d) j++;
     const t = cum[j + 1] > cum[j] ? Math.min(1, (d - cum[j]) / (cum[j + 1] - cum[j])) : 0;
     X.push(xy[j][0] + (xy[j + 1][0] - xy[j][0]) * t);
     Y.push(xy[j][1] + (xy[j + 1][1] - xy[j][1]) * t);
-    E.push(hasEle ? ele[j] + (ele[j + 1] - ele[j]) * t : 100);
+    const own = hasEle ? ele[j] + (ele[j + 1] - ele[j]) * t : null;
+    // the terrain model at this point of the road (back from the local projection to lat/lon)
+    const dem = elevation ? elevation((Y[k] / R) * 180 / Math.PI, (X[k] / (R * Math.cos(lat0))) * 180 / Math.PI) : null;
+    if (dem !== null && Number.isFinite(dem)) fromTerrain++;
+    E.push(dem !== null && Number.isFinite(dem) ? dem : own ?? (E.length ? E[E.length - 1] : 100));
   }
+  const source = fromTerrain > n * 0.9 ? 'terrain' : hasEle ? 'gpx' : 'none';
 
-  // elevation: smooth over ~±60 m so grades read like a road, not like GPS jitter
-  const elev = smooth(E, 8, 3);
+  // elevation: a terrain model sees the valley under a bridge and the hill over a tunnel, so a
+  // running median (±100 m) first drops dips and humps narrower than that; then smooth over ~±40 m
+  // so grades read like a road, not like survey or GPS jitter
+  const elev = smooth(median(E, source === 'terrain' ? 20 : 4), 8, 3);
   // heading from positions smoothed over ~±15 m, then the change per segment
   const sx = smooth(X, 3), sy = smooth(Y, 3);
   const head = [];
@@ -98,7 +120,8 @@ export function routeFromTrack({ name, points }, fileName = '') {
   return {
     id: `gpx-${Date.now().toString(36)}`,
     name: title.slice(0, 40),
-    description: `Imported from GPX${hasEle ? '' : ' (no elevation in the file: flat)'}. Point to point, finish at ${(total / 1000).toFixed(1)} km.`,
+    description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. Point to point, finish at ${(total / 1000).toFixed(1)} km.`,
+    elevSource: source,
     theme: 'meadow',
     custom: true,
     oneWay: true,

@@ -367,3 +367,41 @@ test('drafting reaches the trainer: a lower wind coefficient in road simulation 
   assert.deepEqual(ops, ['43', '46', '46', '43', '46']);
   assert.equal(writes[3][5] | (writes[3][6] << 8), 340); // cw in 0.001 kg/m
 });
+
+test('terrain model: Terrarium tiles sampled along a track, bridge dips removed (#25 step 2)', async () => {
+  const { loadTerrain, tileXY, decodeTerrarium } = await import('../js/dem.js');
+  const { routeFromTrack } = await import('../js/gpx.js');
+  const { Route } = await import('../js/routes.js');
+  // Terrarium: 500 m -> R·256 + G + B/256 - 32768
+  const v = 500 + 32768, px = new Uint8ClampedArray(256 * 256 * 4);
+  for (let i = 0; i < 256 * 256; i++) { px[i * 4] = Math.floor(v / 256); px[i * 4 + 1] = v % 256; px[i * 4 + 2] = 128; }
+  assert.ok(Math.abs(decodeTerrarium(px)[0] - 500.5) < 1e-6);
+
+  // synthetic terrain: rises 30 m per km northward, with a 25 m deep, 60 m wide valley under a bridge at 2 km
+  const m = 1 / 111320, lat0 = 48.45, lon0 = 24.55;
+  const truth = (lat) => { const d = (lat - lat0) / m; return 400 + d * 0.03 - (Math.abs(d - 2000) < 30 ? 25 : 0); };
+  const loader = async (z, x, y) => {
+    const t = new Float32Array(256 * 256);
+    for (let j = 0; j < 256; j++) {
+      const n = 2 ** z, lat = Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + (j + 0.5) / 256)) / n))) * 180 / Math.PI;
+      t.fill(truth(lat), j * 256, j * 256 + 256);
+    }
+    return t;
+  };
+  const pts = [];
+  for (let d = 0; d <= 4000; d += 400) pts.push({ lat: lat0 + d * m, lon: lon0, ele: null }); // a sparse planner track, no elevation
+  let calls = 0;
+  const dem = await loadTerrain(pts, { loader: (...a) => { calls++; return loader(...a); } });
+  assert.ok(calls >= 1 && calls < 10, `tiles ${calls}`);
+  assert.ok(Math.abs(dem(lat0 + 1000 * m, lon0) - truth(lat0 + 1000 * m)) < 0.5);
+  assert.ok(tileXY(lat0, lon0).x > 0);
+
+  const def = routeFromTrack({ name: 'Climb', points: pts }, '', { elevation: dem });
+  assert.equal(def.elevSource, 'terrain');
+  const r = new Route(def);
+  assert.ok(Math.abs(r.gradeAt(1000) - 0.03) < 0.003, `grade ${r.gradeAt(1000)}`); // between the sparse points too
+  const dip = (r.elevAt(1700) + r.elevAt(2300)) / 2 - r.elevAt(2000);
+  assert.ok(Math.abs(dip) < 2, `dip at the bridge ${dip}`); // not the valley's 25 m
+  assert.ok(Math.abs(r.gradeAt(2000)) < 0.06, `bridge grade ${r.gradeAt(2000)}`);
+  assert.ok(r.elevationGain < 130, `gain ${r.elevationGain}`); // ~120 m, not 120 + 2×25
+});

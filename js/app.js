@@ -4,6 +4,7 @@ import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
 import { routes, Route, ROUTE_GROUPS } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
+import { loadTerrain } from './dem.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
 import { Recorder } from './recorder.js';
@@ -323,8 +324,12 @@ function renderRouteList() {
 /** Climb names in the interface language ("Climb 2" -> "Підйом 2"), and an imported route's description. */
 function localizeClimbs(r) {
   if (r.custom) {
-    const flat = /no elevation/.test(r.description);
-    r.description = tr(flat ? 'Imported from GPX (no elevation in the file: flat). Point to point, finish at {km} km.' : 'Imported from GPX. Point to point, finish at {km} km.', { km: (r.length / 1000).toFixed(1) });
+    const src = r.elevSource || (/no elevation/.test(r.description) ? 'none' : 'gpx');
+    r.description = tr({
+      none: 'Imported from GPX (no elevation in the file: flat). Point to point, finish at {km} km.',
+      terrain: 'Imported from GPX (elevation from a terrain model). Point to point, finish at {km} km.',
+      gpx: 'Imported from GPX. Point to point, finish at {km} km.',
+    }[src], { km: (r.length / 1000).toFixed(1) });
   }
   for (const c of r.climbs) { const m = /^Climb (\d+)$/.exec(c.name); c.name = m ? tr('Climb {n}', { n: m[1] }) : tr(c.name); }
 }
@@ -338,7 +343,15 @@ async function importGpx(ev) {
   ev.target.value = '';
   if (!file) return;
   try {
-    const def = routeFromTrack(parseGpx(await file.text()), file.name);
+    const track = parseGpx(await file.text());
+    // real elevations from a terrain model along the road (#25); without a network, the file's own
+    let elevation = null;
+    try {
+      infoBox(tr('Loading terrain…'));
+      elevation = await loadTerrain(track.points, { onProgress: (done, total) => infoBox(tr('Loading terrain… {done}/{total}', { done, total })) });
+    } catch (err) { console.info('Terrain model unavailable, using the GPX elevations', err); }
+    const def = routeFromTrack(track, file.name, { elevation });
+    $('lobby-msg').hidden = true;
     const route = new Route(def);
     localizeClimbs(route);
     customDefs.push(def);
@@ -362,9 +375,14 @@ function deleteCustomRoute(r) {
   renderRouteList(); showRoute();
 }
 
+function infoBox(msg) {
+  const el = $('lobby-msg');
+  el.textContent = msg; el.hidden = false; el.classList.add('info');
+  clearTimeout(alertBox.t);
+}
 function alertBox(msg) {
   const el = $('lobby-msg');
-  el.textContent = msg; el.hidden = false;
+  el.textContent = msg; el.hidden = false; el.classList.remove('info');
   clearTimeout(alertBox.t); alertBox.t = setTimeout(() => { el.hidden = true; }, 6000);
 }
 
