@@ -432,16 +432,18 @@ export class Scene3D {
     this.riderModel = null;
     this.nature = null;
     this.bikeModel = null;
-    // The riders stay hidden until the bike and rider models have loaded (or failed), so the built-in
-    // rider is not shown first and then swapped for the model a moment later.
+    // The scene stays hidden until the bike, rider and scenery models have loaded (or failed), then
+    // fades in: no empty road first, no built-in rider or shapes swapped for the models a moment later.
     this.modelsReady = false;
+    canvas.style.opacity = '0';
+    canvas.style.transition = 'opacity 0.4s ease';
     const bikeLoad = loadBikeModel().then((m) => {
       if (!m) return;
       this.bikeModel = m;
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the bike model on the next frame
     });
-    loadNature().then((n) => {
+    const natureLoad = loadNature().then((n) => {
       if (!n) return;
       this.nature = n;
       this.natureKeep = new Set([...Object.values(n.textures), ...Object.values(n.types).flat(2).map((p) => p.geometry)]);
@@ -453,8 +455,12 @@ export class Scene3D {
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the custom character on the next frame
     });
-    const ready = () => { this.modelsReady = true; };
-    Promise.allSettled([bikeLoad, riderLoad]).then(ready);
+    const ready = () => {
+      if (this.modelsReady) return;
+      this.modelsReady = true;
+      requestAnimationFrame(() => requestAnimationFrame(() => { canvas.style.opacity = '1'; })); // after the rebuilt frame
+    };
+    Promise.allSettled([bikeLoad, riderLoad, natureLoad]).then(ready);
     setTimeout(ready, 10000); // a stalled download must not hide the riders for good
     this.resize();
     window.addEventListener('resize', () => this.resize());
