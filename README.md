@@ -102,7 +102,7 @@
 Web Bluetooth працює лише через `https://` або `localhost`, тому потрібен локальний сервер:
 
 ```bash
-npm start            # або: python3 -m http.server 8000
+npm start            # або: python3 tools/serve.py 8000 (без кешу, щоб браузер не тримав старі модулі)
 ```
 
 Відкрийте http://localhost:8000 у **Chrome** або **Edge** (Windows, macOS, Android).

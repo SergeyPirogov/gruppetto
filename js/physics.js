@@ -18,7 +18,9 @@ export function stepSpeed(v, power, grade, dt, riderMass, opts = {}) {
   const fGrav = m * G * Math.sin(theta);
   const fRoll = v > 0.05 || power > 0 ? m * G * Math.cos(theta) * crr : 0;
   const fAir = 0.5 * rho * cda * v * v;
-  const fProp = power / Math.max(v, 1.5);
+  // P = F·v, so the force grows as v → 0; the floor only keeps it finite. It must be low enough that
+  // modest power still starts the bike on a climb (with 1.5 m/s, 30 W could not move 83 kg up 3%).
+  const fProp = power / Math.max(v, 0.3);
   const a = (fProp - fGrav - fRoll - fAir) / (m + 1.5); // +1.5 kg for wheel inertia
   return Math.max(0, v + a * dt);
 }

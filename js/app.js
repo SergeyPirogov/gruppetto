@@ -29,6 +29,7 @@ const cadenceSensor = new CadenceSensor();
 const controller = new ZwiftController();
 const obc = new OpenBikeControlDevice();
 const obcState = new Map();
+let lastLobbyUpdate = 0;
 const live = { power: 0, cadence: 0, hr: 0, powerAt: 0, cadAt: 0, hrAt: 0 };
 
 const powerSamples = new Sampler(3000);
@@ -40,6 +41,8 @@ trainer.addEventListener('data', ({ detail: d }) => {
   if (d.power !== undefined) { live.power = Math.max(0, d.power); live.powerAt = now; powerSamples.add(now, live.power); }
   if (d.cadence !== undefined && !cadenceSensor.connected) { live.cadence = d.cadence; live.cadAt = now; cadenceSamples.add(now, d.cadence); }
   if (d.heartRate && !hrm.connected) { live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); }
+  if (d.cadence !== undefined) trainer.sendsCadence = true;
+  if (!ride && now - lastLobbyUpdate > 500) { lastLobbyUpdate = now; updateDeviceUI(); } // live readings in the lobby
   advance(now); // keeps the ride clock running even when the tab is hidden and frames stop
 });
 hrm.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); });
@@ -62,40 +65,59 @@ let lastObcLabel = '';
 for (const d of DEVICES) d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(d.lost); });
 
 function deviceStatus(d) {
+  if (d.dev === cadenceSensor && !d.dev.connected && trainer.connected) {
+    // no separate sensor: cadence comes from the trainer automatically
+    if (trainer.sendsCadence) return `з тренажера · ${Math.round(fresh(live.cadence, live.cadAt))} об/хв`;
+    return 'з тренажера · почніть крутити педалі (якщо каденс лишається 0 — підключіть окремий датчик)';
+  }
   if (!d.dev.connected) return 'не підключено';
   if (d.dev === trainer) {
-    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${trainer.controllable ? 'керування ERG/нахил ✓' : 'лише дані'}`;
+    const resistance = trainer.controllable ? 'опір: керує застосунок ✓' : 'лише дані, без керування опором';
+    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${resistance} · ${Math.round(fresh(live.power, live.powerAt))} Вт`;
   }
   if (d.dev === controller || d.dev === obc) {
     const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
-    return `${d.dev.name}${label ? ` · натиснуто: ${label}` : ' · натисніть будь-яку кнопку'}`;
+    const units = d.dev === controller && controller.count > 1 ? ` ×${controller.count}` : '';
+    const hint = d.dev === controller && controller.count === 1 && /ride/i.test(controller.name)
+      ? ' · друга ручка: «+ ручка»' : '';
+    return `${d.dev.name}${units}${label ? ` · натиснуто: ${label}` : ' · натисніть будь-яку кнопку'}${hint}`;
   }
   return d.dev.name;
 }
+
+/** A live reading, or 0 once it is older than 3 s (the trainer stops sending when you stop pedalling). */
+const fresh = (v, at) => (performance.now() - at < 3000 ? v : 0);
 
 function updateDeviceUI() {
   for (const d of DEVICES) {
     const btn = $(`btn-${d.key}`);
     $(`${d.key}-status`).textContent = deviceStatus(d);
-    btn.textContent = d.dev.connected ? 'Відключити' : 'Підключити';
-    btn.classList.toggle('ok', d.dev.connected);
+    // cadence from the trainer counts as connected; the button then offers a separate sensor instead
+    const viaTrainer = d.dev === cadenceSensor && !d.dev.connected && trainer.connected;
+    btn.textContent = d.dev.connected ? 'Відключити' : viaTrainer ? 'Змінити' : 'Підключити';
+    btn.title = viaTrainer ? 'Підключити окремий датчик каденсу замість тренажера' : '';
+    btn.classList.toggle('ok', d.dev.connected || viaTrainer);
   }
+  // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
+  $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
 }
 
-async function toggleDevice(d) {
-  const btn = $(`btn-${d.key}`);
-  if (d.dev.connected) { d.dev.disconnect(); updateDeviceUI(); return; }
+async function toggleDevice(d, { add = false } = {}) {
+  const btn = add ? $('btn-ctl-add') : $(`btn-${d.key}`);
+  if (d.dev.connected && !add) { d.dev.disconnect(); updateDeviceUI(); return; }
   btn.disabled = true;
   btn.textContent = 'Пошук…';
   let error = null;
   try {
     if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
+    if (d.dev === trainer) trainer.sendsCadence = false;
     await d.dev.connect();
     if (d.dev === trainer) $('sim').checked = false;
   } catch (e) {
     if (!(e.name === 'NotFoundError' && /cancel/i.test(e.message))) error = e; // ignore only a cancelled chooser
   } finally {
     btn.disabled = false;
+    if (add) btn.textContent = '+ ручка';
     updateDeviceUI();
     if (error) {
       const noService = error.name === 'NotFoundError' || /service|characteristic/i.test(error.message);
@@ -114,6 +136,7 @@ function initLobby() {
     $('sim').checked = true;
   }
   for (const d of DEVICES) $(`btn-${d.key}`).onclick = () => toggleDevice(d);
+  $('btn-ctl-add').onclick = () => toggleDevice(DEVICES.find((d) => d.dev === controller), { add: true });
   $('show-all').onchange = () => setShowAllDevices($('show-all').checked);
 
   const bind = (id, key, num = true) => {
@@ -291,7 +314,10 @@ function advance(now = performance.now()) {
     const moved = ride.v * dt;
     ride.dist += moved;
     ride.moved += moved;
-    ride.pedal += (cadence / 60) * Math.PI * 2 * dt;
+    // Pedal animation only: trainers like the KICKR CORE derive cadence from the flywheel and report
+    // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
+    const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
+    ride.pedal += (animCadence / 60) * Math.PI * 2 * dt;
     ride.lane += (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
@@ -687,7 +713,7 @@ $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value
 // ---------- Virtual gears & controller actions ----------
 
 const BUTTON_LABELS = {
-  shiftUpL: 'перемикач ліво +', shiftDownL: 'перемикач ліво −', shiftUpR: 'перемикач право +', shiftDownR: 'перемикач право −',
+  shiftUpL: 'ліва ручка (передача −)', shiftDownL: 'ліва ручка (передача −)', shiftUpR: 'права ручка (передача +)', shiftDownR: 'права ручка (передача +)',
   paddleL: 'лівий підрульовий', paddleR: 'правий підрульовий',
   up: '▲', down: '▼', left: '◀', right: '▶', a: 'A', b: 'B', y: 'Y', z: 'Z',
   powerUpL: 'Power-up ліво', powerUpR: 'Power-up право', onOffL: 'вкл. ліво', onOffR: 'вкл. право',

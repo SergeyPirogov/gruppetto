@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseIndoorBikeData, parseCyclingPower, parseHeartRate, cadenceFromCrank, parseCSC, wahoo, parseRideKeypad } from '../js/ble.js';
-import { steadySpeed } from '../js/physics.js';
+import { steadySpeed, stepSpeed } from '../js/physics.js';
+import { rideIntent } from '../js/controls.js';
 import { routes } from '../js/routes.js';
 import { workouts, targetAt, totalDuration } from '../js/workouts.js';
 import { Recorder, normalizedPower, bestAverage } from '../js/recorder.js';
@@ -255,4 +256,16 @@ test('intervals.icu planned workouts: filters other sports, keeps unstructured r
   assert.deepEqual(list.map((w) => w.eventId), [3, 1]); // sorted by date
   assert.deepEqual(list.stats, { total: 3, otherSport: 1, unstructured: 1 });
   assert.deepEqual(list[0].steps, [{ dur: 3600, free: true, text: 'Z2 1h' }]);
+});
+
+test('low power starts the bike from standstill on a climb', () => {
+  // KICKR CORE at an easy spin: ~30 W on a 3 % grade used to leave the rider stuck at 0 km/h
+  let v = 0;
+  for (let i = 0; i < 100; i++) v = stepSpeed(v, 31, 0.032, 0.1, 75);
+  assert.ok(v * 3.6 > 2, `expected the rider to move, got ${(v * 3.6).toFixed(1)} km/h`);
+});
+
+test('Zwift Ride shifts by side: right unit harder, left unit easier', () => {
+  for (const b of ['shiftUpR', 'shiftDownR', 'paddleR']) assert.equal(rideIntent(b), 'harder');
+  for (const b of ['shiftUpL', 'shiftDownL', 'paddleL']) assert.equal(rideIntent(b), 'easier');
 });

@@ -59,9 +59,11 @@ export function obcIntents(changes, prev) {
   return intents;
 }
 
+// Zwift Ride: shifting goes by side, as in Zwift: either shift button (or the paddle) on the right
+// unit shifts to a harder gear, either one on the left unit to an easier gear.
 const RIDE_TO_INTENT = {
-  shiftUpL: 'harder', shiftUpR: 'harder', paddleR: 'harder', up: 'harder',
-  shiftDownL: 'easier', shiftDownR: 'easier', paddleL: 'easier', down: 'easier',
+  shiftUpR: 'harder', shiftDownR: 'harder', paddleR: 'harder', up: 'harder',
+  shiftUpL: 'easier', shiftDownL: 'easier', paddleL: 'easier', down: 'easier',
   left: 'left', right: 'right', a: 'togglePause', y: 'skip',
 };
 

@@ -38,6 +38,7 @@ button.ok { background: #1f6f43; border-color: #2b8f58; }
 @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
 .card h2 { font-size: 1rem; margin: 0 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.device .btns { display: flex; gap: 6px; flex-shrink: 0; }
 .device { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .device small { display: block; color: var(--muted); }
 .device small.hint-sm { font-size: .78rem; opacity: .8; }

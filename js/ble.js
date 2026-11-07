@@ -367,24 +367,38 @@ export class CadenceSensor extends Device {
 }
 
 /** Zwift Ride (also Play / Click v2 on unencrypted firmware). Emits 'press' with button name. */
+/**
+ * Zwift Ride / Play / Click. A Zwift Ride is two handlebar units (left and right), each its own BLE
+ * device, so this holds several connections: every connect() adds one more unit.
+ */
 export class ZwiftController extends Device {
   constructor() {
     super();
-    this._pressed = new Set();
+    this.units = []; // [{device, pressed}]
+    this._lastPress = new Map(); // name -> {unit, t}
   }
+
+  get connected() { return this.units.some((u) => u.device.gatt?.connected); }
+  get count() { return this.units.filter((u) => u.device.gatt?.connected).length; }
 
   async connect() {
     const device = await requestDevice({
       filters: [{ services: [ZWIFT_RIDE_SERVICE] }, { services: [ZWIFT_SERVICE] }, { namePrefix: 'Zwift' }],
       optionalServices: [ZWIFT_RIDE_SERVICE, ZWIFT_SERVICE],
     });
-    this._watch(device);
+    if (this.units.some((u) => u.device.id === device.id && u.device.gatt?.connected)) return this; // already have this unit
+    this.units = this.units.filter((u) => u.device.gatt?.connected && u.device.id !== device.id);
+    const unit = { device, pressed: new Set() };
+    device.addEventListener('gattserverdisconnected', () => {
+      this.units = this.units.filter((u) => u !== unit);
+      this.emit('disconnect');
+    });
     const server = await device.gatt.connect();
     let svc;
     try { svc = await server.getPrimaryService(ZWIFT_RIDE_SERVICE); } catch { svc = await server.getPrimaryService(ZWIFT_SERVICE); }
     const async = await svc.getCharacteristic(ZWIFT_ASYNC);
     const syncRx = await svc.getCharacteristic(ZWIFT_SYNC_RX);
-    async.addEventListener('characteristicvaluechanged', (e) => this._onData(new Uint8Array(e.target.value.buffer)));
+    async.addEventListener('characteristicvaluechanged', (e) => this._onData(unit, new Uint8Array(e.target.value.buffer)));
     await async.startNotifications();
     try {
       const syncTx = await svc.getCharacteristic(ZWIFT_SYNC_TX);
@@ -392,14 +406,28 @@ export class ZwiftController extends Device {
     } catch { /* optional */ }
     const rideOn = new TextEncoder().encode('RideOn');
     await (syncRx.writeValueWithoutResponse ? syncRx.writeValueWithoutResponse(rideOn) : syncRx.writeValue(rideOn));
+    this.units.push(unit);
+    this.device = device;
+    this.name = device.name || 'Контролер';
     return this;
   }
 
-  _onData(bytes) {
+  disconnect() { for (const u of this.units) if (u.device.gatt?.connected) u.device.gatt.disconnect(); }
+
+  _onData(unit, bytes) {
     const now = parseRideKeypad(bytes);
     if (!now) return;
-    for (const name of now) if (!this._pressed.has(name)) this.emit('press', name);
-    this._pressed = now;
+    const t = performance.now();
+    for (const name of now) {
+      if (unit.pressed.has(name)) continue;
+      // The right unit of a Zwift Ride also relays its buttons through the left one, so with both
+      // connected one press arrives twice within ~100 ms, once per unit: count it only once.
+      const last = this._lastPress.get(name);
+      this._lastPress.set(name, { unit, t });
+      if (last && last.unit !== unit && t - last.t < 250) continue;
+      this.emit('press', name);
+    }
+    unit.pressed = now; // per unit
   }
 }
 
