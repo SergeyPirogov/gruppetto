@@ -1,7 +1,7 @@
 import { bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
-import { stepSpeed, draftFactor, DEFAULTS } from './physics.js';
+import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
 import { routes } from './routes.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
 import { Recorder } from './recorder.js';
@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
-  name: 'Me', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
+  name: 'Me', weight: 75, height: 178, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
@@ -229,6 +229,7 @@ function initLobby() {
   bind('f-jersey', 'jersey', false);
   bind('f-stripe', 'stripe', false);
   bind('f-weight', 'weight');
+  bind('f-height', 'height');
   bind('f-ftp', 'ftp');
   bind('f-diff', 'difficulty');
   bind('f-chainring', 'chainring');
@@ -380,6 +381,7 @@ async function startRide() {
     gain: 0, lastElev: route.elevAt(0), laps: 0, lapStartT: 0, lapTimes: [], efforts: [], seg: null, prevDist: 0,
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
     powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
+    cda: riderCdA(settings.height, settings.weight), // air drag from your height and weight
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
@@ -460,7 +462,7 @@ function advance(now = performance.now()) {
     // drafting: the best wheel to sit on among the riders just ahead
     const pack = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
     ride.draft = Math.max(0, ...pack.map((o) => draftFactor(o.dist - ride.dist, o.lane - ride.lane)));
-    ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: DEFAULTS.cda * (1 - ride.draft) });
+    ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft) });
     // on a wheel: no riding into the back of the rider ahead (the overtake logic swings you out instead)
     for (const o of pack) if (o.dist - ride.dist > 0 && o.dist - ride.dist < 0.9 && Math.abs(o.lane - ride.lane) < 0.8) ride.v = Math.min(ride.v, o.v ?? ride.v);
     const moved = ride.v * dt;
@@ -480,7 +482,7 @@ function advance(now = performance.now()) {
     if (ride.pacer) {
       const P = ride.pacer, target = ride.workoutDone ? null : effectiveTarget();
       const pw = target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
-      P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight);
+      P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight, { cda: ride.cda }); // your size, your drag
       P.power = pw;
       P.dist += P.v * dt;
       P.pedal += (90 / 60) * Math.PI * 2 * dt;

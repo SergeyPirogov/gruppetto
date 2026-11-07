@@ -307,3 +307,10 @@ test('Polissia Lakes: 20 km with about 30 m of climbing and nothing steep', () =
   assert.ok(Math.abs(r.elevationGain - 30) < 3, `gain ${r.elevationGain}`);
   for (let d = 0; d < r.length; d += 50) assert.ok(Math.abs(r.gradeAt(d)) < 0.012);
 });
+
+test('air drag grows with height and weight; 178 cm 75 kg is the reference 0.32 m²', async () => {
+  const { riderCdA } = await import('../js/physics.js');
+  assert.ok(Math.abs(riderCdA(178, 75) - 0.32) < 0.002);
+  assert.ok(riderCdA(190, 90) > riderCdA(178, 75));
+  assert.ok(riderCdA(165, 58) < riderCdA(178, 75));
+});

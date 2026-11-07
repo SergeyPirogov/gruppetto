@@ -43,3 +43,14 @@ export function draftFactor(gap, sideways) {
   const side = Math.max(0, 1 - Math.abs(sideways) / 0.8);
   return 0.33 * along * side;
 }
+
+/**
+ * Air drag area (CdA, m²) for a rider of this height (cm) and weight (kg), riding on the hoods.
+ * Frontal area from body size (Bassett et al. 1999: 0.0293·h^0.725·m^0.425 + 0.0604, with the bike),
+ * times a drag coefficient that gives 0.32 m² for a 178 cm, 75 kg rider.
+ */
+export function riderCdA(heightCm = 178, weightKg = 75) {
+  const h = Math.min(2.2, Math.max(1.4, heightCm / 100)), m = Math.min(150, Math.max(40, weightKg));
+  const area = 0.0293 * h ** 0.725 * m ** 0.425 + 0.0604;
+  return 0.944 * area;
+}
