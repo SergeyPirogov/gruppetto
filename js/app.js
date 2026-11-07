@@ -195,6 +195,13 @@ async function toggleDevice(d, { add = false } = {}) {
 
 // ---------- Lobby ----------
 function initLobby() {
+  // Bluetooth works but Chrome can't reopen remembered sensors without its permissions flag
+  if (bluetoothAvailable() && !navigator.bluetooth.getDevices) {
+    $('autoconnect-hint').hidden = false;
+    $('copy-flag').onclick = async () => {
+      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = 'Copied — paste it in the address bar'; } catch { /* clipboard blocked */ }
+    };
+  }
   if (!bluetoothAvailable()) {
     $('bt-warning').hidden = false;
     for (const d of DEVICES) $(`btn-${d.key}`).disabled = true;
