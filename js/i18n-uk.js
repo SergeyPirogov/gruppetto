@@ -90,6 +90,7 @@ export const UK = {
   'free': 'вільно', 'done': 'готово', 'level': 'поруч', '{n} m ahead': 'на {n} м попереду', '{n} m behind': 'на {n} м позаду',
   'With {name}': 'Разом з {name}', 'Drafting · −{n}% drag': 'Драфтинг · −{n}% опору',
   '{n} m to the top': '{n} м до вершини', 'best {time}': 'рекорд {time}', 'no record yet': 'рекорду ще немає', 'Climb record': 'Рекорд підйому',
+  'START': 'Старт', 'FINISH': 'Фініш', 'START · FINISH': 'Старт · Фініш', 'TOP': 'Вершина',
   'Preparing the route…': 'Готую маршрут…',
   '3D graphics are not available in this browser — using 2D': 'У цьому браузері немає 3D-графіки, показую 2D',
   'Simulator mode: set power with the slider or ↑/↓': 'Режим симулятора: потужність задаєш повзунком або ↑/↓',

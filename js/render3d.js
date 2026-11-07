@@ -715,6 +715,7 @@ export class Scene3D {
     // a real road bends and doubles back: gentle side hills, and the land never reaches over another stretch
     if (route.custom) this.t3 = { ...this.t3, amp: 6, far: 0.2, wall: 0, rock: 0, snow: 0, dip: null, beach: false };
     this.reach = null;
+    this.archList = null; this.bannerCache = null; // arches are per route
     // imported routes with OpenStreetMap data: woods, water and buildings where they really are
     this.land = route.land || null;
     this.buildings = route.buildings || [];
@@ -1197,8 +1198,84 @@ export class Scene3D {
       posts.castShadow = rails.castShadow = true;
       group.add(posts, rails);
     }
+    // arches over the road: start / finish, and the foot and the top of every climb
+    for (const A of this._arches()) {
+      const n = this.route.oneWay ? 0 : Math.floor((a0 * SEG - A.d) / this.route.length);
+      for (let k = n; k <= n + 1; k++) {
+        const d = A.d + (this.route.oneWay ? 0 : k * this.route.length);
+        if (d >= a0 * SEG && d < (a0 + rows - 1) * SEG) group.add(this._arch(A, d));
+        if (this.route.oneWay) break;
+      }
+    }
     this.scene.add(group);
     return group;
+  }
+
+  /** Where the arches stand on this route, with their text and colour. */
+  _arches() {
+    if (this.archList?.route === this.route) return this.archList.list;
+    const R = this.route, list = [];
+    if (R.oneWay) { list.push({ d: 0, text: t('START'), color: '#f97316' }, { d: R.length, text: t('FINISH'), color: '#f97316', checker: true }); }
+    else list.push({ d: 0, text: t('START · FINISH'), color: '#f97316', checker: true });
+    for (const c of R.climbs || []) {
+      list.push({ d: c.start, text: `⛰ ${c.name}`, color: '#dc2626' });
+      list.push({ d: c.end, text: `${t('TOP')} · ${c.name}`, color: '#dc2626', checker: true });
+    }
+    this.archList = { route: R, list };
+    return list;
+  }
+
+  /** An inflatable-style arch across the road at distance d, its banner facing the rider. */
+  _arch(A, d) {
+    const f = this.frame(d), g = new THREE.Group();
+    const span = ROAD_HALF + 1.1, H = 5.6, color = col(A.color);
+    const tube = new THREE.MeshLambertMaterial({ color });
+    for (const z of [-span, span]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, H, 12), tube);
+      post.position.set(0, H / 2, z);
+      post.castShadow = true;
+      g.add(post);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.5, span * 2 + 1), tube);
+    beam.position.set(0, H - 0.2, 0);
+    beam.castShadow = true;
+    g.add(beam);
+    // the banner: both faces, each readable from its side
+    const tex = this._bannerTexture(A.text, A.color, A.checker);
+    for (const side of [-1, 1]) {
+      const plane = new THREE.Mesh(new THREE.PlaneGeometry(span * 2 + 0.6, 1.3), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false }));
+      plane.position.set(side * 0.36, H - 0.2, 0);
+      plane.rotation.y = side < 0 ? -Math.PI / 2 : Math.PI / 2;
+      g.add(plane);
+    }
+    g.position.set(f.x, this._roadY(d) - 0.05, f.z);
+    g.rotation.y = -f.h;
+    return g;
+  }
+
+  _bannerTexture(text, color, checker) {
+    this.bannerCache ||= new Map();
+    const key = `${text}|${color}|${checker}`;
+    if (this.bannerCache.has(key)) return this.bannerCache.get(key);
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = color; g.fillRect(0, 0, c.width, c.height);
+    if (checker) { // a chequered strip at both ends, like a finish banner
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+        g.fillStyle = (i + j) % 2 ? '#111' : '#fff';
+        g.fillRect(i * 32, j * 32, 32, 32); g.fillRect(c.width - 128 + i * 32, j * 32, 32, 32);
+      }
+    }
+    g.fillStyle = '#ffffff';
+    g.font = '800 64px system-ui, -apple-system, "Segoe UI", sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(text.toUpperCase(), c.width / 2, c.height / 2 + 3, c.width - (checker ? 300 : 60));
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    this.bannerCache.set(key, tex);
+    return tex;
   }
 
   /** Quaternius models: one InstancedMesh per variant part, leaves tinted from the route palette. */
