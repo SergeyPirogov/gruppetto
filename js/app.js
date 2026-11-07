@@ -15,7 +15,7 @@ const $ = (id) => document.getElementById(id);
 
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
-  name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
+  name: 'Me', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
@@ -55,31 +55,31 @@ obc.addEventListener('buttons', ({ detail: changes }) => onObcButtons(changes));
 obc.addEventListener('disconnect', () => obcState.clear());
 
 const DEVICES = [
-  { dev: trainer, key: 'trainer', lost: 'Тренажер відключився' },
-  { dev: hrm, key: 'hr', lost: 'Пульсометр відключився' },
-  { dev: cadenceSensor, key: 'cad', lost: 'Датчик каденсу відключився' },
-  { dev: controller, key: 'ctl', lost: 'Контролер відключився' },
-  { dev: obc, key: 'obc', lost: 'OpenBikeControl відключився' },
+  { dev: trainer, key: 'trainer', lost: 'Trainer disconnected' },
+  { dev: hrm, key: 'hr', lost: 'Heart rate monitor disconnected' },
+  { dev: cadenceSensor, key: 'cad', lost: 'Cadence sensor disconnected' },
+  { dev: controller, key: 'ctl', lost: 'Controller disconnected' },
+  { dev: obc, key: 'obc', lost: 'OpenBikeControl disconnected' },
 ];
-const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: 'вимірювач потужності' };
+const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: 'power meter' };
 let lastButtonLabel = '';
 let lastObcLabel = '';
 
 const reconnecting = new Map(); // key -> attempt number
 
 for (const d of DEVICES) {
-  d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(`${d.lost} — перепідключаюсь…`); });
+  d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(`${d.lost} — reconnecting…`); });
   d.dev.addEventListener('reconnecting', ({ detail: n }) => { reconnecting.set(d.key, n); updateDeviceUI(); });
   d.dev.addEventListener('reconnected', () => {
     reconnecting.delete(d.key);
     if (d.dev === trainer) resyncTrainer();
     updateDeviceUI();
-    toast(`${d.dev.name}: зв’язок відновлено ✓`);
+    toast(`${d.dev.name}: connection restored ✓`);
   });
   d.dev.addEventListener('reconnect-failed', () => {
     reconnecting.delete(d.key);
     updateDeviceUI();
-    toast(`${d.dev.name}: не вдалося перепідключитися — натисніть «Підключити» в лобі`);
+    toast(`${d.dev.name}: could not reconnect — press “Connect” in the lobby`);
   });
 }
 
@@ -94,23 +94,23 @@ function resyncTrainer() {
 }
 
 function deviceStatus(d) {
-  if (reconnecting.has(d.key)) return `${d.dev.name} · зв’язок втрачено, перепідключення (спроба ${reconnecting.get(d.key)})…`;
+  if (reconnecting.has(d.key)) return `${d.dev.name} · connection lost, reconnecting (attempt ${reconnecting.get(d.key)})…`;
   if (d.dev === cadenceSensor && !d.dev.connected && trainer.connected) {
     // no separate sensor: cadence comes from the trainer automatically
-    if (trainer.sendsCadence) return `з тренажера · ${Math.round(fresh(live.cadence, live.cadAt))} об/хв`;
-    return 'з тренажера · почніть крутити педалі (якщо каденс лишається 0 — підключіть окремий датчик)';
+    if (trainer.sendsCadence) return `from trainer · ${Math.round(fresh(live.cadence, live.cadAt))} rpm`;
+    return 'from trainer · start pedaling (if cadence stays at 0, connect a separate sensor)';
   }
-  if (!d.dev.connected) return 'не підключено';
+  if (!d.dev.connected) return 'not connected';
   if (d.dev === trainer) {
-    const resistance = trainer.controllable ? 'опір: керує застосунок ✓' : 'лише дані, без керування опором';
-    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${resistance} · ${Math.round(fresh(live.power, live.powerAt))} Вт`;
+    const resistance = trainer.controllable ? 'resistance: controlled by the app ✓' : 'data only, no resistance control';
+    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${resistance} · ${Math.round(fresh(live.power, live.powerAt))} W`;
   }
   if (d.dev === controller || d.dev === obc) {
     const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
     const units = d.dev === controller && controller.count > 1 ? ` ×${controller.count}` : '';
     const hint = d.dev === controller && controller.count === 1 && /ride/i.test(controller.name)
-      ? ' · друга ручка: «+ ручка»' : '';
-    return `${d.dev.name}${units}${label ? ` · натиснуто: ${label}` : ' · натисніть будь-яку кнопку'}${hint}`;
+      ? ' · second controller: “+ controller”' : '';
+    return `${d.dev.name}${units}${label ? ` · pressed: ${label}` : ' · press any button'}${hint}`;
   }
   return d.dev.name;
 }
@@ -124,8 +124,8 @@ function updateDeviceUI() {
     $(`${d.key}-status`).textContent = deviceStatus(d);
     // cadence from the trainer counts as connected; the button then offers a separate sensor instead
     const viaTrainer = d.dev === cadenceSensor && !d.dev.connected && trainer.connected;
-    btn.textContent = d.dev.connected ? 'Відключити' : viaTrainer ? 'Змінити' : 'Підключити';
-    btn.title = viaTrainer ? 'Підключити окремий датчик каденсу замість тренажера' : '';
+    btn.textContent = d.dev.connected ? 'Disconnect' : viaTrainer ? 'Change' : 'Connect';
+    btn.title = viaTrainer ? 'Connect a separate cadence sensor instead of the trainer' : '';
     btn.classList.toggle('ok', d.dev.connected || viaTrainer);
   }
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
@@ -153,7 +153,7 @@ async function reopenRemembered(d) {
 async function autoConnectRemembered() {
   for (const d of DEVICES) {
     if (d.dev.connected || !settings.devices?.[d.key]) continue;
-    $(`${d.key}-status`).textContent = 'підключаю запам’ятований пристрій…';
+    $(`${d.key}-status`).textContent = 'connecting remembered device…';
     const ok = await reopenRemembered(d);
     if (ok && d.dev === trainer) $('sim').checked = false;
     updateDeviceUI();
@@ -164,7 +164,7 @@ async function toggleDevice(d, { add = false } = {}) {
   const btn = add ? $('btn-ctl-add') : $(`btn-${d.key}`);
   if (!add && (d.dev.connected || reconnecting.has(d.key))) { d.dev.disconnect(); reconnecting.delete(d.key); forgetDevice(d); updateDeviceUI(); return; }
   btn.disabled = true;
-  btn.textContent = 'Пошук…';
+  btn.textContent = 'Searching…';
   let error = null;
   try {
     if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
@@ -176,13 +176,13 @@ async function toggleDevice(d, { add = false } = {}) {
     if (!(e.name === 'NotFoundError' && /cancel/i.test(e.message))) error = e; // ignore only a cancelled chooser
   } finally {
     btn.disabled = false;
-    if (add) btn.textContent = '+ ручка';
+    if (add) btn.textContent = '+ controller';
     updateDeviceUI();
     if (error) {
       const noService = error.name === 'NotFoundError' || /service|characteristic/i.test(error.message);
       $(`${d.key}-status`).textContent = noService && $('show-all').checked
-        ? 'Цей пристрій не має потрібного сервісу — оберіть інший'
-        : `Не вдалося підключитися: ${error.message}`;
+        ? 'This device does not have the required service — choose another one'
+        : `Could not connect: ${error.message}`;
     }
   }
 }
@@ -223,7 +223,7 @@ function initLobby() {
     const b = document.createElement('button');
     b.className = 'option';
     b.dataset.id = r.id;
-    b.innerHTML = `<b>${r.name}</b><small>${(r.length / 1000).toFixed(0)} км · ↗ ${Math.round(r.elevationGain)} м</small><small>${r.description}</small><canvas></canvas>`;
+    b.innerHTML = `<b>${r.name}</b><small>${(r.length / 1000).toFixed(0)} km · ↗ ${Math.round(r.elevationGain)} m</small><small>${r.description}</small><canvas></canvas>`;
     b.onclick = () => { settings.routeId = r.id; saveSettings(); markSelected(rl, r.id); };
     rl.append(b);
     requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`));
@@ -247,9 +247,9 @@ function renderModes() {
     ml.append(b);
     if (w) requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
   };
-  for (const w of icuWorkouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} хв · ${w.description}`, w, dayLabel(w.date));
-  add('free', 'Вільна їзда', 'Тренажер імітує нахил дороги.');
-  for (const w of workouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} хв · ${w.description}`, w);
+  for (const w of icuWorkouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} min · ${w.description}`, w, dayLabel(w.date));
+  add('free', 'Free ride', 'The trainer simulates the road grade.');
+  for (const w of workouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} min · ${w.description}`, w);
   markSelected(ml, settings.mode);
 }
 
@@ -259,10 +259,10 @@ function markSelected(list, id) {
 
 // ---------- Ride ----------
 const BOTS = [
-  { name: 'Оля', wkg: 2.2, color: '#e5484d', stripe: '#ffffff' },
-  { name: 'Тарас', wkg: 2.7, color: '#2563eb', stripe: '#facc15' },
-  { name: 'Ірина', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0' },
-  { name: 'Богдан', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a' },
+  { name: 'Olya', wkg: 2.2, color: '#e5484d', stripe: '#ffffff' },
+  { name: 'Taras', wkg: 2.7, color: '#2563eb', stripe: '#facc15' },
+  { name: 'Iryna', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0' },
+  { name: 'Bohdan', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a' },
 ];
 // Riders keep right: start in the right half of the road (positive lane = right of travel).
 const START_LANE = 1.2;
@@ -282,11 +282,11 @@ async function ensureScene() {
   if (want === '3d') {
     try {
       const { Scene3D, webglAvailable } = await import('./render3d.js');
-      if (!webglAvailable()) throw new Error('WebGL недоступний');
+      if (!webglAvailable()) throw new Error('WebGL is not available');
       scene = new Scene3D(canvas);
     } catch (e) {
       console.warn('3D unavailable, falling back to 2D', e);
-      toast('3D-графіка недоступна в цьому браузері — використовую 2D');
+      toast('3D graphics are not available in this browser — using 2D');
       want = '2d';
       const fresh = canvas.cloneNode(false);
       canvas.replaceWith(fresh);
@@ -315,7 +315,7 @@ async function startRide() {
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
   $('wk-int').textContent = `${settings.intensity}%`;
-  $('wk-sound').textContent = settings.sound ? 'Звук: увімк' : 'Звук: вимк';
+  $('wk-sound').textContent = settings.sound ? 'Sound: on' : 'Sound: off';
   trainer.riderWeight = settings.weight + 8;
   trainer.resetMode();
   recorder.reset();
@@ -326,7 +326,7 @@ async function startRide() {
   $('sim-ctl').hidden = !simulated;
   $('workout-panel').hidden = !workout;
   $('paused').hidden = true;
-  $('btn-pause').textContent = 'Пауза';
+  $('btn-pause').textContent = 'Pause';
   await ensureScene();
   scene.setStyle?.(settings.style);
   scene.setCamera?.(settings.camera);
@@ -334,8 +334,8 @@ async function startRide() {
   clearInterval(rideTimer);
   rideTimer = setInterval(() => advance(), 250);
   keepAwake(true);
-  if (simulated) toast('Режим симулятора: потужність — повзунок або ↑/↓');
-  if (scene.orbit) setTimeout(() => toast('Камера: тягніть мишею, щоб обертати, колесо — наблизити, подвійний клік — назад'), simulated ? 3500 : 0);
+  if (simulated) toast('Simulator mode: set power with the slider or ↑/↓');
+  if (scene.orbit) setTimeout(() => toast('Camera: drag to orbit, scroll to zoom, double-click to reset'), simulated ? 3500 : 0);
   requestAnimationFrame(frame);
 }
 
@@ -370,7 +370,7 @@ function advance(now = performance.now()) {
   ride.lastSim = now;
   if (left <= 0 || ride.paused) return;
   if (left > MAX_GAP_S && !ride.simulated && !powerSamples.has(from, now)) {
-    toast(`Немає даних від тренажера ${Math.round(left)} с — цей проміжок пропущено`);
+    toast(`No data from the trainer for ${Math.round(left)} s — this gap was skipped`);
     return;
   }
   const { route } = ride;
@@ -431,7 +431,7 @@ function tick(power, cadence, hr) {
   const laps = Math.floor(ride.dist / route.length);
   if (laps > ride.laps) {
     ride.laps = laps;
-    toast(`Коло ${laps} пройдено! 🎉`);
+    toast(`Lap ${laps} complete! 🎉`);
     if (!ride.workout || ride.workoutDone) recorder.markLap();
   }
 
@@ -446,20 +446,20 @@ function tick(power, cadence, hr) {
         if (ride.stepIndex !== undefined) { recorder.markLap(); cueBeep(1040, 0.35); }
         ride.stepIndex = t.index;
         if (t.step.text) toast(t.step.text);
-        else if (t.watts === null) toast('Вільний відрізок — їдьте за відчуттям');
+        else if (t.watts === null) toast('Free segment — ride by feel');
         if (t.step.dur >= 20) cueSay(describeStep(t.step, ride.target));
         updateGear();
       }
       if (t.remaining <= 3 && t.remaining >= 1) cueBeep(660, 0.12);
       const next = ride.workout.steps[t.index + 1];
-      if (next && t.remaining === 10 && t.step.dur >= 30) cueSay(`Через 10 секунд: ${describeStep(next, ergTarget({ watts: stepWatts(next, 0, settings.ftp) }))}`);
+      if (next && t.remaining === 10 && t.step.dur >= 30) cueSay(`In 10 seconds: ${describeStep(next, ergTarget({ watts: stepWatts(next, 0, settings.ftp) }))}`);
     } else {
       ride.workoutDone = true;
       ride.target = null;
       recorder.markLap();
       cueBeep(1040, 0.5);
-      cueSay('Тренування виконано. Чудова робота!');
-      toast('Тренування виконано! Далі — вільна їзда 🏁');
+      cueSay('Workout complete. Great job!');
+      toast('Workout complete! Free ride from here 🏁');
       updateGear();
       if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
     }
@@ -497,7 +497,7 @@ function tick(power, cadence, hr) {
 function updateHud(cadence, hr, grade) {
   const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
   $('m-power').textContent = p3;
-  $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} Вт/кг`;
+  $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} W/kg`;
   $('m-cad').textContent = Math.round(cadence);
   $('m-hr').textContent = hr ? Math.round(hr) : '—';
   $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
@@ -513,7 +513,7 @@ function updateHud(cadence, hr, grade) {
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
     const target = ride.workoutDone ? null : ride.target;
     const tEl = $('wk-target');
-    tEl.textContent = ride.workoutDone ? '—' : target ?? 'вільно';
+    tEl.textContent = ride.workoutDone ? '—' : target ?? 'free';
     // compliance: green within ±5 %, amber within ±10 %, red beyond
     const dev = target ? (p3 - target) / target : 0;
     const cls = !target ? '' : Math.abs(dev) <= 0.05 ? 'c-ok' : Math.abs(dev) <= 0.1 ? 'c-warn' : 'c-bad';
@@ -530,7 +530,7 @@ function updateHud(cadence, hr, grade) {
     $('m-cad').className = cadEl.className;
     const next = t && ride.workout.steps[t.index + 1];
     const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
-    $('wk-next').textContent = next ? (nextW === null ? 'вільно' : `${nextW} Вт`) : '—';
+    $('wk-next').textContent = next ? (nextW === null ? 'free' : `${nextW} W`) : '—';
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
@@ -546,7 +546,7 @@ function updateProgress() {
   } else {
     const L = ride.route.length;
     frac = (ride.dist % L) / L;
-    label = `Коло ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} км`;
+    label = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km`;
   }
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
   $('progress-label').textContent = label;
@@ -590,7 +590,7 @@ function togglePause() {
   ride.paused = !ride.paused;
   ride.lastSim = performance.now();
   $('paused').hidden = !ride.paused;
-  $('btn-pause').textContent = ride.paused ? 'Продовжити' : 'Пауза';
+  $('btn-pause').textContent = ride.paused ? 'Resume' : 'Pause';
 }
 
 function finishRide() {
@@ -609,24 +609,24 @@ function finishRide() {
   $('ride').hidden = true;
   $('summary').hidden = false;
   const stats = sum ? [
-    ['Час', fmtTime(sum.duration)],
-    ['Дистанція', `${(sum.distance / 1000).toFixed(2)} км`],
-    ['Набір висоти', `${Math.round(sum.elevationGain)} м`],
-    ['Сер. потужність', `${sum.avgPower} Вт`],
-    ['NP', sum.normalizedPower ? `${sum.normalizedPower} Вт` : '—'],
-    ['Макс. потужність', `${sum.maxPower} Вт`],
-    ['Сер. пульс', sum.avgHr ? `${sum.avgHr} уд/хв` : '—'],
-    ['Сер. каденс', `${sum.avgCadence} об/хв`],
-    ['Робота', `${sum.kj} кДж`],
-  ] : [['Час', '0:00']];
-  if (sum && wasRamp && sum.best1min) stats.push(['Оцінка FTP', `${Math.round(sum.best1min * 0.75)} Вт`]);
+    ['Time', fmtTime(sum.duration)],
+    ['Distance', `${(sum.distance / 1000).toFixed(2)} km`],
+    ['Elevation gain', `${Math.round(sum.elevationGain)} m`],
+    ['Avg power', `${sum.avgPower} W`],
+    ['NP', sum.normalizedPower ? `${sum.normalizedPower} W` : '—'],
+    ['Max power', `${sum.maxPower} W`],
+    ['Avg heart rate', sum.avgHr ? `${sum.avgHr} bpm` : '—'],
+    ['Avg cadence', `${sum.avgCadence} rpm`],
+    ['Work', `${sum.kj} kJ`],
+  ] : [['Time', '0:00']];
+  if (sum && wasRamp && sum.best1min) stats.push(['Estimated FTP', `${Math.round(sum.best1min * 0.75)} W`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   $('btn-download').disabled = !sum;
   $('btn-download-tcx').disabled = !sum;
   const canUpload = !!(icuClient && sum && sum.duration >= 60);
   $('btn-icu-upload').hidden = !canUpload;
   $('btn-icu-upload').disabled = false;
-  $('btn-icu-upload').textContent = 'Надіслати в intervals.icu';
+  $('btn-icu-upload').textContent = 'Upload to intervals.icu';
   $('icu-upload-status').hidden = true;
   if (canUpload && settings.icuUpload) uploadToIntervals();
 }
@@ -660,10 +660,10 @@ function initIntervals() {
 
 async function connectIntervals({ quiet = false } = {}) {
   const key = $('f-icu-key').value.trim();
-  if (!key) { $('icu-status').textContent = 'Вставте API-ключ з intervals.icu.'; return; }
+  if (!key) { $('icu-status').textContent = 'Paste your intervals.icu API key.'; return; }
   const client = new IntervalsClient({ apiKey: key, athleteId: $('f-icu-athlete').value });
   $('btn-icu').disabled = true;
-  $('icu-status').textContent = 'Підключення…';
+  $('icu-status').textContent = 'Connecting…';
   try {
     const athlete = await client.athlete();
     const today = new Date();
@@ -678,11 +678,11 @@ async function connectIntervals({ quiet = false } = {}) {
     saveSettings();
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};
     const notes = [];
-    if (st.otherSport) notes.push(`інших видів спорту пропущено: ${st.otherSport}`);
-    if (st.unstructured) notes.push(`без інтервалів (вільна їзда): ${st.unstructured}`);
-    const found = n ? `велотренувань на 7 днів: ${n} — вони перші в розділі «Режим»` : 'на 7 днів велотренувань у календарі немає';
-    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} Вт · ${found}${notes.length ? ` (${notes.join(', ')})` : ''}`;
-    $('btn-icu').textContent = 'Оновити';
+    if (st.otherSport) notes.push(`other sports skipped: ${st.otherSport}`);
+    if (st.unstructured) notes.push(`without intervals (free ride): ${st.unstructured}`);
+    const found = n ? `cycling workouts in the next 7 days: ${n} — listed first under “Mode”` : 'no cycling workouts in your calendar for the next 7 days';
+    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} W · ${found}${notes.length ? ` (${notes.join(', ')})` : ''}`;
+    $('btn-icu').textContent = 'Refresh';
     $('btn-icu-forget').hidden = false;
     renderModes();
   } catch (e) {
@@ -702,8 +702,8 @@ function forgetIntervals() {
   saveSettings();
   $('f-icu-key').value = '';
   $('f-icu-athlete').value = '';
-  $('icu-status').textContent = 'Ключ видалено з цього браузера.';
-  $('btn-icu').textContent = 'Підключити';
+  $('icu-status').textContent = 'Key removed from this browser.';
+  $('btn-icu').textContent = 'Connect';
   $('btn-icu-forget').hidden = true;
   renderModes();
 }
@@ -713,35 +713,35 @@ async function uploadToIntervals() {
   const status = $('icu-upload-status');
   const btn = $('btn-icu-upload');
   status.hidden = false;
-  status.textContent = 'Надсилаю в intervals.icu…';
+  status.textContent = 'Uploading to intervals.icu…';
   btn.disabled = true;
   const { workout, route, summary: sum } = lastRide;
   const fromIcu = workout?.source === 'intervals';
   const name = workout ? `Power Up: ${workout.name}` : `Power Up: ${route.name}`;
-  const description = `${route.name} · ${(sum.distance / 1000).toFixed(1)} км · сер. ${sum.avgPower} Вт · NP ${sum.normalizedPower || '—'} Вт`;
+  const description = `${route.name} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`;
   try {
     const id = await icuClient.uploadActivity(recorder.toFIT(), {
       name, description, eventId: fromIcu ? workout.eventId : undefined, filename: `powerup-${Date.now()}.fit`,
     });
     lastRide.uploadedId = id || true;
     status.innerHTML = id
-      ? `Завантажено в intervals.icu ✓${fromIcu ? ' · позначено як виконане' : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">відкрити заїзд</a>`
-      : 'Завантажено в intervals.icu ✓';
+      ? `Uploaded to intervals.icu ✓${fromIcu ? ' · marked as completed' : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">open ride</a>`
+      : 'Uploaded to intervals.icu ✓';
     btn.hidden = true;
   } catch (e) {
-    status.textContent = `Не вдалося надіслати: ${e.message}`;
+    status.textContent = `Upload failed: ${e.message}`;
     btn.disabled = false;
-    btn.textContent = 'Спробувати ще раз';
+    btn.textContent = 'Try again';
   }
 }
 
 function dayLabel(date) {
   const today = localDate();
   const tomorrow = localDate(new Date(Date.now() + 86400000));
-  if (date === today) return 'сьогодні';
-  if (date === tomorrow) return 'завтра';
+  if (date === today) return 'today';
+  if (date === tomorrow) return 'tomorrow';
   const d = new Date(`${date}T12:00:00`);
-  return d.toLocaleDateString('uk-UA', { weekday: 'short', day: 'numeric', month: 'numeric' });
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'numeric' });
 }
 
 // ---------- Screen wake lock ----------
@@ -783,9 +783,9 @@ $('btn-pause').onclick = togglePause;
 let finishArmed = null;
 $('btn-finish').onclick = () => {
   const btn = $('btn-finish');
-  if (finishArmed) { clearTimeout(finishArmed); finishArmed = null; btn.textContent = 'Завершити'; finishRide(); return; }
-  btn.textContent = 'Точно? Ще раз';
-  finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = 'Завершити'; }, 3000);
+  if (finishArmed) { clearTimeout(finishArmed); finishArmed = null; btn.textContent = 'Finish'; finishRide(); return; }
+  btn.textContent = 'Sure? Tap again';
+  finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = 'Finish'; }, 3000);
 };
 $('btn-download').onclick = () => download('fit');
 $('wk-int-down').onclick = () => changeIntensity(-5);
@@ -793,7 +793,7 @@ $('wk-int-up').onclick = () => changeIntensity(+5);
 $('wk-sound').onclick = () => {
   settings.sound = settings.voice = !settings.sound;
   saveSettings();
-  $('wk-sound').textContent = settings.sound ? 'Звук: увімк' : 'Звук: вимк';
+  $('wk-sound').textContent = settings.sound ? 'Sound: on' : 'Sound: off';
   if (settings.sound) { unlockAudio(); beep(880, 0.1); }
 };
 $('btn-download-tcx').onclick = () => download('tcx');
@@ -802,10 +802,10 @@ $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value
 // ---------- Virtual gears & controller actions ----------
 
 const BUTTON_LABELS = {
-  shiftUpL: 'ліва ручка (передача −)', shiftDownL: 'ліва ручка (передача −)', shiftUpR: 'права ручка (передача +)', shiftDownR: 'права ручка (передача +)',
-  paddleL: 'лівий підрульовий', paddleR: 'правий підрульовий',
+  shiftUpL: 'left lever (gear −)', shiftDownL: 'left lever (gear −)', shiftUpR: 'right lever (gear +)', shiftDownR: 'right lever (gear +)',
+  paddleL: 'left paddle', paddleR: 'right paddle',
   up: '▲', down: '▼', left: '◀', right: '▶', a: 'A', b: 'B', y: 'Y', z: 'Z',
-  powerUpL: 'Power-up ліво', powerUpR: 'Power-up право', onOffL: 'вкл. ліво', onOffR: 'вкл. право',
+  powerUpL: 'Power-up left', powerUpR: 'Power-up right', onOffL: 'on/off left', onOffR: 'on/off right',
 };
 
 function onControllerButton(name) {
@@ -855,7 +855,7 @@ function sendVirtualGear() {
     if (ok) { ride.lastSentWheel = gear; return; }
     ride.shiftMode = 'grade';
     ride.lastSentGrade = null;
-    toast('Тренажер не приймає окружність колеса — передачі через нахил');
+    toast('The trainer does not accept wheel circumference — using grade-based gears');
   });
 }
 
@@ -883,8 +883,8 @@ function updateSpiralGuard(power, cadence) {
   ride.lowFor = low ? ride.lowFor + 1 : 0;
   if (ride.lowFor >= 3 && ride.ergFactor > 0.5) {
     ride.ergFactor = 0.5;
-    toast(hasCadence ? 'Низький каденс — ERG тимчасово знижено' : 'Потужність провалилась — ERG тимчасово знижено');
-    cueSay('Розкрутіть педалі');
+    toast(hasCadence ? 'Low cadence — ERG temporarily reduced' : 'Power dropped — ERG temporarily reduced');
+    cueSay('Spin up your cadence');
   } else if (ride.ergFactor < 1) {
     // restore only once the rider has clearly recovered (hysteresis avoids bouncing)
     const recovered = hasCadence ? cadence >= 70 : power >= eff * 0.85;
@@ -893,8 +893,8 @@ function updateSpiralGuard(power, cadence) {
 }
 
 function describeStep(step, watts) {
-  const what = watts === null || watts === undefined ? 'вільна їзда' : `${watts} ват`;
-  const cad = step.cad ? `, каденс ${step.cad[0]}–${step.cad[1]}` : '';
+  const what = watts === null || watts === undefined ? 'free ride' : `${watts} watts`;
+  const cad = step.cad ? `, cadence ${step.cad[0]} to ${step.cad[1]}` : '';
   return `${what}, ${spokenDuration(step.dur)}${cad}${step.text ? `. ${step.text}` : ''}`;
 }
 
@@ -926,7 +926,7 @@ function shift(dir) {
     ride.ergBias += Math.sign(dir) * 5;
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
     if (t && t.watts !== null) ride.target = ergTarget(t);
-    toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} Вт`);
+    toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} W`);
   } else {
     const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
     if (next === ride.gear) return;
@@ -951,15 +951,15 @@ function skipInterval() {
   const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
   if (!t) return;
   ride.workoutT = Math.max(0, ride.workoutT - 1) + t.remaining;
-  toast('Інтервал пропущено ⏭');
+  toast('Interval skipped ⏭');
 }
 
 function updateGear() {
   if (!ride) return;
   const inErg = inErgStep();
-  $('m-gear-label').textContent = inErg ? 'ERG' : 'Передача';
+  $('m-gear-label').textContent = inErg ? 'ERG' : 'Gear';
   $('m-gear').textContent = inErg ? `${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias}` : ride.gear;
-  $('m-gear-unit').textContent = inErg ? 'Вт' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
+  $('m-gear-unit').textContent = inErg ? 'W' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
 }
 
 window.addEventListener('keydown', (e) => {
@@ -975,7 +975,7 @@ window.addEventListener('keydown', (e) => {
     settings.camera = order[(order.indexOf(settings.camera) + 1) % order.length];
     saveSettings();
     scene.setCamera(settings.camera);
-    toast({ chase: 'Камера: за спиною', iso: 'Камера: ізометрія', side: 'Камера: зверху збоку' }[settings.camera]);
+    toast({ chase: 'Camera: chase', iso: 'Camera: isometric', side: 'Camera: side view' }[settings.camera]);
   }
   if (ride.simulated && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
     e.preventDefault();

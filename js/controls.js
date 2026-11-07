@@ -70,10 +70,10 @@ const RIDE_TO_INTENT = {
 export const rideIntent = (button) => RIDE_TO_INTENT[button] || null;
 
 export const OBC_LABELS = {
-  [OBC.SHIFT_UP]: 'передача +', [OBC.SHIFT_DOWN]: 'передача −', [OBC.GEAR_SET]: 'вибір передачі',
+  [OBC.SHIFT_UP]: 'gear +', [OBC.SHIFT_DOWN]: 'gear −', [OBC.GEAR_SET]: 'gear select',
   [OBC.NAV_UP]: '▲', [OBC.NAV_DOWN]: '▼', [OBC.NAV_LEFT]: '◀', [OBC.NAV_RIGHT]: '▶',
-  [OBC.STEER_LEFT]: 'кермо ◀', [OBC.STEER_RIGHT]: 'кермо ▶', [OBC.STEERING_ANGLE]: 'кут керма',
-  [OBC.ERG_UP]: 'ERG +', [OBC.ERG_DOWN]: 'ERG −', [OBC.SKIP]: 'пропустити інтервал',
-  [OBC.PAUSE]: 'пауза', [OBC.RESUME]: 'продовжити', [OBC.HUD]: 'HUD',
-  0x14: 'OK', 0x15: 'назад', 0x16: 'меню',
+  [OBC.STEER_LEFT]: 'steer ◀', [OBC.STEER_RIGHT]: 'steer ▶', [OBC.STEERING_ANGLE]: 'steering angle',
+  [OBC.ERG_UP]: 'ERG +', [OBC.ERG_DOWN]: 'ERG −', [OBC.SKIP]: 'skip interval',
+  [OBC.PAUSE]: 'pause', [OBC.RESUME]: 'resume', [OBC.HUD]: 'HUD',
+  0x14: 'OK', 0x15: 'back', 0x16: 'menu',
 };

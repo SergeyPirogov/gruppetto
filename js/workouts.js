@@ -5,8 +5,8 @@ const m = (min) => min * 60;
 export const workouts = [
   {
     id: 'endurance',
-    name: 'Базова витривалість',
-    description: '45 хв у 2-й зоні.',
+    name: 'Endurance Base',
+    description: '45 min in zone 2.',
     steps: [
       { dur: m(5), power: 0.45, to: 0.65 },
       { dur: m(35), power: 0.68 },
@@ -15,8 +15,8 @@ export const workouts = [
   },
   {
     id: 'sweetspot',
-    name: 'Світ-спот 3×10',
-    description: 'Три відрізки по 10 хв на 90% FTP.',
+    name: 'Sweet Spot 3×10',
+    description: 'Three 10-min efforts at 90% FTP.',
     steps: [
       { dur: m(8), power: 0.45, to: 0.7 },
       { dur: m(10), power: 0.9 }, { dur: m(4), power: 0.55 },
@@ -28,7 +28,7 @@ export const workouts = [
   {
     id: 'vo2',
     name: 'VO₂max 5×3',
-    description: 'П’ять відрізків по 3 хв на 115% FTP.',
+    description: 'Five 3-min efforts at 115% FTP.',
     steps: [
       { dur: m(10), power: 0.45, to: 0.75 },
       ...Array.from({ length: 5 }, () => [{ dur: m(3), power: 1.15 }, { dur: m(3), power: 0.5 }]).flat(),
@@ -37,8 +37,8 @@ export const workouts = [
   },
   {
     id: 'ramp',
-    name: 'Рамп-тест FTP',
-    description: '+20 Вт щохвилини до відмови. FTP ≈ 75% від найкращої хвилини.',
+    name: 'FTP Ramp Test',
+    description: '+20 W every minute to failure. FTP ≈ 75% of your best minute.',
     ramp: true,
     steps: [
       { dur: m(5), power: 0.4 },
@@ -47,8 +47,8 @@ export const workouts = [
   },
   {
     id: 'quick',
-    name: 'Швидкий тест (3 хв)',
-    description: 'Короткий тренувальний прогін для перевірки ERG.',
+    name: 'Quick test (3 min)',
+    description: 'A short practice run to check ERG.',
     steps: [{ dur: 60, power: 0.5 }, { dur: 60, power: 0.8 }, { dur: 60, power: 0.5, to: 0.3 }],
   },
 ];

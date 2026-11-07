@@ -1,4 +1,4 @@
-// Interval cues: short beeps (Web Audio) and spoken prompts (speech synthesis, Ukrainian when available).
+// Interval cues: short beeps (Web Audio) and spoken prompts (speech synthesis, English).
 
 let ctx = null;
 
@@ -26,20 +26,20 @@ export function beep(freq = 880, dur = 0.12, vol = 0.18) {
 export function say(text) {
   if (!text || typeof speechSynthesis === 'undefined') return;
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = 'uk-UA';
-  const voice = speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith('uk'));
+  u.lang = 'en-US';
+  const voice = speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith('en'));
   if (voice) u.voice = voice;
   u.rate = 1.05;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
 }
 
-/** "3 хвилини", "45 секунд", "1 хв 30 с" */
+/** "3 minutes", "45 seconds", "1 minute 30 seconds" */
 export function spokenDuration(sec) {
   sec = Math.round(sec);
   const m = Math.floor(sec / 60), s = sec % 60;
-  const plural = (n, one, few, many) => (n % 10 === 1 && n % 100 !== 11 ? one : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? few : many);
-  if (!m) return `${s} ${plural(s, 'секунда', 'секунди', 'секунд')}`;
-  if (!s) return `${m} ${plural(m, 'хвилина', 'хвилини', 'хвилин')}`;
-  return `${m} хв ${s} с`;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  if (!m) return plural(s, 'second');
+  if (!s) return plural(m, 'minute');
+  return `${plural(m, 'minute')} ${plural(s, 'second')}`;
 }

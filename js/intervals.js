@@ -28,11 +28,11 @@ export class IntervalsClient {
     try {
       res = await fetch(url, { method, body, headers: { Authorization: `Basic ${btoa(`API_KEY:${this.apiKey}`)}` } });
     } catch {
-      throw new IntervalsError(0, 'Немає зв’язку з intervals.icu. Перевірте інтернет.');
+      throw new IntervalsError(0, 'Cannot reach intervals.icu. Check your internet connection.');
     }
-    if (res.status === 401 || res.status === 403) throw new IntervalsError(res.status, 'intervals.icu не прийняв API-ключ. Перевірте ключ і ID атлета.');
-    if (res.status === 404) throw new IntervalsError(404, 'Атлета не знайдено. Перевірте ID (наприклад, i123456) або залиште поле порожнім.');
-    if (!res.ok) throw new IntervalsError(res.status, `intervals.icu відповів помилкою ${res.status}.`);
+    if (res.status === 401 || res.status === 403) throw new IntervalsError(res.status, 'intervals.icu rejected the API key. Check the key and athlete ID.');
+    if (res.status === 404) throw new IntervalsError(404, 'Athlete not found. Check the ID (e.g. i123456) or leave the field empty.');
+    if (!res.ok) throw new IntervalsError(res.status, `intervals.icu returned error ${res.status}.`);
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   }
@@ -63,7 +63,7 @@ export class IntervalsClient {
         // no structured steps (e.g. "1 h Z2" or text only): ride it as a free ride of the planned length
         const dur = Math.round(e.moving_time || e.time_target || 3600);
         w.steps = [{ dur, free: true, text: e.name || '' }];
-        w.description = `Без інтервалів — вільна їзда ${Math.round(dur / 60)} хв`;
+        w.description = `No intervals — free ride, ${Math.round(dur / 60)} min`;
         stats.unstructured++;
       }
       out.push(w);
@@ -98,8 +98,8 @@ export function eventToWorkout(e) {
     eventId: e.id,
     source: 'intervals',
     date,
-    name: e.name || 'Тренування з intervals.icu',
-    description: e.description ? e.description.split('\n')[0].slice(0, 90) : 'З календаря intervals.icu',
+    name: e.name || 'Workout from intervals.icu',
+    description: e.description ? e.description.split('\n')[0].slice(0, 90) : 'From the intervals.icu calendar',
     steps,
   };
 }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="uk">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,193 +7,193 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <!-- ===== Лобі ===== -->
+  <!-- ===== Lobby ===== -->
   <section id="lobby" class="screen">
     <div class="lobby-inner">
       <header class="brand">
         <h1>Power<span>Up</span></h1>
-        <p>Прості віртуальні велотренування вдома</p>
+        <p>Simple virtual indoor cycling at home</p>
       </header>
 
       <div class="grid">
         <div class="card">
-          <h2>1. Пристрої</h2>
-          <p id="bt-warning" class="warn" hidden>Цей браузер не підтримує Bluetooth. Використайте Chrome або Edge на комп’ютері чи Android — або режим симулятора.</p>
+          <h2>1. Devices</h2>
+          <p id="bt-warning" class="warn" hidden>This browser does not support Bluetooth. Use Chrome or Edge on a computer or Android, or the simulator mode.</p>
           <div class="device">
-            <div><b>Смарт-тренажер / вимірювач потужності</b><small id="trainer-status">не підключено</small></div>
-            <button id="btn-trainer">Підключити</button>
+            <div><b>Smart trainer / power meter</b><small id="trainer-status">not connected</small></div>
+            <button id="btn-trainer">Connect</button>
           </div>
           <div class="device">
-            <div><b>Пульсометр</b><small id="hr-status">не підключено</small></div>
-            <button id="btn-hr">Підключити</button>
+            <div><b>Heart rate monitor</b><small id="hr-status">not connected</small></div>
+            <button id="btn-hr">Connect</button>
           </div>
           <div class="device">
-            <div><b>Датчик каденсу</b><small id="cad-status">не підключено</small></div>
-            <button id="btn-cad">Підключити</button>
+            <div><b>Cadence sensor</b><small id="cad-status">not connected</small></div>
+            <button id="btn-cad">Connect</button>
           </div>
           <div class="device">
-            <div><b>Контролери Zwift Ride / Play / Click</b><small id="ctl-status">не підключено</small></div>
+            <div><b>Zwift Ride / Play / Click controllers</b><small id="ctl-status">not connected</small></div>
             <div class="btns">
-              <button id="btn-ctl-add" hidden title="Zwift Ride — це дві ручки, кожна підключається окремо">+ ручка</button>
-              <button id="btn-ctl">Підключити</button>
+              <button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button>
+              <button id="btn-ctl">Connect</button>
             </div>
           </div>
           <div class="device">
-            <div><b>OpenBikeControl</b><small id="obc-status">не підключено</small><small class="hint-sm">Будь-які контролери через застосунок BikeControl</small></div>
-            <button id="btn-obc">Підключити</button>
+            <div><b>OpenBikeControl</b><small id="obc-status">not connected</small><small class="hint-sm">Any controller via the BikeControl app</small></div>
+            <button id="btn-obc">Connect</button>
           </div>
-          <label class="check"><input type="checkbox" id="show-all"> Показувати всі Bluetooth-пристрої (якщо потрібного немає в списку)</label>
-          <label class="check"><input type="checkbox" id="sim"> Симулятор (без тренажера, потужність повзунком або ↑/↓)</label>
+          <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
+          <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or ↑/↓)</label>
         </div>
 
         <div class="card">
-          <h2>2. Профіль</h2>
+          <h2>2. Profile</h2>
           <div class="fields">
-            <label>Ім’я <input id="f-name" maxlength="16"></label>
-            <label>Колір джерсі <input id="f-jersey" type="color"></label>
-            <label>Колір акценту (смуга, декалі) <input id="f-stripe" type="color"></label>
-            <label>Вага, кг <input id="f-weight" type="number" min="30" max="200"></label>
-            <label>FTP, Вт <input id="f-ftp" type="number" min="50" max="600"></label>
-            <label>Передня зірка (Zwift Cog 14T)
+            <label>Name <input id="f-name" maxlength="16"></label>
+            <label>Jersey color <input id="f-jersey" type="color"></label>
+            <label>Accent color (stripe, decals) <input id="f-stripe" type="color"></label>
+            <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
+            <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
+            <label>Chainring (Zwift Cog 14T)
               <select id="f-chainring">
                 <option value="34">34</option><option value="36">36</option><option value="39">39</option>
                 <option value="42">42</option><option value="46">46</option><option value="50">50</option>
                 <option value="52">52</option><option value="53">53</option>
               </select>
             </label>
-            <label>Віртуальні передачі
+            <label>Virtual gears
               <select id="f-shift">
-                <option value="wheel">Як у Zwift (окружність колеса)</option>
-                <option value="grade">Через нахил (сумісніше)</option>
+                <option value="wheel">Like Zwift (wheel circumference)</option>
+                <option value="grade">Via grade (more compatible)</option>
               </select>
             </label>
-            <label>Графіка
+            <label>Graphics
               <select id="f-graphics">
                 <option value="3d">3D (Three.js)</option>
-                <option value="2d">2D (класична, для слабких комп’ютерів)</option>
+                <option value="2d">2D (classic, for low-end computers)</option>
               </select>
             </label>
-            <label>Стиль 3D
+            <label>3D style
               <select id="f-style">
-                <option value="cartoon">Мультяшний</option>
-                <option value="pixel">Піксельний (ретро)</option>
+                <option value="cartoon">Cartoon</option>
+                <option value="pixel">Pixel (retro)</option>
               </select>
             </label>
-            <label>Камера
+            <label>Camera
               <select id="f-camera">
-                <option value="chase">За спиною</option>
-                <option value="iso">Ізометрія (зверху під кутом)</option>
-                <option value="side">Зверху збоку</option>
+                <option value="chase">Chase</option>
+                <option value="iso">Isometric (angled from above)</option>
+                <option value="side">Side, from above</option>
               </select>
             </label>
-            <label>Складність підйомів <span id="diff-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
+            <label>Climb difficulty <span id="diff-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
           </div>
         </div>
       </div>
 
       <div class="card" id="icu-card">
         <h2>intervals.icu</h2>
-        <p class="muted">Беріть заплановані тренування з календаря й автоматично завантажуйте виконані.
-          API-ключ знаходиться в intervals.icu → Settings → Developer Settings.</p>
+        <p class="muted">Pull planned workouts from your calendar and upload completed rides automatically.
+          Find your API key in intervals.icu → Settings → Developer Settings.</p>
         <div class="fields">
-          <label>API-ключ <input id="f-icu-key" type="password" autocomplete="off" spellcheck="false"></label>
-          <label>ID атлета <input id="f-icu-athlete" placeholder="необов’язково, напр. i123456" spellcheck="false"></label>
+          <label>API key <input id="f-icu-key" type="password" autocomplete="off" spellcheck="false"></label>
+          <label>Athlete ID <input id="f-icu-athlete" placeholder="optional, e.g. i123456" spellcheck="false"></label>
         </div>
-        <label class="check"><input type="checkbox" id="f-icu-upload"> Завантажувати заїзд в intervals.icu після завершення</label>
+        <label class="check"><input type="checkbox" id="f-icu-upload"> Upload the ride to intervals.icu when finished</label>
         <div class="row icu-row">
-          <button id="btn-icu">Підключити</button>
-          <button id="btn-icu-forget" hidden>Забути ключ</button>
+          <button id="btn-icu">Connect</button>
+          <button id="btn-icu-forget" hidden>Forget key</button>
           <span id="icu-status" class="muted"></span>
         </div>
       </div>
 
       <div class="card">
-        <h2>3. Маршрут</h2>
+        <h2>3. Route</h2>
         <div id="route-list" class="options"></div>
       </div>
 
       <div class="card">
-        <h2>4. Режим</h2>
+        <h2>4. Mode</h2>
         <div id="mode-list" class="options"></div>
       </div>
 
-      <button id="btn-start" class="primary big">Поїхали!</button>
+      <button id="btn-start" class="primary big">Ride!</button>
     </div>
   </section>
 
-  <!-- ===== Заїзд ===== -->
+  <!-- ===== Ride ===== -->
   <section id="ride" class="screen" hidden>
     <canvas id="scene"></canvas>
 
     <div class="hud-left">
-      <div class="pill big"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><b id="m-power">0</b><span>Вт</span><small id="m-wkg">0.0 Вт/кг</small></div>
-      <div class="pill"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><b id="m-hr">—</b><span>уд/хв</span></div>
-      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><b id="m-cad">0</b><span>об/хв</span></div>
+      <div class="pill big"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><b id="m-power">0</b><span>W</span><small id="m-wkg">0.0 W/kg</small></div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><b id="m-hr">—</b><span>bpm</span></div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><b id="m-cad">0</b><span>rpm</span></div>
     </div>
 
     <div class="hud-center">
       <div class="pill wide">
-        <svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><b id="m-speed">0.0</b><span>км/год</span>
+        <svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><b id="m-speed">0.0</b><span>km/h</span>
         <i class="sep"></i><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b>
-        <i class="sep"></i><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>км</span>
+        <i class="sep"></i><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>km</span>
       </div>
       <div id="workout-panel" class="workout" hidden>
         <div class="wk-head">
-          <div><label>Ціль, Вт</label><b id="wk-target">0</b> <small id="wk-diff"></small></div>
-          <div><label>Інтервал</label><b id="wk-left">0:00</b></div>
-          <div><label>Каденс</label><b id="wk-cad">—</b></div>
-          <div><label>Далі</label><b id="wk-next">—</b></div>
+          <div><label>Target, W</label><b id="wk-target">0</b> <small id="wk-diff"></small></div>
+          <div><label>Interval</label><b id="wk-left">0:00</b></div>
+          <div><label>Cadence</label><b id="wk-cad">—</b></div>
+          <div><label>Next</label><b id="wk-next">—</b></div>
         </div>
         <canvas id="wk-chart"></canvas>
         <div class="wk-ctl">
-          <button id="wk-int-down" class="pill-btn" aria-label="Зменшити інтенсивність">−</button>
-          <span>Інтенсивність <b id="wk-int">100%</b></span>
-          <button id="wk-int-up" class="pill-btn" aria-label="Збільшити інтенсивність">+</button>
-          <button id="wk-sound" class="pill-btn">Звук: увімк</button>
+          <button id="wk-int-down" class="pill-btn" aria-label="Decrease intensity">−</button>
+          <span>Intensity <b id="wk-int">100%</b></span>
+          <button id="wk-int-up" class="pill-btn" aria-label="Increase intensity">+</button>
+          <button id="wk-sound" class="pill-btn">Sound: on</button>
         </div>
       </div>
     </div>
 
     <div class="hud-right">
       <div id="grade" class="pill grade">0.0%</div>
-      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><label id="m-gear-label">Передача</label><b id="m-gear">12</b><span id="m-gear-unit">/24</span></div>
-      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M2 20 9 8l4 6 3-4 6 10z"/></svg><b id="m-gain">0</b><span>м</span></div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><label id="m-gear-label">Gear</label><b id="m-gear">12</b><span id="m-gear-unit">/24</span></div>
+      <div class="pill"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M2 20 9 8l4 6 3-4 6 10z"/></svg><b id="m-gain">0</b><span>m</span></div>
     </div>
 
     <div class="hud-bottom">
       <div class="bottom-left">
         <canvas id="profile"></canvas>
         <div class="controls">
-          <button id="btn-pause" class="pill-btn">Пауза</button>
-          <button id="btn-finish" class="pill-btn danger">Завершити</button>
+          <button id="btn-pause" class="pill-btn">Pause</button>
+          <button id="btn-finish" class="pill-btn danger">Finish</button>
         </div>
       </div>
       <div id="sim-ctl" class="pill sim" hidden>
-        <label>Симулятор <b id="sim-val">150</b> Вт</label>
+        <label>Simulator <b id="sim-val">150</b> W</label>
         <input id="sim-power" type="range" min="0" max="600" step="5" value="150">
       </div>
       <div class="progress">
-        <div id="progress-label" class="progress-label">Коло 1</div>
+        <div id="progress-label" class="progress-label">Lap 1</div>
         <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
       </div>
     </div>
-    <div id="paused" class="paused" hidden>ПАУЗА</div>
+    <div id="paused" class="paused" hidden>PAUSED</div>
     <div id="toast" class="toast" hidden></div>
   </section>
 
-  <!-- ===== Підсумок ===== -->
+  <!-- ===== Summary ===== -->
   <section id="summary" class="screen" hidden>
     <div class="lobby-inner">
-      <h1>Чудова робота! 💪</h1>
+      <h1>Great job! 💪</h1>
       <div id="sum-stats" class="stats"></div>
       <div class="row">
-        <button id="btn-download" class="primary">Завантажити .FIT</button>
+        <button id="btn-download" class="primary">Download .FIT</button>
         <button id="btn-download-tcx">.TCX</button>
-        <button id="btn-icu-upload" hidden>Надіслати в intervals.icu</button>
-        <button id="btn-again">До лобі</button>
+        <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
+        <button id="btn-again">Back to lobby</button>
       </div>
       <p id="icu-upload-status" class="hint" hidden></p>
-      <p class="hint">Файл .FIT (віртуальний заїзд, як у Zwift) можна завантажити в Strava, Garmin Connect або intervals.icu.</p>
+      <p class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
     </div>
   </section>
 

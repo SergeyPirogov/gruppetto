@@ -128,7 +128,7 @@ test('intervals.icu workout_doc conversion', () => {
   const doc = [
     { duration: 600, power: { start: 50, end: 75, units: '%ftp' }, ramp: true, warmup: true },
     { reps: 3, text: '3x', steps: [
-      { duration: 300, power: { value: 95, units: '%ftp' }, text: 'Тримай!' },
+      { duration: 300, power: { value: 95, units: '%ftp' }, text: 'Hold it!' },
       { duration: 120, power: { value: 150, units: 'w' } },
     ] },
     { duration: 240, power: { min: 88, max: 94, units: '%ftp' } },
@@ -140,7 +140,7 @@ test('intervals.icu workout_doc conversion', () => {
   const s = convertSteps(doc);
   assert.equal(s.length, 1 + 6 + 4);
   assert.deepEqual(s[0], { dur: 600, power: 0.5, to: 0.75, text: '' });
-  assert.equal(s[1].text, 'Тримай!');
+  assert.equal(s[1].text, 'Hold it!');
   assert.equal(stepWatts(s[1], 0, 200), 190);
   assert.equal(stepWatts(s[2], 0.5, 200), 150);
   assert.equal(stepWatts(s[7], 0, 200), 182);       // midpoint of 88–94 %
@@ -272,13 +272,13 @@ test('Zwift Ride shifts by side: right unit harder, left unit easier', () => {
 
 import { spokenDuration } from '../js/sound.js';
 
-test('Spoken durations in Ukrainian', () => {
-  assert.equal(spokenDuration(180), '3 хвилини');
-  assert.equal(spokenDuration(300), '5 хвилин');
-  assert.equal(spokenDuration(60), '1 хвилина');
-  assert.equal(spokenDuration(45), '45 секунд');
-  assert.equal(spokenDuration(21), '21 секунда');
-  assert.equal(spokenDuration(90), '1 хв 30 с');
+test('Spoken durations in English', () => {
+  assert.equal(spokenDuration(180), '3 minutes');
+  assert.equal(spokenDuration(300), '5 minutes');
+  assert.equal(spokenDuration(60), '1 minute');
+  assert.equal(spokenDuration(45), '45 seconds');
+  assert.equal(spokenDuration(21), '21 seconds');
+  assert.equal(spokenDuration(90), '1 minute 30 seconds');
 });
 
 test('intervals.icu cadence targets', () => {

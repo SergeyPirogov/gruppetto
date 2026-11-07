@@ -177,7 +177,7 @@ class Device extends EventTarget {
   _watch(device) {
     if (this.device !== device) {
       this.device = device;
-      this.name = device.name || 'Пристрій';
+      this.name = device.name || 'Device';
       device.addEventListener('gattserverdisconnected', () => this._onDrop());
     }
     this._manual = false;
@@ -477,7 +477,7 @@ export class ZwiftController extends Device {
     const rideOn = new TextEncoder().encode('RideOn');
     await (syncRx.writeValueWithoutResponse ? syncRx.writeValueWithoutResponse(rideOn) : syncRx.writeValue(rideOn));
     this.device = device;
-    this.name = device.name || 'Контролер';
+    this.name = device.name || 'Controller';
     return this;
   }
 
