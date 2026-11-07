@@ -432,7 +432,10 @@ export class Scene3D {
     this.riderModel = null;
     this.nature = null;
     this.bikeModel = null;
-    loadBikeModel().then((m) => {
+    // The riders stay hidden until the bike and rider models have loaded (or failed), so the built-in
+    // rider is not shown first and then swapped for the model a moment later.
+    this.modelsReady = false;
+    const bikeLoad = loadBikeModel().then((m) => {
       if (!m) return;
       this.bikeModel = m;
       for (const R of this.riders.values()) this.scene.remove(R.group);
@@ -444,12 +447,15 @@ export class Scene3D {
       this.natureKeep = new Set([...Object.values(n.textures), ...Object.values(n.types).flat(2).map((p) => p.geometry)]);
       this.routeId = null; // rebuild the world with the models on the next frame
     }).catch((e) => console.warn('Nature models unavailable, using built-in shapes', e));
-    (SHOW_RIDER ? loadDummyRider().then((d) => d || loadRiderModel()) : Promise.resolve(null)).then((m) => {
+    const riderLoad = (SHOW_RIDER ? loadDummyRider().then((d) => d || loadRiderModel()) : Promise.resolve(null)).then((m) => {
       if (!m) return;
       this.riderModel = m;
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the custom character on the next frame
     });
+    const ready = () => { this.modelsReady = true; };
+    Promise.allSettled([bikeLoad, riderLoad]).then(ready);
+    setTimeout(ready, 10000); // a stalled download must not hide the riders for good
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -1092,7 +1098,7 @@ export class Scene3D {
       }
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
-      R.group.visible = visible;
+      R.group.visible = visible && this.modelsReady;
       if (!visible) return;
       const f = this.frame(d);
       const lane = r.lane ?? 0;
