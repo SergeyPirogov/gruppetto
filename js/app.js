@@ -550,18 +550,15 @@ function updateHud(cadence, hr, grade) {
 }
 
 function updateProgress() {
-  let frac, label;
-  if (ride.workout && !ride.workoutDone) {
-    const total = totalDuration(ride.workout);
-    frac = Math.min(1, ride.workoutT / total);
-    label = `${ride.workout.name} · ${Math.round(frac * 100)}%`;
-  } else {
-    const L = ride.route.length;
-    frac = (ride.dist % L) / L;
-    label = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km`;
-  }
+  // the bottom-right bar always tracks the lap; the workout's name and progress head its own panel
+  const L = ride.route.length, frac = (ride.dist % L) / L;
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
-  $('progress-label').textContent = label;
+  $('progress-label').textContent = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km`;
+  if (ride.workout) {
+    const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
+    $('wk-name').textContent = ride.workout.name;
+    $('wk-pct').textContent = ride.workoutDone ? 'done' : `${Math.round(done * 100)}%`;
+  }
 }
 
 function drawWorkoutChart(canvas, w, t) {

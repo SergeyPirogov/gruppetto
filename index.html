@@ -150,12 +150,13 @@
     </div>
 
     <div class="hud-center">
-      <div class="pill wide">
-        <svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><b id="m-speed">0.0</b><span>km/h</span>
-        <i class="sep"></i><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b>
-        <i class="sep"></i><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>km</span>
+      <div class="topbar">
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><b id="m-speed">0.0</b><span>km/h</span></div>
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b></div>
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>km</span></div>
       </div>
       <div id="workout-panel" class="workout" hidden>
+        <div class="wk-title"><b id="wk-name"></b><span id="wk-pct"></span></div>
         <div class="wk-head">
           <div><label>Target, W</label><b id="wk-target">0</b> <small id="wk-diff"></small></div>
           <div><label>Interval</label><b id="wk-left">0:00</b></div>
