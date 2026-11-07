@@ -39,6 +39,38 @@ const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
 const SHOW_RIDER = typeof location === 'undefined' || new URLSearchParams(location.search).get('rider') !== '0'; // ?rider=0: bike only
 const SIZE = { oak: 1, birch: 1, pine: 1, rock: 1, bush: 1, cactus: 1, palm: 1, sunflowers: 1, flowers: 1 };
 
+/**
+ * Add a vertex-shader tweak to a material, keeping any it already has (and a program per variant).
+ */
+function patchShader(mat, key, fn) {
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey ? mat.customProgramCacheKey() : '';
+  mat.onBeforeCompile = function (sh, r) { if (prev) prev.call(this, sh, r); fn(sh); };
+  mat.customProgramCacheKey = () => `${prevKey}|${key}`;
+  mat.needsUpdate = true;
+  return mat;
+}
+
+/**
+ * Wind: plants sway, more the higher the vertex (displacement ∝ height²), each at its own phase from
+ * where it stands. `amp` is metres of sway per metre² of height; `time` a shared uniform.
+ */
+function windify(mat, amp, time) {
+  return patchShader(mat, `wind${amp}`, (sh) => {
+    sh.uniforms.uWindTime = time;
+    sh.vertexShader = `uniform float uWindTime;\n${sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec3 wRoot = instanceMatrix[3].xyz;
+      #else
+        vec3 wRoot = vec3(0.0);
+      #endif
+      float wH = max(transformed.y, 0.0);
+      float wS = sin(uWindTime * 1.3 + wRoot.x * 0.21 + wRoot.z * 0.17) * 0.7
+        + sin(uWindTime * 2.9 + wRoot.x * 0.53 - wRoot.z * 0.41) * 0.3
+        + 0.35; // leaning a little with the wind, swaying around that
+      transformed.xz += vec2(0.8, 0.6) * wS * ${amp.toFixed(4)} * wH * wH;`)}`;
+  });
+}
+
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const hash = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 const hash2 = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -227,6 +259,37 @@ function buildModels(theme) {
     { geom: cyl(0.012, 0.016, 0.7, 4), color: '#5c9a3a', pos: [0, 0.35, 0] },
     ...Array.from({ length: 7 }, (_, k) => ({ geom: ico(0.055 - k * 0.004, 0), color: k % 2 ? '#8a6cc4' : '#a68ae0', pos: [0, 0.42 + k * 0.06, 0] })),
   ]);
+  // a clump of grass blades: dark at the root, light at the tip, normals up so it shades like the ground
+  {
+    const base = rgb(theme.grass[0]).multiplyScalar(0.55), tip = rgb(theme.grass[1]).lerp(col('#e9e27a'), 0.18).multiplyScalar(1.12);
+    const pos = [], colr = [], nor = [];
+    for (let b = 0; b < 14; b++) {
+      const a = hash(b * 3.7) * Math.PI * 2, rr = Math.sqrt(hash(b * 5.1)) * 0.32, h = 0.28 + hash(b * 7.3) * 0.32, w = 0.04 + hash(b * 1.9) * 0.025;
+      const cx = Math.cos(a) * rr, cz = Math.sin(a) * rr, lean = 0.08 + hash(b * 2.3) * 0.12;
+      const fa = a + Math.PI / 2, fx = Math.cos(fa), fz = Math.sin(fa); // the blade's flat side
+      const at = (t, side) => {
+        const ww = w * (1 - t) * side, bend = lean * t * t;
+        return [cx + fx * ww + Math.cos(a) * bend, h * t, cz + fz * ww + Math.sin(a) * bend];
+      };
+      const ts = [0, 0.45, 0.8];
+      const tri = (p1, p2, p3, t1, t2, t3) => {
+        for (const [p, t] of [[p1, t1], [p2, t2], [p3, t3]]) {
+          pos.push(...p); nor.push(0, 1, 0);
+          const c = base.clone().lerp(tip, t); colr.push(c.r, c.g, c.b);
+        }
+      };
+      for (let k = 0; k < 2; k++) {
+        const a0 = at(ts[k], -1), a1 = at(ts[k], 1), b0 = at(ts[k + 1], -1), b1 = at(ts[k + 1], 1);
+        tri(a0, a1, b1, ts[k], ts[k], ts[k + 1]); tri(a0, b1, b0, ts[k], ts[k + 1], ts[k + 1]);
+      }
+      tri(at(0.8, -1), at(0.8, 1), at(1, 0), 0.8, 0.8, 1);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+    M.grassClump = g;
+  }
   // a house for imported routes' buildings: 8 m wide, 6 m deep, walls and a pitched roof
   M.house = merge([
     { geom: new THREE.BoxGeometry(8, 4.6, 6), color: '#ece3d2', pos: [0, 2.3, 0], flat: true },
@@ -461,6 +524,7 @@ export class Scene3D {
     this.riders = new Map();
     this.routeId = null;
     this.clock = 0;
+    this.windTime = { value: 0 }; // shared by every swaying material
     this.riderModel = null;
     this.nature = null;
     this.bikeModel = null;
@@ -722,6 +786,13 @@ export class Scene3D {
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.natureMats = this.nature ? natureMaterials(this.nature) : null;
+    // wind: metres of sway per metre² of height, so a 9 m tree's crown moves ~15-20 cm, grass ~7 cm
+    const WIND = { Bark_NormalTree: 0.0022, Leaves_NormalTree: 0.0022, Leaves_Pine: 0.0018, Leaves_TwistedTree: 0.03, Leaves: 0.12, Flowers: 0.15, Grass: 0.16 };
+    if (this.natureMats) for (const [name, m] of Object.entries(this.natureMats)) if (WIND[name]) windify(m, WIND[name], this.windTime);
+    this.matTree = windify(this.mat.clone(), 0.0022, this.windTime);
+    this.matPlant = windify(this.mat.clone(), 0.15, this.windTime);
+    this.matTall = windify(this.mat.clone(), 0.03, this.windTime);
+    this.matGrass = windify(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), 0.35, this.windTime);
     const asphalt = surfaceTexture();
     asphalt.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     this.roadMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: asphalt,
@@ -1120,6 +1191,33 @@ export class Scene3D {
         }
       }
     }
+    // a lawn of grass clumps along both verges, thickest by the road, swaying in the wind
+    const grass = [];
+    if (!T.snowfall && this.route.theme !== 'desert') {
+      for (let r = 0; r < rows - 1; r++) {
+        const a = a0 + r;
+        for (const side of [-1, 1]) {
+          const lim = reach[r] ? reach[r].lim[side > 0 ? 1 : 0] : Infinity;
+          for (let q = 0; q < 30; q++) {
+            const hq = (k) => hash(a * 11.3 + side * 5.7 + q * 2.9 + k * 7.1);
+            const o = side * (ROAD_HALF + 0.75 + hq(0) ** 2.4 * 30);
+            if (Math.abs(o) > lim - 1 || (T3c.beach && side === T3c.dip.side && Math.abs(o) > 9)) continue;
+            if (this.land && this._landAt(a, o) === 'w') continue;
+            const ff = this.frame(a * SEG + hq(1) * SEG);
+            const x = ff.x + ff.rx * o, z = ff.z + ff.rz * o;
+            grass.push([mtx(x, heightAt(r, o) - 0.02, z, hq(2) * 6.28, 0.75 + hq(3) * 0.7), 0.82 + hq(4) * 0.3]);
+          }
+        }
+      }
+    }
+    if (grass.length) {
+      const im = new THREE.InstancedMesh(this.models.grassClump, this.matGrass, grass.length);
+      const c = new THREE.Color();
+      grass.forEach(([m, k], i) => { im.setMatrixAt(i, m); im.setColorAt(i, c.setScalar(k)); });
+      im.receiveShadow = true;
+      group.add(im);
+    }
+
     // imported routes: woods and buildings from the map
     if (this.land) {
       const types = treeTypes.length ? treeTypes.map((x) => x.type) : ['pine', 'oak', 'birch'];
@@ -1164,14 +1262,17 @@ export class Scene3D {
       if (this.nature?.types[type]) { this._addNature(group, type, list, castShadow); continue; }
       const geom = this.models[type];
       if (!geom) continue;
-      const im = new THREE.InstancedMesh(geom, this.mat, list.length);
+      const mat = ['oak', 'pine', 'birch', 'palm'].includes(type) ? this.matTree
+        : ['tuft', 'flower', 'lupine'].includes(type) ? this.matPlant
+          : ['sunflowers', 'bush'].includes(type) ? this.matTall : this.mat;
+      const im = new THREE.InstancedMesh(geom, mat, list.length);
       list.forEach((m, i) => im.setMatrixAt(i, m));
       im.castShadow = castShadow;
       im.receiveShadow = true;
       group.add(im);
     }
     if (flowers.length) {
-      const im = new THREE.InstancedMesh(this.models.flower, this.mat, flowers.length);
+      const im = new THREE.InstancedMesh(this.models.flower, this.matPlant, flowers.length);
       flowers.forEach(([x, y, z, c], i) => { im.setMatrixAt(i, mtx(x, y, z, 0, 1)); im.setColorAt(i, col(c)); });
       group.add(im);
     }
@@ -1341,6 +1442,7 @@ export class Scene3D {
     const dt = this.lastFrameTime === undefined ? 0 : Math.min(0.1, (now - this.lastFrameTime) / 1000);
     this.lastFrameTime = now;
     this.clock += dt;
+    this.windTime.value = this.clock;
 
     // riders
     const seen = new Set();
