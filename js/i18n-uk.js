@@ -68,6 +68,7 @@ export const UK = {
   'Free-ride pacer, W/kg': 'Пейсер у вільній їзді, Вт/кг', '{name} waits for you at the foot of {climb}': '{name} чекає тебе біля підніжжя: {climb}',
   'Riders in the bunch': 'Райдерів у групі', 'None': 'Нікого',
   'Plan': 'План', 'Today': 'Сьогодні', 'Tomorrow': 'Завтра', 'Nothing planned for today or tomorrow': 'На сьогодні й завтра нічого не заплановано',
+  'in {s} s': 'через {s} с',
   'Profile & settings': 'Профіль і налаштування', 'Language': 'Мова', 'Name': 'Ім\'я', 'Jersey color': 'Колір джерсі',
   'Accent color (stripe, decals)': 'Колір акценту (смуга, наліпки)', 'Weight, kg': 'Вага, кг', 'Height, cm': 'Зріст, см', 'FTP, W': 'FTP, Вт',
   'Chainring (Zwift Cog 14T)': 'Передня зірка (Zwift Cog 14T)', 'Virtual gears': 'Віртуальні передачі',

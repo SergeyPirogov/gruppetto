@@ -598,19 +598,19 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .fields input[type=range] { height: 22px; margin: 2px 0 0; }
 
 /* switches instead of check boxes, everywhere in the drawer */
-.drawer .check { margin-top: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #0f1522;
+.drawer .check, .sum-icu { margin-top: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #0f1522;
   font-size: .9rem; font-weight: 500; color: var(--text); cursor: pointer; display: flex; flex-direction: row; align-items: center; gap: 12px; }
 .drawer .card > .check { margin-top: 10px; }
-.drawer .check input[type=checkbox] {
+.drawer .check input[type=checkbox], .sum-icu input[type=checkbox] {
   appearance: none; -webkit-appearance: none; flex: 0 0 auto; width: 38px; height: 22px; margin: 0; border-radius: 999px;
   background: #2a3346; position: relative; cursor: pointer; transition: background .2s ease;
 }
-.drawer .check input[type=checkbox]::after {
+.drawer .check input[type=checkbox]::after, .sum-icu input[type=checkbox]::after {
   content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
   background: #cfd8e6; transition: transform .2s ease, background .2s ease;
 }
-.drawer .check input[type=checkbox]:checked { background: var(--accent); }
-.drawer .check input[type=checkbox]:checked::after { transform: translateX(16px); background: #fff; }
+.drawer .check input[type=checkbox]:checked, .sum-icu input[type=checkbox]:checked { background: var(--accent); }
+.drawer .check input[type=checkbox]:checked::after, .sum-icu input[type=checkbox]:checked::after { transform: translateX(16px); background: #fff; }
 .drawer .check input[type=checkbox]:focus-visible { box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); outline: none; }
 @media (max-width: 520px) { .fields-3 { grid-template-columns: 1fr 1fr; } }
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
@@ -629,3 +629,7 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .plan-list .tag.plan-day { background: var(--accent2); }
 .plan-list .tag.plan-day.tomorrow { background: #9fb0c6; }
 .plan-empty { margin: 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; }
+
+.sum-icu { display: inline-flex; margin-top: 12px; }
+.sum-icu small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.sum-icu[hidden] { display: none; }

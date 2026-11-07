@@ -32,7 +32,7 @@ try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings'
 // ?debug: reach the current ride from devtools (jump along the route when testing laps and climbs)
 if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__ride', { get: () => ride });
-  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true }; renderModes(); }; // try the plan box without an account
+  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async () => null }; renderModes(); }; // try the plan box and uploads without an account
 }
 
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
@@ -1419,7 +1419,7 @@ function showSummary(e, { live = false } = {}) {
   $('btn-delete-ride').hidden = live;
   $('btn-delete-ride').dataset.id = e.id;
   $('btn-delete-ride').textContent = tr('Delete ride');
-  if (canUpload && settings.icuUpload) uploadToIntervals();
+  scheduleUpload(canUpload);
 }
 
 /** Recent rides in the lobby (latest five) and the full list in the drawer. */
@@ -1551,7 +1551,39 @@ function forgetIntervals() {
   renderModes();
 }
 
+/**
+ * The finish screen's "Upload to intervals.icu" switch (remembered for next time): when on, the ride
+ * goes up after a 10 s countdown, or at once on leaving the screen; switched off, nothing is sent.
+ */
+let uploadTimer = null;
+function scheduleUpload(can) {
+  clearInterval(uploadTimer); uploadTimer = null;
+  const box = $('sum-icu-auto'), count = $('sum-icu-count');
+  $('sum-icu').hidden = !can;
+  count.textContent = '';
+  if (!can) return;
+  box.checked = !!settings.icuUpload;
+  let left = 10;
+  const tick = () => {
+    if (left <= 0) { clearInterval(uploadTimer); uploadTimer = null; count.textContent = ''; uploadToIntervals(); return; }
+    count.textContent = tr('in {s} s', { s: left }); left--;
+  };
+  const start = () => { if (lastRide?.uploadedId || uploadTimer) return; left = 10; uploadTimer = setInterval(tick, 1000); tick(); };
+  box.onchange = () => {
+    settings.icuUpload = box.checked; saveSettings(); $('f-icu-upload').checked = box.checked;
+    if (box.checked) start(); else { clearInterval(uploadTimer); uploadTimer = null; count.textContent = ''; }
+  };
+  if (box.checked) start();
+}
+/** Leaving the finish screen: a pending upload goes now. */
+function flushUpload() {
+  if (!uploadTimer) return;
+  clearInterval(uploadTimer); uploadTimer = null;
+  uploadToIntervals();
+}
+
 async function uploadToIntervals() {
+  clearInterval(uploadTimer); uploadTimer = null; $('sum-icu-count').textContent = '';
   if (!icuClient || !lastRide?.summary || lastRide.uploadedId) return;
   const status = $('icu-upload-status');
   const btn = $('btn-icu-upload');
@@ -1571,6 +1603,7 @@ async function uploadToIntervals() {
       ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>`
       : tr('Uploaded to intervals.icu ✓');
     btn.hidden = true;
+    $('sum-icu').hidden = true;
   } catch (e) {
     status.textContent = tr('Upload failed: {error}', { error: e.message });
     btn.disabled = false;
@@ -1695,7 +1728,7 @@ $('f-sound').onchange = () => {
   if (settings.sound) { unlockAudio(); beep(880, 0.1); }
 };
 $('btn-download-tcx').onclick = () => download('tcx');
-$('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
+$('btn-again').onclick = () => { flushUpload(); $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
 $('btn-delete-ride').onclick = () => {
   const b = $('btn-delete-ride');
   if (b.textContent !== tr('Tap again to delete')) { b.textContent = tr('Tap again to delete'); return; }
