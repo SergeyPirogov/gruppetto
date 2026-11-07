@@ -18,7 +18,7 @@ const DEFAULT_SETTINGS = {
   name: 'Я', weight: 75, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
-  intensity: 100, sound: true, voice: true, style: 'cartoon',
+  intensity: 100, sound: true, voice: true, style: 'cartoon', camera: 'chase',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -188,6 +188,7 @@ function initLobby() {
   bind('f-shift', 'shiftMode', false);
   bind('f-graphics', 'graphics', false);
   bind('f-style', 'style', false);
+  bind('f-camera', 'camera', false);
   const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); };
   refreshDiff();
 
@@ -302,6 +303,7 @@ async function startRide() {
   $('btn-pause').textContent = 'Пауза';
   await ensureScene();
   scene.setStyle?.(settings.style);
+  scene.setCamera?.(settings.camera);
   ride.lastSim = performance.now();
   clearInterval(rideTimer);
   rideTimer = setInterval(() => advance(), 250);
@@ -950,6 +952,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'ArrowLeft') { e.preventDefault(); steer(-1); }
   if (e.code === 'ArrowRight') { e.preventDefault(); steer(+1); }
   if (e.code === 'KeyN') skipInterval();
+  if (e.code === 'KeyC' && scene?.setCamera) {
+    settings.camera = settings.camera === 'iso' ? 'chase' : 'iso';
+    saveSettings();
+    scene.setCamera(settings.camera);
+    toast(settings.camera === 'iso' ? 'Камера: ізометрія' : 'Камера: за спиною');
+  }
   if (ride.simulated && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
     e.preventDefault();
     const s = $('sim-power');

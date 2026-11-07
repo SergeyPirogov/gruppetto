@@ -439,6 +439,14 @@ export class Scene3D {
     if (this.pixel) this._setupPixel();
   }
 
+  /** 'chase' (behind the rider, default) or 'iso' (high, from the side, narrow field of view). */
+  setCamera(mode) {
+    this.camMode = mode === 'iso' ? 'iso' : 'chase';
+    this.camera.fov = this.camMode === 'iso' ? 30 : 62;
+    this.camera.updateProjectionMatrix();
+    this._isoHeading = undefined;
+  }
+
   /** 'cartoon' (default) or 'pixel': low-res render, limited palette with dithering and outlines. */
   setStyle(style) {
     const want = style === 'pixel';
@@ -963,7 +971,17 @@ export class Scene3D {
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
     // chase camera
-    if (me) {
+    if (me && this.camMode === 'iso') {
+      // isometric-style view: high, from behind and to the side, narrow field of view (model-like look)
+      const target = this.frame(dist + 3);
+      const h = this._isoHeading = this._isoHeading === undefined ? target.h : this._isoHeading + (target.h - this._isoHeading) * 0.04;
+      const fx = Math.cos(h), fz = Math.sin(h), rx = -Math.sin(h), rz = Math.cos(h);
+      const yaw = THREE.MathUtils.degToRad(35), pitch = THREE.MathUtils.degToRad(40), D = 27;
+      const flat = Math.cos(pitch) * D;
+      const tx = target.x + target.rx * me.lane, tz = target.z + target.rz * me.lane, ty = target.y + 0.8;
+      this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
+      this.camera.lookAt(tx, ty, tz);
+    } else if (me) {
       const back = this.frame(dist - 5.4);
       const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.55, back.z + back.rz * me.lane * 0.8);
       // follow the rider rigidly along the road (lane changes are already eased by the app)
@@ -971,6 +989,8 @@ export class Scene3D {
       this.camera.position.copy(this.camPos);
       const look = this.frame(dist + 11);
       this.camera.lookAt(look.x + look.rx * me.lane * 0.5, look.y + 0.55, look.z + look.rz * me.lane * 0.5);
+    }
+    if (me) {
 
       const cx = this.camera.position.x, cz = this.camera.position.z, cy = me.f.y;
       this.sky.position.set(cx, cy, cz);
