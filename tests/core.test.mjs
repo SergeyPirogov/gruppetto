@@ -314,3 +314,34 @@ test('air drag grows with height and weight; 178 cm 75 kg is the reference 0.32 
   assert.ok(riderCdA(190, 90) > riderCdA(178, 75));
   assert.ok(riderCdA(165, 58) < riderCdA(178, 75));
 });
+
+test('GPX track: point-to-point route with smoothed elevation, bends and a finish', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  const { Route } = await import('../js/routes.js');
+  // 3 km due north climbing 90 m with GPS jitter, then a 90° right turn and 1 km flat
+  const pts = [];
+  const lat0 = 48.45, lon0 = 24.55, m = 1 / 111320;
+  for (let d = 0; d <= 3000; d += 10) pts.push({ lat: lat0 + d * m, lon: lon0, ele: 500 + d * 0.03 + (d % 20 ? 1.5 : -1.5) });
+  for (let d = 10; d <= 1000; d += 10) pts.push({ lat: lat0 + 3000 * m, lon: lon0 + d / 73900, ele: 590 });
+  const def = routeFromTrack({ name: 'Test', points: pts });
+  const r = new Route(JSON.parse(JSON.stringify(def))); // as stored on the device
+  assert.ok(r.oneWay && r.custom);
+  assert.ok(Math.abs(r.length - 4000) < 30, `length ${r.length}`);
+  assert.ok(Math.abs(r.gradeAt(1500) - 0.03) < 0.004, `grade ${r.gradeAt(1500)}`); // jitter smoothed away
+  assert.ok(Math.abs(r.elevationGain - 90) < 6, `gain ${r.elevationGain}`);
+  // a right turn of about 90° in total, turning the same way as the renderer's +curve (TURN = 2.5)
+  const turn = r.segments.reduce((s, x) => s + (x.curve * 2.5) / 5, 0);
+  assert.ok(Math.abs(turn - Math.PI / 2) < 0.15, `turn ${turn}`);
+  // past either end the road runs on, flat
+  assert.equal(r.elevAt(-100), r.elevAt(0));
+  assert.equal(r.elevAt(r.length + 500), r.segments[r.segments.length - 1].elev);
+  assert.equal(r.climbs.length, 1);
+  assert.throws(() => routeFromTrack({ name: '', points: pts.slice(0, 50) }), /shorter than 1 km/);
+});
+
+test('route groups: flat, hilly and mountain', () => {
+  const g = Object.fromEntries(routes.map((r) => [r.id, r.group]));
+  assert.equal(g.lakes, 'flat');
+  assert.equal(g.rolling, 'hilly');
+  assert.equal(g.mountain, 'mountain');
+});

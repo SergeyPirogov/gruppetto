@@ -523,3 +523,29 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 #ride #ghost-tag { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); white-space: nowrap; transition: bottom .25s ease; }
 #ride.show-controls #sim-ctl:not([hidden]) ~ #ghost-tag { bottom: 74px; }
 @media (max-width: 720px) { #ride #ghost-tag { bottom: 70px; font-size: .78rem; } }
+
+/* ---------- Route groups and GPX import (#25) ---------- */
+.route-group + .route-group { margin-top: 16px; }
+.route-group h3 { margin: 0 0 8px; font-size: .75rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); display: flex; gap: 8px; align-items: baseline; }
+.route-group h3 small { font-weight: 400; opacity: .7; }
+.route-cards .option { position: relative; }
+.rc-del { position: absolute; top: 6px; right: 8px; color: var(--muted); font-size: .8rem; padding: 2px 6px; border-radius: 6px; }
+.rc-del:hover { color: #fff; background: rgba(239, 68, 68, .6); }
+.rc-import { cursor: pointer; border: 1px dashed var(--line); background: transparent; display: flex; flex-direction: column; justify-content: center; min-height: 96px; }
+.rc-import:hover { border-color: var(--accent); }
+.rc-import b { color: var(--accent); }
+.route-cards .rc-import small { display: block; }
+.lobby-msg { margin-bottom: 12px; padding: 10px 14px; border-radius: 10px; background: rgba(239, 68, 68, .15); border: 1px solid rgba(239, 68, 68, .5); }
+
+/* ---------- Workout menu ---------- */
+.wk-pick-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wk-change { color: var(--accent); font-size: .8rem; font-weight: 700; white-space: nowrap; }
+.wk-menu { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; }
+.wk-menu[hidden] { display: none; }
+.wk-menu-panel {
+  position: relative; width: min(720px, calc(100vw - 24px)); max-height: calc(100vh - 48px); overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5);
+}
+.wk-menu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.wk-menu-head h2 { margin: 0; }
+.wk-menu-list { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }

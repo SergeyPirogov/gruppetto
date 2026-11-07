@@ -703,6 +703,9 @@ export class Scene3D {
     this._showLoader();
     this.t = themeFor(route.theme);
     this.t3 = T3[route.theme] || T3.meadow;
+    // a real road bends and doubles back: gentle side hills, and the land never reaches over another stretch
+    if (route.custom) this.t3 = { ...this.t3, amp: 6, far: 0.2, wall: 0, rock: 0, snow: 0, dip: null, beach: false };
+    this.reach = null;
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.natureMats = this.nature ? natureMaterials(this.nature) : null;
@@ -853,12 +856,12 @@ export class Scene3D {
   // ----- path -----
 
   _ensurePath(a) {
-    const P = this.path, n = this.route.segments.length;
+    const P = this.path;
     while (A0 + P.h.length <= a + 1) {
       const i = P.h.length;
       if (i === 0) { P.x.push(0); P.z.push(0); P.h.push(0); continue; }
       const prev = A0 + i - 1;
-      const h = P.h[i - 1] + (this.route.segments[((prev % n) + n) % n].curve * TURN) / SEG;
+      const h = P.h[i - 1] + (this.route.segAt(prev).curve * TURN) / SEG;
       P.h.push(h);
       P.x.push(P.x[i - 1] + Math.cos(P.h[i - 1]) * SEG);
       P.z.push(P.z[i - 1] + Math.sin(P.h[i - 1]) * SEG);
@@ -886,6 +889,44 @@ export class Scene3D {
     return y;
   }
 
+  /**
+   * How far the land may reach to each side of the road at segment a, so it never covers another
+   * stretch of the same road (hairpins, a track that comes back past itself). Imported routes only.
+   */
+  _reachAt(a, f) {
+    if (!this.route.custom) return null;
+    if (!this.reach) { // spatial grid of the whole road, 50 m cells
+      const cells = new Map(), n = this.route.segments.length;
+      for (let b = -20; b < n + 20; b += 2) {
+        const g = this.frame(b * SEG), key = `${Math.floor(g.x / 50)},${Math.floor(g.z / 50)}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push([b, g.x, g.z]);
+      }
+      this.reach = cells;
+    }
+    const far = COLS[COLS.length - 1];
+    const lim = [far, far], other = [null, null]; // per side: reach, and the other road's height there
+    const cx = Math.floor(f.x / 50), cz = Math.floor(f.z / 50);
+    for (let i = -6; i <= 6; i++) for (let j = -6; j <= 6; j++) {
+      for (const [b, x, z] of this.reach.get(`${cx + i},${cz + j}`) || []) {
+        const vx = x - f.x, vz = z - f.z, dist = Math.hypot(vx, vz);
+        if (dist > 300 || Math.abs(b - a) * SEG < dist * 1.4 + 20) continue; // the same stretch of road
+        const along = vx * f.rx + vz * f.rz; // + right, - left
+        const across = Math.abs(vx * Math.cos(f.h) + vz * Math.sin(f.h));
+        if (across > Math.abs(along) * 1.2) continue;
+        const k = along >= 0 ? 1 : 0, m = Math.max(ROAD_HALF + 2, dist * 0.5);
+        if (m < lim[k]) { lim[k] = m; other[k] = this._roadY(b * SEG); }
+      }
+    }
+    // inside a tight bend the land would fold over itself: keep it within the bend's radius
+    const k = (this.frame(a * SEG + 10).h - this.frame(a * SEG - 10).h) / 20;
+    if (Math.abs(k) > 1e-4) {
+      const inner = k > 0 ? 1 : 0, m = Math.max(ROAD_HALF + 1, 0.9 / Math.abs(k));
+      if (m < lim[inner]) { lim[inner] = m; other[inner] = null; }
+    }
+    return { lim, other }; // [left, right]
+  }
+
   // ----- chunks -----
 
   _buildChunk(c) {
@@ -901,13 +942,21 @@ export class Scene3D {
     // terrain grid
     const pos = new Float32Array(rows * nc * 3), colors = new Float32Array(rows * nc * 3);
     const heights = [];
+    const reach = frames.map((f, r) => this._reachAt(a0 + r, f));
     for (let r = 0; r < rows; r++) {
       const f = frames[r];
       heights.push([]);
       for (let k = 0; k < nc; k++) {
-        const o = COLS[k];
+        const sd = COLS[k] > 0 ? 1 : 0, lim = reach[r] ? reach[r].lim[sd] : Infinity;
+        const o = Math.sign(COLS[k]) * Math.min(Math.abs(COLS[k]), lim);
         const x = f.x + f.rx * o, z = f.z + f.rz * o;
-        const y = this._terrainY(f.y, o, x, z);
+        let y = this._terrainY(f.y, o, x, z);
+        // between two stretches of the same road the land slopes to meet halfway, at the mean height
+        const oy = reach[r]?.other[sd];
+        if (oy !== null && oy !== undefined) {
+          const mid = (f.y + oy) / 2, t = smooth(ROAD_HALF + 1, lim, Math.abs(o));
+          y = this._terrainY(f.y + (mid - f.y) * t, o, x, z);
+        }
         heights[r].push(y);
         const i = (r * nc + k) * 3;
         pos[i] = x; pos[i + 1] = y; pos[i + 2] = z;
@@ -1000,6 +1049,7 @@ export class Scene3D {
           const h = (k) => hash(idxN * 7.13 + side * 3.7 + (j * 4 + k) * 19.1);
           if (h(0) >= sc.prob) return;
           const o = side * (sc.off[0] + h(1) * (sc.off[1] - sc.off[0])) * ROAD_HALF;
+          if (reach[r] && Math.abs(o) > reach[r].lim[side > 0 ? 1 : 0] - 2) return; // would stand on another stretch of road
           const along = h(3) * SEG;
           const ff = this.frame(a * SEG + along);
           const x = ff.x + ff.rx * o, z = ff.z + ff.rz * o, y = heightAt(r, o);
@@ -1033,6 +1083,7 @@ export class Scene3D {
           const hq = (k) => hash(idxN * 3.31 + q * 51.7 + k * 7.9);
           if (hq(0) > T3c.far) continue;
           const side = hq(1) < 0.5 ? -1 : 1, o = side * (30 + hq(2) * 230);
+          if (reach[r] && Math.abs(o) > reach[r].lim[side > 0 ? 1 : 0] - 4) continue;
           const y = heightAt(r, o);
           if (this.water && y < f.y - (T3c.dip?.depth || 0) * 0.3) continue;
           const tt = treeTypes[Math.floor(hq(3) * treeTypes.length)].type;
@@ -1191,7 +1242,17 @@ export class Scene3D {
       const lane = r.lane ?? 0;
       const slope = Math.atan((this._roadY(d + 2) - this._roadY(d - 2)) / 4);
       R.group.position.set(f.x + f.rx * lane, f.y + 0.05, f.z + f.rz * lane);
-      R.group.rotation.set(0, -f.h, slope, 'YXZ');
+      // face along the road as a chord over a few metres (no wobble from small kinks in a real track),
+      // turned slightly toward a lane change in progress
+      const fa = this.frame(d - 2.5), fb = this.frame(d + 2.5);
+      const head = Math.atan2(fb.z - fa.z, fb.x - fa.x);
+      if (R.lastD !== undefined && dt > 0) {
+        const ds = (d - R.lastD) / dt, dl = (lane - R.lastLane) / dt;
+        const yaw = Math.abs(ds) < 0.5 || Math.abs(ds) > 40 ? 0 : Math.atan2(dl, Math.max(2, ds));
+        R.yaw = (R.yaw || 0) + (yaw - (R.yaw || 0)) * Math.min(1, dt * 5);
+      }
+      R.lastD = d; R.lastLane = lane;
+      R.group.rotation.set(0, -(head + (R.yaw || 0)), slope, 'YXZ');
       R.pose(r.pedal || 0);
       R.roll?.(d);
       R.bike?.pose(r.pedal || 0);

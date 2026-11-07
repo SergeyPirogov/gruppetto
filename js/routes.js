@@ -104,18 +104,25 @@ function wave(d, parts) {
 export class Route {
   constructor(def) {
     Object.assign(this, def);
-    const n = Math.round(def.length / SEG);
     this.segments = [];
-    const base = wave(0, def.hills);
-    for (let i = 0; i < n; i++) {
-      const d = i * SEG;
-      this.segments.push({
-        elev: wave(d, def.hills) - base + 100,
-        curve: wave(d, def.curves),
-      });
+    if (def.elev) { // from data (an imported GPX track): one value per segment
+      for (let i = 0; i < def.elev.length; i++) this.segments.push({ elev: def.elev[i], curve: def.curve?.[i] || 0 });
+      this.length = this.segments.length * SEG;
+      delete this.elev; delete this.curve;
+    } else {
+      const n = Math.round(def.length / SEG);
+      const base = wave(0, def.hills);
+      for (let i = 0; i < n; i++) {
+        const d = i * SEG;
+        this.segments.push({
+          elev: wave(d, def.hills) - base + 100,
+          curve: wave(d, def.curves),
+        });
+      }
     }
+    const n = this.segments.length;
     let gain = 0;
-    for (let i = 0; i < n; i++) {
+    for (let i = 0; i < (this.oneWay ? n - 1 : n); i++) {
       const diff = this.segments[(i + 1) % n].elev - this.segments[i].elev;
       if (diff > 0) gain += diff;
     }
@@ -123,16 +130,26 @@ export class Route {
     this.minElev = Math.min(...this.segments.map((s) => s.elev));
     this.maxElev = Math.max(...this.segments.map((s) => s.elev));
     this.climbs = findClimbs(this);
+    this.group ||= routeGroup(this);
   }
 
   wrap(d) { return ((d % this.length) + this.length) % this.length; }
 
-  elevAt(d) {
-    const x = this.wrap(d) / SEG;
-    const i = Math.floor(x);
+  /** Segment i: a loop wraps around; a point-to-point route runs on flat and straight past either end. */
+  segAt(i) {
     const n = this.segments.length;
-    const a = this.segments[i % n].elev;
-    const b = this.segments[(i + 1) % n].elev;
+    if (this.oneWay) {
+      if (i < 0) return { elev: this.segments[0].elev, curve: 0 };
+      if (i >= n) return { elev: this.segments[n - 1].elev, curve: 0 };
+      return this.segments[i];
+    }
+    return this.segments[((i % n) + n) % n];
+  }
+
+  elevAt(d) {
+    const x = (this.oneWay ? d : this.wrap(d)) / SEG;
+    const i = Math.floor(x);
+    const a = this.segAt(i).elev, b = this.segAt(i + 1).elev;
     return a + (b - a) * (x - i);
   }
 
@@ -162,10 +179,10 @@ const CLIMB_NAMES = {
  * Each gets a name ("Climb 1", in route order), start and end distance, length, gain and grade.
  */
 export function findClimbs(route, minGain = 12, minGrade = 0.025) {
-  const n = route.segments.length, el = (i) => route.segments[((i % n) + n) % n].elev;
+  const n = route.segments.length, el = (i) => route.segAt(i).elev;
   // start the scan at the route's lowest point so no climb is split by the loop's seam
   let low = 0;
-  for (let i = 1; i < n; i++) if (el(i) < el(low)) low = i;
+  if (!route.oneWay) for (let i = 1; i < n; i++) if (el(i) < el(low)) low = i;
   const found = [];
   let i = 0;
   while (i < n) {
@@ -184,5 +201,16 @@ export function findClimbs(route, minGain = 12, minGrade = 0.025) {
   const names = CLIMB_NAMES[route.id] || [];
   return found.map((c, k) => ({ ...c, id: `${route.id}-c${k + 1}`, name: names[k] || `Climb ${k + 1}` }));
 }
+
+/** Flat, hilly or mountain, from the climbing per km and the height of the biggest rise. */
+export function routeGroup(r) {
+  const perKm = r.elevationGain / (r.length / 1000);
+  if (r.maxElev - r.minElev >= 150 || perKm >= 20) return 'mountain';
+  return perKm < 6 ? 'flat' : 'hilly';
+}
+
+export const ROUTE_GROUPS = [
+  { id: 'flat', name: 'Flat' }, { id: 'hilly', name: 'Hilly' }, { id: 'mountain', name: 'Mountain' }, { id: 'mine', name: 'My routes' },
+];
 
 export const routes = ROUTES.map((r) => new Route(r));

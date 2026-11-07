@@ -42,7 +42,9 @@
             <button data-ghost="off"><b>Off</b><small>ride on your own</small></button>
           </div>
         </div>
-        <div id="route-list" class="options route-cards"></div>
+        <div id="lobby-msg" class="lobby-msg" hidden></div>
+        <div id="route-list" class="route-list"></div>
+        <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" hidden>
         <div id="history-box" class="history-box" hidden>
           <div class="hist-head"><h2>Recent rides</h2><span id="history-week"></span><button class="ghost" data-open="history">All rides</button></div>
           <div id="history-recent" class="hist-list"></div>
@@ -57,6 +59,14 @@
         </div>
       </aside>
     </main>
+
+    <div id="wk-menu" class="wk-menu" hidden>
+      <div class="drawer-bg" data-wk-close></div>
+      <div class="wk-menu-panel">
+        <div class="wk-menu-head"><h2>Workouts</h2><button class="drawer-close" data-wk-close aria-label="Close">✕</button></div>
+        <div id="wk-menu-list" class="options wk-menu-list"></div>
+      </div>
+    </div>
 
     <div id="drawer" class="drawer" hidden>
       <div class="drawer-bg" data-close></div>

@@ -2,7 +2,8 @@ import { bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRate
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
-import { routes } from './routes.js';
+import { routes, Route, ROUTE_GROUPS } from './routes.js';
+import { parseGpx, routeFromTrack } from './gpx.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
@@ -29,6 +30,13 @@ if (new URLSearchParams(location.search).has('debug')) Object.defineProperty(win
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
 const records = (() => { try { return JSON.parse(localStorage.getItem('gruppetto.records') || '{}'); } catch { return {}; } })();
 records.lap ||= {}; records.seg ||= {};
+// routes imported from GPX (#25), kept on this device as plain data
+const ROUTES_KEY = 'gruppetto.routes';
+const customDefs = (() => { try { return JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch { return []; } })();
+for (const d of customDefs) { try { routes.push(new Route(d)); } catch { /* skip a broken entry */ } }
+const saveCustomRoutes = () => {
+  try { localStorage.setItem(ROUTES_KEY, JSON.stringify(customDefs)); return true; } catch { return false; }
+};
 const saveRecords = () => { try { localStorage.setItem('gruppetto.records', JSON.stringify(records)); } catch { /* ignore */ } };
 const fmtDelta = (d) => `${d < 0 ? '−' : '+'}${fmtTime(Math.abs(d))}`;
 const saveSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
@@ -241,17 +249,8 @@ function initLobby() {
   const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); pixelUi(); };
   refreshDiff();
 
-  const rl = $('route-list');
-  for (const r of routes) {
-    const b = document.createElement('button');
-    b.className = 'option';
-    b.dataset.id = r.id;
-    b.innerHTML = `<b>${r.name}</b><small>${(r.length / 1000).toFixed(0)} km · ↗ ${Math.round(r.elevationGain)} m</small><small>${r.description}</small><canvas></canvas>`;
-    b.onclick = () => { settings.routeId = r.id; saveSettings(); markSelected(rl, r.id); showRoute(); };
-    rl.append(b);
-    requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`));
-  }
-  markSelected(rl, settings.routeId);
+  renderRouteList();
+  $('gpx-file').addEventListener('change', importGpx);
   showRoute();
   initDrawer();
   renderHistory();
@@ -262,37 +261,141 @@ function initLobby() {
   initIntervals();
 }
 
+/** The route cards in groups: flat, hilly, mountain, and the routes you imported. */
+function renderRouteList() {
+  const rl = $('route-list');
+  rl.innerHTML = '';
+  for (const g of ROUTE_GROUPS) {
+    const list = routes.filter((r) => (r.custom ? 'mine' : r.group) === g.id);
+    if (!list.length && g.id !== 'mine') continue;
+    const sec = document.createElement('div');
+    sec.className = 'route-group';
+    sec.innerHTML = `<h3>${g.name}<small>${list.length || ''}</small></h3><div class="options route-cards"></div>`;
+    const box = sec.querySelector('.route-cards');
+    for (const r of list) {
+      const b = document.createElement('button');
+      b.className = 'option';
+      b.dataset.id = r.id;
+      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom ? 1 : 0)} km · ↗ ${Math.round(r.elevationGain)} m</small><small>${esc(r.description)}</small><canvas></canvas>`
+        + (r.custom ? `<span class="rc-del" title="Delete this route" role="button">✕</span>` : '');
+      b.onclick = (ev) => {
+        if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
+        settings.routeId = r.id; saveSettings(); markRoute(); showRoute();
+      };
+      box.append(b);
+      requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`));
+    }
+    if (g.id === 'mine') {
+      const add = document.createElement('label');
+      add.className = 'option rc-import';
+      add.innerHTML = '<b>＋ Import GPX</b><small>A real road from Strava, Komoot or Garmin, up to 150 km</small>';
+      add.htmlFor = 'gpx-file';
+      box.append(add);
+    }
+    rl.append(sec);
+  }
+  markRoute();
+}
+
+function markRoute() {
+  for (const el of $('route-list').querySelectorAll('.option[data-id]')) el.classList.toggle('sel', el.dataset.id === settings.routeId);
+}
+
+async function importGpx(ev) {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
+  try {
+    const def = routeFromTrack(parseGpx(await file.text()), file.name);
+    const route = new Route(def);
+    customDefs.push(def);
+    if (!saveCustomRoutes()) { customDefs.pop(); throw new Error('Not enough browser storage for this route'); }
+    routes.push(route);
+    settings.routeId = route.id; saveSettings();
+    renderRouteList(); showRoute();
+    $('route-list').querySelector('.sel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } catch (e) {
+    alertBox(`Could not import ${file.name}: ${e.message}`);
+  }
+}
+
+function deleteCustomRoute(r) {
+  if (!confirm(`Delete “${r.name}”? Its records stay in your ride history.`)) return;
+  const i = customDefs.findIndex((d) => d.id === r.id);
+  if (i >= 0) customDefs.splice(i, 1);
+  saveCustomRoutes();
+  routes.splice(routes.indexOf(r), 1);
+  if (settings.routeId === r.id) { settings.routeId = routes[0].id; saveSettings(); }
+  renderRouteList(); showRoute();
+}
+
+function alertBox(msg) {
+  const el = $('lobby-msg');
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(alertBox.t); alertBox.t = setTimeout(() => { el.hidden = true; }, 6000);
+}
+
+const allWorkouts = () => [...icuWorkouts, ...workouts];
+
+/** Mode: free ride, or a workout picked in its own menu. */
 function renderModes() {
   const ml = $('mode-list');
   ml.innerHTML = '';
-  const add = (id, title, sub, w, tag) => {
-    const b = document.createElement('button');
-    b.className = 'option';
-    b.dataset.id = id;
-    b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(title)}</b><small>${esc(sub)}</small>${w ? '<canvas></canvas>' : ''}`;
-    b.onclick = () => { settings.mode = id; saveSettings(); markSelected(ml, id); updateSummary(); };
-    ml.append(b);
-    if (w) requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
+  const w = allWorkouts().find((x) => x.id === settings.mode)
+    || allWorkouts().find((x) => x.id === settings.lastWorkout) || null;
+  const free = document.createElement('button');
+  free.className = 'option';
+  free.dataset.id = 'free';
+  free.innerHTML = '<b>Free ride</b><small>The trainer simulates the road grade.</small>';
+  free.onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); };
+  const wb = document.createElement('button');
+  wb.className = 'option wk-pick';
+  wb.dataset.id = 'workout';
+  wb.innerHTML = w
+    ? `<span class="wk-pick-head"><b>${esc(w.name)}</b><span class="wk-change">Workouts ›</span></span><small>${Math.round(totalDuration(w) / 60)} min · ${esc(w.description)}</small><canvas></canvas>`
+    : '<span class="wk-pick-head"><b>Workout</b><span class="wk-change">Choose ›</span></span><small>Structured intervals in ERG: the trainer holds the target power.</small>';
+  wb.onclick = (ev) => {
+    if (w && settings.mode !== w.id && !ev.target.closest('.wk-change')) { settings.mode = w.id; saveSettings(); renderModes(); return; }
+    openWorkoutMenu();
   };
-  for (const w of icuWorkouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} min · ${w.description}`, w, dayLabel(w.date));
-  add('free', 'Free ride', 'The trainer simulates the road grade.');
-  for (const w of workouts) add(w.id, w.name, `${Math.round(totalDuration(w) / 60)} min · ${w.description}`, w);
-  markSelected(ml, settings.mode);
-  ml.querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+  ml.append(free, wb);
+  free.classList.toggle('sel', settings.mode === 'free');
+  wb.classList.toggle('sel', settings.mode !== 'free' && !!w && w.id === settings.mode);
+  if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
   updateSummary();
 }
+
+/** The workout menu: planned intervals.icu workouts first, then the built-in ones. */
+function openWorkoutMenu() {
+  const menu = $('wk-menu'), list = $('wk-menu-list');
+  list.innerHTML = '';
+  const add = (w, tag) => {
+    const b = document.createElement('button');
+    b.className = 'option';
+    b.dataset.id = w.id;
+    b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} min · ${esc(w.description)}</small><canvas></canvas>`;
+    b.onclick = () => { settings.mode = w.id; settings.lastWorkout = w.id; saveSettings(); closeWorkoutMenu(); renderModes(); };
+    b.classList.toggle('sel', w.id === settings.mode);
+    list.append(b);
+    requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
+  };
+  for (const w of icuWorkouts) add(w, dayLabel(w.date));
+  for (const w of workouts) add(w);
+  menu.hidden = false;
+}
+function closeWorkoutMenu() { $('wk-menu').hidden = true; }
 
 /** The selected route, large, at the top of the lobby. */
 function showRoute() {
   const r = routes.find((x) => x.id === settings.routeId) || routes[0];
   if (!r) return;
   $('rh-name').textContent = r.name;
-  $('rh-meta').textContent = `${(r.length / 1000).toFixed(0)} km · ↗ ${Math.round(r.elevationGain)} m`;
+  $('rh-meta').textContent = `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} km · ↗ ${Math.round(r.elevationGain)} m`;
   $('rh-desc').textContent = r.description;
   renderGhostPicker();
   // the timed climbs, with this device's record on each
   $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} km · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
-    + (records.lap[r.id] ? `<li><b>⏱ Best lap</b> <span class="pb">${fmtTime(records.lap[r.id])}</span></li>` : '');
+    + (records.lap[r.id] ? `<li><b>⏱ ${r.oneWay ? 'Best time' : 'Best lap'}</b> <span class="pb">${fmtTime(records.lap[r.id])}</span></li>` : '');
   requestAnimationFrame(() => drawProfile($('rh-profile'), r, [], `${themeFor(r.theme).accent}cc`));
   updateSummary();
 }
@@ -318,6 +421,8 @@ function initDrawer() {
   for (const el of document.querySelectorAll('#lobby [data-open]')) el.addEventListener('click', () => open(el.dataset.open));
   for (const el of drawer.querySelectorAll('[data-close]')) el.addEventListener('click', () => { drawer.hidden = true; });
   window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !drawer.hidden) drawer.hidden = true; });
+  window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !$('wk-menu').hidden) closeWorkoutMenu(); });
+  $('wk-menu').addEventListener('click', (e) => { if (e.target.closest('[data-wk-close]')) closeWorkoutMenu(); });
   // first visit with nothing to ride on: show the devices
   if (!trainer.connected && !$('sim').checked && !localStorage.getItem('powerup-seen-drawer')) {
     try { localStorage.setItem('powerup-seen-drawer', '1'); } catch { /* private mode */ }
@@ -463,8 +568,11 @@ function advance(now = performance.now()) {
     const pack = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
     ride.draft = Math.max(0, ...pack.map((o) => draftFactor(o.dist - ride.dist, o.lane - ride.lane)));
     ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft) });
+    // your speed on your own, out of the wind shadow: faster than the wheel ahead -> you come past it,
+    // otherwise you sit in and draft
+    ride.vFree = stepSpeed(ride.vFree ?? ride.v, power, grade, dt, settings.weight, { cda: ride.cda });
     // on a wheel: no riding into the back of the rider ahead (the overtake logic swings you out instead)
-    for (const o of pack) if (o.dist - ride.dist > 0 && o.dist - ride.dist < 0.9 && Math.abs(o.lane - ride.lane) < 0.8) ride.v = Math.min(ride.v, o.v ?? ride.v);
+    for (const o of pack) if (Math.abs(o.lane - ride.lane) < 0.8) ride.v = Math.min(ride.v, wheelCap(o.dist - ride.dist, o.v ?? ride.v));
     const moved = ride.v * dt;
     ride.dist += moved;
     ride.moved += moved;
@@ -472,7 +580,7 @@ function advance(now = performance.now()) {
     // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
     ride.pedal += (animCadence / 60) * Math.PI * 2 * dt;
-    ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
+    ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt, ride) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
     if (ride.ghost) {
       const G = ride.ghost, before = G.dist;
       G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
@@ -486,19 +594,21 @@ function advance(now = performance.now()) {
       P.power = pw;
       P.dist += P.v * dt;
       P.pedal += (90 / 60) * Math.PI * 2 * dt;
-      P.lane += ((ride.lane > 0 ? ride.lane - 1.4 : ride.lane + 1.4) - P.lane) * Math.min(1, dt * 2); // rides beside you
+      // rides beside you, on the side with more room; switches sides only well past the centre line
+      P.side = ride.lane > 0.6 ? -1 : ride.lane < -0.6 ? 1 : (P.side || (ride.lane > 0 ? -1 : 1));
+      P.lane = easeLane(P.lane, ride.lane + 1.4 * P.side, dt, P);
     }
     // overtaking: a rider closing on someone in the same lane swings out to a free one, then back
     if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
       ride.laneCheck = 0;
-      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, me: true }, ...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
+      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, me: true }, ...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
       for (const b of ride.bots) b.laneTarget = pickLane(b, solid, b.home);
       if (!ride.steeredAt || ride.elapsed - ride.steeredAt > 4) { // unless you steered yourself just now
         const me = solid[0], t = pickLane(me, solid, ride.laneHome ?? START_LANE);
         if (t !== ride.laneTarget) { ride.laneTarget = t; ride.autoLane = true; }
       }
     }
-    for (const b of ride.bots) b.lane = easeLane(b.lane, b.laneTarget, dt);
+    for (const b of ride.bots) b.lane = easeLane(b.lane, b.laneTarget, dt, b);
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
       const p = b.wkg * 75 * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
@@ -506,7 +616,8 @@ function advance(now = performance.now()) {
       const wheels = [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b)];
       const bd = Math.max(0, ...wheels.map((o) => draftFactor(o.dist - b.dist, o.lane - b.lane)));
       b.v = stepSpeed(b.v, p, g, dt, 75, { cda: DEFAULTS.cda * (1 - bd) });
-      for (const o of wheels) if (o.dist - b.dist > 0 && o.dist - b.dist < 0.9 && Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, o === wheels[0] ? ride.v : o.v);
+      b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, 75, { cda: DEFAULTS.cda });
+      for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
       b.dist += b.v * dt;
       b.pedal += (90 / 60) * Math.PI * 2 * dt;
     }
@@ -556,16 +667,29 @@ function updateAhead() {
  * one overtaken), take the nearest lane clear from 3 m behind to 15 m ahead, and keep it while alongside. Lanes are 1.2 m apart across the road.
  */
 const LANES = [-2.4, -1.2, 0, 1.2, 2.4];
-/** A gentle lane change: eases in and out, at most 0.8 m sideways per second. */
-function easeLane(lane, target, dt) {
-  const d = target - lane;
-  return lane + Math.sign(d) * Math.min(Math.abs(d), Math.min(0.8, 0.3 + Math.abs(d) * 0.9) * dt);
+/**
+ * A gentle lane change: the sideways speed builds up and fades out (at most 1 m/s² and 0.8 m/s), so a
+ * rider never jerks across the road; `s` keeps that rider's sideways speed between frames.
+ */
+function easeLane(lane, target, dt, s) {
+  const d = target - lane, lv = s.lv || 0;
+  const want = Math.sign(d) * Math.min(0.8, Math.sqrt(2 * Math.abs(d)) * 0.9, Math.abs(d) * 2); // can still stop in time
+  const a = 1.0 * dt;
+  s.lv = lv + Math.max(-a, Math.min(a, want - lv));
+  const next = lane + s.lv * dt;
+  if (Math.abs(d) < 0.005 || (target - next) * d < 0) { s.lv = 0; return target; }
+  return next;
+}
+/** Top speed behind a wheel `gap` m ahead: eases down to its speed instead of braking at the last moment. */
+function wheelCap(gap, v) {
+  return gap > 0 && gap < 2.5 ? v + Math.max(0, gap - 0.9) * 1.5 : Infinity;
 }
 function pickLane(r, others, home) {
   const near = (lane, from, to, closing = false) => others.some((o) => o !== r
     && (Math.abs((o.laneTarget ?? o.lane) - lane) < 0.9 || Math.abs(o.lane - lane) < 0.9)
     && o.dist - r.dist > from && o.dist - r.dist < to
-    && (!closing || o.dist - r.dist < 0.8 || (r.v || 0) > (o.v || 0) + 0.4)); // only someone you are catching (sitting on a wheel is fine)
+    // only someone you are faster than on your own: on a wheel at the same power you sit in and draft
+    && (!closing || (r.vFree ?? r.v ?? 0) > (o.vFree ?? o.v ?? 0) + 0.3));
   const cur = r.laneTarget ?? r.lane;
   // never change course while alongside someone: finish the pass in the lane you chose
   if (others.some((o) => o !== r && Math.abs(o.dist - r.dist) < 3.5 && Math.abs(o.lane - r.lane) >= 0.9 && Math.abs(o.lane - r.lane) < 2)) return cur;
@@ -590,8 +714,19 @@ function tick(power, cadence, hr) {
   const elev = route.elevAt(ride.dist);
   if (elev > ride.lastElev) ride.gain += elev - ride.lastElev;
   ride.lastElev = elev;
-  const laps = Math.floor(ride.dist / route.length);
-  if (laps > ride.laps) {
+  if (route.oneWay) {
+    // point to point: the finish line ends the ride, with the time against this route's best
+    if (ride.dist >= route.length && !ride.finished) {
+      ride.finished = true;
+      const t = ride.elapsed, best = records.lap[route.id];
+      ride.lapTimes.push(t);
+      if (!best || t < best) { records.lap[route.id] = t; saveRecords(); }
+      toast(!best ? `Finish! ${fmtTime(t)} 🏁` : t < best ? `Finish! ${fmtTime(t)} — new record! (${fmtDelta(t - best)}) 🏆` : `Finish! ${fmtTime(t)} (${fmtDelta(t - best)} vs best)`);
+      cueBeep(1180, 0.3);
+      setTimeout(() => { if (ride?.finished) finishRide(); }, 2500);
+    }
+  } else if (Math.floor(ride.dist / route.length) > ride.laps) {
+    const laps = Math.floor(ride.dist / route.length);
     ride.laps = laps;
     // lap time against this route's best on this device
     const t = ride.elapsed - ride.lapStartT, best = records.lap[route.id];
@@ -787,10 +922,11 @@ function updateSegments() {
 
 function updateProgress() {
   // the bottom-right bar always tracks the lap; the workout's name and progress head its own panel
-  const L = ride.route.length, frac = (ride.dist % L) / L;
+  const L = ride.route.length, frac = ride.route.oneWay ? Math.min(1, ride.dist / L) : (ride.dist % L) / L;
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
   const best = records.lap[ride.route.id];
-  $('progress-label').textContent = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (best ${fmtTime(best)})` : ''}`;
+  if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} km · ${fmtTime(ride.elapsed)}${best ? ` (best ${fmtTime(best)})` : ''}`;
+  else $('progress-label').textContent = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (best ${fmtTime(best)})` : ''}`;
   if (ride.workout) {
     const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
     $('wk-name').textContent = ride.workout.name;
@@ -974,7 +1110,7 @@ function showSummary(e, { live = false } = {}) {
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   // laps and climbs of this ride, with personal bests
   const rows = [
-    ...e.lapTimes.map((t, i) => [`Lap ${i + 1}`, t, null]),
+    ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? 'Finish' : `Lap ${i + 1}`, t, null]),
     ...e.efforts.map((x) => [x.name, x.time, x]),
   ];
   $('sum-segments').hidden = !rows.length;
