@@ -516,3 +516,7 @@ body.pixel-ui .ghost-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
   border: 1px solid rgba(47, 212, 240, .6); font-variant-numeric: tabular-nums;
 }
 body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+/* ghost tag: bottom centre, where the simulator slider sits; lifts above the slider while it is shown */
+#ride #ghost-tag { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); white-space: nowrap; transition: bottom .25s ease; }
+#ride.show-controls #sim-ctl:not([hidden]) ~ #ghost-tag { bottom: 74px; }
+@media (max-width: 720px) { #ride #ghost-tag { bottom: 70px; font-size: .78rem; } }
