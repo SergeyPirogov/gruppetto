@@ -549,3 +549,7 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .wk-menu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .wk-menu-head h2 { margin: 0; }
 .wk-menu-list { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+/* grade ahead (#29): next 200 m and 1 km under the current grade */
+.stat .grade-next { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; color: #9fb0c6; font-size: .66rem; white-space: nowrap; line-height: 1.2; }
+.grade-next b { font-weight: 700; font-size: .74rem; }

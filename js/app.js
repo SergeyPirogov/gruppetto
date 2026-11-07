@@ -29,7 +29,7 @@ if (new URLSearchParams(location.search).has('debug')) Object.defineProperty(win
 
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
 const records = (() => { try { return JSON.parse(localStorage.getItem('gruppetto.records') || '{}'); } catch { return {}; } })();
-records.lap ||= {}; records.seg ||= {};
+records.lap ||= {}; records.seg ||= {}; records.segTrace ||= {}; // segTrace: seconds at every 10 m of the record climb
 // routes imported from GPX (#25), kept on this device as plain data
 const ROUTES_KEY = 'gruppetto.routes';
 const customDefs = (() => { try { return JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch { return []; } })();
@@ -38,6 +38,26 @@ const saveCustomRoutes = () => {
   try { localStorage.setItem(ROUTES_KEY, JSON.stringify(customDefs)); return true; } catch { return false; }
 };
 const saveRecords = () => { try { localStorage.setItem('gruppetto.records', JSON.stringify(records)); } catch { /* ignore */ } };
+/** Seconds into a climb at `off` metres, from a record trace (every 10 m) or, without one, an even pace. */
+function traceTime(trace, best, length, off) {
+  if (trace?.length > 1) {
+    const x = Math.max(0, off / TRACE_STEP), i = Math.min(trace.length - 2, Math.floor(x));
+    return trace[i] + (trace[i + 1] - trace[i]) * (x - i);
+  }
+  return best * Math.max(0, Math.min(1, off / length));
+}
+/** Metres into a climb after `t` seconds at the record's pace (the inverse of traceTime). */
+function traceDist(trace, best, length, t) {
+  if (trace?.length > 1) {
+    let i = 0;
+    while (i < trace.length - 2 && trace[i + 1] <= t) i++;
+    const f = trace[i + 1] > trace[i] ? (t - trace[i]) / (trace[i + 1] - trace[i]) : 1;
+    return Math.min(length, (i + Math.max(0, Math.min(1, f))) * TRACE_STEP);
+  }
+  return length * Math.max(0, Math.min(1, t / best));
+}
+const TRACE_STEP = 10;
+const gradeColor = (g) => g > 0.06 ? '#ef4444' : g > 0.03 ? '#f97316' : g < -0.02 ? '#60a5fa' : '#e8edf5';
 const fmtDelta = (d) => `${d < 0 ? '−' : '+'}${fmtTime(Math.abs(d))}`;
 const saveSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 
@@ -587,6 +607,11 @@ function advance(now = performance.now()) {
       G.power = G.entry.chart.pw[Math.min(G.entry.chart.pw.length - 1, Math.floor((ride.elapsed + dt) / G.entry.chart.every))] || 0;
       G.pedal += ((G.dist > before ? 88 : 0) / 60) * Math.PI * 2 * dt;
     }
+    if (ride.climbGhost && ride.seg) {
+      const G = ride.climbGhost, before = G.dist;
+      G.dist = ride.seg.d0 + traceDist(G.trace, G.best, G.length, ride.elapsed + dt - ride.seg.t0);
+      G.pedal += ((G.dist > before ? 86 : 0) / 60) * Math.PI * 2 * dt;
+    }
     if (ride.pacer) {
       const P = ride.pacer, target = ride.workoutDone ? null : effectiveTarget();
       const pw = target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
@@ -640,6 +665,7 @@ function frame(now) {
     ...ride.bots,
     ...(ride.pacer && settings.pacer ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),
+    ...(ride.climbGhost ? [ride.climbGhost] : []),
   ];
   scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
@@ -648,7 +674,7 @@ function frame(now) {
 
 /** Riders ahead you could reach within 10 s at your speed: name, gap in seconds and metres, their W/kg. */
 function updateAhead() {
-  const v = Math.max(ride.v, 2), all = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : []), ...(ride.ghost ? [ride.ghost] : [])];
+  const v = Math.max(ride.v, 2), all = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : []), ...(ride.ghost ? [ride.ghost] : []), ...(ride.climbGhost ? [ride.climbGhost] : [])];
   const ahead = all
     .map((r) => ({ r, gap: r.dist - ride.dist }))
     .filter(({ gap }) => gap > 0.5 && gap / v <= 10)
@@ -846,7 +872,15 @@ function updateHud(cadence, hr, grade) {
   updateProgress();
   const gEl = $('grade');
   gEl.textContent = `${grade >= 0 ? '' : '−'}${Math.abs(grade * 100).toFixed(1)}%`;
-  gEl.style.color = grade > 0.06 ? '#ef4444' : grade > 0.03 ? '#f97316' : grade < -0.02 ? '#60a5fa' : '#e8edf5';
+  gEl.style.color = gradeColor(grade);
+  // what is coming: the average grade over the next 200 m and the next kilometre (#29)
+  const ahead = (m, min) => { // null near the finish of a point-to-point route
+    const d0 = ride.dist, span = ride.route.oneWay ? Math.min(m, ride.route.length - d0) : m;
+    return span < min ? null : (ride.route.elevAt(d0 + span) - ride.route.elevAt(d0)) / span;
+  };
+  const fmtG = (g) => g === null ? '' : `<b style="color:${gradeColor(g)}">${g < 0 ? '−' : ''}${Math.abs(g * 100).toFixed(1)}%</b>`;
+  const g2 = ahead(200, 50), g10 = ahead(1000, 1000);
+  $('grade-next').innerHTML = (g2 === null ? '' : `<span>200 m ${fmtG(g2)}</span>`) + (g10 === null ? '' : `<span>1 km ${fmtG(g10)}</span>`);
 
   if (ride.workout) {
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
@@ -893,16 +927,34 @@ function updateSegments() {
     if (done >= S.climb.length) {
       const t = ride.elapsed - S.t0, best = records.seg[S.climb.id];
       ride.efforts.push({ name: S.climb.name, time: t, best, pb: !best || t < best });
-      if (!best || t < best) { records.seg[S.climb.id] = t; saveRecords(); }
+      if (!best || t < best) {
+        records.seg[S.climb.id] = t;
+        S.trace.push(Math.round(t * 10) / 10);
+        records.segTrace[S.climb.id] = S.trace; // the record attempt, for the climb ghost next time
+        saveRecords();
+      }
+      ride.climbGhost = null;
       toast(!best ? `${S.climb.name}: ${fmtTime(t)} — first time up 🎉` : t < best ? `${S.climb.name}: ${fmtTime(t)} — new record! (${fmtDelta(t - best)}) 🏆` : `${S.climb.name}: ${fmtTime(t)} (${fmtDelta(t - best)} vs best)`);
       cueBeep(t < (best || Infinity) ? 1180 : 760, 0.25);
       ride.seg = null;
-    } else if (done < -5) ride.seg = null; // rolled back past the start
+    } else if (done < -5) { ride.seg = null; ride.climbGhost = null; } // rolled back past the start
+    else {
+      // note the time at every 10 m, interpolated between updates
+      const t = ride.elapsed - S.t0;
+      while (S.trace.length * TRACE_STEP <= done) {
+        const at = S.trace.length * TRACE_STEP, f = done > S.lastOff ? (at - S.lastOff) / (done - S.lastOff) : 1;
+        S.trace.push(Math.round((S.lastT + (t - S.lastT) * Math.max(0, Math.min(1, f))) * 10) / 10);
+      }
+      S.lastT = t; S.lastOff = done;
+    }
   }
   if (!ride.seg) {
     const c = route.climbs.find((cl) => crossed(cl.start));
     if (c) {
-      ride.seg = { climb: c, t0: ride.elapsed, d0: cur - (((cur - c.start) % L) + L) % L };
+      ride.seg = { climb: c, t0: ride.elapsed, d0: cur - (((cur - c.start) % L) + L) % L, trace: [0], lastT: 0, lastOff: 0 };
+      // your record on this climb starts beside you and rides it at its own pace (#26)
+      const best = records.seg[c.id];
+      ride.climbGhost = best ? { name: 'Climb record', ghost: true, climb: true, color: settings.jersey, stripe: settings.stripe, dist: ride.seg.d0, pedal: 0.6, lane: START_LANE + 1.1, trace: records.segTrace[c.id] || null, best, length: c.length } : null;
       toast(`${c.name} — ${(c.length / 1000).toFixed(1)} km at ${(c.grade * 100).toFixed(1)}%. Go! ⛰️`);
     }
   }
@@ -916,7 +968,7 @@ function updateSegments() {
     $('seg-left').textContent = `${Math.max(0, Math.round((S.climb.length - (cur - S.d0))))} m to the top`;
     $('seg-best').textContent = best ? `best ${fmtTime(best)}` : 'no record yet';
     // on pace: compare with the best time scaled to the distance done so far
-    const pace = best ? t - best * frac : 0;
+    const pace = best ? t - traceTime(records.segTrace[S.climb.id], best, S.climb.length, cur - S.d0) : 0;
     $('seg-pace').textContent = best && frac > 0.05 ? fmtDelta(pace) : '';
     $('seg-pace').className = pace <= 0 ? 'c-ok' : 'c-bad';
     $('seg-fill').style.width = `${(frac * 100).toFixed(1)}%`;
