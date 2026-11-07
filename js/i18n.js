@@ -1,4 +1,4 @@
-// Interface language (#31): English or Ukrainian. English text is the key; a missing translation
+// Interface language (#31): English (default) or Ukrainian. English text is the key; a missing translation
 // falls back to English. The language is fixed for the page's life: switching saves it and reloads.
 import { UK } from './i18n-uk.js';
 
@@ -7,7 +7,7 @@ export const LANGS = [{ id: 'en', name: 'English' }, { id: 'uk', name: 'Укра
 
 export const lang = (() => {
   try { const v = localStorage.getItem(KEY); if (v === 'en' || v === 'uk') return v; } catch { /* storage blocked */ }
-  return typeof navigator !== 'undefined' && /^uk|^ru-ua/i.test(navigator.language || '') ? 'uk' : 'en';
+  return 'en'; // English unless chosen in Profile
 })();
 const dict = lang === 'uk' ? UK : {};
 
