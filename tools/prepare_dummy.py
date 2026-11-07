@@ -333,7 +333,7 @@ def main(src):
 
     r3 = lambda p: [round(x, 4) for x in p]
     gltf = {
-        'asset': {'version': '2.0', 'generator': 'power-up tools/prepare_dummy.py'},
+        'asset': {'version': '2.0', 'generator': 'gruppetto tools/prepare_dummy.py'},
         'scene': 0,
         'scenes': [{'nodes': list(range(len(nodes))), 'extras': {
             'joints': {k: r3(v) for k, v in J.items() if not k.startswith(('heel', 'toe', 'foot'))}, 'saddle': r3(saddle), 'bb': r3(bb), 'dials': dials}}],

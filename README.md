@@ -1,6 +1,6 @@
 # Gruppetto
 
-*Не крути сам.* Демо: https://automation-remarks.com/power-up/
+*Не крути сам.* Демо: https://automation-remarks.com/gruppetto/
 
 Простий віртуальний велотренажер у браузері — легка альтернатива великим платформам для тренувань удома.
 
