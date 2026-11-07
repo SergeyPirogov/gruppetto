@@ -269,3 +269,25 @@ test('Zwift Ride shifts by side: right unit harder, left unit easier', () => {
   for (const b of ['shiftUpR', 'shiftDownR', 'paddleR']) assert.equal(rideIntent(b), 'harder');
   for (const b of ['shiftUpL', 'shiftDownL', 'paddleL']) assert.equal(rideIntent(b), 'easier');
 });
+
+import { spokenDuration } from '../js/sound.js';
+
+test('Spoken durations in Ukrainian', () => {
+  assert.equal(spokenDuration(180), '3 хвилини');
+  assert.equal(spokenDuration(300), '5 хвилин');
+  assert.equal(spokenDuration(60), '1 хвилина');
+  assert.equal(spokenDuration(45), '45 секунд');
+  assert.equal(spokenDuration(21), '21 секунда');
+  assert.equal(spokenDuration(90), '1 хв 30 с');
+});
+
+test('intervals.icu cadence targets', () => {
+  const s = convertSteps([
+    { duration: 60, power: { value: 90, units: '%ftp' }, cadence: { value: 95, units: 'rpm' } },
+    { duration: 60, power: { value: 60, units: '%ftp' }, cadence: { min: 85, max: 90, units: 'rpm' } },
+    { duration: 60, power: { value: 60, units: '%ftp' } },
+  ]);
+  assert.deepEqual(s[0].cad, [92, 98]);
+  assert.deepEqual(s[1].cad, [85, 90]);
+  assert.equal(s[2].cad, undefined);
+});

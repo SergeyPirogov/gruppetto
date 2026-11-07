@@ -161,20 +161,81 @@ export function parseRideKeypad(bytes) {
 
 // ---------- Devices ----------
 
+const RECONNECT_ATTEMPTS = 20;
+
 class Device extends EventTarget {
   constructor() {
     super();
     this.device = null;
     this.name = '';
+    this._manual = false;
+    this._listeners = [];
   }
   get connected() { return !!this.device?.gatt?.connected; }
   emit(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail })); }
+
   _watch(device) {
-    this.device = device;
-    this.name = device.name || 'Пристрій';
-    device.addEventListener('gattserverdisconnected', () => this.emit('disconnect'));
+    if (this.device !== device) {
+      this.device = device;
+      this.name = device.name || 'Пристрій';
+      device.addEventListener('gattserverdisconnected', () => this._onDrop());
+    }
+    this._manual = false;
+    this._unlistenAll();
   }
-  disconnect() { if (this.connected) this.device.gatt.disconnect(); }
+
+  /** Subscribe to a characteristic; listeners are dropped on reconnect so events never double up. */
+  _listen(ch, fn) {
+    ch.addEventListener('characteristicvaluechanged', fn);
+    this._listeners.push([ch, fn]);
+  }
+  _unlistenAll() {
+    for (const [ch, fn] of this._listeners) ch.removeEventListener('characteristicvaluechanged', fn);
+    this._listeners = [];
+  }
+
+  _onDrop() {
+    this.emit('disconnect');
+    if (!this._manual && this.device) this._reconnect(0);
+  }
+
+  /** Reconnect to the same device with backoff (1 s, 2 s, 4 s … max 10 s). */
+  async _reconnect(attempt) {
+    if (this._manual || this.connected) return;
+    this.emit('reconnecting', attempt + 1);
+    try {
+      await withTimeout(this.connect(this.device), 15000);
+      this.emit('reconnected');
+    } catch {
+      if (attempt + 1 < RECONNECT_ATTEMPTS && !this._manual) {
+        setTimeout(() => this._reconnect(attempt + 1), Math.min(10000, 1000 * 2 ** attempt));
+      } else {
+        this.emit('reconnect-failed');
+      }
+    }
+  }
+
+  /** Connect a device the browser already allowed (no chooser). */
+  async reopen(device, timeoutMs = 8000) {
+    return withTimeout(this.connect(device), timeoutMs);
+  }
+
+  disconnect() {
+    this._manual = true;
+    if (this.connected) this.device.gatt.disconnect();
+  }
+}
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+/** Devices this site may use without the chooser (Chrome's getDevices; empty where unsupported). */
+export async function knownDevices() {
+  try { return (await navigator.bluetooth?.getDevices?.()) || []; } catch { return []; }
 }
 
 export class Trainer extends Device {
@@ -192,8 +253,11 @@ export class Trainer extends Device {
     this._lastCrankAt = 0;
   }
 
-  async connect() {
-    const device = await requestDevice({
+  async connect(known) {
+    this._queue = Promise.resolve();
+    this._pending = null;
+    this._lastCrank = null;
+    const device = known || await requestDevice({
       filters: [{ services: [FTMS] }, { services: [CPS] }],
       optionalServices: [FTMS, CPS],
     });
@@ -205,11 +269,11 @@ export class Trainer extends Device {
 
     if (ftms) {
       const data = await ftms.getCharacteristic(INDOOR_BIKE_DATA);
-      data.addEventListener('characteristicvaluechanged', (e) => this.emit('data', parseIndoorBikeData(e.target.value)));
+      this._listen(data, (e) => this.emit('data', parseIndoorBikeData(e.target.value)));
       await data.startNotifications();
       try {
         this._cp = await ftms.getCharacteristic(FTMS_CONTROL_POINT);
-        this._cp.addEventListener('characteristicvaluechanged', (e) => this._onResponse(e.target.value));
+        this._listen(this._cp, (e) => this._onResponse(e.target.value));
         await this._cp.startNotifications();
         await this._command([0x00]); // request control
         await this._command([0x07]); // start / resume
@@ -222,7 +286,7 @@ export class Trainer extends Device {
     } else {
       const cps = await server.getPrimaryService(CPS);
       const meas = await cps.getCharacteristic(CP_MEASUREMENT);
-      meas.addEventListener('characteristicvaluechanged', (e) => this._onPower(parseCyclingPower(e.target.value)));
+      this._listen(meas, (e) => this._onPower(parseCyclingPower(e.target.value)));
       await meas.startNotifications();
       this.protocol = 'power';
       try {
@@ -332,27 +396,27 @@ export class Trainer extends Device {
 }
 
 export class HeartRateMonitor extends Device {
-  async connect() {
-    const device = await requestDevice({ filters: [{ services: [HRS] }] });
+  async connect(known) {
+    const device = known || await requestDevice({ filters: [{ services: [HRS] }] });
     this._watch(device);
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(HRS);
     const ch = await svc.getCharacteristic(HR_MEASUREMENT);
-    ch.addEventListener('characteristicvaluechanged', (e) => this.emit('data', { heartRate: parseHeartRate(e.target.value) }));
+    this._listen(ch, (e) => this.emit('data', { heartRate: parseHeartRate(e.target.value) }));
     await ch.startNotifications();
     return this;
   }
 }
 
 export class CadenceSensor extends Device {
-  async connect() {
-    const device = await requestDevice({ filters: [{ services: [CSC] }] });
+  async connect(known) {
+    const device = known || await requestDevice({ filters: [{ services: [CSC] }] });
     this._watch(device);
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(CSC);
     const ch = await svc.getCharacteristic(CSC_MEASUREMENT);
     let last = null, lastAt = 0;
-    ch.addEventListener('characteristicvaluechanged', (e) => {
+    this._listen(ch, (e) => {
       const m = parseCSC(e.target.value);
       if (m.crankRevs === undefined) return;
       const now = performance.now();
@@ -369,36 +433,42 @@ export class CadenceSensor extends Device {
 /** Zwift Ride (also Play / Click v2 on unencrypted firmware). Emits 'press' with button name. */
 /**
  * Zwift Ride / Play / Click. A Zwift Ride is two handlebar units (left and right), each its own BLE
- * device, so this holds several connections: every connect() adds one more unit.
+ * device, so this holds several connections: every connect() adds one more unit. A unit that drops
+ * is reconnected on its own with backoff, like the other devices.
  */
 export class ZwiftController extends Device {
   constructor() {
     super();
-    this.units = []; // [{device, pressed}]
+    this.units = []; // [{device, pressed, listeners}]
     this._lastPress = new Map(); // name -> {unit, t}
   }
 
   get connected() { return this.units.some((u) => u.device.gatt?.connected); }
   get count() { return this.units.filter((u) => u.device.gatt?.connected).length; }
 
-  async connect() {
-    const device = await requestDevice({
+  async connect(known) {
+    const device = known || await requestDevice({
       filters: [{ services: [ZWIFT_RIDE_SERVICE] }, { services: [ZWIFT_SERVICE] }, { namePrefix: 'Zwift' }],
       optionalServices: [ZWIFT_RIDE_SERVICE, ZWIFT_SERVICE],
     });
-    if (this.units.some((u) => u.device.id === device.id && u.device.gatt?.connected)) return this; // already have this unit
-    this.units = this.units.filter((u) => u.device.gatt?.connected && u.device.id !== device.id);
-    const unit = { device, pressed: new Set() };
-    device.addEventListener('gattserverdisconnected', () => {
-      this.units = this.units.filter((u) => u !== unit);
-      this.emit('disconnect');
-    });
+    let unit = this.units.find((u) => u.device.id === device.id);
+    if (unit && unit.device.gatt?.connected) return this; // already have this unit
+    if (!unit) {
+      unit = { device, pressed: new Set(), listeners: [] };
+      device.addEventListener('gattserverdisconnected', () => this._unitDropped(unit));
+      this.units.push(unit);
+    }
+    this._manual = false;
+    for (const [ch, fn] of unit.listeners) ch.removeEventListener('characteristicvaluechanged', fn);
+    unit.listeners = [];
     const server = await device.gatt.connect();
     let svc;
     try { svc = await server.getPrimaryService(ZWIFT_RIDE_SERVICE); } catch { svc = await server.getPrimaryService(ZWIFT_SERVICE); }
     const async = await svc.getCharacteristic(ZWIFT_ASYNC);
     const syncRx = await svc.getCharacteristic(ZWIFT_SYNC_RX);
-    async.addEventListener('characteristicvaluechanged', (e) => this._onData(unit, new Uint8Array(e.target.value.buffer)));
+    const onData = (e) => this._onData(unit, new Uint8Array(e.target.value.buffer));
+    async.addEventListener('characteristicvaluechanged', onData);
+    unit.listeners.push([async, onData]);
     await async.startNotifications();
     try {
       const syncTx = await svc.getCharacteristic(ZWIFT_SYNC_TX);
@@ -406,13 +476,37 @@ export class ZwiftController extends Device {
     } catch { /* optional */ }
     const rideOn = new TextEncoder().encode('RideOn');
     await (syncRx.writeValueWithoutResponse ? syncRx.writeValueWithoutResponse(rideOn) : syncRx.writeValue(rideOn));
-    this.units.push(unit);
     this.device = device;
     this.name = device.name || 'Контролер';
     return this;
   }
 
-  disconnect() { for (const u of this.units) if (u.device.gatt?.connected) u.device.gatt.disconnect(); }
+  _unitDropped(unit) {
+    this.emit('disconnect');
+    if (this._manual) { this.units = this.units.filter((u) => u !== unit); return; }
+    this._reconnectUnit(unit, 0);
+  }
+
+  async _reconnectUnit(unit, attempt) {
+    if (this._manual || unit.device.gatt?.connected) return;
+    this.emit('reconnecting', attempt + 1);
+    try {
+      await withTimeout(this.connect(unit.device), 15000);
+      this.emit('reconnected');
+    } catch {
+      if (attempt + 1 < RECONNECT_ATTEMPTS && !this._manual) {
+        setTimeout(() => this._reconnectUnit(unit, attempt + 1), Math.min(10000, 1000 * 2 ** attempt));
+      } else {
+        this.units = this.units.filter((u) => u !== unit);
+        this.emit('reconnect-failed');
+      }
+    }
+  }
+
+  disconnect() {
+    this._manual = true;
+    for (const u of this.units) if (u.device.gatt?.connected) u.device.gatt.disconnect();
+  }
 
   _onData(unit, bytes) {
     const now = parseRideKeypad(bytes);
@@ -438,13 +532,13 @@ export class OpenBikeControlDevice extends Device {
     this._haptic = null;
   }
 
-  async connect() {
-    const device = await requestDevice({ filters: [{ services: [OBC_SERVICE] }] });
+  async connect(known) {
+    const device = known || await requestDevice({ filters: [{ services: [OBC_SERVICE] }] });
     this._watch(device);
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(OBC_SERVICE);
     const buttons = await svc.getCharacteristic(OBC_BUTTONS);
-    buttons.addEventListener('characteristicvaluechanged', (e) => {
+    this._listen(buttons, (e) => {
       const changes = parseObcButtons(new Uint8Array(e.target.value.buffer));
       if (changes.length) this.emit('buttons', changes);
     });

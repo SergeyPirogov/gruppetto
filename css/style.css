@@ -108,6 +108,14 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .wk-head label { display: block; font-size: .68rem; color: #c9d4e3; text-transform: uppercase; letter-spacing: .05em; }
 .wk-head b { font-size: 1.35rem; }
 #wk-chart { width: 100%; height: 48px; display: block; }
+#wk-target { font-size: 2rem; transition: color .3s; }
+#wk-diff { font-size: .85rem; font-weight: 700; margin-left: 4px; }
+.c-ok { color: #4ade80 !important; }
+.c-warn { color: #fbbf24 !important; }
+.c-bad { color: #f87171 !important; }
+.wk-ctl { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: .85rem; color: #c9d4e3; }
+.wk-ctl .pill-btn { padding: 4px 12px; }
+.wk-ctl #wk-sound { margin-left: auto; }
 
 
 .hud-bottom {

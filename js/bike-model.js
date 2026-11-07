@@ -1,39 +1,58 @@
-// The bike: a rigged model file at assets/bike/bike.glb (e.g. "Canyon Aeroad | Road Bike" by hipoojan
-// on Sketchfab, Sketchfab Standard licence — not redistributed, see .gitignore), or, without it, the
-// bike built in code (Rider3D in render3d.js). The model's skeleton has bones for the wheels, the
-// chainring with the pedals and the handlebar; they are turned here every frame.
+// Optional bike model instead of the bike built in code (Rider3D in render3d.js). Two kinds:
+//
+// • Rigged, at assets/bike/bike.glb — e.g. "Canyon Aeroad | Road Bike" by hipoojan on Sketchfab
+//   (Sketchfab Standard licence, not redistributed, see .gitignore). Its skeleton has bones for the
+//   wheels, the chainring with the pedals and the handlebar, turned here every frame; the frame paint
+//   baked into the vertex colours takes the rider's jersey colour.
+// • Any static glTF at assets/bike.glb (e.g. a CC-BY model from Sketchfab): turned to face +x, scaled
+//   to the built-in bike's size and set on the ground; a crank part, if it has one, spins with the
+//   pedals. Fine-tune with assets/bike.json:
+//     { "node": "Bike_02", "rotateY": 180, "length": 1.68, "offset": [0, 0, 0], "crankNode": "Cranks" }
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 
-const URL = 'assets/bike/bike.glb';
-const BB = new THREE.Vector3(0, 0.29, 0); // bottom bracket in the rider group (render3d.js)
-const WHEEL_R = 0.36;                     // m, tyre radius of the model
+const CANDIDATES = [
+  { url: 'assets/bike/bike.glb', cfg: 'assets/bike/bike.json' },
+  { url: 'assets/bike.glb', cfg: 'assets/bike.json' },
+];
+const DEFAULT_LENGTH = 1.68; // wheel to wheel, matches the built-in bike the rider is posed on
+const BB = new THREE.Vector3(0, 0.29, 0); // bottom bracket in the rider group
+const WHEEL_R = 0.36;                     // m, tyre radius of the rigged model
 
-/** Loads the bike once; null when the file is missing. */
+/** Loads the bike once: { gltf, cfg }, or null when there is no model file. */
 export async function loadBikeModel() {
-  try {
-    const head = await fetch(URL, { method: 'HEAD' });
-    if (!head.ok) return null;
-    return await new GLTFLoader().loadAsync(URL);
-  } catch (e) {
-    console.warn('Bike model not loaded, using the built-in bike', e);
-    return null;
+  for (const c of CANDIDATES) {
+    try {
+      const head = await fetch(c.url, { method: 'HEAD' });
+      if (!head.ok) continue;
+      let cfg = {};
+      try { const r = await fetch(c.cfg); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
+      return { gltf: await new GLTFLoader().loadAsync(c.url), cfg };
+    } catch (e) {
+      console.warn(`Bike model ${c.url} not loaded`, e);
+    }
   }
+  return null;
 }
 
-const find = (root, re) => { let b = null; root.traverse((o) => { if (!b && o.isBone && re.test(o.name)) b = o; }); return b; };
+const byName = (root, test) => {
+  let found = null;
+  root.traverse((o) => { if (!found && o.name && test(o.name)) found = o; });
+  return found;
+};
+const bone = (root, re) => byName(root, (n) => re.test(n));
 
-// The model's greys, by lightness: white parts (bars, stem, seatpost, fork) become dark carbon, the
-// mid grey of the wheels near-black rubber and carbon, the lighter grey metal stays a bit silvery.
+// The rigged model's greys, by lightness: white parts (bars, stem, seatpost, fork) become dark carbon,
+// the mid grey of the wheels near-black rubber and carbon, the lighter grey metal stays a bit silvery.
 const GREYS = [[0.9, 0.16], [0.55, 0.42], [0.35, 0.09], [0, 0.06]]; // [model lightness ≥, new lightness]
 
 /** Paint colours are baked into the vertices: the saturated red is the frame paint, recoloured to `color`. */
 function recolor(geometry, color) {
   const c = geometry.attributes.color;
   if (!c) return;
-  const target = new THREE.Color(color), hsl = {}, tgt = {};
-  target.getHSL(tgt);
+  const tgt = {}, hsl = {};
+  new THREE.Color(color).getHSL(tgt);
   const v = new THREE.Color();
   for (let i = 0; i < c.count; i++) {
     v.setRGB(c.getX(i), c.getY(i), c.getZ(i));
@@ -53,8 +72,18 @@ function recolor(geometry, color) {
 
 export class ModelBike {
   /** `group` is the rider group (forward = +x, right = +z, road at y = 0). */
-  constructor(gltf, group, { color }) {
+  constructor(model, group, { color } = {}) {
+    const { gltf, cfg } = model;
     this.group = group;
+    this._q = new THREE.Quaternion();
+    const rigged = bone(gltf.scene, /back.?wheel/i) && bone(gltf.scene, /front.?wheel/i);
+    if (rigged) this._rigged(gltf, group, color);
+    else this._static(gltf, cfg, group);
+  }
+
+  // ----- rigged model: bones for the wheels, chainring + pedals, handlebar -----
+
+  _rigged(gltf, group, color) {
     this.root = SkeletonUtils.clone(gltf.scene);
     this.root.traverse((o) => {
       if (!o.isMesh) return;
@@ -62,7 +91,7 @@ export class ModelBike {
       o.receiveShadow = true;
       o.frustumCulled = false;
       o.geometry = o.geometry.clone(); // own vertex colours per rider
-      recolor(o.geometry, color);
+      if (color) recolor(o.geometry, color);
       o.material = o.material.clone();
       o.material.vertexColors = true;
       o.material.metalness = 0.1;
@@ -70,10 +99,10 @@ export class ModelBike {
     });
     group.add(this.root);
     this.bones = {
-      back: find(this.root, /back.?wheel/i),
-      front: find(this.root, /front.?wheel/i),
-      ring: find(this.root, /chain.?ring|crank/i),
-      pedals: [find(this.root, /right.?ped/i), find(this.root, /left.?ped/i)].filter(Boolean),
+      back: bone(this.root, /back.?wheel/i),
+      front: bone(this.root, /front.?wheel/i),
+      ring: bone(this.root, /chain.?ring|crank/i),
+      pedals: [bone(this.root, /right.?ped/i), bone(this.root, /left.?ped/i)].filter(Boolean),
     };
     // bottom bracket over ours, so the riders' pedalling and saddle positions still match
     group.updateMatrixWorld(true);
@@ -91,23 +120,75 @@ export class ModelBike {
       const rel = gq.clone().multiply(b.getWorldQuaternion(new THREE.Quaternion()));
       this.spin.set(b, { rest: b.quaternion.clone(), axis: new THREE.Vector3(0, 0, 1).applyQuaternion(rel.invert()).normalize() });
     }
-    this._q = new THREE.Quaternion();
   }
 
-  _turn(bone, angle) {
-    const s = this.spin.get(bone);
-    if (s) bone.quaternion.copy(s.rest).multiply(this._q.setFromAxisAngle(s.axis, angle));
+  _turn(b, angle) {
+    const s = this.spin?.get(b);
+    if (s) b.quaternion.copy(s.rest).multiply(this._q.setFromAxisAngle(s.axis, angle));
   }
+
+  // ----- static model: scaled to the built-in bike, an optional crank part spins -----
+
+  _static(gltf, cfg, group) {
+    let src = gltf.scene;
+    if (cfg.node) src = byName(gltf.scene, (n) => n === cfg.node) || src;
+    const body = SkeletonUtils.clone(src);
+    body.position.set(0, 0, 0);
+    body.rotation.set(0, 0, 0);
+    body.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+
+    // the bike's long horizontal axis becomes +x
+    const holder = new THREE.Group();
+    holder.add(body);
+    body.updateMatrixWorld(true);
+    let box = new THREE.Box3().setFromObject(body);
+    const size = box.getSize(new THREE.Vector3());
+    const alongZ = size.z > size.x;
+    holder.rotation.y = THREE.MathUtils.degToRad(cfg.rotateY ?? (alongZ ? 90 : 0));
+    const length = alongZ ? size.z : size.x;
+    holder.scale.setScalar((cfg.length || DEFAULT_LENGTH) / (length || 1));
+    holder.updateMatrixWorld(true);
+    box = new THREE.Box3().setFromObject(holder);
+    const c = box.getCenter(new THREE.Vector3());
+    const off = cfg.offset || [0, 0, 0];
+    holder.position.set(-c.x + off[0], -box.min.y + off[1], -c.z + off[2]);
+    group.add(holder);
+    group.updateMatrixWorld(true);
+    this.holder = holder;
+
+    // spin the crank part around its own centre, about the bike's lateral axis
+    const crank = byName(body, (n) => (cfg.crankNode ? n === cfg.crankNode : /crank|pedal/i.test(n)));
+    if (crank && crank.parent) {
+      crank.updateMatrixWorld(true);
+      const parent = crank.parent;
+      const centreWorld = new THREE.Box3().setFromObject(crank).getCenter(new THREE.Vector3());
+      const centre = parent.worldToLocal(centreWorld.clone());
+      const pivot = new THREE.Group();
+      pivot.position.copy(centre);
+      parent.add(pivot);
+      pivot.attach(crank); // keeps the crank where it is, now hinged at its centre
+      // lateral axis of the bike expressed in the pivot's parent space
+      const lateralWorld = new THREE.Vector3(0, 0, 1).transformDirection(group.matrixWorld);
+      const inv = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+      this.axis = lateralWorld.transformDirection(inv).normalize();
+      this.pivot = pivot;
+    }
+  }
+
+  // ----- per frame -----
 
   /** Crank angle (radians, same convention as Rider3D.pose): forward pedalling turns clockwise seen from +z. */
   pose(angle) {
+    if (this.pivot) { this.pivot.quaternion.setFromAxisAngle(this.axis, -angle); return; } // top pedal moves forward
+    if (!this.bones) return;
     const a = -angle;
     this._turn(this.bones.ring, a);
     for (const p of this.bones.pedals) this._turn(p, -a); // pedals stay level while the cranks turn
   }
 
-  /** Distance ridden (m): the wheels roll forward. */
+  /** Distance ridden (m): the wheels of a rigged model roll forward. */
   roll(dist) {
+    if (!this.bones) return;
     const a = -dist / WHEEL_R;
     this._turn(this.bones.back, a);
     this._turn(this.bones.front, a);

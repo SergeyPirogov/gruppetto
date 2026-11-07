@@ -258,12 +258,12 @@ function shape(geom, f) {
 }
 const lerp = (a, b, t) => a + (b - a) * t;
 
-export class Rider3D {
-  constructor(jersey, stripe, label, withBody = true) {
+class Rider3D {
+  constructor(jersey, stripe, label, withBody = true, withBike = true, bikeColor = '#c9302c') {
     this.group = new THREE.Group();
     const mat = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp() });
     this.mats = {
-      frame: mat('#1d2026'), tyre: mat('#141416'), rim: mat('#3a3e46'), jersey: mat(jersey), stripe: mat(stripe),
+      frame: mat(bikeColor), tyre: mat('#1a1a1d'), rim: mat('#33363d'), jersey: mat(jersey), stripe: mat(stripe),
       skin: mat(SKIN), shorts: mat(SHORTS), sock: mat(SOCK), shoe: mat(SHOE), helmet: mat('#f7f7f7'), dark: mat('#26282d'),
       decal: mat(stripe), bottle: mat('#f2f2f2'),
     };
@@ -278,101 +278,36 @@ export class Rider3D {
     };
     const capsule = (r, len, m, f) => add(f ? shape(new THREE.CapsuleGeometry(r, len, 8, 16), f) : new THREE.CapsuleGeometry(r, len, 8, 16), m);
 
-    // bike: road bike, forward = +x, drivetrain on the right (+z)
-    const V = (x, y, z = 0) => new THREE.Vector3(x, y, z);
-    const tube = (a, b, r, m, aero = 1) => {
-      const mesh = this._orient(add(cyl(r, r, V(...a).distanceTo(V(...b)), 14), m), V(...a), V(...b));
-      mesh.scale.z = aero; // < 1 flattens the tube sideways into an aero profile
-      return mesh;
-    };
-    const lathe = (profile, segs = 48, phi0 = 0, phiLen = Math.PI * 2) => new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), segs, phi0, phiLen).rotateX(Math.PI / 2);
-    // wheels: each is its own group around the axle so it can spin (see roll())
-    this.wheels = [-0.5, 0.5].map((x) => {
-      const w = new THREE.Group();
-      w.position.set(x, 0.34, 0);
-      this.group.add(w);
-      const put = (geom, m) => { const mesh = new THREE.Mesh(geom, m); mesh.castShadow = true; w.add(mesh); return mesh; };
-      // tyre, deep carbon rim with decals, hub, and spokes as one line set
-      put(new THREE.TorusGeometry(0.326, 0.0125, 10, 56), M.tyre);
-      put(lathe([[0.262, -0.0095], [0.306, -0.0128], [0.313, 0], [0.306, 0.0128], [0.262, 0.0095], [0.262, -0.0095]]), M.rim); // ~50 mm carbon rim
-      for (const phi of [0.3, Math.PI + 0.3]) put(lathe([[0.279, -0.0113], [0.29, -0.0119], [0.29, 0.0119], [0.279, 0.0113], [0.279, -0.0113]], 16, phi, 1.4), M.decal);
-      put(cyl(0.022, 0.022, 0.09, 14), M.dark).rotation.x = Math.PI / 2;
-      const pts = [];
-      for (let i = 0; i < 20; i++) {
-        const t = (i / 20) * Math.PI * 2, side = i % 2 ? 1 : -1;
-        pts.push(V(0, 0, side * 0.035), V(Math.cos(t) * 0.263, Math.sin(t) * 0.263, side * 0.004));
-      }
-      w.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: '#8d9299' })));
-      return w;
-    });
-    // frame: aero race bike — deep truncated-airfoil tubes, a seat tube curved around the rear
-    // wheel, very low seat stays, deep fork blades and an aero seatpost
-    const BB = [0, 0.29, 0], HT_TOP = [0.445, 0.895, 0], HT_BOT = [0.415, 0.765, 0], ST_TOP = [-0.13, 0.82, 0], ST_MID = [-0.06, 0.47, 0];
-    const joint = (p, r) => add(new THREE.SphereGeometry(r, 16, 12), M.frame, p).scale.set(1, 1, 0.5);
-    tube(BB, HT_BOT, 0.042, M.frame, 0.38);                        // down tube, deep
-    tube(BB, ST_MID, 0.03, M.frame, 0.5);                          // seat tube, lower part
-    tube(ST_MID, ST_TOP, 0.028, M.frame, 0.5);                     // seat tube, upper part (wheel cut-out)
-    tube(ST_TOP, [0.435, 0.872, 0], 0.022, M.frame, 0.66);          // top tube, sloping
-    tube(HT_BOT, HT_TOP, 0.036, M.frame, 0.5);                     // head tube, deep
-    joint(BB, 0.045); joint(ST_MID, 0.03); joint(ST_TOP, 0.03); joint(HT_BOT, 0.04);
-    for (const z of [-0.035, 0.035]) {
-      tube([-0.5, 0.34, z * 1.3], [0, 0.29, z * 0.7], 0.014, M.frame, 0.8);       // chain stays
-      tube([-0.5, 0.34, z * 1.3], [-0.085, 0.62, z * 0.6], 0.011, M.frame, 0.8);  // dropped seat stays
-      tube([0.42, 0.775, z * 0.7], [0.5, 0.34, z * 1.35], 0.022, M.frame, 0.4);  // fork blades, deep
-    }
-    // decals along the down tube on both sides
-    const dtAng = Math.atan2(HT_BOT[1] - BB[1], HT_BOT[0] - BB[0]);
-    for (const z of [-0.0165, 0.0165]) {
-      add(new THREE.BoxGeometry(0.24, 0.018, 0.003), M.decal, [0.21, 0.55, z]).rotation.z = dtAng;
-      add(new THREE.BoxGeometry(0.12, 0.007, 0.003), M.bottle, [0.25, 0.6, z]).rotation.z = dtAng;
-    }
-    // seatpost and a shaped saddle (wide at the back, narrow nose)
-    tube(ST_TOP, [-0.16, 0.985, 0], 0.024, M.frame, 0.45);      // aero seatpost
-    const sOutline = new THREE.Shape();
-    sOutline.moveTo(-0.13, 0);
-    sOutline.bezierCurveTo(-0.13, 0.075, -0.06, 0.07, 0.0, 0.03);
-    sOutline.lineTo(0.13, 0.016);
-    sOutline.quadraticCurveTo(0.145, 0, 0.13, -0.016);
-    sOutline.lineTo(0.0, -0.03);
-    sOutline.bezierCurveTo(-0.06, -0.07, -0.13, -0.075, -0.13, 0);
-    const saddle = new THREE.ExtrudeGeometry(sOutline, { depth: 0.012, bevelEnabled: true, bevelThickness: 0.008, bevelSize: 0.008, bevelSegments: 3, curveSegments: 10 });
-    saddle.rotateX(Math.PI / 2);
-    add(saddle, M.dark, [-0.15, 1.01, 0]);
-    // cockpit: aero spacers, a V-shaped split stem and an integrated wing-profile bar
-    // race fit: bar ~8 cm below the saddle (saddle top ≈ 1.01)
-    tube(HT_TOP, [0.46, 0.92, 0], 0.03, M.frame, 0.5);              // aero steerer cover / spacers
-    for (const z of [-0.045, 0.045]) tube([0.46, 0.92, z * 0.15], [0.565, 0.93, z], 0.012, M.dark, 0.75); // V-stem arms
-    const tops = add(cyl(0.014, 0.014, 0.39, 16), M.dark, [0.57, 0.93, 0], [Math.PI / 2, 0, 0]);
-    tops.scale.set(1.8, 1, 0.62);                                    // slim aero wing tops (~50 x 17 mm)
-    for (const z of [-0.2, 0.2]) {
-      const drop = new THREE.CatmullRomCurve3([V(0.57, 0.93, z), V(0.63, 0.92, z * 1.03), V(0.66, 0.875, z * 1.05), V(0.64, 0.815, z * 1.06), V(0.57, 0.795, z * 1.06)]);
-      add(new THREE.TubeGeometry(drop, 20, 0.0125, 8), M.dark);
-      add(new THREE.CapsuleGeometry(0.019, 0.06, 4, 10), M.dark, [0.625, 0.943, z * 1.03], [0, 0, -1.25]).scale.set(1, 1, 0.85); // hood
-      add(new THREE.BoxGeometry(0.014, 0.1, 0.012), M.rim, [0.665, 0.88, z * 1.03], [0, 0, 0.18]);    // brake lever
-    }
-    // drivetrain on the right: chainring, cassette, chain, rear derailleur
-    add(new THREE.TorusGeometry(0.1, 0.006, 6, 40), M.rim, [0, 0.29, 0.07]);
-    add(cyl(0.04, 0.04, 0.01, 16), M.dark, [0, 0.29, 0.07], [Math.PI / 2, 0, 0]); // spider
-    for (let i = 0; i < 4; i++) { const t = i * Math.PI / 2 + 0.4; add(new THREE.BoxGeometry(0.06, 0.012, 0.006), M.dark, [Math.cos(t) * 0.065, 0.29 + Math.sin(t) * 0.065, 0.07], [0, 0, t]); }
-    add(cyl(0.055, 0.03, 0.03, 20), M.rim, [-0.5, 0.34, 0.055], [Math.PI / 2, 0, 0]);
-    tube([0, 0.39, 0.07], [-0.5, 0.39, 0.055], 0.004, M.rim);
-    tube([0, 0.19, 0.07], [-0.48, 0.27, 0.055], 0.004, M.rim);
-    add(new THREE.BoxGeometry(0.03, 0.07, 0.02), M.dark, [-0.49, 0.27, 0.06]);
-    // bottle on the down tube
-    const bottle = add(cyl(0.032, 0.032, 0.17, 14), M.bottle);
-    this._orient(bottle, V(0.16, 0.5, 0), V(0.26, 0.63, 0));
-    bottle.position.add(V(-0.03, 0.04, 0));
-
-    this.cranks = [-1, 1].map((side) => ({
-      side,
-      mesh: add(new THREE.BoxGeometry(0.03, 0.17, 0.014), M.dark),
-      pedal: add(new THREE.BoxGeometry(0.08, 0.014, 0.06), M.dark),
-    }));
-    this.bikeParts = [...this.group.children]; // the built-in bike, hidden when a bike model is used
+    // bike (skipped when a custom assets/bike.glb is used)
+    if (withBike) this._bike(add, M);
+    this.cranks = withBike ? [-1, 1].map((side) => ({ side, mesh: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark) })) : [];
     this.legs = [];
     if (withBody) this._body(add, capsule, M);
     if (label) this._label(label);
     this.pose(0);
+  }
+
+  _bike(add, M) {
+    for (const x of [-0.5, 0.5]) {
+      add(new THREE.TorusGeometry(0.335, 0.03, 12, 48), M.tyre, [x, 0.34, 0]);
+      add(new THREE.TorusGeometry(0.295, 0.024, 8, 48), M.rim, [x, 0.34, 0]).scale.set(1, 1, 0.55);
+      add(cyl(0.028, 0.028, 0.1, 12), M.dark, [x, 0.34, 0], [Math.PI / 2, 0, 0]);
+    }
+    // frame tubes drawn a little thicker than real so the bike still reads at pixel-art resolution
+    const tube = (a, b, r, m) => { const rr = m === M.frame ? r * 1.6 : r; return this._orient(add(cyl(rr, rr, new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)), 12), m), new THREE.Vector3(...a), new THREE.Vector3(...b)); };
+    tube([-0.5, 0.34, 0.035], [0, 0.29, 0.02], 0.016, M.frame);
+    tube([-0.5, 0.34, -0.035], [0, 0.29, -0.02], 0.016, M.frame);
+    tube([0, 0.29, 0], [-0.13, 0.9, 0], 0.028, M.frame);
+    tube([-0.5, 0.34, 0], [-0.12, 0.86, 0], 0.015, M.frame);
+    tube([0, 0.29, 0], [0.4, 0.84, 0], 0.035, M.frame);
+    tube([-0.13, 0.86, 0], [0.4, 0.88, 0], 0.026, M.frame);
+    tube([0.4, 0.84, 0], [0.43, 0.95, 0], 0.028, M.frame);
+    tube([0.43, 0.95, 0], [0.5, 0.34, 0], 0.018, M.frame);
+    tube([-0.13, 0.9, 0], [-0.15, 0.99, 0], 0.015, M.dark);
+    add(new THREE.CapsuleGeometry(0.035, 0.18, 4, 10), M.dark, [-0.16, 1.0, 0], [0, 0, Math.PI / 2]).scale.set(1, 1, 1.6);
+    add(cyl(0.016, 0.016, 0.42, 10), M.dark, [0.5, 0.97, 0], [Math.PI / 2, 0, 0]);
+    tube([0.43, 0.95, 0], [0.5, 0.97, 0], 0.018, M.dark);
+    for (const z of [-0.2, 0.2]) tube([0.5, 0.97, z], [0.55, 0.9, z], 0.015, M.dark);
   }
 
   _body(add, capsule, M) {
@@ -443,13 +378,6 @@ export class Rider3D {
     return mesh;
   }
 
-  /** Spin the wheels for a distance travelled (m): forward = +x, so they turn clockwise seen from +z. */
-  /** Hides the built-in bike (a bike model is shown instead). */
-  hideBike() { for (const o of this.bikeParts) o.visible = false; }
-
-  roll(dist) {
-    for (const w of this.wheels) w.rotation.z = -(dist / 0.339) % (Math.PI * 2);
-  }
 
   /** Pedalling pose: feet on the crank circle, knees by two-bone IK. */
   pose(angle) {
@@ -458,9 +386,8 @@ export class Rider3D {
     angle = -angle; // forward = +x: the top pedal must move forward, i.e. clockwise seen from +z
     for (const c of this.cranks) {
       const a = angle + (c.side > 0 ? 0 : Math.PI);
-      c.mesh.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, c.side * 0.085); // just outside the chainring
+      c.mesh.position.set(Math.cos(a) * 0.085, bb.y + Math.sin(a) * 0.085, c.side * 0.11);
       c.mesh.rotation.set(0, 0, a - Math.PI / 2);
-      c.pedal.position.set(Math.cos(a) * 0.17, bb.y + Math.sin(a) * 0.17, c.side * 0.11); // ~150 mm Q-factor
     }
     for (const leg of this.legs) {
       const a = angle + (leg.side > 0 ? 0 : Math.PI);
@@ -577,6 +504,93 @@ export class Scene3D {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / Math.max(1, h);
     this.camera.updateProjectionMatrix();
+    if (this.pixel) this._setupPixel();
+  }
+
+  /** 'chase' (behind the rider, default), 'iso' (high, behind and to the side) or 'side' (high, from the side). */
+  setCamera(mode) {
+    this.camMode = ['iso', 'side'].includes(mode) ? mode : 'chase';
+    this.camera.fov = this.camMode === 'chase' ? 62 : this.camMode === 'side' ? 34 : 30;
+    this.camera.updateProjectionMatrix();
+    this._isoHeading = undefined;
+  }
+
+  /** 'cartoon' (default) or 'pixel': low-res render, limited palette with dithering and outlines. */
+  setStyle(style) {
+    const want = style === 'pixel';
+    if (want === !!this.pixel) return;
+    if (this.pixel) { this.pixel.target.dispose(); this.pixel.quad.material.dispose(); }
+    this.pixel = want ? {} : null;
+    if (want) this._setupPixel();
+  }
+
+  _setupPixel() {
+    const P = this.pixel;
+    P.target?.dispose();
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const VIRTUAL_W = 480; // width of the pixel grid (height follows the aspect ratio)
+    const w = VIRTUAL_W, h = Math.max(1, Math.round((size.y / Math.max(1, size.x)) * VIRTUAL_W));
+    P.target = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, type: THREE.HalfFloatType });
+    P.target.depthTexture = new THREE.DepthTexture(w, h);
+    if (!P.quad) {
+      P.scene = new THREE.Scene();
+      P.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      P.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+        toneMapped: false,
+        depthTest: false,
+        depthWrite: false,
+        uniforms: { tColor: { value: null }, tDepth: { value: null }, res: { value: new THREE.Vector2() }, near: { value: 0.3 }, far: { value: 4000 }, exposure: { value: 1.05 } },
+        vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+        fragmentShader: `
+          uniform sampler2D tColor; uniform sampler2D tDepth; uniform vec2 res; uniform float near; uniform float far; uniform float exposure;
+          varying vec2 vUv;
+          float viewZ(vec2 uv) { float d = texture2D(tDepth, uv).x; return (near * far) / ((far - near) * d - far); }
+          vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+          float bayer4(vec2 p) {
+            int x = int(mod(p.x, 4.0)), y = int(mod(p.y, 4.0)); int i = x + y * 4;
+            float m[16]; m[0]=0.;m[1]=8.;m[2]=2.;m[3]=10.;m[4]=12.;m[5]=4.;m[6]=14.;m[7]=6.;m[8]=3.;m[9]=11.;m[10]=1.;m[11]=9.;m[12]=15.;m[13]=7.;m[14]=13.;m[15]=5.;
+            for (int k = 0; k < 16; k++) if (k == i) return m[k] / 16.0 - 0.5;
+            return 0.0;
+          }
+          void main() {
+            vec2 cell = floor(vUv * res);
+            vec2 uv = (cell + 0.5) / res;                       // one colour per pixel cell
+            vec3 c = texture2D(tColor, uv).rgb;
+            c = pow(aces(c * exposure), vec3(1.0 / 2.2));       // tone map + sRGB
+            // outlines where depth jumps between neighbouring cells
+            float z = -viewZ(uv);
+            vec2 px = 1.0 / res;
+            float e = 0.0;
+            e = max(e, abs(z + viewZ(uv + vec2(px.x, 0.0))));
+            e = max(e, abs(z + viewZ(uv + vec2(0.0, px.y))));
+            e = max(e, abs(z + viewZ(uv - vec2(px.x, 0.0))));
+            e = max(e, abs(z + viewZ(uv - vec2(0.0, px.y))));
+            if (z < 900.0 && e > 0.06 * z + 0.4) c *= 0.38;
+            // warm grade: cooler shadows, golden highlights, a touch more saturation
+            float l = dot(c, vec3(0.299, 0.587, 0.114));
+            c = mix(c, c * vec3(0.9, 0.9, 1.1), (1.0 - l) * 0.4);
+            c = mix(c, c * vec3(1.08, 1.0, 0.84), l * 0.3);
+            c = mix(vec3(l), c, 1.12);
+            // painterly bands: quantise brightness, keep the hue; dither only near band edges
+            l = dot(c, vec3(0.299, 0.587, 0.114));
+            vec3 chroma = c - l;
+            float bands = 12.0, t = l * bands, f = fract(t);
+            float edge = clamp((f - 0.5) / 0.28 + 0.5, 0.0, 1.0);   // solid inside a band, ramp near its edge
+            float lq = (floor(t) + step(bayer4(cell) + 0.5, edge)) / bands;
+            chroma = floor(chroma * 28.0 + 0.5) / 28.0;
+            c = lq + chroma;
+            gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+          }`,
+      }));
+      P.scene.add(P.quad);
+    }
+    const u = P.quad.material.uniforms;
+    u.tColor.value = P.target.texture;
+    u.tDepth.value = P.target.depthTexture;
+    u.res.value.set(w, h);
+    u.near.value = this.camera.near;
+    u.far.value = this.camera.far;
+    u.exposure.value = this.renderer.toneMappingExposure;
   }
 
   // ----- world setup per route -----
@@ -623,12 +637,12 @@ export class Scene3D {
     this.scene.fog = new THREE.Fog(fogColor, 150, 1500);
     this.scene.background = col(this.t.sky[1]);
 
-    this.hemi = new THREE.HemisphereLight(col(this.t.sky[1]), rgb(this.t.grass[0]).multiplyScalar(0.65), 1.15);
+    this.hemi = new THREE.HemisphereLight(col(this.t.sky[1]), rgb(this.t.grass[0]).multiplyScalar(0.65), 0.8); // softer fill so the sun's shading reads on the rider
     this.scene.add(this.hemi);
     this.sunDirection = this.t.sun
       ? new THREE.Vector3(Math.cos((this.t.sun.x - 0.5) * 2), 0.16, Math.sin((this.t.sun.x - 0.5) * 2)).normalize()
-      : new THREE.Vector3(-0.55, 0.8, 0.35).normalize();
-    this.sun = new THREE.DirectionalLight(this.t.sun ? '#ffc48f' : '#fff2dc', this.t.sun ? 2.0 : 2.6);
+      : new THREE.Vector3(-0.6, 0.5, 0.62).normalize(); // low raking sun: long shadows, readable volume on the rider
+    this.sun = new THREE.DirectionalLight(this.t.sun ? '#ffc48f' : '#fff2dc', this.t.sun ? 2.3 : 3.0);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 400 });
@@ -1062,11 +1076,13 @@ export class Scene3D {
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
-        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, SHOW_RIDER && !this.riderModel);
+        const BIKE_COLORS = ['#2a2f3a', '#e8e8e8', '#1f5fd0', '#f0c020', '#2f8f4e'];
+        const bikeColor = r.self ? '#c9302c' : BIKE_COLORS[(String(r.name || i).length + i) % BIKE_COLORS.length];
+        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, SHOW_RIDER && !this.riderModel, !this.bikeModel, bikeColor);
         this.riders.set(key, R);
         this.scene.add(R.group);
         if (this.riderModel) R.model = new ModelRider(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
-        if (this.bikeModel) { R.hideBike(); R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color }); }
+        if (this.bikeModel) R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color });
       }
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
@@ -1078,8 +1094,9 @@ export class Scene3D {
       R.group.position.set(f.x + f.rx * lane, f.y + 0.05, f.z + f.rz * lane);
       R.group.rotation.set(0, -f.h, slope, 'YXZ');
       R.pose(r.pedal || 0);
-      R.roll(d);
-      if (R.bike) { R.bike.pose(r.pedal || 0); R.bike.roll(d); }
+      R.roll?.(d);
+      R.bike?.pose(r.pedal || 0);
+      R.bike?.roll(d);
       if (R.model) {
         const now = performance.now(), dt = R.lastT ? (now - R.lastT) / 1000 : 0;
         const cadence = dt > 0 ? (((r.pedal || 0) - (R.lastPedal || 0)) / dt) * 60 / (Math.PI * 2) : 0;
@@ -1091,11 +1108,23 @@ export class Scene3D {
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
     // chase camera
-    if (me) {
-      const back = this.frame(dist - 5.4);
-      const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.55, back.z + back.rz * me.lane * 0.8);
-      const ahead = this.frame(dist + 11);
-      const look = new THREE.Vector3(ahead.x + ahead.rx * me.lane * 0.5, ahead.y + 0.55, ahead.z + ahead.rz * me.lane * 0.5);
+    if (me && (this.camMode === 'iso' || this.camMode === 'side')) {
+      // isometric-style view: high, from behind and to the side, narrow field of view (model-like look)
+      const target = this.frame(dist + (this.camMode === 'side' ? 4 : 3));
+      const h = this._isoHeading = this._isoHeading === undefined ? target.h : this._isoHeading + (target.h - this._isoHeading) * 0.04;
+      const fx = Math.cos(h), fz = Math.sin(h), rx = -Math.sin(h), rz = Math.cos(h);
+      // iso: behind-and-side; side: almost square to the road, rider crosses the screen left to right
+      const side = this.camMode === 'side';
+      const yaw = THREE.MathUtils.degToRad(side ? 78 : 35), pitch = THREE.MathUtils.degToRad(side ? 30 : 40), D = side ? 22 : 27;
+      const flat = Math.cos(pitch) * D;
+      const tx = target.x + target.rx * me.lane, tz = target.z + target.rz * me.lane, ty = target.y + 0.8;
+      this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
+      this.camera.lookAt(tx, ty, tz);
+    } else if (me) {
+      const back = this.frame(dist - 4.3);
+      const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.25, back.z + back.rz * me.lane * 0.8);
+      const ahead = this.frame(dist + 9);
+      const look = new THREE.Vector3(ahead.x + ahead.rx * me.lane * 0.5, ahead.y + 0.75, ahead.z + ahead.rz * me.lane * 0.5);
       const O = this.orbit;
       if (O.yaw || O.pitch || O.zoom !== 1) {
         // orbit around the rider: the default chase offset turned by yaw/pitch and scaled by zoom
@@ -1114,12 +1143,20 @@ export class Scene3D {
       this.camPos = target;
       this.camera.position.copy(this.camPos);
       this.camera.lookAt(look);
+    }
+    if (me) {
 
       const cx = this.camera.position.x, cz = this.camera.position.z, cy = me.f.y;
       this.sky.position.set(cx, cy, cz);
       for (const ring of this.rings) ring.position.set(cx, cy - 40, cz);
       this.cloudGroup.position.set(cx, cy, cz);
       this.cloudGroup.rotation.y += dt * 0.0012;
+      // Key light follows the heading: low, ahead and to the left, so the rider is lit from the side
+      // and their shadow falls back towards the camera, like the late-afternoon look of pixel games.
+      const ahead = this.frame(dist + 6);
+      const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
+      const fx = hx / hl, fz = hz / hl; // forward on the ground plane; left is (fz, -fx)
+      this.sunDirection.set(fx * 0.55 + fz * 0.62, 0.48, fz * 0.55 - fx * 0.62).normalize();
       this.sun.position.copy(this.sunDirection).multiplyScalar(140).add(new THREE.Vector3(me.f.x, me.f.y, me.f.z));
       this.sun.target.position.set(me.f.x, me.f.y, me.f.z);
       if (this.sunDisk) {
@@ -1145,7 +1182,14 @@ export class Scene3D {
         p.needsUpdate = true;
       }
     }
-    this.renderer.render(this.scene, this.camera);
+    if (this.pixel) {
+      this.renderer.setRenderTarget(this.pixel.target);
+      this.renderer.render(this.scene, this.camera);
+      this.renderer.setRenderTarget(null);
+      this.renderer.render(this.pixel.scene, this.pixel.cam);
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
   }
 }
 

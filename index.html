@@ -73,6 +73,19 @@
                 <option value="2d">2D (класична, для слабких комп’ютерів)</option>
               </select>
             </label>
+            <label>Стиль 3D
+              <select id="f-style">
+                <option value="cartoon">Мультяшний</option>
+                <option value="pixel">Піксельний (ретро)</option>
+              </select>
+            </label>
+            <label>Камера
+              <select id="f-camera">
+                <option value="chase">За спиною</option>
+                <option value="iso">Ізометрія (зверху під кутом)</option>
+                <option value="side">Зверху збоку</option>
+              </select>
+            </label>
             <label>Складність підйомів <span id="diff-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
           </div>
         </div>
@@ -126,11 +139,18 @@
       </div>
       <div id="workout-panel" class="workout" hidden>
         <div class="wk-head">
-          <div><label>Ціль</label><b id="wk-target">0</b> Вт</div>
+          <div><label>Ціль, Вт</label><b id="wk-target">0</b> <small id="wk-diff"></small></div>
           <div><label>Інтервал</label><b id="wk-left">0:00</b></div>
+          <div><label>Каденс</label><b id="wk-cad">—</b></div>
           <div><label>Далі</label><b id="wk-next">—</b></div>
         </div>
         <canvas id="wk-chart"></canvas>
+        <div class="wk-ctl">
+          <button id="wk-int-down" class="pill-btn" aria-label="Зменшити інтенсивність">−</button>
+          <span>Інтенсивність <b id="wk-int">100%</b></span>
+          <button id="wk-int-up" class="pill-btn" aria-label="Збільшити інтенсивність">+</button>
+          <button id="wk-sound" class="pill-btn">Звук: увімк</button>
+        </div>
       </div>
     </div>
 
