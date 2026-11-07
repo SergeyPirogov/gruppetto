@@ -155,9 +155,9 @@ test('intervals.icu workout_doc conversion', () => {
 
 import { THEMES } from '../js/themes.js';
 
-test('10 routes, each with an existing theme and distinct name', () => {
-  assert.equal(routes.length, 10);
-  assert.equal(new Set(routes.map((r) => r.name)).size, 10);
+test('11 routes, each with an existing theme and distinct name', () => {
+  assert.equal(routes.length, 11);
+  assert.equal(new Set(routes.map((r) => r.name)).size, 11);
   for (const r of routes) assert.ok(THEMES[r.theme], `${r.id} theme ${r.theme}`);
 });
 
@@ -299,4 +299,11 @@ test('drafting saves most drag right on the wheel and none far back or off to th
   assert.equal(draftFactor(5, 0), 0);
   assert.equal(draftFactor(1, 1.2), 0);
   assert.equal(draftFactor(-1, 0), 0);
+});
+
+test('Polissia Lakes: 20 km with about 30 m of climbing and nothing steep', () => {
+  const r = routes.find((x) => x.id === 'lakes');
+  assert.equal(r.length, 20000);
+  assert.ok(Math.abs(r.elevationGain - 30) < 3, `gain ${r.elevationGain}`);
+  for (let d = 0; d < r.length; d += 50) assert.ok(Math.abs(r.gradeAt(d)) < 0.012);
 });

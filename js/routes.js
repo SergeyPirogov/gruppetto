@@ -14,6 +14,14 @@ const ROUTES = [
     curves: [[0.006, 4000, 0], [0.004, 1000, 1.3]],
   },
   {
+    id: 'lakes', theme: 'river',
+    name: 'Polissia Lakes',
+    description: 'A long, almost flat loop past lakes and pine woods. Steady endurance miles.',
+    length: 20000,
+    hills: [[7.4, 20000, 0.6], [2.8, 5000, 1.2], [0.9, 2000, 2.1]],
+    curves: [[0.005, 10000, 0.8], [0.004, 2500, 0.2], [0.002, 1000, 1.7]],
+  },
+  {
     id: 'steppe', theme: 'steppe',
     name: 'Sunflower Steppe',
     description: 'Long straights through sunflower fields. Fast and flat, ideal for ERG.',
