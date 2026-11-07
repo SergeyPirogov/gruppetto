@@ -173,15 +173,35 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 }
 #ride.hud-hidden .hud-left, #ride.hud-hidden .hud-center, #ride.hud-hidden .hud-right { display: none; }
 @media (max-width: 760px) {
-  #profile, .hud-right .pill:last-child { display: none; }
-  .pill { padding: 5px 10px; }
-  .pill b { font-size: 1.05rem; }
-  .pill.big b { font-size: 1.3rem; }
-  .hud-center { top: auto; bottom: 150px; }
-  .hud-bottom { flex-wrap: wrap; }
-  .progress { width: 100%; order: -1; }
-  .progress-label { white-space: nowrap; }
-  .sim { width: 150px; }
+  /* phone ride: two compact boards side by side at the top, the road in the middle, the workout and
+     top bar at the bottom; the route profile and decorations step aside */
+  .hud-left, .hud-right { top: max(8px, env(safe-area-inset-top, 0px)); gap: 6px; }
+  .hud-left { left: max(8px, env(safe-area-inset-left, 0px)); width: calc(50% - 12px); }
+  .hud-right { right: max(8px, env(safe-area-inset-right, 0px)); width: calc(50% - 12px); }
+  .board { min-width: 0; width: 100%; }
+  .stat { grid-template-columns: 14px 1fr; column-gap: 6px; padding: 4px 8px 4px 6px; }
+  .stat .ic { width: 14px; height: 14px; }
+  .stat small { grid-column: 2; padding: 0; font-size: .66rem; }
+  .st-body label { font-size: .52rem; }
+  .st-val b { font-size: 1.15rem; }
+  .stat.power .st-val b { font-size: 1.35rem; }
+  .st-val span { font-size: .66rem; }
+  .board.intensity { padding: 4px 6px; font-size: .75rem; }
+  .board.intensity .pill-btn { padding: 2px 9px; }
+  .hud-center { top: auto; bottom: max(64px, calc(env(safe-area-inset-bottom, 0px) + 56px)); gap: 6px; }
+  .topbar { width: min(460px, calc(100vw - 16px)); }
+  .tb-cell { padding: 4px 4px; gap: 4px; }
+  .tb-cell b { font-size: 1.05rem; min-width: 0; }
+  .tb-cell span { font-size: .7rem; }
+  .tb-cell .ic { width: 15px; height: 15px; }
+  .workout { width: min(460px, calc(100vw - 16px)); padding: 6px 10px; }
+  .wk-title b { font-size: .8rem; }
+  .wk-head b { font-size: 1.05rem; }
+  #wk-chart { height: 32px; }
+  .hud-bottom { left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
+  .progress { width: auto; }
+  #profile { display: none; }
+  #ride #sim-ctl { width: 170px; }
 }
 
 /* ---------- Summary ---------- */
@@ -360,3 +380,53 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
 /* brand: the Gruppetto mark before the name */
 .brand h1 { display: inline-flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: -.02em; }
 .brand h1 .mark { height: 1.1em; width: auto; }
+
+/* ---------- Phones (#15) ---------- */
+@media (max-width: 860px) {
+  /* top bar: name and buttons on one row, the device dots scroll sideways under them */
+  .lobby-top { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 10px 16px; }
+  .lobby-top .brand h1 { font-size: 1.4rem; }
+  .top-actions button { padding: 6px 10px; font-size: .85rem; }
+  .dev-chips { grid-column: 1 / -1; grid-row: 2; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -16px; padding: 0 16px; }
+  .dev-chips::-webkit-scrollbar { display: none; }
+  .dev-chip { flex: none; padding: 5px 10px; font-size: .8rem; }
+
+  .lobby-main { padding: 14px 16px 120px; gap: 14px; }
+  .route-hero { padding: 14px; gap: 10px; }
+  .rh-text b { font-size: 1.5rem; }
+  #rh-profile { height: 70px; }
+  /* routes: a row of cards you swipe through */
+  .route-cards { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; margin: 0 -16px; padding: 2px 16px 6px; scrollbar-width: none; }
+  .route-cards::-webkit-scrollbar { display: none; }
+  .route-cards .option { flex: 0 0 160px; scroll-snap-align: start; padding: 10px; }
+  .route-cards .option canvas { height: 28px; }
+  .mode-list { max-height: none; overflow: visible; }
+  /* Ride button stays at the bottom of the screen */
+  .ride-box {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; margin: 0;
+    padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    background: rgba(15, 20, 32, .94); border-top: 1px solid var(--line); backdrop-filter: blur(8px);
+    flex-direction: row; align-items: center; gap: 12px;
+  }
+  .ride-summary { flex: 1; text-align: left; font-size: .85rem; }
+  .ride-box #btn-start { width: auto; flex: none; padding: 12px 22px; font-size: 1.1rem; }
+}
+@media (max-width: 520px) {
+  .fields { grid-template-columns: 1fr; }
+  .drawer-panel { padding: 12px; }
+  .drawer-tabs button { padding: 6px 9px; font-size: .85rem; }
+  .device { flex-wrap: wrap; }
+}
+.lobby-routes, .lobby-side { min-width: 0; } /* let the swipeable rows scroll instead of widening the page */
+@media (max-width: 860px) { .lobby-main { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) {
+  .sum-main { padding: 14px 16px 24px; }
+  .sum-hero { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .sum-hero div { padding: 12px; }
+  .sum-hero b { font-size: 1.8rem; }
+  .sum-title b { font-size: .95rem; }
+  .sum-chart-head { flex-direction: column; gap: 2px; }
+  #sum-chart { height: 120px; }
+  .sum-main .stats { grid-template-columns: 1fr 1fr; }
+  .sum-actions #btn-again { margin-left: 0; }
+}
