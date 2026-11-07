@@ -230,8 +230,6 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 
 /* ---------- Pixel interface (3D style "Pixel"): the whole UI in pixels ---------- */
 body.pixel-ui { letter-spacing: 0.02em; }
-/* chosen interface font (settings "Font"); unset = the system font */
-body { font-family: var(--ui-font, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif); }
 button, input, select, textarea { font-family: inherit; }
 body.pixel-ui *, body.pixel-ui *::before, body.pixel-ui *::after { border-radius: 0 !important; }
 body.pixel-ui button, body.pixel-ui input, body.pixel-ui select, body.pixel-ui textarea { font-family: inherit; }
@@ -247,8 +245,6 @@ body.pixel-ui button:active { transform: translate(2px, 2px); box-shadow: 2px 2p
 body.pixel-ui canvas:not(#scene) { image-rendering: pixelated; }
 body.pixel-ui .ride-loader-wheel { border-style: dashed; animation-timing-function: steps(8); }
 body.pixel-ui h1, body.pixel-ui h2 { font-weight: 700; letter-spacing: 0.04em; }
-/* pixel fonts have a single weight: bold numbers come from size, not faux bold */
-body.pixel-ui b, body.pixel-ui strong, body.pixel-ui h1, body.pixel-ui h2, body.pixel-ui .grade { font-weight: 400; }
 body.pixel-ui .board { background: rgba(22, 30, 46, 0.92); border-color: rgba(255, 255, 255, 0.22); }
 body.pixel-ui .stat + .stat { border-top: 2px dashed rgba(255, 255, 255, 0.14); }
 body.pixel-ui .st-val b { font-size: 1.5rem; }
