@@ -246,11 +246,11 @@ function shape(geom, f) {
 const lerp = (a, b, t) => a + (b - a) * t;
 
 class Rider3D {
-  constructor(jersey, stripe, label, withBody = true, withBike = true) {
+  constructor(jersey, stripe, label, withBody = true, withBike = true, bikeColor = '#c9302c') {
     this.group = new THREE.Group();
     const mat = (c) => new THREE.MeshToonMaterial({ color: c, gradientMap: toonRamp() });
     this.mats = {
-      frame: mat('#2c4650'), tyre: mat('#1a1a1d'), rim: mat('#33363d'), jersey: mat(jersey), stripe: mat(stripe),
+      frame: mat(bikeColor), tyre: mat('#1a1a1d'), rim: mat('#33363d'), jersey: mat(jersey), stripe: mat(stripe),
       skin: mat(SKIN), shorts: mat(SHORTS), sock: mat(SOCK), shoe: mat(SHOE), helmet: mat('#f7f7f7'), dark: mat('#26282d'),
     };
     const M = this.mats;
@@ -275,11 +275,12 @@ class Rider3D {
 
   _bike(add, M) {
     for (const x of [-0.5, 0.5]) {
-      add(new THREE.TorusGeometry(0.335, 0.024, 12, 48), M.tyre, [x, 0.34, 0]);
+      add(new THREE.TorusGeometry(0.335, 0.03, 12, 48), M.tyre, [x, 0.34, 0]);
       add(new THREE.TorusGeometry(0.295, 0.024, 8, 48), M.rim, [x, 0.34, 0]).scale.set(1, 1, 0.55);
       add(cyl(0.028, 0.028, 0.1, 12), M.dark, [x, 0.34, 0], [Math.PI / 2, 0, 0]);
     }
-    const tube = (a, b, r, m) => this._orient(add(cyl(r, r, new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)), 12), m), new THREE.Vector3(...a), new THREE.Vector3(...b));
+    // frame tubes drawn a little thicker than real so the bike still reads at pixel-art resolution
+    const tube = (a, b, r, m) => { const rr = m === M.frame ? r * 1.6 : r; return this._orient(add(cyl(rr, rr, new THREE.Vector3(...a).distanceTo(new THREE.Vector3(...b)), 12), m), new THREE.Vector3(...a), new THREE.Vector3(...b)); };
     tube([-0.5, 0.34, 0.035], [0, 0.29, 0.02], 0.016, M.frame);
     tube([-0.5, 0.34, -0.035], [0, 0.29, -0.02], 0.016, M.frame);
     tube([0, 0.29, 0], [-0.13, 0.9, 0], 0.028, M.frame);
@@ -567,12 +568,12 @@ export class Scene3D {
     this.scene.fog = new THREE.Fog(fogColor, 150, 1500);
     this.scene.background = col(this.t.sky[1]);
 
-    this.hemi = new THREE.HemisphereLight(col(this.t.sky[1]), rgb(this.t.grass[0]).multiplyScalar(0.65), 1.15);
+    this.hemi = new THREE.HemisphereLight(col(this.t.sky[1]), rgb(this.t.grass[0]).multiplyScalar(0.65), 0.8); // softer fill so the sun's shading reads on the rider
     this.scene.add(this.hemi);
     this.sunDirection = this.t.sun
       ? new THREE.Vector3(Math.cos((this.t.sun.x - 0.5) * 2), 0.16, Math.sin((this.t.sun.x - 0.5) * 2)).normalize()
-      : new THREE.Vector3(-0.55, 0.8, 0.35).normalize();
-    this.sun = new THREE.DirectionalLight(this.t.sun ? '#ffc48f' : '#fff2dc', this.t.sun ? 2.0 : 2.6);
+      : new THREE.Vector3(-0.6, 0.5, 0.62).normalize(); // low raking sun: long shadows, readable volume on the rider
+    this.sun = new THREE.DirectionalLight(this.t.sun ? '#ffc48f' : '#fff2dc', this.t.sun ? 2.3 : 3.0);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 400 });
@@ -953,7 +954,9 @@ export class Scene3D {
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
-        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, !this.riderModel, !this.bikeModel);
+        const BIKE_COLORS = ['#2a2f3a', '#e8e8e8', '#1f5fd0', '#f0c020', '#2f8f4e'];
+        const bikeColor = r.self ? '#c9302c' : BIKE_COLORS[(String(r.name || i).length + i) % BIKE_COLORS.length];
+        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, !this.riderModel, !this.bikeModel, bikeColor);
         this.riders.set(key, R);
         this.scene.add(R.group);
         if (this.bikeModel) R.bike = new ModelBike(this.bikeModel, R.group);
@@ -994,13 +997,13 @@ export class Scene3D {
       this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
       this.camera.lookAt(tx, ty, tz);
     } else if (me) {
-      const back = this.frame(dist - 5.4);
-      const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.55, back.z + back.rz * me.lane * 0.8);
+      const back = this.frame(dist - 4.3);
+      const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.25, back.z + back.rz * me.lane * 0.8);
       // follow the rider rigidly along the road (lane changes are already eased by the app)
       this.camPos = target;
       this.camera.position.copy(this.camPos);
-      const look = this.frame(dist + 11);
-      this.camera.lookAt(look.x + look.rx * me.lane * 0.5, look.y + 0.55, look.z + look.rz * me.lane * 0.5);
+      const look = this.frame(dist + 9);
+      this.camera.lookAt(look.x + look.rx * me.lane * 0.5, look.y + 0.75, look.z + look.rz * me.lane * 0.5);
     }
     if (me) {
 
@@ -1009,6 +1012,12 @@ export class Scene3D {
       for (const ring of this.rings) ring.position.set(cx, cy - 40, cz);
       this.cloudGroup.position.set(cx, cy, cz);
       this.cloudGroup.rotation.y += dt * 0.0012;
+      // Key light follows the heading: low, ahead and to the left, so the rider is lit from the side
+      // and their shadow falls back towards the camera, like the late-afternoon look of pixel games.
+      const ahead = this.frame(dist + 6);
+      const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
+      const fx = hx / hl, fz = hz / hl; // forward on the ground plane; left is (fz, -fx)
+      this.sunDirection.set(fx * 0.55 + fz * 0.62, 0.48, fz * 0.55 - fx * 0.62).normalize();
       this.sun.position.copy(this.sunDirection).multiplyScalar(140).add(new THREE.Vector3(me.f.x, me.f.y, me.f.z));
       this.sun.target.position.set(me.f.x, me.f.y, me.f.z);
       if (this.sunDisk) {
