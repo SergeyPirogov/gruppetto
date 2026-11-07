@@ -51,7 +51,6 @@ button.ok { background: #1f6f43; border-color: #2b8f58; }
 .warn { background: #3a2a10; color: #ffcf7a; padding: 8px 10px; border-radius: 8px; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fields label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: .9rem; }
-.fields label:last-child { grid-column: 1 / -1; }
 input[type=number], input[type=password], input:not([type]), select {
   font: inherit; color: var(--text); background: #0f1522; border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px;
@@ -349,7 +348,7 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
 .drawer-tabs button.sel { border-color: var(--accent); color: var(--accent); }
 .drawer-tabs .drawer-close { margin-left: auto; }
 .drawer-panel .card[hidden] { display: none; }
-.fields label.check { flex-direction: row; align-items: center; margin-top: 22px; }
+.fields label.check { flex-direction: row; align-items: center; margin-top: 0; }
 
 /* ---------- Ride summary ---------- */
 #summary { min-height: 100%; display: flex; flex-direction: column; }
@@ -559,3 +558,56 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 /* settings during a ride: history opens the summary screen, so it stays in the lobby */
 .drawer.in-ride .drawer-tabs [data-open="history"] { display: none; }
 .drawer.in-ride .drawer-bg { background: rgba(5, 8, 14, .35); }
+
+/* ---------- Settings form: one height for every control, own select arrow, switches ---------- */
+.fields { align-items: end; column-gap: 14px; row-gap: 12px; }
+.fields > .wide, .fields > .fields-head, .fields > .fields-3 { grid-column: 1 / -1; }
+.fields-head {
+  margin: 10px 0 -2px; font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent); display: flex; align-items: center; gap: 10px;
+}
+.fields-head::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.fields-head:first-child { margin-top: 0; }
+.fields-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.fields label, .fields-3 label { display: flex; flex-direction: column; gap: 6px; color: var(--muted); font-size: .8rem; font-weight: 600; min-width: 0; }
+.fields input[type=number], .fields input[type=password], .fields input:not([type]), .fields select, .fields input[type=color] {
+  box-sizing: border-box; width: 100%; height: 42px; margin: 0;
+  font: inherit; font-size: .95rem; font-weight: 500; color: var(--text);
+  background-color: #0f1522; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.fields input:hover, .fields select:hover { border-color: #3a465c; }
+.fields input:focus, .fields select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255, 122, 26, .22); }
+.fields select {
+  appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 36px;
+  text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%239fb0c6' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 13px center;
+}
+.fields select option { background: #0f1522; color: var(--text); }
+.fields input[type=number] { -moz-appearance: textfield; }
+.fields input[type=number]::-webkit-inner-spin-button, .fields input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.fields input[type=color] { padding: 5px; cursor: pointer; }
+.fields input[type=color]::-webkit-color-swatch-wrapper { padding: 0; }
+.fields input[type=color]::-webkit-color-swatch { border: none; border-radius: 6px; }
+.fields input[type=color]::-moz-color-swatch { border: none; border-radius: 6px; }
+.fields .range-val { position: absolute; right: 0; top: 0; color: var(--text); font-weight: 700; }
+.fields label.wide:has(.range-val) { position: relative; }
+.fields input[type=range] { height: 22px; margin: 2px 0 0; }
+
+/* switches instead of check boxes, everywhere in the drawer */
+.drawer .check { margin-top: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: #0f1522;
+  font-size: .9rem; font-weight: 500; color: var(--text); cursor: pointer; display: flex; flex-direction: row; align-items: center; gap: 12px; }
+.drawer .card > .check { margin-top: 10px; }
+.drawer .check input[type=checkbox] {
+  appearance: none; -webkit-appearance: none; flex: 0 0 auto; width: 38px; height: 22px; margin: 0; border-radius: 999px;
+  background: #2a3346; position: relative; cursor: pointer; transition: background .2s ease;
+}
+.drawer .check input[type=checkbox]::after {
+  content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
+  background: #cfd8e6; transition: transform .2s ease, background .2s ease;
+}
+.drawer .check input[type=checkbox]:checked { background: var(--accent); }
+.drawer .check input[type=checkbox]:checked::after { transform: translateX(16px); background: #fff; }
+.drawer .check input[type=checkbox]:focus-visible { box-shadow: 0 0 0 3px rgba(255, 122, 26, .3); outline: none; }
+@media (max-width: 520px) { .fields-3 { grid-template-columns: 1fr 1fr; } }

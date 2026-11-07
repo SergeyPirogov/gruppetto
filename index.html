@@ -123,26 +123,18 @@
       <div class="card" data-panel="profile">
         <h2>Profile &amp; settings</h2>
         <div class="fields">
-          <label>Language <select id="f-lang"></select></label>
+          <h3 class="fields-head">Rider</h3>
           <label>Name <input id="f-name" maxlength="16"></label>
+          <label>Language <select id="f-lang"></select></label>
           <label>Jersey color <input id="f-jersey" type="color"></label>
-          <label>Accent color (stripe, decals) <input id="f-stripe" type="color"></label>
-          <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
-          <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
-          <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
-          <label>Chainring (Zwift Cog 14T)
-            <select id="f-chainring">
-              <option value="34">34</option><option value="36">36</option><option value="39">39</option>
-              <option value="42">42</option><option value="46">46</option><option value="50">50</option>
-              <option value="52">52</option><option value="53">53</option>
-            </select>
-          </label>
-          <label>Virtual gears
-            <select id="f-shift">
-              <option value="wheel">Like Zwift (wheel circumference)</option>
-              <option value="grade">Via grade (more compatible)</option>
-            </select>
-          </label>
+          <label>Accent color <input id="f-stripe" type="color" title="Stripe and decals"></label>
+          <div class="fields-3">
+            <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
+            <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
+            <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
+          </div>
+
+          <h3 class="fields-head">Ride</h3>
           <label>3D style
             <select id="f-style">
               <option value="cartoon">Cartoon</option>
@@ -152,14 +144,31 @@
           <label>Camera
             <select id="f-camera">
               <option value="chase">Chase</option>
-              <option value="iso">Isometric (angled from above)</option>
+              <option value="iso">Isometric</option>
               <option value="side">Side, from above</option>
             </select>
           </label>
-          <label class="check"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
-          <label class="check"><input type="checkbox" id="f-pacer"> Workout pacer: a virtual partner riding the target power</label>
+          <label class="wide">Climb difficulty <span id="diff-val" class="range-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
+
+          <h3 class="fields-head">Gears</h3>
+          <label>Virtual gears
+            <select id="f-shift">
+              <option value="wheel">Like Zwift (wheel size)</option>
+              <option value="grade">Via grade (any trainer)</option>
+            </select>
+          </label>
+          <label>Chainring (Zwift Cog 14T)
+            <select id="f-chainring">
+              <option value="34">34</option><option value="36">36</option><option value="39">39</option>
+              <option value="42">42</option><option value="46">46</option><option value="50">50</option>
+              <option value="52">52</option><option value="53">53</option>
+            </select>
+          </label>
+
+          <h3 class="fields-head">Workouts</h3>
+          <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
+          <label class="check wide"><input type="checkbox" id="f-pacer"> Workout pacer: a virtual partner riding the target power</label>
           <label>Pacer name <input id="f-pacer-name" maxlength="16" placeholder="Pacer"></label>
-          <label>Climb difficulty <span id="diff-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
         </div>
       </div>
       <div class="card" id="icu-card" data-panel="icu">

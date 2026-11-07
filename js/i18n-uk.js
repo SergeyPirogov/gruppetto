@@ -62,12 +62,13 @@ export const UK = {
 
   // drawer: profile
   'Settings': 'Налаштування',
+  'Rider': 'Райдер', 'Ride': 'Заїзд', 'Gears': 'Передачі', 'Accent color': 'Колір акценту', 'Stripe and decals': 'Смуга й наліпки',
   'Profile & settings': 'Профіль і налаштування', 'Language': 'Мова', 'Name': 'Ім\'я', 'Jersey color': 'Колір джерсі',
   'Accent color (stripe, decals)': 'Колір акценту (смуга, наліпки)', 'Weight, kg': 'Вага, кг', 'Height, cm': 'Зріст, см', 'FTP, W': 'FTP, Вт',
   'Chainring (Zwift Cog 14T)': 'Передня зірка (Zwift Cog 14T)', 'Virtual gears': 'Віртуальні передачі',
-  'Like Zwift (wheel circumference)': 'Як у Zwift (довжина кола колеса)', 'Via grade (more compatible)': 'Через нахил (сумісніше)',
+  'Like Zwift (wheel size)': 'Як у Zwift (розмір колеса)', 'Via grade (any trainer)': 'Через нахил (будь-який тренажер)',
   'Climb difficulty': 'Складність підйомів', '3D style': '3D-стиль', 'Cartoon': 'Мультяшний', 'Pixel (retro)': 'Піксельний (ретро)',
-  'Camera': 'Камера', 'Chase': 'Ззаду', 'Isometric (angled from above)': 'Ізометрія (згори під кутом)', 'Side, from above': 'Збоку, згори',
+  'Camera': 'Камера', 'Chase': 'Ззаду', 'Isometric': 'Ізометрія', 'Side, from above': 'Збоку, згори',
   'Workout pacer: a virtual partner riding the target power': 'Пейсер у тренуваннях: віртуальний напарник на цільовій потужності',
   'Pacer name': 'Ім\'я пейсера', 'Pacer': 'Пейсер', 'Workout sounds and voice cues': 'Звуки й голосові підказки в тренуваннях',
 
