@@ -612,6 +612,8 @@ function hexToRgb(hex) {
 }
 
 /** Elevation profile with rider markers. */
+const SEG_STEP = 25; // m, resolution of the climb lines on the profile
+
 export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22)') {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = canvas.clientWidth * dpr;
@@ -630,6 +632,17 @@ export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22
   ctx.closePath();
   ctx.fillStyle = fill;
   ctx.fill();
+  // timed climbs: an orange line along the top of each
+  ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2.5 * dpr; ctx.lineCap = 'round';
+  for (const c of route.climbs || []) {
+    ctx.beginPath();
+    for (let d = 0; d <= c.length; d += SEG_STEP) {
+      const at = route.wrap(c.start + d), x = (at / route.length) * W;
+      if (d && at < SEG_STEP) { ctx.stroke(); ctx.beginPath(); }
+      d ? ctx.lineTo(x, yOf(route.elevAt(at))) : ctx.moveTo(x, yOf(route.elevAt(at)));
+    }
+    ctx.stroke();
+  }
   for (const r of riders) {
     const d = route.wrap(r.dist);
     const px = pad + (d / route.length) * (W - pad * 2);

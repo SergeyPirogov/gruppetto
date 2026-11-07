@@ -23,6 +23,14 @@ const DEFAULT_SETTINGS = {
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
+// ?debug: reach the current ride from devtools (jump along the route when testing laps and climbs)
+if (new URLSearchParams(location.search).has('debug')) Object.defineProperty(window, '__ride', { get: () => ride });
+
+// personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
+const records = (() => { try { return JSON.parse(localStorage.getItem('gruppetto.records') || '{}'); } catch { return {}; } })();
+records.lap ||= {}; records.seg ||= {};
+const saveRecords = () => { try { localStorage.setItem('gruppetto.records', JSON.stringify(records)); } catch { /* ignore */ } };
+const fmtDelta = (d) => `${d < 0 ? '−' : '+'}${fmtTime(Math.abs(d))}`;
 const saveSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 
 // ---------- Devices & live data ----------
@@ -279,6 +287,9 @@ function showRoute() {
   $('rh-name').textContent = r.name;
   $('rh-meta').textContent = `${(r.length / 1000).toFixed(0)} km · ↗ ${Math.round(r.elevationGain)} m`;
   $('rh-desc').textContent = r.description;
+  // the timed climbs, with this device's record on each
+  $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} km · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
+    + (records.lap[r.id] ? `<li><b>⏱ Best lap</b> <span class="pb">${fmtTime(records.lap[r.id])}</span></li>` : '');
   requestAnimationFrame(() => drawProfile($('rh-profile'), r, [], `${themeFor(r.theme).accent}cc`));
   updateSummary();
 }
@@ -363,7 +374,7 @@ async function startRide() {
   ride = {
     route, workout, simulated,
     dist: 0, v: 0, elapsed: 0, secAcc: 0, workoutT: 0, workoutDone: false,
-    gain: 0, lastElev: route.elevAt(0), laps: 0,
+    gain: 0, lastElev: route.elevAt(0), laps: 0, lapStartT: 0, lapTimes: [], efforts: [], seg: null, prevDist: 0,
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
     powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
@@ -497,9 +508,17 @@ function tick(power, cadence, hr) {
   const laps = Math.floor(ride.dist / route.length);
   if (laps > ride.laps) {
     ride.laps = laps;
-    toast(`Lap ${laps} complete! 🎉`);
+    // lap time against this route's best on this device
+    const t = ride.elapsed - ride.lapStartT, best = records.lap[route.id];
+    ride.lapStartT = ride.elapsed;
+    ride.lapTimes.push(t);
+    if (!best || t < best) {
+      records.lap[route.id] = t; saveRecords();
+      toast(best ? `Lap ${laps}: ${fmtTime(t)} — new best lap! (${fmtDelta(t - best)}) 🏆` : `Lap ${laps}: ${fmtTime(t)} — first lap on this route 🎉`);
+    } else toast(`Lap ${laps}: ${fmtTime(t)} (${fmtDelta(t - best)} vs best)`);
     if (!ride.workout || ride.workoutDone) recorder.markLap();
   }
+  updateSegments();
 
   // workout / trainer control
   const grade = route.gradeAt(ride.dist);
@@ -620,11 +639,52 @@ function updateHud(cadence, hr, grade) {
   drawProfile($('profile'), ride.route, [...ride.bots, { dist: ride.dist, color: settings.jersey, self: true }]);
 }
 
+/** Climb segments: start the timer at the foot, stop it at the top, compare with the best. */
+function updateSegments() {
+  const { route } = ride, L = route.length, prev = ride.prevDist, cur = ride.dist;
+  ride.prevDist = cur;
+  const crossed = (at) => Math.floor((prev - at) / L) < Math.floor((cur - at) / L);
+  if (ride.seg) {
+    const S = ride.seg, done = cur - S.d0;
+    if (done >= S.climb.length) {
+      const t = ride.elapsed - S.t0, best = records.seg[S.climb.id];
+      ride.efforts.push({ name: S.climb.name, time: t, best, pb: !best || t < best });
+      if (!best || t < best) { records.seg[S.climb.id] = t; saveRecords(); }
+      toast(!best ? `${S.climb.name}: ${fmtTime(t)} — first time up 🎉` : t < best ? `${S.climb.name}: ${fmtTime(t)} — new record! (${fmtDelta(t - best)}) 🏆` : `${S.climb.name}: ${fmtTime(t)} (${fmtDelta(t - best)} vs best)`);
+      cueBeep(t < (best || Infinity) ? 1180 : 760, 0.25);
+      ride.seg = null;
+    } else if (done < -5) ride.seg = null; // rolled back past the start
+  }
+  if (!ride.seg) {
+    const c = route.climbs.find((cl) => crossed(cl.start));
+    if (c) {
+      ride.seg = { climb: c, t0: ride.elapsed, d0: cur - (((cur - c.start) % L) + L) % L };
+      toast(`${c.name} — ${(c.length / 1000).toFixed(1)} km at ${(c.grade * 100).toFixed(1)}%. Go! ⛰️`);
+    }
+  }
+  const panel = $('seg-panel');
+  panel.hidden = !ride.seg;
+  if (ride.seg) {
+    const S = ride.seg, t = ride.elapsed - S.t0, best = records.seg[S.climb.id];
+    const frac = Math.min(1, (cur - S.d0) / S.climb.length);
+    $('seg-name').textContent = S.climb.name;
+    $('seg-time').textContent = fmtTime(t);
+    $('seg-left').textContent = `${Math.max(0, Math.round((S.climb.length - (cur - S.d0))))} m to the top`;
+    $('seg-best').textContent = best ? `best ${fmtTime(best)}` : 'no record yet';
+    // on pace: compare with the best time scaled to the distance done so far
+    const pace = best ? t - best * frac : 0;
+    $('seg-pace').textContent = best && frac > 0.05 ? fmtDelta(pace) : '';
+    $('seg-pace').className = pace <= 0 ? 'c-ok' : 'c-bad';
+    $('seg-fill').style.width = `${(frac * 100).toFixed(1)}%`;
+  }
+}
+
 function updateProgress() {
   // the bottom-right bar always tracks the lap; the workout's name and progress head its own panel
   const L = ride.route.length, frac = (ride.dist % L) / L;
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
-  $('progress-label').textContent = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km`;
+  const best = records.lap[ride.route.id];
+  $('progress-label').textContent = `Lap ${Math.floor(ride.dist / L) + 1} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} km · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (best ${fmtTime(best)})` : ''}`;
   if (ride.workout) {
     const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
     $('wk-name').textContent = ride.workout.name;
@@ -681,7 +741,7 @@ function finishRide() {
   keepAwake(false);
   const sum = recorder.summary();
   const wasRamp = ride.workout?.ramp;
-  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null };
+  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, efforts: ride.efforts };
   ride = null;
   if (trainer.connected && trainer.controllable) {
     trainer.setSimulation(0);
@@ -709,6 +769,17 @@ function finishRide() {
   ] : [];
   if (sum && wasRamp && sum.best1min) stats.push(['Estimated FTP', `${Math.round(sum.best1min * 0.75)} W`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
+  // laps and climbs of this ride, with personal bests
+  const rows = [
+    ...lastRide.lapTimes.map((t, i) => [`Lap ${i + 1}`, t, null]),
+    ...lastRide.efforts.map((e) => [e.name, e.time, e]),
+  ];
+  $('sum-segments').hidden = !rows.length;
+  $('sum-seg-rows').innerHTML = rows.map(([name, t, e]) => {
+    const pb = e ? e.pb : t <= (records.lap[lastRide.route.id] ?? Infinity);
+    const vs = e && e.best ? fmtDelta(t - e.best) : '';
+    return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? '<span class="pb">🏆 best</span>' : vs}</td></tr>`;
+  }).join('');
   $('btn-download').disabled = !sum;
   $('btn-download-tcx').disabled = !sum;
   const canUpload = !!(icuClient && sum && sum.duration >= 60);

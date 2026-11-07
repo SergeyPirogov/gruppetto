@@ -32,6 +32,7 @@
         <div class="route-hero">
           <div class="rh-text"><small>Route</small><b id="rh-name"></b><span id="rh-meta"></span><p id="rh-desc"></p></div>
           <canvas id="rh-profile"></canvas>
+          <ul id="rh-climbs" class="rh-climbs"></ul>
         </div>
         <div id="route-list" class="options route-cards"></div>
       </section>
@@ -173,6 +174,11 @@
         <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b></div>
         <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>km</span></div>
       </div>
+      <div id="seg-panel" class="seg-panel" hidden>
+        <div class="seg-head"><b id="seg-name"></b><span id="seg-left"></span></div>
+        <div class="seg-row"><b id="seg-time">0:00</b><span id="seg-pace"></span><small id="seg-best"></small></div>
+        <div class="seg-track"><div id="seg-fill"></div></div>
+      </div>
       <div id="workout-panel" class="workout" hidden>
         <div class="wk-title"><b id="wk-name"></b><span id="wk-pct"></span></div>
         <div class="wk-head">
@@ -227,6 +233,10 @@
         <canvas id="sum-chart"></canvas>
       </div>
       <div id="sum-stats" class="stats"></div>
+      <div id="sum-segments" class="card sum-segments" hidden>
+        <h2>Laps &amp; climbs</h2>
+        <table><tbody id="sum-seg-rows"></tbody></table>
+      </div>
       <div class="sum-actions">
         <button id="btn-download" class="primary">Download .FIT</button>
         <button id="btn-download-tcx">.TCX</button>

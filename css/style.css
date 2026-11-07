@@ -431,3 +431,30 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
   .sum-main .stats { grid-template-columns: 1fr 1fr; }
   .sum-actions #btn-again { margin-left: 0; }
 }
+
+/* ---------- Climb segments (#18) ---------- */
+.seg-panel {
+  width: min(460px, calc(100vw - 16px)); background: var(--pill); border: 1px solid var(--pill-line);
+  border-left: 4px solid #f97316; border-radius: 14px; padding: 8px 12px; color: #fff; backdrop-filter: blur(6px);
+}
+.seg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.seg-head b { font-size: .9rem; }
+.seg-head span { font-size: .75rem; color: #c9d4e3; }
+.seg-row { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 6px; font-variant-numeric: tabular-nums; }
+.seg-row b { font-size: 1.5rem; }
+.seg-row span { font-weight: 700; }
+.seg-row small { margin-left: auto; color: #c9d4e3; font-size: .8rem; }
+.seg-track { height: 6px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; }
+#seg-fill { height: 100%; width: 0; background: #f97316; transition: width .5s linear; }
+body.pixel-ui .seg-panel { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.45); backdrop-filter: none; }
+.sum-segments table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.sum-segments td { padding: 7px 4px; border-top: 1px solid var(--line); }
+.sum-segments td:nth-child(2) { font-weight: 700; }
+.sum-segments td:last-child { text-align: right; color: var(--muted); }
+.sum-segments .pb { color: var(--accent2); font-weight: 700; }
+
+.rh-climbs { grid-column: 1 / -1; list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: .8rem; color: var(--muted); }
+.rh-climbs li { background: rgba(249, 115, 22, .12); border: 1px solid rgba(249, 115, 22, .35); border-radius: 999px; padding: 3px 10px; }
+.rh-climbs b { display: inline; font-size: inherit; margin: 0; color: var(--text); font-weight: 600; }
+.rh-climbs:empty { display: none; }
+.rh-climbs .pb { color: var(--accent2); font-weight: 700; }

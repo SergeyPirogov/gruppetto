@@ -114,6 +114,7 @@ export class Route {
     this.elevationGain = gain;
     this.minElev = Math.min(...this.segments.map((s) => s.elev));
     this.maxElev = Math.max(...this.segments.map((s) => s.elev));
+    this.climbs = findClimbs(this);
   }
 
   wrap(d) { return ((d % this.length) + this.length) % this.length; }
@@ -131,6 +132,49 @@ export class Route {
   gradeAt(d) {
     return (this.elevAt(d + 10) - this.elevAt(d - 10)) / 20;
   }
+}
+
+/** Made-up names for each route's climbs, in route order (more than needed is fine). */
+const CLIMB_NAMES = {
+  rolling: ['Shepherd\'s Rise', 'Windmill Hill', 'The Long Meadow'],
+  autumn: ['Acorn Bank', 'Owl\'s Brow'],
+  sunset: ['Red Sky Ramp', 'The Big Wall', 'Golden Hour Climb', 'Lantern Kick', 'The Wall Again', 'Last Light'],
+  desert: ['Mesa Grade'],
+  carpathians: ['Hutsul Serpentine', 'Smereka Pass'],
+  mountain: ['Col du Pas'],
+  coast: ['Lighthouse Bump'],
+  winter: ['Snowdrift Rise'],
+  steppe: ['Sunflower Kurgan'],
+  flat: ['Bridge Ramp'],
+};
+
+/**
+ * Timed segments: every climb that gains at least 12 m at an average of at least 2.5 %, from the
+ * bottom of the rise to its top. A climb may run over the start/finish line (start > end then).
+ * Each gets a name ("Climb 1", in route order), start and end distance, length, gain and grade.
+ */
+export function findClimbs(route, minGain = 12, minGrade = 0.025) {
+  const n = route.segments.length, el = (i) => route.segments[((i % n) + n) % n].elev;
+  // start the scan at the route's lowest point so no climb is split by the loop's seam
+  let low = 0;
+  for (let i = 1; i < n; i++) if (el(i) < el(low)) low = i;
+  const found = [];
+  let i = 0;
+  while (i < n) {
+    // walk to a local minimum, then up to the next local maximum (ignoring dips under 2 m)
+    while (i < n && el(low + i + 1) <= el(low + i)) i++;
+    const a = i;
+    let top = i, j = i;
+    while (j < n && el(low + j) >= el(low + top) - 2) { if (el(low + j) > el(low + top)) top = j; j++; }
+    const gain = el(low + top) - el(low + a), len = (top - a) * SEG;
+    if (len > 0 && gain >= minGain && gain / len >= minGrade) {
+      found.push({ start: ((low + a) % n) * SEG, end: ((low + top) % n) * SEG, length: len, gain, grade: gain / len });
+    }
+    i = Math.max(top, a + 1);
+  }
+  found.sort((x, y) => x.start - y.start);
+  const names = CLIMB_NAMES[route.id] || [];
+  return found.map((c, k) => ({ ...c, id: `${route.id}-c${k + 1}`, name: names[k] || `Climb ${k + 1}` }));
 }
 
 export const routes = ROUTES.map((r) => new Route(r));
