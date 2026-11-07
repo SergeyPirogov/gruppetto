@@ -469,12 +469,14 @@ function advance(now = performance.now()) {
     if (ride.ghost) {
       const G = ride.ghost, before = G.dist;
       G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
+      G.power = G.entry.chart.pw[Math.min(G.entry.chart.pw.length - 1, Math.floor((ride.elapsed + dt) / G.entry.chart.every))] || 0;
       G.pedal += ((G.dist > before ? 88 : 0) / 60) * Math.PI * 2 * dt;
     }
     if (ride.pacer) {
       const P = ride.pacer, target = ride.workoutDone ? null : effectiveTarget();
       const pw = target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
       P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight);
+      P.power = pw;
       P.dist += P.v * dt;
       P.pedal += (90 / 60) * Math.PI * 2 * dt;
       P.lane += ((ride.lane > 0 ? ride.lane - 1.4 : ride.lane + 1.4) - P.lane) * Math.min(1, dt * 2); // rides beside you
@@ -482,6 +484,7 @@ function advance(now = performance.now()) {
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
       const p = b.wkg * 75 * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
+      b.power = p;
       b.v = stepSpeed(b.v, p, g, dt, 75);
       b.dist += b.v * dt;
       b.pedal += (90 / 60) * Math.PI * 2 * dt;
@@ -509,6 +512,21 @@ function frame(now) {
   scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
   requestAnimationFrame(frame);
+}
+
+/** Riders ahead you could reach within 10 s at your speed: name, gap in seconds and metres, their W/kg. */
+function updateAhead() {
+  const v = Math.max(ride.v, 2), all = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : []), ...(ride.ghost ? [ride.ghost] : [])];
+  const ahead = all
+    .map((r) => ({ r, gap: r.dist - ride.dist }))
+    .filter(({ gap }) => gap > 0.5 && gap / v <= 10)
+    .sort((a, b) => a.gap - b.gap)
+    .slice(0, 4);
+  $('ahead').hidden = !ahead.length;
+  $('ahead-rows').innerHTML = ahead.map(({ r, gap }) => {
+    const wkg = r.wkg ?? (r.power ? r.power / settings.weight : 0);
+    return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}s</span><small>${Math.round(gap)} m${wkg ? ` · ${wkg.toFixed(1)} W/kg` : ''}</small></div>`;
+  }).join('');
 }
 
 /** Called once per second of riding. */
@@ -625,6 +643,7 @@ function updateHud(cadence, hr, grade) {
   $('m-hr-avg').textContent = A?.hrN ? `avg ${Math.round(A.hr / A.hrN)}` : '';
   $('m-cad-avg').textContent = A?.cadN ? `avg ${Math.round(A.cad / A.cadN)}` : '';
   $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
+  updateAhead();
   if (ride.ghost) {
     const G = ride.ghost, gap = ride.dist - G.dist, tg = ghostTimeAt(G.entry, ride.dist);
     const secs = tg === null ? null : Math.round(tg - ride.elapsed); // + = you got here sooner

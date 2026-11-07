@@ -496,3 +496,15 @@ body.pixel-ui .seg-panel { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
   font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums; backdrop-filter: blur(6px);
 }
 body.pixel-ui .ghost-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.45); backdrop-filter: none; }
+
+/* ---------- Riders ahead (within 10 s) ---------- */
+.board.ahead { padding: 6px 0; }
+.board.ahead[hidden] { display: none; }
+.ahead-head { padding: 0 12px 4px; font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; color: #9fb0c6; }
+.ahead-row { display: grid; grid-template-columns: 10px 1fr auto; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 4px 12px; font-variant-numeric: tabular-nums; }
+.ahead-row + .ahead-row { border-top: 1px solid rgba(255,255,255,.08); }
+.ahead-row i { grid-row: 1 / 3; width: 10px; height: 10px; border-radius: 50%; }
+.ahead-row b { font-size: .85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ahead-row span { font-weight: 700; color: var(--cyan); font-size: .85rem; }
+.ahead-row small { grid-column: 2 / 4; color: #9fb0c6; font-size: .7rem; }
+.hud-right { align-items: stretch; }
