@@ -33,6 +33,7 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
+const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
 const SHOW_RIDER = typeof location === 'undefined' || new URLSearchParams(location.search).get('rider') !== '0'; // ?rider=0: bike only
 const SIZE = { oak: 1, birch: 1, pine: 1, rock: 1, bush: 1, cactus: 1, palm: 1, sunflowers: 1, flowers: 1 };
 
@@ -388,6 +389,7 @@ class Rider3D {
     sprite.position.set(0.45, 1.72, 0); // over the head, which leans forward over the bars
     sprite.renderOrder = 10; // over the scenery, never hidden behind a fence or a rider
     this.group.add(sprite);
+    this.labelSprite = sprite;
   }
 
   /** Place a y-aligned mesh between a and b (no scaling). */
@@ -1182,6 +1184,8 @@ export class Scene3D {
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
       R.group.visible = visible && this.modelsReady;
+      // name tags only for riders near you: far up the road they pile up into an unreadable stack
+      if (R.labelSprite) R.labelSprite.visible = Math.abs(d - dist) < LABEL_RANGE;
       if (!visible) return;
       const f = this.frame(d);
       const lane = r.lane ?? 0;
