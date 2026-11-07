@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, ghost: 'best', style: 'cartoon', camera: 'chase',
+  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -293,6 +293,7 @@ function initLobby() {
   bind('f-shift', 'shiftMode', false);
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
+  bind('f-bots', 'bots');
   // the pixel 3D style squares off the interface too (square corners, hard shadows)
   const pixelUi = () => document.body.classList.toggle('pixel-ui', settings.style === 'pixel');
   const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); pixelUi(); };
@@ -532,12 +533,39 @@ function markSelected(list, id) {
 }
 
 // ---------- Ride ----------
-const BOTS = [
-  { name: 'Andriy', wkg: 2.2, color: '#e5484d', stripe: '#ffffff', rpm: 84 },  // rpm: his cadence on the flat
-  { name: 'Taras', wkg: 2.7, color: '#2563eb', stripe: '#facc15', rpm: 92 },
-  { name: 'Dmytro', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0', rpm: 88 },
-  { name: 'Bohdan', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a', rpm: 96 },
+// The bunch: a new one every ride, drawn from these names and kits (English spelling, Ukrainian)
+const BOT_NAMES = [
+  ['Andriy', 'Андрій'], ['Taras', 'Тарас'], ['Dmytro', 'Дмитро'], ['Bohdan', 'Богдан'], ['Oleh', 'Олег'], ['Mykola', 'Микола'],
+  ['Serhiy', 'Сергій'], ['Yaroslav', 'Ярослав'], ['Ivan', 'Іван'], ['Ostap', 'Остап'], ['Roman', 'Роман'], ['Vitaliy', 'Віталій'],
+  ['Yuriy', 'Юрій'], ['Maksym', 'Максим'], ['Artem', 'Артем'], ['Nazar', 'Назар'], ['Pavlo', 'Павло'], ['Ihor', 'Ігор'],
+  ['Denys', 'Денис'], ['Volodymyr', 'Володимир'], ['Mykhailo', 'Михайло'], ['Danylo', 'Данило'], ['Stepan', 'Степан'], ['Kyrylo', 'Кирило'],
 ];
+const BOT_KITS = [
+  ['#e5484d', '#ffffff'], ['#2563eb', '#facc15'], ['#8b5cf6', '#f0f0f0'], ['#f5f5f5', '#16a34a'], ['#111827', '#f97316'],
+  ['#0ea5e9', '#0f172a'], ['#f59e0b', '#1f2937'], ['#14b8a6', '#ffffff'], ['#db2777', '#fde68a'], ['#65a30d', '#f8fafc'],
+  ['#7c2d12', '#fbbf24'], ['#1e3a8a', '#ef4444'],
+];
+/**
+ * A bunch of `n` riders around your level: their steady pace is 55-95 % of your FTP in W/kg (so on
+ * a free ride some are a little slower than you, some a little faster), each with his own weight,
+ * build (air drag from height and weight), cadence and kit; names and kits never repeat in a ride.
+ */
+function makeBots(n) {
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr.splice(Math.floor(Math.random() * arr.length), 1)[0];
+  const names = BOT_NAMES.slice(), kits = BOT_KITS.filter(([c]) => c.toLowerCase() !== String(settings.jersey).toLowerCase());
+  const ftpWkg = Math.max(1.5, settings.ftp / Math.max(40, settings.weight));
+  return Array.from({ length: n }, (_, i) => {
+    const [en, uk] = pick(names), [color, stripe] = pick(kits.length ? kits : BOT_KITS.slice());
+    const weight = Math.round(rnd(60, 88)), height = Math.round(165 + (weight - 60) * 0.9 + rnd(-6, 6));
+    // spread evenly across the range, then shuffled by the random start order
+    const level = 0.55 + (n > 1 ? i / (n - 1) : 0.5) * 0.4 + rnd(-0.04, 0.04);
+    return {
+      name: lang === 'uk' ? uk : en, color, stripe, weight, cda: riderCdA(height, weight),
+      wkg: Math.round(ftpWkg * level * 10) / 10, rpm: Math.round(rnd(82, 98)), phase: rnd(0, 6.28),
+    };
+  }).sort(() => Math.random() - 0.5);
+}
 /**
  * A rider's cadence, like a person's: their own rpm on the flat, slower as the road tilts up (about
  * 2.5 rpm per % up to 8 %+), a little faster on a gentle descent, freewheeling now and then on a
@@ -603,7 +631,7 @@ async function startRide() {
     powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
     cda: riderCdA(settings.height, settings.weight), // air drag from your height and weight
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
-    bots: BOTS.map((b, i) => ({ ...b, name: tr(b.name), dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
+    bots: makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
     ghost: (() => { const g = pickGhost(route.id); return g ? { entry: g, name: settings.ghost === 'last' ? tr('Last ride') : tr('Your best'), color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
@@ -735,15 +763,17 @@ function advance(now = performance.now()) {
     for (const b of ride.bots) b.lane = easeLane(b.lane, b.laneTarget, dt, b);
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
-      const p = b.wkg * 75 * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
+      // his steady pace, harder up the climbs and easier down, and never perfectly even
+      const swing = 1 + Math.sin(ride.elapsed * 0.05 + b.phase) * 0.05 + Math.sin(ride.elapsed * 0.17 + b.phase * 2) * 0.03;
+      const p = b.wkg * b.weight * swing * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
       b.power = p;
       const wheels = [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b)];
       const bd = Math.max(0, ...wheels.map((o) => draftFactor(o.dist - b.dist, o.lane - b.lane)));
-      b.v = stepSpeed(b.v, p, g, dt, 75, { cda: DEFAULTS.cda * (1 - bd) });
-      b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, 75, { cda: DEFAULTS.cda });
+      b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd) });
+      b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, b.weight, { cda: b.cda });
       for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
       b.dist += b.v * dt;
-      const bc = liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.wkg * 3);
+      const bc = liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.phase * 3);
       b.pedal = bc < 5 ? levelPedals(b.pedal, dt) : b.pedal + (bc / 60) * Math.PI * 2 * dt;
     }
     ride.elapsed += dt;
