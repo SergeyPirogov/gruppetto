@@ -330,9 +330,9 @@ function markSelected(list, id) {
 
 // ---------- Ride ----------
 const BOTS = [
-  { name: 'Olya', wkg: 2.2, color: '#e5484d', stripe: '#ffffff' },
+  { name: 'Andriy', wkg: 2.2, color: '#e5484d', stripe: '#ffffff' },
   { name: 'Taras', wkg: 2.7, color: '#2563eb', stripe: '#facc15' },
-  { name: 'Iryna', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0' },
+  { name: 'Dmytro', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0' },
   { name: 'Bohdan', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a' },
 ];
 // Riders keep right: start in the right half of the road (positive lane = right of travel).
@@ -381,7 +381,7 @@ async function startRide() {
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
     powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
-    bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
+    bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
     ghost: (() => { const g = pickGhost(route.id); return g ? { entry: g, name: settings.ghost === 'last' ? 'Last ride' : 'Your best', color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
     pacer: workout ? { name: settings.pacerName?.trim() || 'Pacer', color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true } : null,
@@ -465,7 +465,7 @@ function advance(now = performance.now()) {
     // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
     ride.pedal += (animCadence / 60) * Math.PI * 2 * dt;
-    ride.lane += (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
+    ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
     if (ride.ghost) {
       const G = ride.ghost, before = G.dist;
       G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
@@ -481,6 +481,17 @@ function advance(now = performance.now()) {
       P.pedal += (90 / 60) * Math.PI * 2 * dt;
       P.lane += ((ride.lane > 0 ? ride.lane - 1.4 : ride.lane + 1.4) - P.lane) * Math.min(1, dt * 2); // rides beside you
     }
+    // overtaking: a rider closing on someone in the same lane swings out to a free one, then back
+    if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
+      ride.laneCheck = 0;
+      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, me: true }, ...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
+      for (const b of ride.bots) b.laneTarget = pickLane(b, solid, b.home);
+      if (!ride.steeredAt || ride.elapsed - ride.steeredAt > 4) { // unless you steered yourself just now
+        const me = solid[0], t = pickLane(me, solid, ride.laneHome ?? START_LANE);
+        if (t !== ride.laneTarget) { ride.laneTarget = t; ride.autoLane = true; }
+      }
+    }
+    for (const b of ride.bots) b.lane = easeLane(b.lane, b.laneTarget, dt);
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
       const p = b.wkg * 75 * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
@@ -527,6 +538,30 @@ function updateAhead() {
     const wkg = r.wkg ?? (r.power ? r.power / settings.weight : 0);
     return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}s</span><small>${Math.round(gap)} m${wkg ? ` · ${wkg.toFixed(1)} W/kg` : ''}</small></div>`;
   }).join('');
+}
+
+/**
+ * Lane for rider `r` among `others` (each {dist, lane, laneTarget}): keep `home` when nobody is close
+ * ahead in it; when catching someone up to 15 m ahead in the current lane (the overtaker moves, not the
+ * one overtaken), take the nearest lane clear from 3 m behind to 15 m ahead, and keep it while alongside. Lanes are 1.2 m apart across the road.
+ */
+const LANES = [-2.4, -1.2, 0, 1.2, 2.4];
+/** A gentle lane change: eases in and out, at most 0.8 m sideways per second. */
+function easeLane(lane, target, dt) {
+  const d = target - lane;
+  return lane + Math.sign(d) * Math.min(Math.abs(d), Math.min(0.8, 0.3 + Math.abs(d) * 0.9) * dt);
+}
+function pickLane(r, others, home) {
+  const near = (lane, from, to, closing = false) => others.some((o) => o !== r
+    && (Math.abs((o.laneTarget ?? o.lane) - lane) < 0.9 || Math.abs(o.lane - lane) < 0.9)
+    && o.dist - r.dist > from && o.dist - r.dist < to
+    && (!closing || o.dist - r.dist < 2 || (r.v || 0) > (o.v || 0) + 0.2)); // only someone you are catching
+  const cur = r.laneTarget ?? r.lane;
+  // never change course while alongside someone: finish the pass in the lane you chose
+  if (others.some((o) => o !== r && Math.abs(o.dist - r.dist) < 3.5 && Math.abs(o.lane - r.lane) < 2)) return cur;
+  if (!near(cur, -0.5, 15, true)) return near(home, -6, 10) ? cur : home; // nobody just ahead: drift back home when it is clear
+  const free = LANES.filter((l) => !near(l, -3, 15)).sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
+  return free.length ? free[0] : cur;
 }
 
 /** Called once per second of riding. */
@@ -1333,6 +1368,7 @@ function shift(dir) {
 function steer(dir) {
   if (!ride) return;
   ride.laneTarget = Math.max(-2.4, Math.min(2.4, ride.laneTarget + dir * 1.2));
+  ride.laneHome = ride.laneTarget; ride.steeredAt = ride.elapsed; ride.autoLane = false;
 }
 
 function skipInterval() {
