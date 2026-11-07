@@ -467,8 +467,8 @@ export class Scene3D {
    * pinch to zoom, double-click or double-tap to go back to the chase view.
    */
   _orbitControls(canvas) {
-    // default view: a touch farther back than the plain chase position, almost straight behind
-    const HOME = { yaw: 0.053, pitch: 0.022, zoom: 1.26 };
+    // default view: straight behind, a touch farther back than the plain chase position
+    const HOME = { yaw: 0, pitch: 0, zoom: 1.26 };
     this.orbit = { ...HOME };
     const O = this.orbit;
     const pts = new Map();
