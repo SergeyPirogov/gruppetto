@@ -316,7 +316,6 @@ async function startRide() {
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
   $('wk-int').textContent = `${settings.intensity}%`;
-  $('wk-sound').textContent = settings.sound ? 'Sound: on' : 'Sound: off';
   trainer.riderWeight = settings.weight + 8;
   trainer.resetMode();
   recorder.reset();
@@ -426,6 +425,14 @@ function frame(now) {
 /** Called once per second of riding. */
 function tick(power, cadence, hr) {
   const { route } = ride;
+  // simulator without a heart rate monitor: a plausible heart rate that follows power with a lag —
+  // from ~62 bpm at rest towards ~170 bpm at FTP, rising in about 30 s and drifting up with time
+  if (ride.simulated && !hr) {
+    const effort = Math.max(0, power) / Math.max(50, settings.ftp);
+    const target = 62 + 108 * Math.min(1.25, effort) + Math.min(8, ride.elapsed / 600);
+    ride.simHr = ride.simHr ? ride.simHr + (target - ride.simHr) * 0.035 : 75;
+    hr = Math.round(ride.simHr + Math.sin(ride.elapsed / 7) * 1.2);
+  }
 
   // elevation & laps
   const elev = route.elevAt(ride.dist);
@@ -798,10 +805,10 @@ $('btn-finish').onclick = () => {
 $('btn-download').onclick = () => download('fit');
 $('wk-int-down').onclick = () => changeIntensity(-5);
 $('wk-int-up').onclick = () => changeIntensity(+5);
-$('wk-sound').onclick = () => {
-  settings.sound = settings.voice = !settings.sound;
+$('f-sound').checked = !!settings.sound;
+$('f-sound').onchange = () => {
+  settings.sound = settings.voice = $('f-sound').checked;
   saveSettings();
-  $('wk-sound').textContent = settings.sound ? 'Sound: on' : 'Sound: off';
   if (settings.sound) { unlockAudio(); beep(880, 0.1); }
 };
 $('btn-download-tcx').onclick = () => download('tcx');
@@ -970,7 +977,7 @@ function updateGear() {
   $('m-gear-unit').textContent = inErg ? 'W' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
 }
 
-// Pause / Finish stay hidden while riding: they show when the mouse moves (for a few seconds, or as
+// Pause / Finish and the simulator slider stay hidden while riding: they show when the mouse moves (for a few seconds, or as
 // long as it rests on them), on a tap, while paused, and Esc toggles them.
 let controlsTimer = 0, controlsPinned = false;
 function showControls(ms = 3000) {
@@ -985,8 +992,10 @@ function hideControls() {
 }
 $('ride').addEventListener('mousemove', () => showControls());
 $('ride').addEventListener('touchstart', () => showControls(4000), { passive: true });
-document.querySelector('#ride .controls').addEventListener('mouseenter', () => { controlsPinned = true; showControls(0); });
-document.querySelector('#ride .controls').addEventListener('mouseleave', () => { controlsPinned = false; showControls(); });
+for (const el of [document.querySelector('#ride .controls'), $('sim-ctl')]) {
+  el.addEventListener('mouseenter', () => { controlsPinned = true; showControls(0); });
+  el.addEventListener('mouseleave', () => { controlsPinned = false; showControls(); });
+}
 
 window.addEventListener('keydown', (e) => {
   if (!ride) return;
