@@ -12,6 +12,8 @@ const CSC = 0x1816;
 const CSC_MEASUREMENT = 0x2a5b;
 // Wahoo legacy trainer control (KICKR v1/v2, SNAP, CORE before FTMS firmware), inside the Cycling Power service.
 const WAHOO_CONTROL = 'a026e005-0a7d-4ab3-97fa-f1500f9feb8b';
+/** Default wind resistance coefficient (kg/m) for trainer road simulation (the FTMS default). */
+export const WIND_CW = 0.51;
 // Zwift Ride / Play / Click controllers.
 const ZWIFT_RIDE_SERVICE = 0xfc82;
 const ZWIFT_SERVICE = '00000001-19ca-4651-86e5-fa29dcdd09d1';
@@ -351,7 +353,7 @@ export class Trainer extends Device {
   }
 
   /** Forces the trainer mode (and rider weight) to be re-sent with the next command. */
-  resetMode() { this._wahooMode = null; }
+  resetMode() { this._wahooMode = null; this._wahooCw = null; }
 
   _write(bytes) {
     const run = () => {
@@ -375,11 +377,18 @@ export class Trainer extends Device {
   }
 
   /** Simulation mode: grade in percent. */
-  setSimulation(gradePercent, { crr = 0.004, cw = 0.51 } = {}) {
+  /**
+   * Road simulation: grade in percent, rolling resistance and the wind resistance coefficient cw (kg/m).
+   * A lower cw makes the trainer ease off at speed, as when sitting on a wheel.
+   */
+  setSimulation(gradePercent, { crr = 0.004, cw = WIND_CW } = {}) {
     if (!this.controllable) return Promise.resolve(false);
     if (this.protocol === 'wahoo') {
       const steps = [];
-      if (this._wahooMode !== 'sim') { steps.push(this._write(wahoo.simMode(this.riderWeight, crr, cw))); this._wahooMode = 'sim'; }
+      // the wind coefficient lives in the sim-mode setup: send it again when it changes (drafting)
+      if (this._wahooMode !== 'sim' || Math.abs((this._wahooCw ?? cw) - cw) >= 0.02) {
+        steps.push(this._write(wahoo.simMode(this.riderWeight, crr, cw))); this._wahooMode = 'sim'; this._wahooCw = cw;
+      }
       steps.push(this._write(wahoo.grade(gradePercent)));
       return Promise.all(steps).then(() => true, () => false);
     }

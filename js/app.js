@@ -1,4 +1,4 @@
-import { bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
+import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
@@ -780,10 +780,13 @@ function tick(power, cadence, hr) {
       if (ride.shiftMode === 'wheel') sendVirtualGear();
       const offset = ride.shiftMode === 'wheel' ? 0 : gearGradeOffset(ride.gear);
       const g = Math.round((grade * 100 * (settings.difficulty / 100) + offset) * 10) / 10;
+      // on a wheel the trainer gets less wind, so the shelter is felt in the legs, not only seen
+      const cw = Math.round(WIND_CW * (1 - (ride.draft || 0)) * 100) / 100;
       const now = performance.now();
-      if (g !== ride.lastSentGrade || now - ride.lastGradeSentAt > 10000) {
-        trainer.setSimulation(g);
+      if (g !== ride.lastSentGrade || Math.abs(cw - (ride.lastSentCw ?? cw)) >= 0.02 || now - ride.lastGradeSentAt > 10000) {
+        trainer.setSimulation(g, { cw });
         ride.lastSentGrade = g;
+        ride.lastSentCw = cw;
         ride.lastGradeSentAt = now;
       }
     }

@@ -345,3 +345,25 @@ test('route groups: flat, hilly and mountain', () => {
   assert.equal(g.rolling, 'hilly');
   assert.equal(g.mountain, 'mountain');
 });
+
+test('drafting reaches the trainer: a lower wind coefficient in road simulation (FTMS and Wahoo)', async () => {
+  const { Trainer, WIND_CW } = await import('../js/ble.js');
+  const ftms = new Trainer();
+  const sent = [];
+  Object.assign(ftms, { controllable: true, protocol: 'ftms', _command: (b) => { sent.push(b); return Promise.resolve(true); } });
+  await ftms.setSimulation(3.5);
+  await ftms.setSimulation(3.5, { cw: Math.round(WIND_CW * (1 - 0.33) * 100) / 100 });
+  assert.equal(sent[0][6], 51); // cw in 0.01 kg/m
+  assert.equal(sent[1][6], 34); // a third less wind on a wheel
+  assert.equal(sent[1][3] | (sent[1][4] << 8), 350); // the grade is untouched
+
+  const w = new Trainer();
+  const writes = [];
+  Object.assign(w, { controllable: true, protocol: 'wahoo', riderWeight: 83, _write: (b) => { writes.push(b); return Promise.resolve(); } });
+  await w.setSimulation(2);            // sim mode set up once, then the grade
+  await w.setSimulation(2.5);          // same wind: only the grade
+  await w.setSimulation(2.5, { cw: 0.34 }); // drafting: sim mode again with the new wind, then the grade
+  const ops = writes.map((b) => b[0].toString(16));
+  assert.deepEqual(ops, ['43', '46', '46', '43', '46']);
+  assert.equal(writes[3][5] | (writes[3][6] << 8), 340); // cw in 0.001 kg/m
+});
