@@ -494,6 +494,10 @@ function tick(power, cadence, hr) {
 
   ride.powerHist.push(power);
   if (ride.powerHist.length > 3) ride.powerHist.shift();
+  // running averages for the board (zeros left out, as in the ride summary)
+  const A = ride.avg ||= { hr: 0, hrN: 0, cad: 0, cadN: 0 };
+  if (hr > 0) { A.hr += hr; A.hrN++; }
+  if (cadence > 0) { A.cad += cadence; A.cadN++; }
   updateHud(cadence, hr, grade);
 }
 
@@ -503,6 +507,9 @@ function updateHud(cadence, hr, grade) {
   $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} W/kg`;
   $('m-cad').textContent = Math.round(cadence);
   $('m-hr').textContent = hr ? Math.round(hr) : '—';
+  const A = ride.avg;
+  $('m-hr-avg').textContent = A?.hrN ? `avg ${Math.round(A.hr / A.hrN)}` : '';
+  $('m-cad-avg').textContent = A?.cadN ? `avg ${Math.round(A.cad / A.cadN)}` : '';
   $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
   $('m-dist').textContent = (ride.dist / 1000).toFixed(2);
   $('m-time').textContent = fmtTime(ride.elapsed);
