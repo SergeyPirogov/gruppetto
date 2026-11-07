@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, pacer: true, style: 'cartoon', camera: 'chase',
+  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', style: 'cartoon', camera: 'chase',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -381,7 +381,7 @@ async function startRide() {
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
     bots: BOTS.map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6 })),
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
-    pacer: workout ? { name: 'Pacer', color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true } : null,
+    pacer: workout ? { name: settings.pacerName?.trim() || 'Pacer', color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true } : null,
   };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
@@ -638,7 +638,7 @@ function updateHud(cadence, hr, grade) {
     $('wk-pacer').hidden = !(P && settings.pacer);
     if (P && settings.pacer) {
       const gap = Math.round(ride.dist - P.dist);
-      $('wk-pacer').textContent = Math.abs(gap) < 3 ? 'With the pacer' : gap > 0 ? `Pacer ${gap} m behind` : `Pacer ${-gap} m ahead`;
+      $('wk-pacer').textContent = Math.abs(gap) < 3 ? `With ${P.name}` : gap > 0 ? `${P.name} ${gap} m behind` : `${P.name} ${-gap} m ahead`;
       $('wk-pacer').className = `pacer-tag ${gap >= -3 ? 'c-ok' : gap >= -25 ? 'c-warn' : 'c-bad'}`;
     }
     $('wk-diff').textContent = target ? `${p3 - target >= 0 ? '+' : '−'}${Math.abs(Math.round(p3 - target))}` : '';
@@ -1076,6 +1076,8 @@ $('btn-download').onclick = () => download('fit');
 $('wk-int-down').onclick = () => changeIntensity(-5);
 $('wk-int-up').onclick = () => changeIntensity(+5);
 $('f-pacer').checked = settings.pacer !== false;
+$('f-pacer-name').value = settings.pacerName || '';
+$('f-pacer-name').oninput = () => { settings.pacerName = $('f-pacer-name').value; saveSettings(); };
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
 $('wk-pacer-btn').onclick = () => togglePacer();
 function togglePacer() {
@@ -1084,7 +1086,8 @@ function togglePacer() {
   $('f-pacer').checked = settings.pacer;
   $('wk-pacer-btn').classList.toggle('on', settings.pacer);
   if (ride?.pacer && settings.pacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } // rejoin beside you
-  toast(settings.pacer ? 'Pacer on: ride with your virtual training partner' : 'Pacer off');
+  const who = settings.pacerName?.trim() || 'Pacer';
+  toast(settings.pacer ? `${who} is riding with you` : `${who} dropped back`);
 }
 $('f-sound').checked = !!settings.sound;
 $('f-sound').onchange = () => {
