@@ -282,7 +282,7 @@ class Rider3D {
     this.cranks = withBike ? [-1, 1].map((side) => ({ side, mesh: add(new THREE.BoxGeometry(0.032, 0.17, 0.016), M.dark) })) : [];
     this.legs = [];
     if (withBody) this._body(add, capsule, M);
-    if (label) this._label(label);
+    if (label) this._label(label, jersey, stripe);
     this.pose(0);
   }
 
@@ -352,21 +352,42 @@ class Rider3D {
     }));
   }
 
-  _label(label) {
-    {
-      const c = document.createElement('canvas');
-      c.width = 256; c.height = 64;
-      const g = c.getContext('2d');
-      g.font = '600 34px system-ui, sans-serif'; g.textAlign = 'center';
-      g.lineWidth = 6; g.strokeStyle = 'rgba(0,0,0,0.55)'; g.strokeText(label, 128, 44);
-      g.fillStyle = '#fff'; g.fillText(label, 128, 44);
-      const tex = new THREE.CanvasTexture(c);
-      tex.colorSpace = THREE.SRGBColorSpace;
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
-      sprite.scale.set(1.6, 0.4, 1);
-      sprite.position.set(0.2, 2.0, 0);
-      this.group.add(sprite);
-    }
+  /** Name tag over the rider: a dark pill with a dot in the rider's colours and a small pointer down. */
+  _label(label, jersey = '#ffffff', stripe = '#ff8a1f') {
+    const c = document.createElement('canvas');
+    const W = 512, H = 136, g = c.getContext('2d');
+    c.width = W; c.height = H;
+    g.font = '700 46px system-ui, -apple-system, "Segoe UI", sans-serif';
+    const tw = Math.min(W - 120, g.measureText(label).width);
+    const pw = tw + 104, ph = 76, x0 = (W - pw) / 2, y0 = 6, r = ph / 2;
+    // pill with a soft shadow
+    g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
+    g.fillStyle = 'rgba(15, 20, 32, 0.86)';
+    g.beginPath(); g.roundRect(x0, y0, pw, ph, r); g.fill();
+    g.shadowColor = 'transparent';
+    // pointer under the pill, toward the rider
+    g.beginPath(); g.moveTo(W / 2 - 14, y0 + ph - 1); g.lineTo(W / 2 + 14, y0 + ph - 1); g.lineTo(W / 2, y0 + ph + 18); g.closePath(); g.fill();
+    // rim in the accent colour
+    g.lineWidth = 3; g.strokeStyle = stripe; g.globalAlpha = 0.85;
+    g.beginPath(); g.roundRect(x0 + 1.5, y0 + 1.5, pw - 3, ph - 3, r - 1.5); g.stroke();
+    g.globalAlpha = 1;
+    // jersey dot with the accent ring
+    const cx = x0 + 40, cy = y0 + ph / 2;
+    g.fillStyle = jersey; g.beginPath(); g.arc(cx, cy, 15, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 4; g.strokeStyle = stripe; g.stroke();
+    // name
+    g.fillStyle = '#ffffff'; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.fillText(label, x0 + 70, cy + 2, tw);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    // the same size on screen near or far (readable for riders up the road), centred over the head
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false, depthTest: false, transparent: true, sizeAttenuation: false }));
+    sprite.center.set(0.5, 0);
+    sprite.scale.set(0.15, 0.15 * H / W, 1);
+    sprite.position.set(0.45, 1.72, 0); // over the head, which leans forward over the bars
+    sprite.renderOrder = 10; // over the scenery, never hidden behind a fence or a rider
+    this.group.add(sprite);
   }
 
   /** Place a y-aligned mesh between a and b (no scaling). */
