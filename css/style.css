@@ -261,3 +261,6 @@ body.pixel-ui .stat.power .st-val b { font-size: 1.85rem; }
 #ride.show-controls .controls, #ride.show-controls #sim-ctl { opacity: 1; transform: none; pointer-events: auto; }
 body.pixel-ui .topbar { background: rgba(22, 30, 46, 0.92); border-color: rgba(255, 255, 255, 0.22); }
 body.pixel-ui .tb-cell + .tb-cell { border-left: 2px dashed rgba(255, 255, 255, 0.14); }
+/* simulator slider: centred on the screen, whatever the widths beside it */
+#ride #sim-ctl { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 8px); }
+#ride.show-controls #sim-ctl { transform: translate(-50%, 0); }
