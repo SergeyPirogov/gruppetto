@@ -44,6 +44,35 @@ function smooth(a, r, passes = 2) {
   return src;
 }
 
+/**
+ * A smooth curve through the points (centripetal Catmull-Rom, no loops or overshoot on uneven
+ * spacing), sampled every ~2 m; elevations follow linearly along each span.
+ */
+function curveThrough(pts, ele) {
+  const P = [], E = [];
+  pts.forEach((p, i) => { // drop repeated points
+    if (!P.length || Math.hypot(p[0] - P[P.length - 1][0], p[1] - P[P.length - 1][1]) > 0.5) { P.push(p); E.push(ele[i]); }
+  });
+  if (P.length < 3) return { xy: P, ele: E };
+  const xy = [P[0]], out = [E[0]];
+  const knot = (a, b) => Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])) || 1e-6;
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(P.length - 1, i + 2)];
+    const t1 = knot(p0, p1), t2 = t1 + knot(p1, p2), t3 = t2 + knot(p2, p3);
+    const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]), m = Math.max(1, Math.ceil(len / 2));
+    for (let k = 1; k <= m; k++) {
+      const t = t1 + ((t2 - t1) * k) / m;
+      const lerp = (a, b, ta, tb) => [0, 1].map((c) => (tb === ta ? a[c] : ((tb - t) * a[c] + (t - ta) * b[c]) / (tb - ta)));
+      const A1 = lerp(p0, p1, 0, t1), A2 = lerp(p1, p2, t1, t2), A3 = lerp(p2, p3, t2, t3);
+      const B1 = lerp(A1, A2, 0, t2), B2 = lerp(A2, A3, t1, t3);
+      const C = lerp(B1, B2, t1, t2);
+      xy.push(C);
+      out.push(E[i] === null || E[i] === undefined ? null : E[i] + (E[i + 1] - E[i]) * (k / m));
+    }
+  }
+  return { xy, ele: out };
+}
+
 /** Running median with radius r (in samples): removes dips and spikes narrower than ~2r, keeps slopes. */
 function median(a, r) {
   const n = a.length, out = new Array(n), win = [];
@@ -66,7 +95,17 @@ function median(a, r) {
 export function routeFromTrack({ name, points }, fileName = '', { elevation, osm } = {}) {
   // local flat projection in metres (fine for a ride-sized area)
   const lat0 = points[0].lat * Math.PI / 180, R = 6371000;
-  const xy = points.map((p) => [p.lon * Math.PI / 180 * R * Math.cos(lat0), p.lat * Math.PI / 180 * R]);
+  const xy0 = points.map((p) => [p.lon * Math.PI / 180 * R * Math.cos(lat0), p.lat * Math.PI / 180 * R]);
+  const hasEle = points.filter((p) => p.ele !== null).length > points.length / 2;
+  const rawEle = points.map((p) => p.ele);
+  if (hasEle) { // fill gaps with the previous known value
+    let last = rawEle.find((e) => e !== null);
+    for (let i = 0; i < rawEle.length; i++) { if (rawEle[i] === null) rawEle[i] = last; else last = rawEle[i]; }
+  }
+  // the road between the track's points: a smooth curve through them (centripetal Catmull-Rom),
+  // not straight lines with a kink at every point; planner tracks have points tens of metres apart
+  const { xy, ele } = curveThrough(xy0, rawEle);
+
   const cum = [0];
   for (let i = 1; i < xy.length; i++) cum.push(cum[i - 1] + Math.hypot(xy[i][0] - xy[i - 1][0], xy[i][1] - xy[i - 1][1]));
   const total = cum[cum.length - 1];
@@ -75,12 +114,6 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
 
   // resample positions and elevations every SEG metres
   const n = Math.floor(total / SEG) + 1;
-  const hasEle = points.filter((p) => p.ele !== null).length > points.length / 2;
-  const ele = points.map((p) => p.ele);
-  if (hasEle) { // fill gaps with the previous known value
-    let last = ele.find((e) => e !== null);
-    for (let i = 0; i < ele.length; i++) { if (ele[i] === null) ele[i] = last; else last = ele[i]; }
-  }
   const X = [], Y = [], E = [];
   let fromTerrain = 0;
   for (let k = 0, j = 0; k < n; k++) {
@@ -98,11 +131,12 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
   const source = fromTerrain > n * 0.9 ? 'terrain' : hasEle ? 'gpx' : 'none';
 
   // elevation: a terrain model sees the valley under a bridge and the hill over a tunnel, so a
-  // running median (±100 m) first drops dips and humps narrower than that; then smooth over ~±40 m
-  // so grades read like a road, not like survey or GPS jitter
-  const elev = smooth(median(E, source === 'terrain' ? 20 : 4), 8, 3);
-  // heading from positions smoothed over ~±15 m, then the change per segment
-  const sx = smooth(X, 3), sy = smooth(Y, 3);
+  // running median (±100 m) first drops dips and humps narrower than that; then smooth over ~±60 m
+  // so the grade changes over a hundred metres or so, like a road's, not with every 1 m step of the
+  // survey or every GPS wobble
+  const elev = smooth(median(E, source === 'terrain' ? 20 : 6), 16, 3);
+  // heading from positions smoothed over ~±20 m, then the change per segment
+  const sx = smooth(X, 4), sy = smooth(Y, 4);
   const head = [];
   for (let k = 0; k < n - 1; k++) head.push(Math.atan2(sy[k + 1] - sy[k], sx[k + 1] - sx[k]));
   head.push(head[head.length - 1]);
@@ -114,7 +148,7 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     while (a < -Math.PI) a += 2 * Math.PI;
     dh.push(Math.max(-maxTurn, Math.min(maxTurn, a)));
   }
-  dh = smooth(dh, 1, 1);
+  dh = smooth(dh, 3, 2); // bends come in and out gradually
   // map north-up (x east, y north) onto the renderer's heading sense: it turns toward +right for +curve
   const curve = dh.map((a) => (-a * SEG) / TURN);
 
@@ -126,11 +160,13 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     name: title.slice(0, 40),
     description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. Point to point, finish at ${(total / 1000).toFixed(1)} km.`,
     elevSource: source,
-    startHeading: Math.round(head[0] * 1000) / 1000, // map radians (from east, anticlockwise): turns the minimap north-up
+    startHeading: Math.round(head[0] * 1000) / 1000, // map radians (from east, anticlockwise)
+    // the real shape for the minimap, every 50 m, north up (x east, y south), in whole metres
+    map: Array.from({ length: Math.ceil(n / 10) + 1 }, (_, i) => Math.min(n - 1, i * 10)).flatMap((k) => [Math.round(sx[k]), Math.round(-sy[k])]),
     theme: 'meadow',
     custom: true,
     oneWay: true,
-    elev: elev.map((e) => Math.round(e * 10) / 10),
+    elev: elev.map((e) => Math.round(e * 100) / 100), // cm: at 0.1 m the 20 m grade could only move in 0.5 % steps
     curve: curve.map((c) => Math.round(c * 1e5) / 1e5),
   };
 }

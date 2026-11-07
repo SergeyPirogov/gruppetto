@@ -1012,9 +1012,19 @@ function updateHud(cadence, hr, grade) {
 // ---------- Minimap ----------
 const MAP_TURN = 2.5; // the 3D renderer's curvature factor: the map has the same bends as the road you see
 const shapes = new WeakMap();
-/** The road from above: points every 20 m (x right, y down), north-up for imported routes. */
+/**
+ * The road from above: { pts (x right, y down), step (m between points) }. An imported route has its
+ * real shape (north up); a built-in one is drawn from the bends the 3D world is built from.
+ */
 function routeShape(route) {
   if (shapes.has(route)) return shapes.get(route);
+  if (route.map?.length >= 4) {
+    const pts = [];
+    for (let i = 0; i < route.map.length; i += 2) pts.push([route.map[i], route.map[i + 1]]);
+    const shape = { pts, step: SEG * 10 };
+    shapes.set(route, shape);
+    return shape;
+  }
   const n = route.segments.length, pts = [];
   let x = 0, y = 0, h = 0;
   for (let i = 0; i <= n; i++) {
@@ -1027,8 +1037,9 @@ function routeShape(route) {
     const a = route.startHeading, c = Math.cos(a), s = Math.sin(a);
     for (const p of pts) { const [px, py] = p; p[0] = px * c + py * s; p[1] = -px * s + py * c; }
   }
-  shapes.set(route, pts);
-  return pts;
+  const shape = { pts, step: SEG * 4 };
+  shapes.set(route, shape);
+  return shape;
 }
 
 function drawMinimap() {
@@ -1036,14 +1047,14 @@ function drawMinimap() {
   if (!canvas || !ride || $('minimap-box').offsetParent === null) return;
   const dpr = Math.min(window.devicePixelRatio || 1, 2), W = canvas.clientWidth, H = canvas.clientHeight;
   if (canvas.width !== Math.round(W * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
-  const g = canvas.getContext('2d'), route = ride.route, pts = routeShape(route);
+  const g = canvas.getContext('2d'), route = ride.route, { pts, step } = routeShape(route);
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, W, H);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   const pad = 12, k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
   const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
-  const L = route.length, step = SEG * 4;
+  const L = route.length;
   const at = (d, wrap = true) => { // map point at distance d along the route (riders wrap round a loop)
     const dd = route.oneWay || !wrap ? Math.max(0, Math.min(L, d)) : ((d % L) + L) % L;
     const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;

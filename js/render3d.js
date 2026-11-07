@@ -293,6 +293,13 @@ function buildModels(theme) {
     g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
     M.grassClump = g;
   }
+  // a block of flats for buildings of four floors and more: 8 × 6 m, 3 m a floor (scaled by floors)
+  M.block = merge([
+    { geom: new THREE.BoxGeometry(8, 3, 6), color: '#d9d2c5', pos: [0, 1.5, 0], flat: true },
+    { geom: new THREE.BoxGeometry(8.3, 0.25, 6.3), color: '#8b8f96', pos: [0, 3.05, 0], flat: true },
+    ...[-2.6, 0, 2.6].map((x) => ({ geom: new THREE.BoxGeometry(1.3, 1.1, 0.08), color: '#9cc3d8', pos: [x, 1.6, 3.02], flat: true })),
+    ...[-2.6, 0, 2.6].map((x) => ({ geom: new THREE.BoxGeometry(1.3, 1.1, 0.08), color: '#9cc3d8', pos: [x, 1.6, -3.02], flat: true })),
+  ]);
   // a house for imported routes' buildings: 8 m wide, 6 m deep, walls and a pitched roof
   M.house = merge([
     { geom: new THREE.BoxGeometry(8, 4.6, 6), color: '#ece3d2', pos: [0, 2.3, 0], flat: true },
@@ -1301,12 +1308,17 @@ export class Scene3D {
         }
       }
       const d0 = a0 * SEG, d1 = (a0 + rows - 1) * SEG;
-      for (const [d, o, size, ang] of this.buildings) {
+      const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
+      for (const [d, o, size, ang, floors = 1] of this.buildings) {
         if (d < d0 || d >= d1) continue;
         const r = Math.floor(d / SEG) - a0, lim = reach[r] ? reach[r].lim[o > 0 ? 1 : 0] : Infinity;
         if (Math.abs(o) > lim - size / 2) continue;
-        const f = this.frame(d);
-        put('house', mtx(f.x + f.rx * o, heightAt(r, o) - 0.2, f.z + f.rz * o, -f.h - ang, size / 8));
+        const f = this.frame(d), s = size / 8;
+        // the footprint from the map, the height from the floors: a house up to three, flats above
+        const tall = floors >= 4, sy = tall ? floors : Math.min(1.3, 0.75 + floors * 0.25);
+        const m = new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * o, heightAt(r, o) - 0.2, f.z + f.rz * o),
+          q.setFromAxisAngle(up, -f.h - ang), new THREE.Vector3(s, sy, s));
+        put(tall ? 'block' : 'house', m);
       }
     }
 

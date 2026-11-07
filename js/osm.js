@@ -2,7 +2,7 @@
 // (© OpenStreetMap contributors, ODbL), fetched once at import through the Overpass API.
 // What is kept is relative to the road, so the renderer can lay it out beside its own road:
 //   land: one character per OFFSETS cell every LAND_STEP metres ('.' open, 'f' wood, 'w' water)
-//   buildings: [distance along the road, signed offset (+ right), size, angle to the road]
+//   buildings: [distance along the road, signed offset (+ right), size, angle to the road, floors]
 
 export const OFFSETS = [-250, -160, -100, -60, -35, -18, 18, 35, 60, 100, 160, 250];
 export const LAND_STEP = 10; // m
@@ -30,14 +30,14 @@ export function trackBoxes(line) {
  * Overpass QL for a polyline [[lat, lon], ...]: woods and water in the boxes around the track (an
  * "around" filter would miss a wood the road runs through, whose edge is far away), buildings near it.
  */
-export function overpassQuery(line) {
-  const ll = line.map(([a, b]) => `${a.toFixed(5)},${b.toFixed(5)}`).join(',');
+export function overpassQuery(line, near = line) {
   const boxes = trackBoxes(line).map((b) => `(${b.join(',')})`);
   const areas = ['way["natural"="wood"]', 'way["landuse"="forest"]', 'relation["landuse"="forest"]', 'relation["natural"="wood"]',
     'way["natural"="water"]', 'relation["natural"="water"]', 'way["waterway"="riverbank"]'];
   return `[out:json][timeout:90];(`
     + areas.map((a) => boxes.map((b) => `${a}${b};`).join('')).join('')
-    + `way["building"](around:150,${ll});`
+    // buildings: one 'around' per point (a polyline 'around' finds nothing on the public servers)
+    + near.map(([a, b]) => `way["building"](around:150,${a.toFixed(5)},${b.toFixed(5)});`).join('')
     + `);out geom;`;
 }
 
@@ -58,7 +58,8 @@ function thin(points, step = 200) {
 export async function fetchOsm(points, { fetcher = fetch, timeoutMs = 60000 } = {}) {
   const line = thin(points);
   if (line.length > 900 || trackBoxes(line).length > 120) throw new Error('track too long for a map query');
-  const body = new URLSearchParams({ data: overpassQuery(line) });
+  const near = thin(points, 120);
+  const body = new URLSearchParams({ data: overpassQuery(line, near.length <= 1300 ? near : []) });
   let lastErr;
   for (const url of ENDPOINTS) {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
@@ -88,6 +89,13 @@ function joinRings(lines) {
   return rings;
 }
 
+/** Floors of a building: its building:levels tag, or a guess from its kind. */
+function levelsOf(tags = {}) {
+  const n = parseInt(tags['building:levels'], 10);
+  if (n > 0 && n < 60) return n;
+  return { apartments: 5, commercial: 3, retail: 2, industrial: 2, office: 4, school: 3, hospital: 4, university: 4 }[tags.building] || 1;
+}
+
 const kindOf = (tags = {}) => tags.building ? 'b'
   : tags.natural === 'water' || tags.waterway === 'riverbank' ? 'w'
     : tags.natural === 'wood' || tags.landuse === 'forest' ? 'f' : null;
@@ -105,7 +113,7 @@ export function landFromOsm(osm, toXY, X, Y, H, SEG) {
     if (!kind) continue;
     if (e.type === 'way' && e.geometry?.length > 3) {
       const ring = ringXY(e.geometry);
-      if (kind === 'b') buildings.push(ring); else polys.push({ kind, outer: [ring], holes: [] });
+      if (kind === 'b') buildings.push({ ring, levels: levelsOf(e.tags) }); else polys.push({ kind, outer: [ring], holes: [] });
     } else if (e.type === 'relation' && kind !== 'b') {
       const ways = (role) => (e.members || []).filter((m) => m.type === 'way' && m.role === role && m.geometry).map((m) => ringXY(m.geometry));
       const outer = joinRings(ways('outer'));
@@ -159,7 +167,7 @@ export function landFromOsm(osm, toXY, X, Y, H, SEG) {
     near.get(key).push(k);
   }
   const out = [];
-  for (const ring of buildings) {
+  for (const { ring, levels } of buildings) {
     let cx = 0, cy = 0, area = 0;
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
       const f = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
@@ -185,7 +193,7 @@ export function landFromOsm(osm, toXY, X, Y, H, SEG) {
       if (l > ll) { ll = l; la = Math.atan2(dy, dx); }
     }
     const size = Math.max(5, Math.min(30, Math.sqrt(Math.abs(area) / 2)));
-    out.push([bk * SEG, Math.round(off * 10) / 10, Math.round(size * 10) / 10, Math.round((la - H[bk]) * 100) / 100]);
+    out.push([bk * SEG, Math.round(off * 10) / 10, Math.round(size * 10) / 10, Math.round((la - H[bk]) * 100) / 100, levels]);
     if (out.length >= 4000) break;
   }
   out.sort((a, b) => a[0] - b[0]);

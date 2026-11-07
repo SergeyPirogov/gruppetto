@@ -432,5 +432,5 @@ test('OSM scenery: woods, water and buildings laid out relative to the road (#25
   assert.ok(Math.abs(d - 1500) < 15 && Math.abs(off - 41) < 3, `building at ${d} m, ${off} m`);
   const q = overpassQuery([[48.45, 24.55], [48.46, 24.56]]);
   assert.match(q, /way\["landuse"="forest"\]\(48\.44,24\.52,48\.48,24\.56\)/); // the box the road runs through
-  assert.match(q, /way\["building"\]\(around:150,48\.45000,24\.55000,48\.46000,24\.56000\)/);
+  assert.match(q, /way\["building"\]\(around:150,48\.45000,24\.55000\);way\["building"\]\(around:150,48\.46000,24\.56000\);/);
 });

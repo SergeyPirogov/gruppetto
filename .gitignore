@@ -14,3 +14,4 @@ assets/rider/dummy.gltf
 assets/rider/dummy.bin
 assets/rider/head.glb
 tools/__pycache__/
+.local/
