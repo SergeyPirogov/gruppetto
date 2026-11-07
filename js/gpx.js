@@ -126,6 +126,7 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     name: title.slice(0, 40),
     description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. Point to point, finish at ${(total / 1000).toFixed(1)} km.`,
     elevSource: source,
+    startHeading: Math.round(head[0] * 1000) / 1000, // map radians (from east, anticlockwise): turns the minimap north-up
     theme: 'meadow',
     custom: true,
     oneWay: true,

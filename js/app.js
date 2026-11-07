@@ -2,7 +2,7 @@ import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, 
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
-import { routes, Route, ROUTE_GROUPS } from './routes.js';
+import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
@@ -1009,6 +1009,73 @@ function updateHud(cadence, hr, grade) {
   drawProfile($('profile'), ride.route, [...ride.bots, ...(ride.ghost ? [{ dist: ride.ghost.dist, color: 'rgba(255,255,255,.6)' }] : []), { dist: ride.dist, color: settings.jersey, self: true }]);
 }
 
+// ---------- Minimap ----------
+const MAP_TURN = 2.5; // the 3D renderer's curvature factor: the map has the same bends as the road you see
+const shapes = new WeakMap();
+/** The road from above: points every 20 m (x right, y down), north-up for imported routes. */
+function routeShape(route) {
+  if (shapes.has(route)) return shapes.get(route);
+  const n = route.segments.length, pts = [];
+  let x = 0, y = 0, h = 0;
+  for (let i = 0; i <= n; i++) {
+    if (i % 4 === 0 || i === n) pts.push([x, y]);
+    const seg = route.segAt(i);
+    x += Math.cos(h) * SEG; y += Math.sin(h) * SEG;
+    h += (seg.curve * MAP_TURN) / SEG;
+  }
+  if (route.startHeading !== undefined) { // the track began heading this way on the map
+    const a = route.startHeading, c = Math.cos(a), s = Math.sin(a);
+    for (const p of pts) { const [px, py] = p; p[0] = px * c + py * s; p[1] = -px * s + py * c; }
+  }
+  shapes.set(route, pts);
+  return pts;
+}
+
+function drawMinimap() {
+  const canvas = $('minimap');
+  if (!canvas || !ride || $('minimap-box').offsetParent === null) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), W = canvas.clientWidth, H = canvas.clientHeight;
+  if (canvas.width !== Math.round(W * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
+  const g = canvas.getContext('2d'), route = ride.route, pts = routeShape(route);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const pad = 12, k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
+  const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+  const L = route.length, step = SEG * 4;
+  const at = (d, wrap = true) => { // map point at distance d along the route (riders wrap round a loop)
+    const dd = route.oneWay || !wrap ? Math.max(0, Math.min(L, d)) : ((d % L) + L) % L;
+    const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
+    return [ox + (pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t) * k, oy + (pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t) * k];
+  };
+  const line = (from, to, color, width) => {
+    g.beginPath();
+    for (let d = from; d <= to; d += step) { const [px, py] = at(Math.min(d, to), false); d === from ? g.moveTo(px, py) : g.lineTo(px, py); }
+    const [ex, ey] = at(to, false); g.lineTo(ex, ey);
+    g.strokeStyle = color; g.lineWidth = width; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
+  };
+  line(0, L, 'rgba(255,255,255,.18)', 6);
+  line(0, L, 'rgba(232,237,245,.75)', 2.2);
+  for (const c of route.climbs) {
+    if (c.start + c.length <= L) line(c.start, c.start + c.length, '#f97316', 3);
+    else { line(c.start, L, '#f97316', 3); line(0, c.start + c.length - L, '#f97316', 3); } // over the start line
+  }
+  // start (and finish of a point-to-point route)
+  const flag = (d, color) => { const [px, py] = at(d); g.fillStyle = color; g.fillRect(px - 3, py - 3, 6, 6); g.strokeStyle = '#111'; g.lineWidth = 1; g.strokeRect(px - 3, py - 3, 6, 6); };
+  flag(0, '#fff');
+  if (route.oneWay) flag(L, '#22c55e');
+  const dot = (d, color, r, ring) => {
+    const [px, py] = at(d);
+    g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+    if (ring) { g.lineWidth = 2; g.strokeStyle = ring; g.stroke(); }
+  };
+  for (const b of ride.bots) dot(b.dist, b.color, 3);
+  if (pacerOn()) dot(ride.pacer.dist, ride.pacer.color, 3);
+  if (ride.ghost) dot(ride.ghost.dist, 'rgba(255,255,255,.55)', 3);
+  dot(ride.dist, settings.jersey, 5, '#fff');
+}
+
 /** Climb segments: start the timer at the foot, stop it at the top, compare with the best. */
 function updateSegments() {
   const { route } = ride, L = route.length, prev = ride.prevDist, cur = ride.dist;
@@ -1068,6 +1135,7 @@ function updateSegments() {
 }
 
 function updateProgress() {
+  drawMinimap();
   // the bottom-right bar always tracks the lap; the workout's name and progress head its own panel
   const L = ride.route.length, frac = ride.route.oneWay ? Math.min(1, ride.dist / L) : (ride.dist % L) / L;
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;

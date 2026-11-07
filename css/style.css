@@ -614,3 +614,8 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; padding-left: 12px; padding-right: 12px; }
 .icon-btn .ic { width: 20px; height: 20px; }
 .stat.gear .ic.stroke { stroke-width: 1.5; }
+
+/* ---------- Minimap ---------- */
+.board.minimap { padding: 6px; width: 172px; align-self: flex-end; box-sizing: border-box; }
+#minimap { display: block; width: 160px; height: 160px; }
+@media (max-width: 760px) { .board.minimap { display: none; } }
