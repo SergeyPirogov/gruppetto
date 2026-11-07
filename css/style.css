@@ -458,3 +458,21 @@ body.pixel-ui .seg-panel { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .rh-climbs b { display: inline; font-size: inherit; margin: 0; color: var(--text); font-weight: 600; }
 .rh-climbs:empty { display: none; }
 .rh-climbs .pb { color: var(--accent2); font-weight: 700; }
+
+/* ---------- Ride history (#19) ---------- */
+.history-box { margin-top: 18px; }
+.hist-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.hist-head h2 { margin: 0; }
+.hist-head span { color: var(--muted); font-size: .85rem; }
+.hist-head button { margin-left: auto; padding: 4px 10px; font-size: .8rem; }
+.hist-list { display: flex; flex-direction: column; gap: 6px; }
+.hist-row {
+  display: grid; grid-template-columns: 56px 1fr 90px 90px; align-items: center; gap: 10px; text-align: left;
+  padding: 9px 12px; border-radius: 10px; background: #121a28; border: 1px solid var(--line); font-variant-numeric: tabular-nums;
+}
+.hist-row:hover { border-color: var(--accent); }
+.hist-date { color: var(--muted); font-size: .8rem; }
+.hist-name b, .hist-nums b { display: block; font-size: .92rem; }
+.hist-name small, .hist-nums small { color: var(--muted); font-size: .75rem; }
+.hist-nums { text-align: right; }
+@media (max-width: 520px) { .hist-row { grid-template-columns: 44px 1fr 70px; } .hist-row .hist-nums:last-child { display: none; } }

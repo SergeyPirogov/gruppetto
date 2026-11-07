@@ -253,6 +253,7 @@ function initLobby() {
   markSelected(rl, settings.routeId);
   showRoute();
   initDrawer();
+  renderHistory();
   $('sim').addEventListener('change', updateDeviceUI);
 
   $('btn-start').onclick = startRide;
@@ -740,17 +741,65 @@ function finishRide() {
   clearInterval(rideTimer);
   keepAwake(false);
   const sum = recorder.summary();
-  const wasRamp = ride.workout?.ramp;
-  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, efforts: ride.efforts };
+  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, efforts: ride.efforts, ramp: !!ride.workout?.ramp };
   ride = null;
   if (trainer.connected && trainer.controllable) {
     trainer.setSimulation(0);
     if (settings.shiftMode === 'wheel') trainer.setWheelCircumference(BASE_WHEEL_MM);
   }
+  const entry = sum && sum.duration >= 30 ? saveToHistory(lastRide, recorder.samples) : null;
   $('ride').hidden = true;
+  showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
+}
+
+// ---------- Ride history (#19) ----------
+// The last 100 rides, kept on this device: the summary, laps and climbs, and power / heart rate every
+// 5 s for the chart (the full second-by-second record is only kept until the next ride).
+const HISTORY_KEY = 'gruppetto.history';
+let history = (() => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } })();
+const saveHistory = () => {
+  for (;;) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); return; } catch { if (history.length <= 1) return; history.pop(); } // full: drop the oldest
+  }
+};
+
+/** Training stress: hours × intensity factor² × 100, with NP (or average power) against FTP. */
+function tss(sum, ftp) {
+  const np = sum.normalizedPower || sum.avgPower;
+  if (!np || !ftp) return 0;
+  return Math.round((sum.duration * np * (np / ftp)) / (ftp * 3600) * 100);
+}
+
+function historyEntry(r, samples) {
+  const every = 5, pw = [], hr = [];
+  for (let i = 0; i < samples.length; i += every) {
+    const chunk = samples.slice(i, i + every);
+    const avg = (k) => { const v = chunk.map((x) => x[k] || 0).filter((x) => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
+    pw.push(avg('power')); hr.push(avg('heartRate'));
+  }
+  return {
+    id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
+    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, summary: r.summary,
+    tss: r.summary ? tss(r.summary, settings.ftp) : 0, lapTimes: r.lapTimes || [], efforts: r.efforts || [], chart: { every, pw, hr },
+  };
+}
+
+function saveToHistory(r, samples) {
+  const e = historyEntry(r, samples);
+  history.unshift(e);
+  history = history.slice(0, 100);
+  saveHistory();
+  renderHistory();
+  return e;
+}
+
+/** The ride summary screen, for the ride just finished (live: downloads available) or one from history. */
+function showSummary(e, { live = false } = {}) {
+  const sum = e.summary;
+  $('lobby').hidden = true;
   $('summary').hidden = false;
-  // hero: the four numbers people look for first; the rest goes in the grid below
-  $('sum-name').textContent = [lastRide.route?.name, lastRide.workout?.name || 'Free ride'].filter(Boolean).join(' · ');
+  $('sum-kicker').textContent = live ? 'Ride complete' : new Date(e.date).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  $('sum-name').textContent = [e.routeName, e.workoutName || 'Free ride'].filter(Boolean).join(' · ');
   const hero = sum ? [
     ['Time', fmtTime(sum.duration), ''],
     ['Distance', (sum.distance / 1000).toFixed(2), 'km'],
@@ -758,40 +807,63 @@ function finishRide() {
     ['Avg heart rate', sum.avgHr || '—', sum.avgHr ? 'bpm' : ''],
   ] : [['Time', '0:00', '']];
   $('sum-hero').innerHTML = hero.map(([k, v, u]) => `<div><label>${k}</label><b>${v}</b><span>${u}</span></div>`).join('');
-  requestAnimationFrame(() => drawSummaryChart($('sum-chart'), recorder.samples));
+  const chartSamples = e.chart.pw.map((p, i) => ({ power: p, heartRate: e.chart.hr[i] }));
+  requestAnimationFrame(() => drawSummaryChart($('sum-chart'), chartSamples, 2, e.ftp || settings.ftp));
   const stats = sum ? [
     ['Elevation gain', `${Math.round(sum.elevationGain)} m`],
     ['NP', sum.normalizedPower ? `${sum.normalizedPower} W` : '—'],
+    ['TSS', e.tss || '—'],
     ['Max power', `${sum.maxPower} W`],
     ['Max heart rate', sum.maxHr ? `${sum.maxHr} bpm` : '—'],
     ['Avg cadence', `${sum.avgCadence} rpm`],
     ['Work', `${sum.kj} kJ`],
   ] : [];
-  if (sum && wasRamp && sum.best1min) stats.push(['Estimated FTP', `${Math.round(sum.best1min * 0.75)} W`]);
+  if (sum && e.ramp && sum.best1min) stats.push(['Estimated FTP', `${Math.round(sum.best1min * 0.75)} W`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   // laps and climbs of this ride, with personal bests
   const rows = [
-    ...lastRide.lapTimes.map((t, i) => [`Lap ${i + 1}`, t, null]),
-    ...lastRide.efforts.map((e) => [e.name, e.time, e]),
+    ...e.lapTimes.map((t, i) => [`Lap ${i + 1}`, t, null]),
+    ...e.efforts.map((x) => [x.name, x.time, x]),
   ];
   $('sum-segments').hidden = !rows.length;
-  $('sum-seg-rows').innerHTML = rows.map(([name, t, e]) => {
-    const pb = e ? e.pb : t <= (records.lap[lastRide.route.id] ?? Infinity);
-    const vs = e && e.best ? fmtDelta(t - e.best) : '';
+  $('sum-seg-rows').innerHTML = rows.map(([name, t, x]) => {
+    const pb = x ? x.pb : t <= (records.lap[e.routeId] ?? Infinity);
+    const vs = x && x.best ? fmtDelta(t - x.best) : '';
     return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? '<span class="pb">🏆 best</span>' : vs}</td></tr>`;
   }).join('');
-  $('btn-download').disabled = !sum;
-  $('btn-download-tcx').disabled = !sum;
-  const canUpload = !!(icuClient && sum && sum.duration >= 60);
+  // files and intervals.icu only for the ride just finished (older rides keep a summary, not the full record)
+  for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !live; $(id).disabled = !sum; }
+  document.querySelector('#summary .hint:last-of-type').hidden = !live;
+  const canUpload = !!(live && icuClient && sum && sum.duration >= 60);
   $('btn-icu-upload').hidden = !canUpload;
   $('btn-icu-upload').disabled = false;
   $('btn-icu-upload').textContent = 'Upload to intervals.icu';
   $('icu-upload-status').hidden = true;
+  $('btn-delete-ride').hidden = live;
+  $('btn-delete-ride').dataset.id = e.id;
+  $('btn-delete-ride').textContent = 'Delete ride';
   if (canUpload && settings.icuUpload) uploadToIntervals();
 }
 
+/** Recent rides in the lobby (latest five) and the full list in the drawer. */
+function renderHistory() {
+  const row = (e) => {
+    const s = e.summary || {};
+    const day = new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${esc(e.workoutName || 'Free ride')}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} km</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} W</b><small>TSS ${e.tss || 0}</small></span></button>`;
+  };
+  $('history-recent').innerHTML = history.slice(0, 5).map(row).join('');
+  $('history-box').hidden = !history.length;
+  $('history-all').innerHTML = history.length ? history.map(row).join('') : '<p class="muted">No rides yet. Finished rides show up here.</p>';
+  const week = history.filter((e) => Date.now() - Date.parse(e.date) < 7 * 864e5);
+  $('history-week').textContent = week.length ? `This week: ${week.length} ride${week.length > 1 ? 's' : ''} · ${fmtTime(week.reduce((a, e) => a + (e.summary?.duration || 0), 0))} · TSS ${week.reduce((a, e) => a + (e.tss || 0), 0)}` : '';
+  for (const b of document.querySelectorAll('.hist-row')) {
+    b.onclick = () => { $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e); };
+  }
+}
+
 /** Power (filled, smoothed over 10 s) and heart rate (line) over the whole ride. */
-function drawSummaryChart(canvas, samples) {
+function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = canvas.clientWidth, h = canvas.clientHeight;
   canvas.width = w * dpr; canvas.height = h * dpr;
@@ -804,13 +876,13 @@ function drawSummaryChart(canvas, samples) {
     for (let j = Math.max(0, i - n + 1); j <= i; j++) { const v = samples[j][k] || 0; if (v > 0) { a += v; c++; } }
     return c ? a / c : 0;
   });
-  const pw = smooth('power', 10), hr = smooth('heartRate', 5);
-  const pMax = Math.max(settings.ftp * 1.3, ...pw), hMax = Math.max(190, ...hr);
+  const pw = smooth('power', smoothN), hr = smooth('heartRate', Math.max(1, Math.round(smoothN / 2)));
+  const pMax = Math.max(ftp * 1.3, ...pw), hMax = Math.max(190, ...hr);
   const x = (i) => (i / Math.max(1, samples.length - 1)) * w;
   // FTP reference line
-  const yF = h - (settings.ftp / pMax) * (h - 8);
+  const yF = h - (ftp / pMax) * (h - 8);
   g.strokeStyle = 'rgba(255,255,255,.18)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
-  g.fillStyle = 'rgba(255,255,255,.4)'; g.font = '11px system-ui'; g.fillText(`FTP ${settings.ftp} W`, 6, yF - 4);
+  g.fillStyle = 'rgba(255,255,255,.4)'; g.font = '11px system-ui'; g.fillText(`FTP ${ftp} W`, 6, yF - 4);
   g.beginPath(); g.moveTo(0, h);
   pw.forEach((v, i) => g.lineTo(x(i), h - (v / pMax) * (h - 8)));
   g.lineTo(w, h); g.closePath();
@@ -991,7 +1063,15 @@ $('f-sound').onchange = () => {
   if (settings.sound) { unlockAudio(); beep(880, 0.1); }
 };
 $('btn-download-tcx').onclick = () => download('tcx');
-$('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; };
+$('btn-again').onclick = () => { $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
+$('btn-delete-ride').onclick = () => {
+  const b = $('btn-delete-ride');
+  if (b.textContent !== 'Tap again to delete') { b.textContent = 'Tap again to delete'; return; }
+  history = history.filter((e) => e.id !== b.dataset.id);
+  saveHistory();
+  renderHistory();
+  $('summary').hidden = true; $('lobby').hidden = false;
+};
 $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value; };
 // ---------- Virtual gears & controller actions ----------
 

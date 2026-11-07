@@ -35,6 +35,10 @@
           <ul id="rh-climbs" class="rh-climbs"></ul>
         </div>
         <div id="route-list" class="options route-cards"></div>
+        <div id="history-box" class="history-box" hidden>
+          <div class="hist-head"><h2>Recent rides</h2><span id="history-week"></span><button class="ghost" data-open="history">All rides</button></div>
+          <div id="history-recent" class="hist-list"></div>
+        </div>
       </section>
       <aside class="lobby-side">
         <h2>Mode</h2>
@@ -53,6 +57,7 @@
           <button data-open="devices">Devices</button>
           <button data-open="profile">Profile</button>
           <button data-open="icu">intervals.icu</button>
+          <button data-open="history">History</button>
           <button class="drawer-close" data-close aria-label="Close">✕</button>
         </div>
         <div class="card" data-panel="devices">
@@ -147,6 +152,11 @@
           <span id="icu-status" class="muted"></span>
         </div>
       </div>
+        <div class="card" data-panel="history">
+          <h2>Ride history</h2>
+          <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
+          <div id="history-all" class="hist-list"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -224,7 +234,7 @@
   <section id="summary" class="screen" hidden>
     <header class="lobby-top">
       <div class="brand"><h1><img class="mark" src="logo.svg" alt="">Gruppetto</h1></div>
-      <div class="sum-title"><small>Ride complete</small><b id="sum-name"></b></div>
+      <div class="sum-title"><small id="sum-kicker">Ride complete</small><b id="sum-name"></b></div>
     </header>
     <main class="sum-main">
       <div id="sum-hero" class="sum-hero"></div>
@@ -241,6 +251,7 @@
         <button id="btn-download" class="primary">Download .FIT</button>
         <button id="btn-download-tcx">.TCX</button>
         <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
+        <button id="btn-delete-ride" class="ghost" hidden>Delete ride</button>
         <button id="btn-again" class="ghost">Back to lobby</button>
       </div>
       <p id="icu-upload-status" class="hint" hidden></p>
