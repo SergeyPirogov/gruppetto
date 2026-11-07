@@ -25,7 +25,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', ghost: 'best', style: 'cartoon', camera: 'chase',
+  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, ghost: 'best', style: 'cartoon', camera: 'chase',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -490,7 +490,9 @@ function updateSummary() {
   const r = routes.find((x) => x.id === settings.routeId);
   const sel = document.querySelector('#mode-list .sel b');
   const g = r && pickGhost(r.id);
-  el.textContent = [r?.name, sel?.textContent, g ? `👻 ${settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null].filter(Boolean).join(' · ');
+  const free = settings.mode === 'free';
+  const pacer = free && settings.freePacer ? `🚴 ${settings.pacerName?.trim() || tr('Pacer')} ${settings.freePacerWkg} ${U.wkg}` : null;
+  el.textContent = [r?.name, sel?.textContent, g ? `👻 ${settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null, pacer].filter(Boolean).join(' · ');
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
@@ -596,7 +598,8 @@ async function startRide() {
     bots: BOTS.map((b, i) => ({ ...b, name: tr(b.name), dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
     ghost: (() => { const g = pickGhost(route.id); return g ? { entry: g, name: settings.ghost === 'last' ? tr('Last ride') : tr('Your best'), color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
-    pacer: workout ? { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true } : null,
+    // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
+    pacer: { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
@@ -670,7 +673,7 @@ function advance(now = performance.now()) {
     const cadence = cadenceAt(t, power);
     const grade = route.gradeAt(ride.dist);
     // drafting: the best wheel to sit on among the riders just ahead
-    const pack = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
+    const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
     ride.draft = Math.max(0, ...pack.map((o) => draftFactor(o.dist - ride.dist, o.lane - ride.lane)));
     ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft) });
     // your speed on your own, out of the wind shadow: faster than the wheel ahead -> you come past it,
@@ -698,10 +701,12 @@ function advance(now = performance.now()) {
       G.pedal += ((G.dist > before ? 86 : 0) / 60) * Math.PI * 2 * dt;
     }
     if (ride.pacer) {
-      const P = ride.pacer, target = ride.workoutDone ? null : effectiveTarget();
-      const pw = target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
+      const P = ride.pacer, target = ride.workoutDone || P.free ? null : effectiveTarget();
+      const pw = P.free ? Math.round((settings.freePacerWkg || 2.5) * settings.weight)
+        : target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
       P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight, { cda: ride.cda }); // your size, your drag
       P.power = pw;
+      if (P.free && pacerOn()) pacerRegroup(P, dt);
       P.dist += P.v * dt;
       const pc = liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5);
       P.pedal = pc < 5 ? levelPedals(P.pedal, dt) : P.pedal + (pc / 60) * Math.PI * 2 * dt;
@@ -712,7 +717,7 @@ function advance(now = performance.now()) {
     // overtaking: a rider closing on someone in the same lane swings out to a free one, then back
     if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
       ride.laneCheck = 0;
-      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, me: true }, ...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : [])];
+      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
       for (const b of ride.bots) b.laneTarget = pickLane(b, solid, b.home);
       if (!ride.steeredAt || ride.elapsed - ride.steeredAt > 4) { // unless you steered yourself just now
         const me = solid[0], t = pickLane(me, solid, ride.laneHome ?? START_LANE);
@@ -750,7 +755,7 @@ function frame(now) {
   const riders = [
     { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
     ...ride.bots,
-    ...(ride.pacer && settings.pacer ? [ride.pacer] : []),
+    ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),
     ...(ride.climbGhost ? [ride.climbGhost] : []),
   ];
@@ -761,7 +766,7 @@ function frame(now) {
 
 /** Riders ahead you could reach within 10 s at your speed: name, gap in seconds and metres, their W/kg. */
 function updateAhead() {
-  const v = Math.max(ride.v, 2), all = [...ride.bots, ...(ride.pacer && settings.pacer ? [ride.pacer] : []), ...(ride.ghost ? [ride.ghost] : []), ...(ride.climbGhost ? [ride.climbGhost] : [])];
+  const v = Math.max(ride.v, 2), all = [...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...(ride.ghost ? [ride.ghost] : []), ...(ride.climbGhost ? [ride.climbGhost] : [])];
   const ahead = all
     .map((r) => ({ r, gap: r.dist - ride.dist }))
     .filter(({ gap }) => gap > 0.5 && gap / v <= 10)
@@ -980,8 +985,8 @@ function updateHud(cadence, hr, grade) {
     tEl.className = cls;
     $('m-power').className = cls;
     const P = ride.pacer;
-    $('wk-pacer').hidden = !(P && settings.pacer);
-    if (P && settings.pacer) {
+    $('wk-pacer').hidden = !pacerOn();
+    if (pacerOn()) {
       const gap = Math.round(ride.dist - P.dist);
       $('wk-pacer').textContent = Math.abs(gap) < 3 ? tr('With {name}', { name: P.name }) : gap > 0 ? `${P.name} ${tr('{n} m behind', { n: gap })}` : `${P.name} ${tr('{n} m ahead', { n: -gap })}`;
       $('wk-pacer').className = `pacer-tag ${gap >= -3 ? 'c-ok' : gap >= -25 ? 'c-warn' : 'c-bad'}`;
@@ -1494,15 +1499,52 @@ $('f-pacer-name').oninput = () => {
 };
 $('btn-settings').onclick = () => openDrawer('profile');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
+$('f-free-pacer').checked = !!settings.freePacer;
+$('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
+$('f-free-wkg').value = settings.freePacerWkg;
+$('f-free-wkg').oninput = () => { const v = Number($('f-free-wkg').value); if (v >= 0.5 && v <= 7) { settings.freePacerWkg = v; saveSettings(); updateSummary(); } };
 $('wk-pacer-btn').onclick = () => togglePacer();
 function togglePacer() {
-  settings.pacer = !settings.pacer;
+  // in a workout the workout pacer, on a free ride the free-ride pacer
+  const key = ride && !ride.workout ? 'freePacer' : 'pacer';
+  settings[key] = !(key === 'pacer' ? settings.pacer !== false : settings.freePacer);
   saveSettings();
-  $('f-pacer').checked = settings.pacer;
-  $('wk-pacer-btn').classList.toggle('on', settings.pacer);
-  if (ride?.pacer && settings.pacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } // rejoin beside you
+  $('f-pacer').checked = settings.pacer !== false;
+  $('f-free-pacer').checked = !!settings.freePacer;
+  $('wk-pacer-btn').classList.toggle('on', settings.pacer !== false);
+  const on = settings[key];
+  if (ride?.pacer && on) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; ride.pacer.waitAt = null; } // rejoin beside you
   const who = settings.pacerName?.trim() || tr('Pacer');
-  toast(settings.pacer ? tr('{name} is riding with you', { name: who }) : tr('{name} dropped back', { name: who }));
+  toast(on ? tr('{name} is riding with you', { name: who }) : tr('{name} dropped back', { name: who }));
+  updateSummary();
+}
+
+/** The pacer is out on the road: the workout pacer in a workout, the free-ride pacer otherwise. */
+function pacerOn() {
+  if (!ride?.pacer) return false;
+  return ride.pacer.free ? !!settings.freePacer : settings.pacer !== false;
+}
+
+/**
+ * Free-ride pacer: at the foot of a climb, when you are more than 40 m back, he stops and waits
+ * until you are there, so you go up together.
+ */
+function pacerRegroup(P, dt) {
+  const R = ride.route, L = R.length;
+  if (P.waitAt != null) {
+    // you are coming: set off as you arrive, at your speed, so you go up side by side
+    if (ride.dist >= P.waitAt - 2) { P.waitAt = null; P.v = Math.max(P.v, ride.v); return; }
+    P.v = 0;
+    return;
+  }
+  for (const c of R.climbs) {
+    const foot = R.oneWay ? c.start : c.start + Math.ceil((P.dist - c.start) / L) * L; // the next foot ahead
+    if (foot >= P.dist && foot <= P.dist + P.v * dt + 0.01 && ride.dist < foot - 40) {
+      P.dist = foot; P.v = 0; P.waitAt = foot;
+      toast(tr('{name} waits for you at the foot of {climb}', { name: P.name, climb: c.name }));
+      return;
+    }
+  }
 }
 $('f-sound').checked = !!settings.sound;
 $('f-sound').onchange = () => {
