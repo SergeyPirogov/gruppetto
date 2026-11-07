@@ -456,11 +456,24 @@ function markSelected(list, id) {
 
 // ---------- Ride ----------
 const BOTS = [
-  { name: 'Andriy', wkg: 2.2, color: '#e5484d', stripe: '#ffffff' },
-  { name: 'Taras', wkg: 2.7, color: '#2563eb', stripe: '#facc15' },
-  { name: 'Dmytro', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0' },
-  { name: 'Bohdan', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a' },
+  { name: 'Andriy', wkg: 2.2, color: '#e5484d', stripe: '#ffffff', rpm: 84 },  // rpm: his cadence on the flat
+  { name: 'Taras', wkg: 2.7, color: '#2563eb', stripe: '#facc15', rpm: 92 },
+  { name: 'Dmytro', wkg: 3.1, color: '#8b5cf6', stripe: '#f0f0f0', rpm: 88 },
+  { name: 'Bohdan', wkg: 3.6, color: '#f5f5f5', stripe: '#16a34a', rpm: 96 },
 ];
+/**
+ * A rider's cadence, like a person's: their own rpm on the flat, slower as the road tilts up (about
+ * 2.5 rpm per % up to 8 %+), a little faster on a gentle descent, freewheeling now and then on a
+ * steep one, and never quite steady. `r` keeps the eased value between frames.
+ */
+function liveCadence(r, base, grade, t, dt, seed = 0) {
+  let target = base - Math.max(0, Math.min(0.1, grade)) * 250 + (grade < 0 && grade > -0.03 ? -grade * 150 : 0);
+  target += Math.sin(t * 0.37 + seed * 1.7) * 2.5 + Math.sin(t * 1.3 + seed) * 1.2;
+  if (grade <= -0.035 && Math.sin(t * 0.21 + seed) > -0.2) target = 0; // coasting most of a steep descent
+  const cur = r.cad ?? target;
+  r.cad = cur + (target - cur) * Math.min(1, dt * (target === 0 || cur < 5 ? 2.5 : 0.7));
+  return Math.max(0, r.cad < 3 ? 0 : r.cad);
+}
 // Riders keep right: start in the right half of the road (positive lane = right of travel).
 const START_LANE = 1.2;
 
@@ -618,7 +631,7 @@ function advance(now = performance.now()) {
       P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight, { cda: ride.cda }); // your size, your drag
       P.power = pw;
       P.dist += P.v * dt;
-      P.pedal += (90 / 60) * Math.PI * 2 * dt;
+      P.pedal += (liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5) / 60) * Math.PI * 2 * dt;
       // rides beside you, on the side with more room; switches sides only well past the centre line
       P.side = ride.lane > 0.6 ? -1 : ride.lane < -0.6 ? 1 : (P.side || (ride.lane > 0 ? -1 : 1));
       P.lane = easeLane(P.lane, ride.lane + 1.4 * P.side, dt, P);
@@ -644,7 +657,7 @@ function advance(now = performance.now()) {
       b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, 75, { cda: DEFAULTS.cda });
       for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
       b.dist += b.v * dt;
-      b.pedal += (90 / 60) * Math.PI * 2 * dt;
+      b.pedal += (liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.wkg * 3) / 60) * Math.PI * 2 * dt;
     }
     ride.elapsed += dt;
     ride.secAcc += dt;
