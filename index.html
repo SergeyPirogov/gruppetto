@@ -203,18 +203,26 @@
 
   <!-- ===== Summary ===== -->
   <section id="summary" class="screen" hidden>
-    <div class="lobby-inner">
-      <h1>Great job! 💪</h1>
+    <header class="lobby-top">
+      <div class="brand"><h1>Power<span>Up</span></h1></div>
+      <div class="sum-title"><small>Ride complete</small><b id="sum-name"></b></div>
+    </header>
+    <main class="sum-main">
+      <div id="sum-hero" class="sum-hero"></div>
+      <div class="sum-chart card">
+        <div class="sum-chart-head"><h2>Power &amp; heart rate</h2><span class="legend"><i class="lg-power"></i>Power <i class="lg-hr"></i>Heart rate</span></div>
+        <canvas id="sum-chart"></canvas>
+      </div>
       <div id="sum-stats" class="stats"></div>
-      <div class="row">
+      <div class="sum-actions">
         <button id="btn-download" class="primary">Download .FIT</button>
         <button id="btn-download-tcx">.TCX</button>
         <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
-        <button id="btn-again">Back to lobby</button>
+        <button id="btn-again" class="ghost">Back to lobby</button>
       </div>
       <p id="icu-upload-status" class="hint" hidden></p>
       <p class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
-    </div>
+    </main>
   </section>
 
   <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>

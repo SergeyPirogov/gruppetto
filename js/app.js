@@ -672,17 +672,24 @@ function finishRide() {
   }
   $('ride').hidden = true;
   $('summary').hidden = false;
+  // hero: the four numbers people look for first; the rest goes in the grid below
+  $('sum-name').textContent = [lastRide.route?.name, lastRide.workout?.name || 'Free ride'].filter(Boolean).join(' · ');
+  const hero = sum ? [
+    ['Time', fmtTime(sum.duration), ''],
+    ['Distance', (sum.distance / 1000).toFixed(2), 'km'],
+    ['Avg power', sum.avgPower, 'W'],
+    ['Avg heart rate', sum.avgHr || '—', sum.avgHr ? 'bpm' : ''],
+  ] : [['Time', '0:00', '']];
+  $('sum-hero').innerHTML = hero.map(([k, v, u]) => `<div><label>${k}</label><b>${v}</b><span>${u}</span></div>`).join('');
+  requestAnimationFrame(() => drawSummaryChart($('sum-chart'), recorder.samples));
   const stats = sum ? [
-    ['Time', fmtTime(sum.duration)],
-    ['Distance', `${(sum.distance / 1000).toFixed(2)} km`],
     ['Elevation gain', `${Math.round(sum.elevationGain)} m`],
-    ['Avg power', `${sum.avgPower} W`],
     ['NP', sum.normalizedPower ? `${sum.normalizedPower} W` : '—'],
     ['Max power', `${sum.maxPower} W`],
-    ['Avg heart rate', sum.avgHr ? `${sum.avgHr} bpm` : '—'],
+    ['Max heart rate', sum.maxHr ? `${sum.maxHr} bpm` : '—'],
     ['Avg cadence', `${sum.avgCadence} rpm`],
     ['Work', `${sum.kj} kJ`],
-  ] : [['Time', '0:00']];
+  ] : [];
   if (sum && wasRamp && sum.best1min) stats.push(['Estimated FTP', `${Math.round(sum.best1min * 0.75)} W`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   $('btn-download').disabled = !sum;
@@ -693,6 +700,41 @@ function finishRide() {
   $('btn-icu-upload').textContent = 'Upload to intervals.icu';
   $('icu-upload-status').hidden = true;
   if (canUpload && settings.icuUpload) uploadToIntervals();
+}
+
+/** Power (filled, smoothed over 10 s) and heart rate (line) over the whole ride. */
+function drawSummaryChart(canvas, samples) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext('2d');
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, w, h);
+  if (!samples.length) return;
+  const smooth = (k, n) => samples.map((_, i) => {
+    let a = 0, c = 0;
+    for (let j = Math.max(0, i - n + 1); j <= i; j++) { const v = samples[j][k] || 0; if (v > 0) { a += v; c++; } }
+    return c ? a / c : 0;
+  });
+  const pw = smooth('power', 10), hr = smooth('heartRate', 5);
+  const pMax = Math.max(settings.ftp * 1.3, ...pw), hMax = Math.max(190, ...hr);
+  const x = (i) => (i / Math.max(1, samples.length - 1)) * w;
+  // FTP reference line
+  const yF = h - (settings.ftp / pMax) * (h - 8);
+  g.strokeStyle = 'rgba(255,255,255,.18)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
+  g.fillStyle = 'rgba(255,255,255,.4)'; g.font = '11px system-ui'; g.fillText(`FTP ${settings.ftp} W`, 6, yF - 4);
+  g.beginPath(); g.moveTo(0, h);
+  pw.forEach((v, i) => g.lineTo(x(i), h - (v / pMax) * (h - 8)));
+  g.lineTo(w, h); g.closePath();
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, 'rgba(255,194,26,.85)'); grad.addColorStop(1, 'rgba(255,194,26,.15)');
+  g.fillStyle = grad; g.fill();
+  if (hr.some((v) => v > 0)) {
+    g.strokeStyle = '#ff4d5e'; g.lineWidth = 2; g.beginPath();
+    let started = false;
+    hr.forEach((v, i) => { if (!v) return; const y = h - (v / hMax) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
+    g.stroke();
+  }
 }
 
 function download(kind) {
