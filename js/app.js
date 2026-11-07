@@ -466,6 +466,11 @@ const BOTS = [
  * 2.5 rpm per % up to 8 %+), a little faster on a gentle descent, freewheeling now and then on a
  * steep one, and never quite steady. `r` keeps the eased value between frames.
  */
+/** Coasting: the cranks settle level (crank angle a multiple of π), as a rider rests on the pedals. */
+function levelPedals(pedal, dt) {
+  const target = Math.round(pedal / Math.PI) * Math.PI;
+  return pedal + (target - pedal) * Math.min(1, dt * 3);
+}
 function liveCadence(r, base, grade, t, dt, seed = 0) {
   let target = base - Math.max(0, Math.min(0.1, grade)) * 250 + (grade < 0 && grade > -0.03 ? -grade * 150 : 0);
   target += Math.sin(t * 0.37 + seed * 1.7) * 2.5 + Math.sin(t * 1.3 + seed) * 1.2;
@@ -612,7 +617,7 @@ function advance(now = performance.now()) {
     // Pedal animation only: trainers like the KICKR CORE derive cadence from the flywheel and report
     // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
-    ride.pedal += (animCadence / 60) * Math.PI * 2 * dt;
+    ride.pedal = animCadence < 5 ? levelPedals(ride.pedal, dt) : ride.pedal + (animCadence / 60) * Math.PI * 2 * dt;
     ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt, ride) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
     if (ride.ghost) {
       const G = ride.ghost, before = G.dist;
@@ -631,7 +636,8 @@ function advance(now = performance.now()) {
       P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight, { cda: ride.cda }); // your size, your drag
       P.power = pw;
       P.dist += P.v * dt;
-      P.pedal += (liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5) / 60) * Math.PI * 2 * dt;
+      const pc = liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5);
+      P.pedal = pc < 5 ? levelPedals(P.pedal, dt) : P.pedal + (pc / 60) * Math.PI * 2 * dt;
       // rides beside you, on the side with more room; switches sides only well past the centre line
       P.side = ride.lane > 0.6 ? -1 : ride.lane < -0.6 ? 1 : (P.side || (ride.lane > 0 ? -1 : 1));
       P.lane = easeLane(P.lane, ride.lane + 1.4 * P.side, dt, P);
@@ -657,7 +663,8 @@ function advance(now = performance.now()) {
       b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, 75, { cda: DEFAULTS.cda });
       for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
       b.dist += b.v * dt;
-      b.pedal += (liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.wkg * 3) / 60) * Math.PI * 2 * dt;
+      const bc = liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.wkg * 3);
+      b.pedal = bc < 5 ? levelPedals(b.pedal, dt) : b.pedal + (bc / 60) * Math.PI * 2 * dt;
     }
     ride.elapsed += dt;
     ride.secAcc += dt;
