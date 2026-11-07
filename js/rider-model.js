@@ -10,6 +10,7 @@ import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 import { buildProceduralRider } from './rider-procedural.js';
 
 const URL_CFG = 'assets/rider.json';
+const SADDLE0 = { x: -0.15, y: 1.03 }; // saddle of the built-in bike the hips settings were tuned on
 const TRANSPARENT_PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
 // Default hero: Microsoft Rocketbox "Sports_Male_04" (MIT, see assets/default-rider/LICENSE.md).
@@ -17,7 +18,11 @@ const TRANSPARENT_PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCA
 const DEFAULT_DIR = 'assets/default-rider/';
 const DEFAULT_TEXTURES = { m026_body_color: 'body.jpg', m026_head_color: 'head.jpg' };
 const DEFAULT_CFG = {
-  height: 1.78,
+  // fit on a 56 cm race bike (saddle ~0.80 m above the cranks): knee ~67° at the top, ~148° at the bottom
+  height: 1.88, hipsX: -0.15, hipsY: 0.93, torsoLean: 36, clavicle: { out: 0.8, fwd: -0.6, up: -0.35 },
+  helmet: false, // bare head, no glasses
+  glasses: false,
+  neckAngle: 40, headAngle: 40, // this skeleton's head bone points further back: these keep the eyes on the road
   // Recolour the kit in the body texture atlas (UV rectangles, 0..1 from the top-left).
   kit: { jerseyHue: [195, 245], shorts: [[0, 0, 0.31, 0.185], [0.7, 0, 1, 0.185]], stripes: [[0.205, 0.255], [0.68, 0.73]], shirtX: [0.32, 0.69] },
 };
@@ -39,6 +44,18 @@ function defaultManager() {
 const CANDIDATES = [
   { url: 'assets/rider.glb', load: async (u) => new GLTFLoader().loadAsync(u) },
   { url: 'assets/rider.fbx', load: async (u) => { const g = await new FBXLoader().loadAsync(u); return { scene: g, animations: g.animations || [] }; } },
+  // bundled CC0 character (Quaternius Universal Base Characters, see tools/prepare_rider.py),
+  // with its own settings next to it; assets/rider.json still overrides them
+  {
+    url: 'assets/rider/rider.gltf',
+    cfg: 'assets/rider/rider.json',
+    load: async (u, cfg) => {
+      const gltf = await new GLTFLoader().loadAsync(u);
+      await attachParts(gltf.scene, (cfg.attach || []).map((f) => `assets/rider/${f}`));
+      if (cfg.hairColor) tintHair(gltf.scene, cfg.hairColor);
+      return gltf;
+    },
+  },
   {
     url: `${DEFAULT_DIR}Sports_Male_04.fbx`,
     builtin: true,
@@ -59,10 +76,44 @@ const CANDIDATES = [
       return { scene: g, animations: g.animations || [] };
     },
   },
-  // bundled CC0 character (Quaternius Universal Base Characters, see tools/prepare_rider.py),
-  // with its own settings next to it; assets/rider.json still overrides them
-  { url: 'assets/rider/rider.gltf', cfg: 'assets/rider/rider.json', load: async (u) => new GLTFLoader().loadAsync(u) },
 ];
+
+/**
+ * Extra rigged parts (hairstyles, beard) made for the same skeleton: their skinned meshes are bound to
+ * the character's bones, matched by name, and added next to its body.
+ */
+async function attachParts(scene, urls) {
+  const bones = new Map();
+  scene.traverse((o) => { if (o.isBone) bones.set(o.name, o); });
+  const body = (() => { let m = null; scene.traverse((o) => { if (!m && o.isSkinnedMesh) m = o; }); return m; })();
+  for (const url of urls) {
+    try {
+      const part = (await new GLTFLoader().loadAsync(url)).scene;
+      part.updateMatrixWorld(true);
+      const meshes = [];
+      part.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });
+      for (const m of meshes) {
+        const mapped = m.skeleton.bones.map((b) => bones.get(b.name));
+        if (mapped.some((b) => !b)) { console.warn(`${url}: bones do not match the character`); continue; }
+        (body?.parent || scene).add(m);
+        if (body) { m.position.copy(body.position); m.quaternion.copy(body.quaternion); m.scale.copy(body.scale); }
+        m.bind(new THREE.Skeleton(mapped, m.skeleton.boneInverses), m.bindMatrix);
+      }
+    } catch (e) {
+      console.warn(`Rider part ${url} not loaded`, e);
+    }
+  }
+}
+
+/** Hair, beard and eyebrows use greyscale textures meant to be tinted: give them one colour. */
+function tintHair(scene, hex) {
+  scene.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+      if (/hair|brow|beard/i.test(m.name || '') || /hair|brow|beard/i.test(o.name || '')) m.color = new THREE.Color(hex);
+    }
+  });
+}
 
 /** Loads the model once: your assets/rider.(glb|fbx) if present, otherwise the built-in hero. */
 export async function loadRiderModel() {
@@ -73,7 +124,7 @@ export async function loadRiderModel() {
       let cfg = c.builtin ? { ...DEFAULT_CFG } : {};
       if (c.cfg) { try { const r = await fetch(c.cfg); if (r.ok) cfg = await r.json(); } catch { /* optional */ } }
       if (!c.builtin) { try { const r = await fetch(URL_CFG); if (r.ok) cfg = { ...cfg, ...(await r.json()) }; } catch { /* optional */ } }
-      const gltf = await c.load(c.url);
+      const gltf = await c.load(c.url, cfg);
       return { gltf, cfg };
     } catch (e) {
       console.warn(`Rider model ${c.url} not loaded`, e);
@@ -139,6 +190,9 @@ export function paintKit(image, kit, jerseyHex, stripeHex) {
 const norm = (n) => n.toLowerCase().replace(/^mixamorig\d*[:_]?/, '').replace(/[\s:_.\-]/g, '');
 
 /** Splits a bone name into side ('l' | 'r' | null) and a side-free core name. */
+/** Finger joint name without its side: 'index2', 'index02', 'Index2L' -> 'index2'/'index02'. */
+const fingerCore = (name) => parseName(name).core.replace(/(\d)[lr]$/, '$1');
+
 function parseName(name) {
   const raw = name.toLowerCase();
   let core = norm(name);
@@ -175,7 +229,7 @@ export function findBones(root) {
     if (side) {
       for (const [part, test] of Object.entries(PARTS)) if (!B[side][part] && test(core)) B[side][part] = b;
     } else if (/hips|pelvis/.test(core) && !B.hips) B.hips = b;
-    else if (/spine|chest/.test(core)) B.spine.push(b);
+    else if (/spine|chest|abdomen|torso/.test(core)) B.spine.push(b);
     else if (/neck/.test(core) && !B.neck) B.neck = b;
     else if (/head$/.test(core) && !B.head) B.head = b;
   }
@@ -376,7 +430,7 @@ function regroup(o, cuts, classify, mats) {
  * part gets a plain material; the skin keeps the model's own textured material.
  * `sleeve`, `shorts` and `sock` are fractions along the upper arm, thigh and shin.
  */
-function paintKitMesh(root, bones, { jersey, stripe, sleeve, shorts, sock }) {
+function paintKitMesh(root, bones, { jersey, stripe, sleeve, shorts, sock, collar }) {
   const B = bones;
   const legs = ['l', 'r'].map((s) => B[s]).filter((L) => L.upperLeg && L.lowerLeg && L.foot);
   const arms = ['l', 'r'].map((s) => B[s]).filter((A) => A.upperArm && A.lowerArm);
@@ -388,7 +442,7 @@ function paintKitMesh(root, bones, { jersey, stripe, sleeve, shorts, sock }) {
   const hem = 0.025;
   const A = arms.map((a) => seg(a.upperArm, a.lowerArm));
   const L = legs.map((l) => ({ thigh: seg(l.upperLeg, l.lowerLeg), shin: seg(l.lowerLeg, l.foot), ankleY: wp(l.foot).y + 0.015 }));
-  const neckY = wp(B.neck).y + 0.035; // a round collar at the base of the neck, not a V down to the chest
+  const neckY = wp(B.neck).y + (collar ?? 0.035); // a round collar at the base of the neck, not a V down to the chest
   const waistY = wp(B.hips).y + 0.06; // the jersey overlaps the top of the bib shorts
   const cuts = [
     (p) => p.y - neckY,
@@ -491,26 +545,63 @@ function makeJersey(root, bones, sleeve, skinMat, accentMat) {
  * geometry, so each geometry is changed only once.
  */
 function slimArms(root, bones, k) {
+  const segs = [];
+  for (const sd of ['l', 'r']) {
+    const B = bones[sd];
+    for (const [from, to] of [[B.upperArm, B.lowerArm], [B.lowerArm, B.handJoint]]) if (from && to) segs.push({ bones: [from], a: from, b: to });
+  }
+  slimAlong(root, segs, k, 'arms');
+}
+
+/**
+ * Slimmer torso ("bodySlim"): vertices of the hips and spine toward the hips–neck line. The collarbones
+ * are left out: the deltoids follow the upper-arm bones, so pulling only the collarbone area in would
+ * leave a step on top of each shoulder.
+ */
+function slimTorso(root, bones, k) {
+  if (!bones.hips || !bones.neck) return;
+  slimAlong(root, [{ bones: [bones.hips, ...bones.spine], a: bones.hips, b: bones.neck }], k, 'torso');
+}
+
+/** Thinner neck and trapezius ("neckSlim"): vertices of the neck bone toward the neck–head line. */
+function slimNeck(root, bones, k) {
+  if (!bones.neck || !bones.head) return;
+  slimAlong(root, [{ bones: [bones.neck], a: bones.neck, b: bones.head }], k, 'neck');
+}
+
+/** Slimmer legs ("legSlim"): thighs and calves toward their bones. */
+function slimLegs(root, bones, k) {
+  const segs = [];
+  for (const sd of ['l', 'r']) {
+    const B = bones[sd];
+    for (const [from, to] of [[B.upperLeg, B.lowerLeg], [B.lowerLeg, B.foot]]) if (from && to) segs.push({ bones: [from], a: from, b: to });
+  }
+  slimAlong(root, segs, k, 'legs');
+}
+
+/**
+ * Pulls the skinned vertices that follow `segs[i].bones` toward the segment a→b by `k` (1 = unchanged),
+ * on every skinned mesh alike so skin and clothing stay matched. Works in the rendered (skinned) rest
+ * pose and maps the shift back through each vertex's own skinning transform.
+ */
+function slimAlong(root, segs, k, tag) {
   root.updateMatrixWorld(true);
   const v = new THREE.Vector3(), p = new THREE.Vector3(), t = new THREE.Vector3(), sh = new THREE.Vector3();
   const S = new THREE.Matrix3(), Mk = new THREE.Matrix3();
   root.traverse((o) => {
-    if (!o.isSkinnedMesh || o.geometry.userData.slimmedArms) return;
+    if (!o.isSkinnedMesh || o.geometry.userData[`slimmed_${tag}`]) return;
     const { position, skinIndex, skinWeight } = o.geometry.attributes;
     if (!skinIndex || !skinWeight) return;
     const sk = o.skeleton;
     // per-bone skinning matrix in mesh space, as the renderer applies it
     const M = sk.bones.map((bone, i) => new THREE.Matrix4().multiplyMatrices(o.bindMatrixInverse,
       new THREE.Matrix4().multiplyMatrices(bone.matrixWorld, sk.boneInverses[i])).multiply(o.bindMatrix));
-    // arm axes (mesh space) for every bone carrying an arm bone's name, duplicates included
+    // segment axes (mesh space) for every bone carrying a listed bone's name, duplicates included
     const seg = new Map();
-    for (const sd of ['l', 'r']) {
-      const B = bones[sd];
-      for (const [from, to] of [[B.upperArm, B.lowerArm], [B.lowerArm, B.handJoint]]) {
-        if (!from || !to) continue;
-        const ax = { a: o.worldToLocal(wp(from)), b: o.worldToLocal(wp(to)) };
-        sk.bones.forEach((bone, i) => { if (bone.name === from.name) seg.set(i, ax); });
-      }
+    for (const sg of segs) {
+      const ax = { a: o.worldToLocal(wp(sg.a)), b: o.worldToLocal(wp(sg.b)) };
+      const names = new Set(sg.bones.map((b) => b.name));
+      sk.bones.forEach((bone, i) => { if (names.has(bone.name)) seg.set(i, ax); });
     }
     if (!seg.size) return;
     let moved = 0;
@@ -544,7 +635,7 @@ function slimArms(root, bones, k) {
       moved++;
     }
     if (moved) position.needsUpdate = true; // keep the original (smooth) normals: the shift is small
-    o.geometry.userData.slimmedArms = true;
+    o.geometry.userData[`slimmed_${tag}`] = true;
   });
 }
 
@@ -589,7 +680,7 @@ function sampleSkin(root, bones) {
  * covers the forehead and dips lower at the back, dark vent channels running front to back and
  * a dark rim. Built on a unit sphere (+x forward, +y up, +z side) and scaled to the skull.
  */
-function buildHelmet(fit, scale = 1, colors = {}) {
+export function buildHelmet(fit, scale = 1, colors = {}) {
   // aero road helmet: smooth closed shell, a few wide intakes over the brow, a long tail that
   // tapers and drops toward the nape, exhaust ports at the back and a thin coloured side stripe
   const shellMat = new THREE.MeshStandardMaterial({ color: colors.shell || '#f2f3f5', roughness: 0.22, metalness: 0.15, side: THREE.DoubleSide });
@@ -724,8 +815,13 @@ export class ModelRider {
     this.bones = findBones(this.root);
     // longer arms ("armLength": 1 = as modelled): the elbow and wrist joints are moved out along the
     // bones and the skin stretches with them, so a short-armed character can reach the bars lower down
-    if (cfg.armLength && cfg.armLength !== 1) {
-      for (const sd of ['l', 'r']) for (const b of [this.bones[sd].lowerArm, this.bones[sd].handJoint]) b?.position.multiplyScalar(cfg.armLength);
+    // "upperArmLength" / "forearmLength" scale the two parts separately (on top of armLength)
+    const kUp = (cfg.armLength ?? 1) * (cfg.upperArmLength ?? 1), kFore = (cfg.armLength ?? 1) * (cfg.forearmLength ?? 1);
+    if (kUp !== 1 || kFore !== 1) {
+      for (const sd of ['l', 'r']) {
+        this.bones[sd].lowerArm?.position.multiplyScalar(kUp);   // elbow: end of the upper arm
+        this.bones[sd].handJoint?.position.multiplyScalar(kFore); // wrist: end of the forearm
+      }
       this.root.updateMatrixWorld(true);
     }
     // finger chains (index..pinky, not the thumb), each listed root-first, to curl around the hoods
@@ -740,7 +836,7 @@ export class ModelRider {
     this.root.updateMatrixWorld(true);
     this.handRest = {};
     for (const sd of ['l', 'r']) {
-      const hand = this.bones[sd].handJoint, mid = this.fingers[sd].find((b) => /middle0?1$/.test(parseName(b.name).core));
+      const hand = this.bones[sd].handJoint, mid = this.fingers[sd].find((b) => /middle0?1$/.test(fingerCore(b.name)));
       if (!hand || !mid) continue;
       const qInv = hand.getWorldQuaternion(new THREE.Quaternion()).invert();
       const fL = wp(mid).sub(wp(hand)).applyQuaternion(qInv).normalize();
@@ -750,6 +846,9 @@ export class ModelRider {
     }
     // slimmer arms for bulky sleeves (rider.json "armSlim": 1 = unchanged, smaller = thinner)
     if ((cfg.armSlim ?? 0.8) < 1) slimArms(this.root, this.bones, cfg.armSlim ?? 0.8);
+    if (cfg.bodySlim && cfg.bodySlim < 1) slimTorso(this.root, this.bones, cfg.bodySlim); // rider.json "bodySlim": torso and shoulders
+    if (cfg.legSlim && cfg.legSlim < 1) slimLegs(this.root, this.bones, cfg.legSlim);
+    if (cfg.neckSlim && cfg.neckSlim < 1) slimNeck(this.root, this.bones, cfg.neckSlim);
     // short cycling socks (rider.json: "sockHeight", 0 = ankle .. 1 = knee; false keeps the model's socks)
     // bare skin where clothing is cut down (colour sampled from the body texture once it loads)
     this.skinMat = new THREE.MeshStandardMaterial({ color: '#c08a68', roughness: 0.7 });
@@ -761,7 +860,7 @@ export class ModelRider {
       usesSkin = makeJersey(this.root, this.bones, cfg.sleeve ?? 0.6, this.skinMat, accent) || usesSkin;
     }
     // a bare base body (no clothing meshes): paint the cycling kit onto it ("bodyKit": true)
-    if (cfg.bodyKit) paintKitMesh(this.root, this.bones, { jersey, stripe, sleeve: cfg.kitSleeve ?? 0.55, shorts: cfg.kitShorts ?? 0.78, sock: cfg.kitSock ?? 0.55 });
+    if (cfg.bodyKit) paintKitMesh(this.root, this.bones, { jersey, stripe, sleeve: cfg.kitSleeve ?? 0.55, shorts: cfg.kitShorts ?? 0.78, sock: cfg.kitSock ?? 0.55, collar: cfg.kitCollar });
     if (!usesSkin) this.skinMat = null;
     // face +x: work out where the character looks from its hips (forward = up × (right − left))
     let rotY = Math.PI / 2;
@@ -807,7 +906,11 @@ export class ModelRider {
     const hips = this.group.worldToLocal(wp(this.bones.hips));
     // The hips bone sits above the sit bones, so it goes a little below the saddle height
     // (saddle top ≈ 1.03) to seat the rider instead of leaving him standing on straight legs.
-    this.root.position.add(new THREE.Vector3((this.cfg.hipsX ?? -0.2) - hips.x, (this.cfg.hipsY ?? 0.97) - hips.y, -hips.z)); // seated on the saddle, over the bottom bracket
+    // hipsX/Y are tuned on the built-in bike (saddle centre x ≈ -0.15, top ≈ 1.03); a bike model moves
+    // them with its own saddle (bikeFit, from ModelBike)
+    const F = this.bikeFit;
+    const dx = F ? F.saddle.x - SADDLE0.x : 0, dy = F ? F.saddle.y - SADDLE0.y : 0;
+    this.root.position.add(new THREE.Vector3((this.cfg.hipsX ?? -0.2) + dx - hips.x, (this.cfg.hipsY ?? 0.97) + dy - hips.y, -hips.z)); // seated on the saddle, over the bottom bracket
     this.group.updateMatrixWorld(true);
     const len = (a, b) => (a && b ? wp(a).distanceTo(wp(b)) : 0);
     this.len = {};
@@ -898,19 +1001,21 @@ export class ModelRider {
       // shoulders rolled forward and in, as on a road bike: aim the collarbone so the shoulder
       // joint moves toward the bars, which also narrows the silhouette seen from behind
       const clav = A.upperArm.parent;
-      if (clav?.isBone && clav !== B.neck && !B.spine.includes(clav)) {
+      if (this.cfg.clavicle !== false && clav?.isBone && clav !== B.neck && !B.spine.includes(clav)) {
         const c0 = wp(clav), cl = c0.distanceTo(wp(A.upperArm));
         const outDir = L(0, 0, side).sub(L(0, 0, 0)).normalize();
         const C = this.cfg.clavicle || {}; // rider.json "clavicle": {"out", "fwd", "up"} — where the shoulders go
         aim(clav, A.upperArm, c0.clone().addScaledVector(outDir.multiplyScalar(C.out ?? 0.72).addScaledVector(fwd, C.fwd ?? 0.5).addScaledVector(up, C.up ?? -0.1).normalize(), cl));
       }
       // wrist behind the hoods so the palm rests on them and the knuckles sit at their front (render3d: hoods x ≈ 0.61)
-      const hand = L(0.545, 0.97, side * 0.225); // palm faces in, so the hand sits just outside the hood
+      // palm faces in, so the hand sits just outside the hood; wrist ~8 cm behind the hood's middle
+      const H = this.bikeFit?.hand;
+      const hand = H ? L(H.x, H.y, side * H.z) : L(0.545, 0.97, side * 0.225);
       const sh = wp(A.upperArm);
       const { arm1, arm2 } = this.len[s];
       const out = L(0, 0, side).sub(L(0, 0, 0)).normalize();
       // elbows point back and down, only slightly out: relaxed, close to the body
-      const elbow = solveJoint(sh, hand, arm1, arm2, out.multiplyScalar(-0.08).addScaledVector(up, -0.6).addScaledVector(fwd, -0.55));
+      const elbow = solveJoint(sh, hand, arm1, arm2, out.multiplyScalar(this.cfg.elbowOut ?? -0.08).addScaledVector(up, -(this.cfg.elbowDown ?? 0.6)).addScaledVector(fwd, -0.55));
       aim(A.upperArm, A.lowerArm, elbow);
       aim(A.lowerArm, A.handJoint, hand);
       // hand on the hood: set the whole hand orientation, not just its direction — knuckles forward and a
@@ -929,7 +1034,7 @@ export class ModelRider {
         A.handJoint.updateMatrixWorld(true);
         const axis = new THREE.Vector3().crossVectors(f, n).normalize(); // rotating about f×n turns f toward n
         for (const b of this.fingers[s]) {
-          const k = parseName(b.name).core; // 'index2' (Mixamo) or 'index02' (Unreal-style)
+          const k = fingerCore(b.name); // 'index2' (Mixamo), 'index02' (Unreal-style), 'Index2L' (Quaternius)
           const joint = /1$/.test(k) ? 0.85 : /2$/.test(k) ? 1.0 : /3$/.test(k) ? 0.6 : 0;
           if (joint) rotateWorld(b, axis, joint);
         }

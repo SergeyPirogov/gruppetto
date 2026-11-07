@@ -5,6 +5,7 @@ import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
 import { loadRiderModel, ModelRider } from './rider-model.js';
+import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
 
@@ -32,9 +33,7 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
-// While the bike is being reworked the riders are hidden: only the bikes ride. Add ?rider=1 to the
-// address to see the riders again.
-const SHOW_RIDER = typeof location !== 'undefined' && new URLSearchParams(location.search).get('rider') === '1';
+const SHOW_RIDER = typeof location === 'undefined' || new URLSearchParams(location.search).get('rider') !== '0'; // ?rider=0: bike only
 const SIZE = { oak: 1, birch: 1, pine: 1, rock: 1, bush: 1, cactus: 1, palm: 1, sunflowers: 1, flowers: 1 };
 
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
@@ -445,7 +444,7 @@ export class Scene3D {
       this.natureKeep = new Set([...Object.values(n.textures), ...Object.values(n.types).flat(2).map((p) => p.geometry)]);
       this.routeId = null; // rebuild the world with the models on the next frame
     }).catch((e) => console.warn('Nature models unavailable, using built-in shapes', e));
-    (SHOW_RIDER ? loadRiderModel() : Promise.resolve(null)).then((m) => {
+    (SHOW_RIDER ? loadDummyRider().then((d) => d || loadRiderModel()) : Promise.resolve(null)).then((m) => {
       if (!m) return;
       this.riderModel = m;
       for (const R of this.riders.values()) this.scene.remove(R.group);
@@ -456,15 +455,18 @@ export class Scene3D {
   }
 
   /**
-   * Camera you can turn: drag (mouse or one finger) to orbit around your rider, wheel or pinch to
-   * zoom, double-click or double-tap to go back to the chase view.
+   * Camera you can turn a little: drag (mouse or one finger) to orbit around your rider, wheel or
+   * pinch to zoom, double-click or double-tap to go back to the chase view.
    */
   _orbitControls(canvas) {
     this.orbit = { yaw: 0, pitch: 0, zoom: 1 };
     const O = this.orbit;
     const pts = new Map();
     let pinch = 0, lastTap = 0;
-    const clampZoom = (z) => Math.max(0.3, Math.min(2.5, z));
+    // kept near the chase view: up to ~30° round to either side, higher up or a little lower, a little
+    // closer or farther — enough to see the rider from behind and three-quarters, never from in front
+    const clampZoom = (z) => Math.max(0.6, Math.min(1.3, z));
+    const clampYaw = (y) => Math.max(-0.5, Math.min(0.5, y));
     canvas.style.touchAction = 'none';
     canvas.style.cursor = 'grab';
     canvas.addEventListener('pointerdown', (e) => {
@@ -483,8 +485,8 @@ export class Scene3D {
       const dx = e.clientX - p.x, dy = e.clientY - p.y;
       p.x = e.clientX; p.y = e.clientY;
       if (pts.size === 1) {
-        O.yaw -= dx * 0.006;
-        O.pitch = Math.max(-0.5, Math.min(1.2, O.pitch + dy * 0.004));
+        O.yaw = clampYaw(O.yaw - dx * 0.006);
+        O.pitch = Math.max(-0.1, Math.min(0.25, O.pitch + dy * 0.004));
       } else if (pts.size === 2) {
         const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
         if (pinch) O.zoom = clampZoom(O.zoom * pinch / d);
@@ -1081,8 +1083,12 @@ export class Scene3D {
         R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, SHOW_RIDER && !this.riderModel, !this.bikeModel, bikeColor);
         this.riders.set(key, R);
         this.scene.add(R.group);
-        if (this.riderModel) R.model = new ModelRider(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
+        if (this.riderModel) {
+          const Model = this.riderModel.dummy ? DummyRider : ModelRider;
+          R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
+        }
         if (this.bikeModel) R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color });
+        if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; } // saddle, hoods and pedals of this bike
       }
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;

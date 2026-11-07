@@ -2,19 +2,31 @@
   "bodyKit": true,
   "sleeve": false,
   "sockHeight": false,
-  "armSlim": 1,
+  "armSlim": 0.8,
   "height": 1.92,
   "vertexColors": false,
-  "hipsX": -0.19,
-  "hipsY": 1.065,
-  "torsoLean": 28,
-  "pelvisTilt": 48,
+  "hipsX": -0.15,
+  "hipsY": 1.03,
+  "torsoLean": 40,
+  "pelvisTilt": 50,
   "clavicle": {
-    "out": 0.8,
-    "fwd": -0.6,
+    "out": 0.55,
+    "fwd": -0.3,
     "up": -0.35
   },
-  "neckAngle": 65,
-  "headAngle": 88,
-  "armLength": 0.86
+  "neckAngle": 42,
+  "headAngle": 72,
+  "armLength": 1.02,
+  "helmet": false,
+  "glasses": false,
+  "attach": [
+    "Hair_Buzzed.gltf",
+    "Hair_Beard.gltf"
+  ],
+  "hairColor": "#2a2018",
+  "bodySlim": 0.8,
+  "legSlim": 0.88,
+  "elbowDown": 0.6,
+  "neckSlim": 0.8,
+  "kitCollar": 0.07
 }

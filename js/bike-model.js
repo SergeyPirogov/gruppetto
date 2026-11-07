@@ -79,6 +79,43 @@ export class ModelBike {
     const rigged = bone(gltf.scene, /back.?wheel/i) && bone(gltf.scene, /front.?wheel/i);
     if (rigged) this._rigged(gltf, group, color);
     else this._static(gltf, cfg, group);
+    // where the rider sits and holds on (measured once per model, in the rider group's frame)
+    this.fit = model.fit ||= this._measureFit(cfg);
+  }
+
+  /**
+   * Saddle (middle of its top) and the wrist target behind the brake hoods, from the geometry:
+   * the saddle is the highest part behind the bottom bracket, the hoods the highest parts out at the
+   * bar ends. assets/bike(.json) "saddle": [x, y] / "hand": [x, y, z] override them.
+   */
+  _measureFit(cfg) {
+    const g = this.group;
+    g.updateMatrixWorld(true);
+    const pts = [], v = new THREE.Vector3();
+    (this.root || this.holder).traverse((o) => { // the bike only, not the rider in the same group
+      if (!o.isMesh) return;
+      const p = o.geometry.attributes.position;
+      for (let i = 0; i < p.count; i += 2) {
+        if (o.isSkinnedMesh) o.getVertexPosition(i, v); else v.fromBufferAttribute(p, i);
+        pts.push(g.worldToLocal(v.applyMatrix4(o.matrixWorld)).clone());
+      }
+    });
+    const rear = pts.filter((p) => p.x < BB.x + 0.05 && p.y > 0.6);
+    const top = rear.reduce((a, b) => (b.y > a.y ? b : a), rear[0] || new THREE.Vector3(-0.15, 1.03, 0));
+    const seat = rear.filter((p) => p.y > top.y - 0.02);
+    const sx = seat.length ? (Math.min(...seat.map((p) => p.x)) + Math.max(...seat.map((p) => p.x))) / 2 : -0.15;
+    const bars = pts.filter((p) => p.x > 0.3 && p.y > 0.7 && Math.abs(p.z) > 0.14);
+    const hoodTop = bars.reduce((a, b) => (b.y > a.y ? b : a), bars[0] || new THREE.Vector3(0.625, 0.95, 0.2));
+    const hood = bars.filter((p) => p.y > hoodTop.y - 0.04);
+    const hx = hood.length ? (Math.min(...hood.map((p) => p.x)) + Math.max(...hood.map((p) => p.x))) / 2 : 0.625;
+    const hz = hood.length ? hood.reduce((n, p) => n + Math.abs(p.z), 0) / hood.length : 0.21;
+    const fit = {
+      saddle: new THREE.Vector2(sx, top.y),
+      hand: new THREE.Vector3(hx - 0.08, hoodTop.y - 0.015, hz + 0.01),
+    };
+    if (cfg.saddle) fit.saddle.set(...cfg.saddle);
+    if (cfg.hand) fit.hand.set(...cfg.hand);
+    return fit;
   }
 
   // ----- rigged model: bones for the wheels, chainring + pedals, handlebar -----

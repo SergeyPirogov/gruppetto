@@ -7,3 +7,10 @@ assets/rider.fbx
 
 # Bike model under the Sketchfab Standard licence: usable in the app, not redistributable as a file
 assets/bike/bike.glb
+
+# Rider mannequin and head made from downloaded models of unchecked licence (tools/prepare_dummy.py,
+# tools/prepare_head.py); without them the bundled CC0 character is used
+assets/rider/dummy.gltf
+assets/rider/dummy.bin
+assets/rider/head.glb
+tools/__pycache__/
