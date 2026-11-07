@@ -410,7 +410,7 @@ export class DummyRider {
       // hand), and is placed so its middle sits on top of the hood; the wrist follows from that.
       // The hood comes from the bike's fit: its wrist point is ~8 cm behind the hood's middle.
       const H = F?.hand || HAND0;
-      const [gx, gy, gz] = cfg.grip || [-0.03, -0.04, -0.015];
+      const [gx, gy, gz] = cfg.grip || [-0.03, -0.055, -0.015];
       const grip = this._local(H.x + 0.08 + gx, H.y + 0.015 + gy, side * (H.z - 0.01 + gz));
       const [tx, ty, tz] = (cfg.handTurn || [0, 0, 0]).map((d) => THREE.MathUtils.degToRad(d));
       const hand = P[`hand${s}`];
