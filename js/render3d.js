@@ -74,6 +74,27 @@ function windify(mat, amp, time) {
   });
 }
 
+/** A soft elongated shadow (shared): dark patches under both wheels inside a faint oval. */
+let _contactTex = null;
+function contactShadowTexture() {
+  if (_contactTex) return _contactTex;
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 76;
+  const g = c.getContext('2d');
+  // the oval fades out exactly at the texture's edges (a squashed circle of radius 124)
+  const oval = g.createRadialGradient(0, 0, 4, 0, 0, 124);
+  oval.addColorStop(0, 'rgba(0,0,0,0.38)'); oval.addColorStop(0.55, 'rgba(0,0,0,0.18)'); oval.addColorStop(1, 'rgba(0,0,0,0)');
+  g.save(); g.translate(128, 38); g.scale(1, 0.3); g.fillStyle = oval; g.fillRect(-128, -130, 256, 260); g.restore();
+  for (const x of [128 - 0.53 / 2.1 * 256, 128 + 0.53 / 2.1 * 256]) { // the tyres, 1.06 m apart (wheelbase)
+    const w = g.createRadialGradient(x, 38, 1, x, 38, 26);
+    w.addColorStop(0, 'rgba(0,0,0,0.85)'); w.addColorStop(0.4, 'rgba(0,0,0,0.45)'); w.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = w; g.fillRect(x - 30, 0, 60, 76);
+  }
+  _contactTex = new THREE.CanvasTexture(c);
+  _contactTex.colorSpace = THREE.SRGBColorSpace;
+  return _contactTex;
+}
+
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const hash = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
 const hash2 = (x, z) => { const s = Math.sin(x * 127.1 + z * 311.7) * 43758.5453; return s - Math.floor(s); };
@@ -1524,6 +1545,15 @@ export class Scene3D {
         const bikeColor = r.self ? '#c9302c' : BIKE_COLORS[(String(r.name || i).length + i) % BIKE_COLORS.length];
         R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, SHOW_RIDER && !this.riderModel, !this.bikeModel, bikeColor);
         this.riders.set(key, R);
+        // contact shadow: a soft dark patch on the road under the bike, darkest under the tyres, so
+        // the wheels sit on the asphalt instead of seeming to hover over it (the sun's shadow falls aside)
+        const blob = new THREE.Mesh(new THREE.PlaneGeometry(2.1, 0.62), new THREE.MeshBasicMaterial({
+          map: contactShadowTexture(), transparent: true, depthWrite: false, opacity: r.ghost ? 0.25 : 1, toneMapped: false, fog: true,
+        }));
+        blob.rotation.x = -Math.PI / 2;
+        blob.position.set(0.08, 0.018, 0);
+        blob.renderOrder = 1;
+        R.group.add(blob);
         this.scene.add(R.group);
         if (this.riderModel) {
           const Model = this.riderModel.dummy ? DummyRider : ModelRider;
@@ -1554,7 +1584,7 @@ export class Scene3D {
       const f = this.frame(d);
       const lane = r.lane ?? 0;
       const slope = Math.atan((this._roadY(d + 2) - this._roadY(d - 2)) / 4);
-      R.group.position.set(f.x + f.rx * lane, f.y + 0.05, f.z + f.rz * lane);
+      R.group.position.set(f.x + f.rx * lane, f.y + 0.035, f.z + f.rz * lane); // tyres pressed 1.5 cm into the road
       // face along the road as a chord over a few metres (no wobble from small kinks in a real track),
       // turned slightly toward a lane change in progress
       const fa = this.frame(d - 2.5), fb = this.frame(d + 2.5);
