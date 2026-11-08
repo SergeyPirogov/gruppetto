@@ -269,7 +269,8 @@ test('Zwift Ride shifts by side: right unit harder, left unit easier', async () 
   for (const b of ['shiftUpR', 'shiftDownR', 'paddleR']) assert.equal(rideIntent(b), 'harder');
   for (const b of ['shiftUpL', 'shiftDownL', 'paddleL']) assert.equal(rideIntent(b), 'easier');
   assert.equal(rideIntent('b'), 'toggleErg');
-  assert.equal(rideIntent('z'), 'camera');
+  assert.equal(rideIntent('z'), 'skip');
+  assert.equal(rideIntent('y'), 'camera');
   assert.equal(rideIntent('powerUpL'), 'pacer');
   assert.equal(rideIntent('powerUpR'), 'hud');
   assert.equal(rideIntent('onOffL'), null); // the controller's own power button
