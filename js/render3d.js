@@ -777,11 +777,11 @@ export class Scene3D {
 
   /**
    * 'chase' (behind the rider, default), 'eyes' (the rider's own view), 'iso' (high, behind and to the side),
-   * 'side' (high, from the side) or 'front' (ahead of the rider, looking back, like a TV motorbike).
+   * 'side' (over the shoulder: behind and to the left) or 'front' (ahead of the rider, looking back, like a TV motorbike).
    */
   setCamera(mode) {
     this.camMode = ['eyes', 'iso', 'side', 'front'].includes(mode) ? mode : 'chase';
-    this.camera.fov = { chase: 62, eyes: 72, iso: 30, side: 34, front: 48 }[this.camMode];
+    this.camera.fov = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48 }[this.camMode];
     this.camera.updateProjectionMatrix();
     this.csm?.updateFrustums();
     this._isoHeading = undefined;
@@ -1821,7 +1821,7 @@ export class Scene3D {
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
     // chase camera
-    if (me && (this.camMode === 'iso' || this.camMode === 'side')) {
+    if (me && this.camMode === 'iso') {
       // isometric-style view: high, from behind and to the side, narrow field of view (model-like look)
       const target = this.frame(dist + (this.camMode === 'side' ? 4 : 3));
       const h = this._isoHeading = this._isoHeading === undefined ? target.h : this._isoHeading + (target.h - this._isoHeading) * 0.04;
@@ -1833,7 +1833,7 @@ export class Scene3D {
       const tx = target.x + target.rx * me.lane, tz = target.z + target.rz * me.lane, ty = target.y + 0.8;
       this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
       this.camera.lookAt(tx, ty, tz);
-    } else if (me && (this.camMode === 'eyes' || this.camMode === 'front')) {
+    } else if (me && (this.camMode === 'eyes' || this.camMode === 'front' || this.camMode === 'side')) {
       const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
       const px = me.f.x + me.f.rx * me.lane, pz = me.f.z + me.f.rz * me.lane, cx = Math.cos(ch), cz = Math.sin(ch);
       if (this.camMode === 'eyes') {
@@ -1841,6 +1841,12 @@ export class Scene3D {
         const ahead = this.frame(dist + 25);
         this.camera.position.set(px + cx * 0.25, me.f.y + 1.62, pz + cz * 0.25);
         this.camera.lookAt(px + cx * 25, ahead.y + 1.2, pz + cz * 25);
+      } else if (this.camMode === 'side') {
+        // over the shoulder: behind and to the left, the rider in the right of the picture, looking down the road
+        const BACK = 5, LEFT = 1.9, ahead = this.frame(dist + 30);
+        const lx = -me.f.rx * LEFT, lz = -me.f.rz * LEFT; // left of the rider (rx/rz points right)
+        this.camera.position.set(px - cx * BACK + lx, this._roadY(dist - BACK) + 2.5, pz - cz * BACK + lz);
+        this.camera.lookAt(px + cx * 30 + lx, ahead.y - 0.4, pz + cz * 30 + lz);
       } else {
         // a camera bike 6 m ahead, a little to the side, looking back at the rider
         const AHEAD = 6.5, front = this.frame(dist + AHEAD);

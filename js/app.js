@@ -2753,7 +2753,7 @@ function manualLap() {
 
 /** The camera views, in the order of keys 1–5. */
 const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front'];
-const CAMERA_NAMES = { chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: side view', front: 'Camera: from the front' };
+const CAMERA_NAMES = { chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front' };
 function setCameraView(mode) {
   if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
   settings.camera = mode;
@@ -2954,7 +2954,7 @@ const KEYS = [
   [['E'], 'ERG on / off (free ride: hold this power)'],
   [['N'], 'Skip the interval (free ride: new lap)'],
   [['P'], 'Pacer on / off'],
-  [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · side · front'],
+  [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · over the shoulder · front'],
   [['C'], 'Next camera'],
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
