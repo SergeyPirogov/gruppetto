@@ -1699,7 +1699,7 @@ function updateHud(cadence, hr, grade) {
     const air = 0.5 * DEFAULTS.rho * ride.cda * Math.max(0, ride.v) ** 3; // W pushing the air at this speed
     const saved = Math.round((air * df) / 5) * 5;
     const passing = (ride.heldFor || 0) > PASS_AFTER - 1.5;
-    $('draft-tag').innerHTML = `<b>🌀 ${tr('In the slipstream')}</b><span>${passing ? tr('pulling out to pass…') : saved >= 5 ? tr('saving ~{w} W', { w: saved }) : tr('a little shelter')}</span><i class="dt-bar"><i style="width:${Math.round(Math.min(1, df / 0.33) * 100)}%"></i></i>`;
+    $('draft-tag').innerHTML = `<b>${tr('Slipstream')}</b><span>${passing ? tr('pulling out to pass…') : saved >= 5 ? tr('saving ~{w} W', { w: saved }) : tr('a little shelter')}</span><i class="dt-bar"><i style="width:${Math.round(Math.min(1, df / 0.33) * 100)}%"></i></i>`;
     $('draft-tag').title = tr('{n}% less air drag behind the wheel', { n: Math.round(df * 100) });
   }
   if (ride.ghost) {
