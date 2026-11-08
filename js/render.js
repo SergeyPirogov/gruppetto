@@ -614,7 +614,7 @@ function hexToRgb(hex) {
 /** Elevation profile with rider markers. */
 const SEG_STEP = 25; // m, resolution of the climb lines on the profile
 
-export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22)') {
+export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22)', scale = 0) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = canvas.clientWidth * dpr;
   canvas.height = canvas.clientHeight * dpr;
@@ -622,7 +622,9 @@ export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22
   const W = canvas.width, H = canvas.height;
   ctx.clearRect(0, 0, W, H);
   const pad = 6 * dpr;
-  const range = Math.max(30, route.maxElev - route.minElev);
+  // scale: metres for the full height, shared by the route cards so a flat route looks flat and a
+  // pass looks like a pass (otherwise every profile is stretched to fill its box)
+  const range = Math.max(scale || 30, route.maxElev - route.minElev);
   const yOf = (e) => H - pad - ((e - route.minElev) / range) * (H - pad * 2);
   const n = route.segments.length;
   ctx.beginPath();

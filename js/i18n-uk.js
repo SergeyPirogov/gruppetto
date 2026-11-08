@@ -29,7 +29,7 @@ export const UK = {
   'Free ride': 'Вільна їзда', 'The trainer simulates the road grade.': 'Тренажер імітує нахил дороги.',
   'Workouts': 'Тренування', 'Workout': 'Тренування', 'Choose': 'Обрати',
   'Structured intervals in ERG: the trainer holds the target power.': 'Інтервали в режимі ERG: тренажер сам тримає цільову потужність.',
-  'Best time': 'Найкращий час', 'Best lap': 'Найкраще коло', 'Climb {n}': 'Підйом {n}',
+  'Best time': 'Найкращий час', 'Best lap': 'Найкраще коло', 'Climb {n}': 'Підйом {n}', 'max {n}%': 'до {n}%',
   'Close': 'Закрити',
 
   // drawer: devices
@@ -155,9 +155,9 @@ export const UK = {
   'Autumn Forest': 'Осінній ліс', 'Golden oaks, moderate hills, a winding road.': 'Золоті дуби, помірні пагорби, звивиста дорога.',
   'Sunset Hills': 'Вечірні пагорби', 'Looping “walls” up to 8% at sunset. For strength.': 'Кільцеві «стіни» до 8% на заході сонця. На силу.',
   'Winter Forest': 'Зимовий ліс', 'Snowy firs and silence. Small climbs.': 'Засніжені ялини й тиша. Невеликі підйоми.',
-  'Red Canyon': 'Червоний каньйон', 'Cacti, red rocks and one long climb.': 'Кактуси, червоні скелі й один довгий підйом.',
-  'Carpathian Switchbacks': 'Карпатський серпантин', 'Spruce slopes, steep switchbacks and a ~4–8% climb.': 'Смерекові схили, круті серпантини й підйом ~4–8%.',
-  'Mountain Pass': 'Гірський перевал', 'A long ~5–8% climb to snowy peaks and a fast descent.': 'Довгий підйом ~5–8% до засніжених вершин і швидкий спуск.',
+  'Red Canyon': 'Червоний каньйон', 'Cacti, red rocks and one long, gentle climb.': 'Кактуси, червоні скелі й один довгий пологий підйом.',
+  'Carpathian Switchbacks': 'Карпатський серпантин', 'Spruce slopes, switchbacks and a 3.5 km climb, ramps up to 8%.': 'Смерекові схили, серпантини й підйом 3,5 км з рампами до 8%.',
+  'Mountain Pass': 'Гірський перевал', 'A 7 km climb (about 4%, ramps up to 9%) to snowy peaks and a fast descent.': 'Підйом 7 км (близько 4%, рампи до 9%) до засніжених вершин і швидкий спуск.',
   // climbs
   'Shepherd\'s Rise': 'Пастуший підйом', 'Windmill Hill': 'Вітряковий пагорб', 'The Long Meadow': 'Довгий луг',
   'Acorn Bank': 'Жолудевий схил', 'Owl\'s Brow': 'Совине чоло',

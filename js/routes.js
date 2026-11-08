@@ -72,7 +72,7 @@ const ROUTES = [
   {
     id: 'desert', theme: 'desert',
     name: 'Red Canyon',
-    description: 'Cacti, red rocks and one long climb.',
+    description: 'Cacti, red rocks and one long, gentle climb.',
     length: 12000,
     hills: [[40, 12000, 0], [10, 3000, 1], [3, 1000, 2]],
     curves: [[0.009, 3000, 0], [0.006, 1200, 2]],
@@ -80,7 +80,7 @@ const ROUTES = [
   {
     id: 'carpathians', theme: 'carpathians',
     name: 'Carpathian Switchbacks',
-    description: 'Spruce slopes, steep switchbacks and a ~4–8% climb.',
+    description: 'Spruce slopes, switchbacks and a 3.5 km climb, ramps up to 8%.',
     length: 14000,
     hills: [[90, 14000, -Math.PI / 2], [15, 3500, 0.4], [4, 1000, 1]],
     curves: [[0.016, 1750, 0], [0.008, 700, 1]],
@@ -88,7 +88,7 @@ const ROUTES = [
   {
     id: 'mountain', theme: 'alpine',
     name: 'Mountain Pass',
-    description: 'A long ~5–8% climb to snowy peaks and a fast descent.',
+    description: 'A 7 km climb (about 4%, ramps up to 9%) to snowy peaks and a fast descent.',
     length: 16000,
     hills: [[130, 16000, -Math.PI / 2], [6, 2000, 0.5], [2.5, 800, 1.5]],
     curves: [[0.012, 2000, 0], [0.006, 800, 1]],
@@ -127,6 +127,11 @@ export class Route {
       if (diff > 0) gain += diff;
     }
     this.elevationGain = gain;
+    // the steepest 100 m, up (a fraction): what the card promises as "up to 9 %"
+    const w = Math.max(1, Math.round(100 / SEG));
+    let steep = 0;
+    for (let i = 0; i < (this.oneWay ? n - w : n); i++) steep = Math.max(steep, (this.segments[(i + w) % n].elev - this.segments[i].elev) / (w * SEG));
+    this.maxGrade = steep;
     this.minElev = Math.min(...this.segments.map((s) => s.elev));
     this.maxElev = Math.max(...this.segments.map((s) => s.elev));
     this.climbs = findClimbs(this);

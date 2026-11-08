@@ -365,6 +365,9 @@ function initLobby() {
 function renderRouteList() {
   const rl = $('route-list');
   rl.innerHTML = '';
+  // one height scale for the cards, so a flat route looks flat; at 40 % of the tallest route's rise,
+  // so rolling hills still read as hills and only the passes fill the box
+  const cardScale = 0.4 * Math.max(...routes.filter((r) => !r.custom).map((r) => r.maxElev - r.minElev));
   for (const g of ROUTE_GROUPS) {
     const list = routes.filter((r) => (r.custom ? 'mine' : r.group) === g.id);
     if (!list.length && g.id !== 'mine') continue;
@@ -376,14 +379,14 @@ function renderRouteList() {
       const b = document.createElement('button');
       b.className = 'option';
       b.dataset.id = r.id;
-      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}</small><small>${esc(r.description)}</small><canvas></canvas>`
+      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}${r.maxGrade >= 0.02 ? ` · ${tr('max {n}%', { n: Math.round(r.maxGrade * 100) })}` : ''}</small><small>${esc(r.description)}</small><canvas></canvas>`
         + (r.custom ? `<span class="rc-del" title="${tr('Delete this route')}" role="button">✕</span>` : '');
       b.onclick = (ev) => {
         if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
         settings.routeId = r.id; saveSettings(); markRoute(); showRoute();
       };
       box.append(b);
-      requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`));
+      requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`, cardScale));
     }
     if (g.id === 'mine') {
       const add = document.createElement('label');
