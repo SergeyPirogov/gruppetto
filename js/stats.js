@@ -3,7 +3,7 @@
 // sent: never a name, a key, a place or a number that tells one rider from another. Off in Profile, or when
 // the browser asks not to be tracked; GoatCounter itself does not count localhost.
 
-const ENDPOINT = 'https://serhii.goatcounter.com/count';
+const ENDPOINT = 'https://grupetto.goatcounter.com/count';
 const SCRIPT = 'https://gc.zgo.at/count.js';
 
 let on = false;

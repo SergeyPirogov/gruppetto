@@ -738,7 +738,7 @@ test('Usage stats: nothing without consent or with Do Not Track; events only as 
   navigator.doNotTrack = '1'; initStats(true);
   assert.equal(added.length, 0, 'Do Not Track: no script');
   navigator.doNotTrack = '0'; initStats(true);
-  assert.equal(added[0].dataset.goatcounter, 'https://serhii.goatcounter.com/count');
+  assert.equal(added[0].dataset.goatcounter, 'https://grupetto.goatcounter.com/count');
   track('ride-finish', minutesBucket(2700)); // queued until the script is in
   window.goatcounter = { count: (e) => sent.push(e) }; added[0].onload();
   track('ride-count', rideMilestone(3));
