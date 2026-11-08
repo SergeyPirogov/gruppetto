@@ -1,7 +1,7 @@
 import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
-import { stepSpeed, draftFactor, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
+import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
 import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
@@ -1245,9 +1245,9 @@ function advance(now = performance.now()) {
     const power = powerAt(t);
     const cadence = cadenceAt(t, power);
     const grade = route.gradeAt(ride.dist);
-    // drafting: the best wheel to sit on among the riders just ahead
+    // drafting: the shelter of the riders ahead (deeper in a bunch), and a little from one close behind
     const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
-    ride.draft = Math.max(0, ...pack.map((o) => draftFactor(o.dist - ride.dist, o.lane - ride.lane, W.cross)));
+    ride.draft = packDraft(pack.map((o) => ({ gap: o.dist - ride.dist, sideways: o.lane - ride.lane })), W.cross);
     ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft), wind: W.head });
     // your speed on your own, out of the wind shadow: faster than the wheel ahead -> you come past it,
     // otherwise you sit in and draft
@@ -1320,7 +1320,7 @@ function advance(now = performance.now()) {
       }
       b.power = p;
       const wheels = [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b)];
-      const bd = Math.max(0, ...wheels.map((o) => draftFactor(o.dist - b.dist, o.lane - b.lane, W.cross)));
+      const bd = packDraft(wheels.map((o) => ({ gap: o.dist - b.dist, sideways: o.lane - b.lane })), W.cross);
       b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd), wind: W.head });
       b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, b.weight, { cda: b.cda, wind: W.head });
       for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
@@ -1653,7 +1653,7 @@ function updateHud(cadence, hr, grade) {
   $('draft-tag').hidden = df < 0.03;
   if (df >= 0.03) {
     $('draft-tag').textContent = `🌀 ${tr('Drafting · −{n}% drag', { n: Math.round(df * 100) })}`;
-    $('draft-tag').style.setProperty('--d', df / 0.33);
+    $('draft-tag').style.setProperty('--d', Math.min(1, df / 0.33));
   }
   if (ride.ghost) {
     const G = ride.ghost, gap = ride.dist - G.dist, tg = ghostTimeAt(G.entry, ride.dist);

@@ -68,6 +68,29 @@ export function draftFactor(gap, sideways, cross = 0) {
 }
 
 /**
+ * The shelter a rider gets from everyone around (`others`: [{ gap, sideways }], gap > 0 ahead, < 0 behind):
+ * - from the wheels ahead: the best single wheel (draftFactor), deeper inside a bunch — each more rider
+ *   sheltering the wheel you follow adds a little (a line of 3 ahead about 40 %, a full bunch up to ~48 %);
+ * - from a rider right behind: the one in front saves a little too (air pushed back on its back), up to ~4 %
+ *   at 0.5 m, nothing past 2 m.
+ * Returns the share of air drag saved (0 … 0.5).
+ */
+export function packDraft(others, cross = 0) {
+  const ahead = others.filter((o) => o.gap > 0.3 && o.gap < 4);
+  let best = 0;
+  for (const o of ahead) best = Math.max(best, draftFactor(o.gap, o.sideways, cross));
+  // a bunch: riders further up the same line (up to 12 m ahead, within a bike width) deepen the shelter
+  const line = others.filter((o) => o.gap >= 4 && o.gap < 12 && Math.abs(o.sideways) < 1).length;
+  const deep = best > 0 ? Math.min(0.15, line * 0.05) * (best / 0.33) : 0;
+  // pushed from behind: someone close on your wheel
+  let push = 0;
+  for (const o of others) {
+    if (o.gap < 0 && o.gap > -2 && Math.abs(o.sideways) < 0.8) push = Math.max(push, 0.04 * (1 - (-o.gap - 0.5) / 1.5) * (1 - Math.abs(o.sideways) / 0.8));
+  }
+  return Math.min(0.5, best + deep + Math.max(0, push));
+}
+
+/**
  * Air drag area (CdA, m²) for a rider of this height (cm) and weight (kg), riding on the hoods.
  * Frontal area from body size (Bassett et al. 1999: 0.0293·h^0.725·m^0.425 + 0.0604, with the bike),
  * times a drag coefficient that gives 0.32 m² for a 178 cm, 75 kg rider.

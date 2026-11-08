@@ -780,3 +780,16 @@ test('Short pauses: runs of 3 s and more without power, how many and how long', 
   assert.deepEqual(stopsOf([180, 0, 190, 0], 5), { n: 2, sec: 10 }); // a 5 s chart: each empty point is 5 s
   assert.deepEqual(stopsOf([150, 160]), { n: 0, sec: 0 });
 });
+
+test('Shelter in a bunch: deeper behind a line of riders, a little for the one in front, never more than half', async () => {
+  const { packDraft, draftFactor } = await import('../js/physics.js');
+  const one = packDraft([{ gap: 1, sideways: 0 }]);
+  assert.equal(one, draftFactor(1, 0));                                           // a single wheel: as before
+  const line = packDraft([{ gap: 1, sideways: 0 }, { gap: 5, sideways: 0 }, { gap: 9, sideways: 0.3 }]);
+  assert.ok(line > one + 0.08 && line <= 0.5, `a line of three: ${line}`);
+  assert.equal(packDraft([{ gap: 5, sideways: 0 }, { gap: 9, sideways: 0 }]), 0);  // no wheel close: no bunch shelter
+  const pushed = packDraft([{ gap: -0.6, sideways: 0 }]);
+  assert.ok(pushed > 0.03 && pushed <= 0.04, `the one in front: ${pushed}`);
+  assert.equal(packDraft([{ gap: -3, sideways: 0 }]), 0);                         // too far behind
+  assert.ok(packDraft(Array.from({ length: 12 }, (_, i) => ({ gap: 1 + i * 1.5, sideways: 0 }))) <= 0.5);
+});
