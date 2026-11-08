@@ -39,6 +39,16 @@ const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
 const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || 2; // ?csm=3 to compare
 const CSM_FAR = 240;
 const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
+let preloaded = null;
+/** Starts the bike, rider and scenery downloads once, from the lobby, so the ride starts with them ready. */
+export function preloadModels() {
+  return preloaded ||= {
+    bike: loadBikeModel(),
+    rider: SHOW_RIDER ? loadDummyRider().then((d) => d || loadRiderModel()) : Promise.resolve(null),
+    nature: loadNature().catch((e) => { console.warn('Nature models unavailable, using built-in shapes', e); return null; }),
+  };
+}
+
 const SHOW_RIDER = typeof location === 'undefined' || new URLSearchParams(location.search).get('rider') !== '0'; // ?rider=0: bike only
 const SIZE = { oak: 1, birch: 1, pine: 1, rock: 1, bush: 1, cactus: 1, palm: 1, sunflowers: 1, flowers: 1 };
 
@@ -564,19 +574,20 @@ export class Scene3D {
     // popping in, no built-in shapes swapped for the models a moment later.
     this.modelsReady = false;
     this.loader = this._makeLoader(canvas.parentElement);
-    const bikeLoad = loadBikeModel().then((m) => {
+    const models = preloadModels();
+    const bikeLoad = models.bike.then((m) => {
       if (!m) return;
       this.bikeModel = m;
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the bike model on the next frame
     });
-    const natureLoad = loadNature().then((n) => {
+    const natureLoad = models.nature.then((n) => {
       if (!n) return;
       this.nature = n;
       this.natureKeep = new Set([...Object.values(n.textures), ...Object.values(n.types).flat(2).map((p) => p.geometry)]);
       this.routeId = null; // rebuild the world with the models on the next frame
     }).catch((e) => console.warn('Nature models unavailable, using built-in shapes', e));
-    const riderLoad = (SHOW_RIDER ? loadDummyRider().then((d) => d || loadRiderModel()) : Promise.resolve(null)).then((m) => {
+    const riderLoad = models.rider.then((m) => {
       if (!m) return;
       this.riderModel = m;
       for (const R of this.riders.values()) this.scene.remove(R.group);
@@ -584,7 +595,7 @@ export class Scene3D {
     });
     const ready = () => { this.modelsReady = true; };
     Promise.allSettled([bikeLoad, riderLoad, natureLoad]).then(ready);
-    setTimeout(ready, 10000); // a stalled download must not hide the riders for good
+    setTimeout(ready, 30000); // a stalled download must not hide the riders for good
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }

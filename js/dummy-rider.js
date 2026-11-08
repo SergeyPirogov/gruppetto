@@ -5,7 +5,7 @@
 // seated in a riding position; here the mannequin is scaled to the bike, its hips put on the saddle,
 // the torso tilted, the hands brought to the hoods and the feet kept on the turning pedals.
 import * as THREE from 'three';
-import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { gltfLoader } from './gltf.js';
 import { buildModernHelmet } from './helmet.js';
 
 const URL = 'assets/rider/dummy.gltf';
@@ -25,8 +25,8 @@ export async function loadDummyRider() {
     let cfg = {};
     try { const r = await fetch(CFG_URL); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
     let headModel = null;
-    try { if ((await fetch(HEAD_URL, { method: 'HEAD' })).ok) headModel = await new GLTFLoader().loadAsync(HEAD_URL); } catch (e) { console.warn('Rider head not loaded', e); }
-    return { dummy: await new GLTFLoader().loadAsync(URL), head: headModel, cfg };
+    try { if ((await fetch(HEAD_URL, { method: 'HEAD' })).ok) headModel = await gltfLoader().loadAsync(HEAD_URL); } catch (e) { console.warn('Rider head not loaded', e); }
+    return { dummy: await gltfLoader().loadAsync(URL), head: headModel, cfg };
   } catch (e) {
     console.warn('Dummy rider not loaded', e);
     return null;

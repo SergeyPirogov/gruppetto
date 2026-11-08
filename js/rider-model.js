@@ -4,7 +4,7 @@
 // kinematics (feet on the pedals, hands on the hoods, torso leaning forward). If a file carries a
 // cycling animation clip, that clip is played instead, its speed following cadence.
 import * as THREE from 'three';
-import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { gltfLoader } from './gltf.js';
 import { FBXLoader } from '../vendor/three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 import { buildProceduralRider } from './rider-procedural.js';
@@ -42,7 +42,7 @@ function defaultManager() {
 
 // Your own model wins: glTF, or FBX straight from Mixamo (embedded textures) — no conversion needed.
 const CANDIDATES = [
-  { url: 'assets/rider.glb', load: async (u) => new GLTFLoader().loadAsync(u) },
+  { url: 'assets/rider.glb', load: async (u) => gltfLoader().loadAsync(u) },
   { url: 'assets/rider.fbx', load: async (u) => { const g = await new FBXLoader().loadAsync(u); return { scene: g, animations: g.animations || [] }; } },
   // bundled CC0 character (Quaternius Universal Base Characters, see tools/prepare_rider.py),
   // with its own settings next to it; assets/rider.json still overrides them
@@ -50,7 +50,7 @@ const CANDIDATES = [
     url: 'assets/rider/rider.gltf',
     cfg: 'assets/rider/rider.json',
     load: async (u, cfg) => {
-      const gltf = await new GLTFLoader().loadAsync(u);
+      const gltf = await gltfLoader().loadAsync(u);
       await attachParts(gltf.scene, (cfg.attach || []).map((f) => `assets/rider/${f}`));
       if (cfg.hairColor) tintHair(gltf.scene, cfg.hairColor);
       return gltf;
@@ -88,7 +88,7 @@ async function attachParts(scene, urls) {
   const body = (() => { let m = null; scene.traverse((o) => { if (!m && o.isSkinnedMesh) m = o; }); return m; })();
   for (const url of urls) {
     try {
-      const part = (await new GLTFLoader().loadAsync(url)).scene;
+      const part = (await gltfLoader().loadAsync(url)).scene;
       part.updateMatrixWorld(true);
       const meshes = [];
       part.traverse((o) => { if (o.isSkinnedMesh) meshes.push(o); });

@@ -9,7 +9,7 @@
 //   pedals. Fine-tune with assets/bike.json:
 //     { "node": "Bike_02", "rotateY": 180, "length": 1.68, "offset": [0, 0, 0], "crankNode": "Cranks" }
 import * as THREE from 'three';
-import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { gltfLoader } from './gltf.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 
 const CANDIDATES = [
@@ -28,7 +28,7 @@ export async function loadBikeModel() {
       if (!head.ok) continue;
       let cfg = {};
       try { const r = await fetch(c.cfg); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
-      return { gltf: await new GLTFLoader().loadAsync(c.url), cfg };
+      return { gltf: await gltfLoader().loadAsync(c.url), cfg };
     } catch (e) {
       console.warn(`Bike model ${c.url} not loaded`, e);
     }

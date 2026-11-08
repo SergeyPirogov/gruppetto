@@ -3,7 +3,7 @@
 // variant is split into parts by material (bark, leaves...) so the scene can draw thousands of
 // copies with one InstancedMesh per part. Without the files the scene keeps its built-in shapes.
 import * as THREE from 'three';
-import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { gltfLoader } from './gltf.js';
 
 const DIR = 'assets/nature/';
 
@@ -77,7 +77,7 @@ export async function loadNature() {
     const head = await fetch(`${DIR}${NATURE_TYPES.oak.models[0]}.gltf`, { method: 'HEAD' });
     if (!head.ok) return null;
   } catch { return null; }
-  const loader = new GLTFLoader();
+  const loader = gltfLoader();
   const texLoader = new THREE.TextureLoader();
   const textures = {};
   for (const [name, m] of Object.entries(NATURE_MATERIALS)) {

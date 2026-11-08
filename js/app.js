@@ -32,6 +32,7 @@ try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings'
 // ?debug: reach the current ride from devtools (jump along the route when testing laps and climbs)
 if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__ride', { get: () => ride });
+  Object.defineProperty(window, '__scene', { get: () => scene });
   window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async () => null }; renderModes(); }; // try the plan box and uploads without an account
 }
 
@@ -2172,3 +2173,7 @@ $('f-lang').innerHTML = LANGS.map((l) => `<option value="${l.id}">${l.name}</opt
 $('f-lang').value = lang;
 $('f-lang').onchange = () => setLang($('f-lang').value);
 initLobby();
+// the 3D models download while you pick a route, so the ride opens with the real rider and bike
+(window.requestIdleCallback || ((f) => setTimeout(f, 800)))(() => {
+  import('./render3d.js').then((m) => m.webglAvailable() && m.preloadModels()).catch(() => {});
+});
