@@ -33,7 +33,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true, stats: true,
+  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto',
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
@@ -369,6 +369,8 @@ function initLobby() {
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
   bind('f-time', 'timeOfDay', false);
+  bind('f-quality', 'quality', false);
+  $('f-quality').addEventListener('change', () => scene?.setQuality?.(settings.quality));
   $('f-time').addEventListener('change', renderTimeHint);
   renderTimeHint();
   bind('f-weather', 'weather', false);
@@ -1180,6 +1182,7 @@ async function startRide() {
   $('ride').classList.remove('show-controls');
   await ensureScene();
   scene.setStyle?.(settings.style);
+  scene.setQuality?.(settings.quality);
   scene.setAtmosphere?.(settings.timeOfDay, settings.weather);
   scene.setCamera?.(settings.camera);
   ride.lastSim = performance.now();

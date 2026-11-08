@@ -761,11 +761,12 @@ export class Scene3D {
     this.camera.updateProjectionMatrix();
     this.csm?.updateFrustums();
     if (this.pixel) this._setupPixel();
+    if (this.post) this._setupPost();
   }
 
   /** Device pixels per CSS pixel: the screen's, up to 2, times the adaptive quality scale. */
   _pixelRatio() {
-    return Math.max(LOW ? 0.6 : 0.75, Math.min(window.devicePixelRatio || 1, LOW ? 1.25 : 2) * (this.quality ?? 1));
+    return Math.max(LOW ? 0.6 : 0.6, Math.min(window.devicePixelRatio || 1, LOW ? 1.25 : 2) * (this.quality ?? 1) * (this.qualityCap ?? 1));
   }
 
   /**
@@ -798,6 +799,84 @@ export class Scene3D {
   setWind(speed = 0) {
     this.windSpeed = speed;
     WIND_AMP.value = 0.6 + speed * 0.17;
+  }
+
+  /**
+   * Graphics quality: 'low' (fewer pixels, shorter view, no finish), 'medium' (as before) or 'high' (a soft glow
+   * round the sun and bright surfaces, a gentle colour grade and vignette). 'auto' picks by the device.
+   */
+  setQuality(q = 'auto') {
+    const want = q === 'auto' ? (LOW ? 'low' : 'medium') : q;
+    this.qualityLevel = want;
+    const post = want === 'high';
+    if (post && !this.post) this._setupPost();
+    if (!post && this.post) { for (const t of this.post.targets) t.dispose(); this.post.quad.material.dispose(); this.post = null; }
+    this.qualityCap = want === 'low' ? 0.75 : 1;
+    this.resize();
+  }
+
+  /** The finish for 'high': the scene in a buffer, its bright parts blurred twice, then glow, grade and vignette over it. */
+  _setupPost() {
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    const opts = { type: THREE.HalfFloatType };
+    const P = this.post = this.post || {};
+    P.targets?.forEach((t) => t.dispose());
+    const w = Math.max(1, size.x), h = Math.max(1, size.y), q = 4; // the glow at a quarter size: soft and cheap
+    P.scene0 = new THREE.WebGLRenderTarget(w, h, { ...opts, samples: 4 });
+    P.blurA = new THREE.WebGLRenderTarget(Math.ceil(w / q), Math.ceil(h / q), opts);
+    P.blurB = new THREE.WebGLRenderTarget(Math.ceil(w / q), Math.ceil(h / q), opts);
+    P.targets = [P.scene0, P.blurA, P.blurB];
+    if (P.quad) return;
+    P.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    P.scene = new THREE.Scene();
+    const vert = 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+    // bright parts, blurred along one direction (run twice, across and down)
+    P.blur = new THREE.ShaderMaterial({
+      uniforms: { tSrc: { value: null }, dir: { value: new THREE.Vector2() }, pick: { value: 0 } },
+      vertexShader: vert, depthTest: false, depthWrite: false,
+      fragmentShader: `uniform sampler2D tSrc; uniform vec2 dir; uniform float pick; varying vec2 vUv;
+        vec3 at(vec2 uv) { vec3 c = texture2D(tSrc, uv).rgb; if (pick > 0.5) { float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); c *= smoothstep(0.85, 1.9, l); } return c; } // the scene is linear HDR here: the bright is over 1
+        void main() {
+          vec3 s = at(vUv) * 0.227;
+          s += (at(vUv + dir * 1.385) + at(vUv - dir * 1.385)) * 0.316;
+          s += (at(vUv + dir * 3.231) + at(vUv - dir * 3.231)) * 0.070;
+          gl_FragColor = vec4(s, 1.0);
+        }`,
+    });
+    // the final picture: the scene, its glow, a gentle colour grade (a touch more contrast and warmth) and a vignette
+    P.final = new THREE.ShaderMaterial({
+      uniforms: { tScene: { value: null }, tGlow: { value: null }, glow: { value: 0.55 } },
+      vertexShader: vert, depthTest: false, depthWrite: false, toneMapped: true,
+      // a render target holds the scene linear and not tone-mapped (three.js maps only on the way to the screen):
+      // glow is added there, then the renderer's own tone mapping and sRGB, then the grade
+      fragmentShader: `uniform sampler2D tScene; uniform sampler2D tGlow; uniform float glow; varying vec2 vUv;
+        void main() {
+          gl_FragColor = vec4(texture2D(tScene, vUv).rgb + texture2D(tGlow, vUv).rgb * glow, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          vec3 c = gl_FragColor.rgb;
+          float l = dot(c, vec3(0.299, 0.587, 0.114));
+          c = mix(vec3(l), c, 1.08);                                  // a little more colour
+          c = (c - 0.5) * 1.05 + 0.5;                                 // a little more contrast
+          c *= vec3(1.015, 1.0, 0.985);                               // a touch warmer
+          vec2 d = vUv - 0.5; c *= 1.0 - dot(d, d) * 0.55;            // a soft vignette
+          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+        }`,
+    });
+    P.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), P.blur);
+    P.quad.frustumCulled = false;
+    P.scene.add(P.quad);
+  }
+
+  _renderPost() {
+    const P = this.post, r = this.renderer;
+    r.setRenderTarget(P.scene0); r.render(this.scene, this.camera);
+    const pass = (mat, target) => { P.quad.material = mat; r.setRenderTarget(target); r.render(P.scene, P.cam); };
+    const px = (t) => new THREE.Vector2(1 / t.width, 1 / t.height);
+    P.blur.uniforms.tSrc.value = P.scene0.texture; P.blur.uniforms.pick.value = 1; P.blur.uniforms.dir.value.copy(px(P.blurA)).multiply(new THREE.Vector2(1, 0)); pass(P.blur, P.blurA);
+    P.blur.uniforms.tSrc.value = P.blurA.texture; P.blur.uniforms.pick.value = 0; P.blur.uniforms.dir.value.copy(px(P.blurB)).multiply(new THREE.Vector2(0, 1)); pass(P.blur, P.blurB);
+    P.final.uniforms.tScene.value = P.scene0.texture; P.final.uniforms.tGlow.value = P.blurB.texture;
+    pass(P.final, null);
   }
 
   /** 'cartoon' (default) or 'pixel': low-res render, limited palette with dithering and outlines. */
@@ -2262,6 +2341,8 @@ export class Scene3D {
       this.renderer.render(this.scene, this.camera);
       this.renderer.setRenderTarget(null);
       this.renderer.render(this.pixel.scene, this.pixel.cam);
+    } else if (this.post) {
+      this._renderPost();
     } else {
       this.renderer.render(this.scene, this.camera);
     }
