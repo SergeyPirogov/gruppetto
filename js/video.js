@@ -22,10 +22,10 @@ export function secondsOf(x) {
 /** The start in a link's t= or start=, seconds. */
 export const startInLink = (u) => secondsOf((/[?&#](?:t|start)=([\dhms:]+)/.exec(String(u || '')) || [])[1]);
 
-/** The playback rate for your speed against the filmed one, in YouTube's range, in 0.05 steps; 0 = pause. */
+/** The playback rate for your speed against the filmed one, in YouTube's range, in 0.05 steps; 0 = pause (stopped). */
 export function videoRate(kmh, filmedKmh) {
+  if (kmh < 1.5) return 0; // stopped: pause; slower than a quarter of the filmed pace still plays, at 0.25×
   const want = kmh / Math.max(1, filmedKmh || 25);
-  if (want < 0.2) return 0;
   return Math.min(2, Math.max(0.25, Math.round(want * 20) / 20));
 }
 

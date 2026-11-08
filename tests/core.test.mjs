@@ -756,5 +756,5 @@ test('Video rides: a YouTube id from any link, the start from t=, the rate from 
   assert.deepEqual(['2:00', '120', '2m', '1h2m3s', '1:02:03', ''].map(secondsOf), [120, 120, 120, 3723, 3723, 0]);
   assert.equal(startInLink('https://youtu.be/fXaFHAGK6cA?t=120'), 120);
   assert.equal(startInLink('https://www.youtube.com/watch?v=fXaFHAGK6cA&t=2m'), 120);
-  assert.deepEqual([videoRate(25, 25), videoRate(31.4, 25), videoRate(80, 25), videoRate(4, 25), videoRate(2, 25)], [1, 1.25, 2, 0.25, 0]);
+  assert.deepEqual([videoRate(25, 25), videoRate(31.4, 25), videoRate(80, 25), videoRate(4, 25), videoRate(2, 25), videoRate(1, 25)], [1, 1.25, 2, 0.25, 0.25, 0]);
 });
