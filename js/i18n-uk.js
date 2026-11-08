@@ -190,4 +190,7 @@ export const UK = {
   'Set your max heart rate in Profile to see heart rate zones.': 'Вкажіть максимальний пульс у Профілі, щоб бачити пульсові зони.',
   'Very light': 'Дуже легко', 'Light': 'Легко', 'Moderate': 'Помірно', 'Hard': 'Важко', 'Maximum': 'Максимум',
   'Finish in': 'До кінця', 'Workout complete': 'Тренування завершено',
+  // sprints (#38)
+  'Sprint {n}': 'Спринт {n}', 'Sprint record': 'Рекорд спринту', '⚡ {name}: {m} m — sprint!': '⚡ {name}: {m} м — спринт!', '{n} m to the line': '{n} м до лінії',
+  'top speed': 'макс. швидкість', 'max': 'макс.', 'SPRINT': 'СПРИНТ', 'LINE': 'ФІНІШ', '{name}: {time} 🏁': '{name}: {time} 🏁',
 };

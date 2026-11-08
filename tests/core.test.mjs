@@ -489,3 +489,18 @@ test('after the ride: intervals as ridden and time in zones (#9)', async () => {
   assert.deepEqual(z.slice(0, 5).map((x) => x.sec), [10, 0, 5, 0, 0]); // 0 W and 100 W in Z1, 160 W (80 %) in Z3
   assert.equal(z[5].sec, 5); // 260 W = 130 % of FTP: Z6, anaerobic
 });
+
+test('sprint segments: flat, straight, clear of climbs and of each other (#38)', async () => {
+  const { routes } = await import('../js/routes.js');
+  for (const r of routes) {
+    const L = r.length;
+    if (L < 3000) { assert.equal(r.sprints.length, 0); continue; }
+    assert.ok(r.sprints.length >= 1 && r.sprints.length <= 4, `${r.id}: ${r.sprints.length} sprints`);
+    for (const s of r.sprints) {
+      assert.equal(s.length, 250);
+      assert.ok(Math.abs(r.elevAt(s.start + 250) - r.elevAt(s.start)) / 250 <= 0.015, `${r.id} ${s.name} is not flat`);
+      for (const c of r.climbs) assert.ok(s.start + 250 <= c.start - 150 || s.start >= c.start + c.length + 150 || c.start + c.length > L, `${r.id} ${s.name} touches ${c.name}`);
+    }
+    for (let i = 1; i < r.sprints.length; i++) assert.ok(r.sprints[i].start - r.sprints[i - 1].start >= 1500);
+  }
+});

@@ -130,6 +130,7 @@ export class Route {
     this.minElev = Math.min(...this.segments.map((s) => s.elev));
     this.maxElev = Math.max(...this.segments.map((s) => s.elev));
     this.climbs = findClimbs(this);
+    this.sprints = findSprints(this);
     this.group ||= routeGroup(this);
   }
 
@@ -200,6 +201,40 @@ export function findClimbs(route, minGain = 12, minGrade = 0.025) {
   found.sort((x, y) => x.start - y.start);
   const names = CLIMB_NAMES[route.id] || [];
   return found.map((c, k) => ({ ...c, id: `${route.id}-c${k + 1}`, name: names[k] || `Climb ${k + 1}` }));
+}
+
+/**
+ * Sprint segments (#38): 250 m on the flattest, straightest stretches, clear of the climbs and of the
+ * start, at least 1.5 km apart; one per ~6 km (1 to 4). Named "Sprint 1", … in route order.
+ */
+export function findSprints(route, length = 250) {
+  const n = route.segments.length, w = Math.round(length / SEG), L = n * SEG;
+  if (L < 3000) return [];
+  const el = (i) => route.segAt(i).elev;
+  const want = Math.max(1, Math.min(4, Math.round(L / 6000)));
+  const nearClimb = (d0, d1) => (route.climbs || []).some((c) => {
+    const s = c.start, e = c.start + c.length;
+    return d1 > s - 150 && d0 < e + 150; // a sprint is not the run-up to a climb or its top
+  });
+  const cands = [];
+  for (let i = 0; i + w < (route.oneWay ? n : n + w); i += 2) {
+    const d0 = i * SEG, d1 = d0 + length;
+    if (route.oneWay ? d0 < 400 || d1 > L - 400 : d0 < 300 || d1 > L - 100) continue; // not on the start line
+    let bend = 0, steep = 0;
+    for (let k = i; k < i + w; k++) { bend += Math.abs(route.segAt(k).curve); steep = Math.max(steep, Math.abs(el(k + 1) - el(k)) / SEG); }
+    const grade = Math.abs(el(i + w) - el(i)) / length;
+    if (grade > 0.015 || steep > 0.035 || nearClimb(d0, d1)) continue;
+    cands.push({ d0, score: bend + grade * 400 });
+  }
+  cands.sort((a, b) => a.score - b.score);
+  const found = [];
+  for (const c of cands) {
+    if (found.length >= want) break;
+    const gap = (a, b) => { const d = Math.abs(a - b); return route.oneWay ? d : Math.min(d, L - d); };
+    if (found.every((f) => gap(f.start, c.d0) >= 1500)) found.push({ start: c.d0, length, end: c.d0 + length });
+  }
+  found.sort((a, b) => a.start - b.start);
+  return found.map((s, k) => ({ ...s, id: `${route.id}-s${k + 1}`, name: `Sprint ${k + 1}`, sprint: true, grade: 0 }));
 }
 
 /** Flat, hilly or mountain, from the climbing per km and the height of the biggest rise. */

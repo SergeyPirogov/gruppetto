@@ -40,7 +40,7 @@ if (new URLSearchParams(location.search).has('debug')) {
 
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
 const records = (() => { try { return JSON.parse(localStorage.getItem('gruppetto.records') || '{}'); } catch { return {}; } })();
-records.lap ||= {}; records.seg ||= {}; records.segTrace ||= {};
+records.lap ||= {}; records.seg ||= {}; records.segTrace ||= {}; records.top ||= {}; // top: best top speed per sprint, km/h
 /** A lap or finish time is real only below 90 km/h on average (a debug jump or a broken import is not a record). */
 const plausibleLap = (t, length) => t > 0 && t >= length / 25;
 /** This route's best lap / finish time, ignoring an impossible one. */
@@ -367,6 +367,7 @@ function localizeClimbs(r) {
     r.description = `${from} ${r.oneWay ? tr('Point to point, finish at {km} km.', { km }) : tr('A loop of {km} km: ride it lap after lap.', { km })}`;
   }
   for (const c of r.climbs) { const m = /^Climb (\d+)$/.exec(c.name); c.name = m ? tr('Climb {n}', { n: m[1] }) : tr(c.name); }
+  for (const s of r.sprints || []) { const m = /^Sprint (\d+)$/.exec(s.name); if (m) s.name = tr('Sprint {n}', { n: m[1] }); }
 }
 
 function markRoute() {
@@ -592,6 +593,7 @@ function showRoute() {
   renderGhostPicker();
   // the timed climbs, with this device's record on each
   $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} ${U.km} · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
+    + (r.sprints || []).map((s) => `<li class="sprint"><b>⚡ ${esc(s.name)}</b> ${s.length} ${U.m}${records.seg[s.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[s.id])}${records.top?.[s.id] ? ` · ${records.top[s.id]} ${tr('km/h')}` : ''}</span>` : ''}</li>`).join('')
     + (bestLap(r) ? `<li><b>⏱ ${r.oneWay ? tr('Best time') : tr('Best lap')}</b> <span class="pb">${fmtTime(bestLap(r))}</span></li>` : '');
   requestAnimationFrame(() => drawProfile($('rh-profile'), r, [], `${themeFor(r.theme).accent}cc`));
   updateSummary();
@@ -1258,8 +1260,10 @@ function updateSegments() {
   if (ride.seg) {
     const S = ride.seg, done = cur - S.d0;
     if (done >= S.climb.length) {
-      const t = ride.elapsed - S.t0, best = records.seg[S.climb.id];
-      ride.efforts.push({ name: S.climb.name, time: t, best, pb: !best || t < best });
+      const t = Math.round((ride.elapsed - S.t0) * 10) / 10, best = records.seg[S.climb.id];
+      const top = S.climb.sprint ? Math.round(S.vmax * 3.6 * 10) / 10 : null;
+      ride.efforts.push({ name: `${S.climb.sprint ? '⚡' : '⛰'} ${S.climb.name}`, time: t, best, pb: !best || t < best, ...(top ? { top } : {}) });
+      if (top && top > (records.top[S.climb.id] || 0)) { records.top[S.climb.id] = top; saveRecords(); }
       if (!best || t < best) {
         records.seg[S.climb.id] = t;
         S.trace.push(Math.round(t * 10) / 10);
@@ -1267,7 +1271,8 @@ function updateSegments() {
         saveRecords();
       }
       ride.climbGhost = null;
-      toast(!best ? tr('{name}: {time} — first time up 🎉', { name: S.climb.name, time: fmtTime(t) }) : t < best ? tr('{name}: {time} — new record! ({delta}) 🏆', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('{name}: {time} ({delta} vs best)', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }));
+      if (S.climb.sprint) toast(`⚡ ${!best ? tr('{name}: {time} 🏁', { name: S.climb.name, time: fmtTime(t) }) : t < best ? tr('{name}: {time} — new record! ({delta}) 🏆', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('{name}: {time} ({delta} vs best)', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) })} · ${tr('top speed')} ${top} ${tr('km/h')}`);
+      else toast(!best ? tr('{name}: {time} — first time up 🎉', { name: S.climb.name, time: fmtTime(t) }) : t < best ? tr('{name}: {time} — new record! ({delta}) 🏆', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('{name}: {time} ({delta} vs best)', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }));
       cueBeep(t < (best || Infinity) ? 1180 : 760, 0.25);
       ride.seg = null;
     } else if (done < -5) { ride.seg = null; ride.climbGhost = null; } // rolled back past the start
@@ -1279,16 +1284,18 @@ function updateSegments() {
         S.trace.push(Math.round((S.lastT + (t - S.lastT) * Math.max(0, Math.min(1, f))) * 10) / 10);
       }
       S.lastT = t; S.lastOff = done;
+      S.vmax = Math.max(S.vmax || 0, ride.v);
     }
   }
   if (!ride.seg) {
-    const c = route.climbs.find((cl) => crossed(cl.start));
+    const c = [...route.climbs, ...(route.sprints || [])].find((cl) => crossed(cl.start));
     if (c) {
-      ride.seg = { climb: c, t0: ride.elapsed, d0: cur - (((cur - c.start) % L) + L) % L, trace: [0], lastT: 0, lastOff: 0 };
+      ride.seg = { climb: c, t0: ride.elapsed, d0: cur - (((cur - c.start) % L) + L) % L, trace: [0], lastT: 0, lastOff: 0, vmax: ride.v };
       // your record on this climb starts beside you and rides it at its own pace (#26)
       const best = records.seg[c.id];
-      ride.climbGhost = best ? { name: tr('Climb record'), ghost: true, climb: true, color: settings.jersey, stripe: settings.stripe, dist: ride.seg.d0, pedal: 0.6, lane: START_LANE + 1.1, trace: records.segTrace[c.id] || null, best, length: c.length } : null;
-      toast(tr('{name} — {km} km at {grade}%. Go! ⛰️', { name: c.name, km: (c.length / 1000).toFixed(1), grade: (c.grade * 100).toFixed(1) }));
+      ride.climbGhost = best ? { name: c.sprint ? tr('Sprint record') : tr('Climb record'), ghost: true, climb: true, color: settings.jersey, stripe: settings.stripe, dist: ride.seg.d0, pedal: 0.6, lane: START_LANE + 1.1, trace: records.segTrace[c.id] || null, best, length: c.length } : null;
+      if (c.sprint) { toast(tr('⚡ {name}: {m} m — sprint!', { name: c.name, m: c.length })); cueBeep(1320, 0.18); }
+      else toast(tr('{name} — {km} km at {grade}%. Go! ⛰️', { name: c.name, km: (c.length / 1000).toFixed(1), grade: (c.grade * 100).toFixed(1) }));
     }
   }
   const panel = $('seg-panel');
@@ -1296,9 +1303,11 @@ function updateSegments() {
   if (ride.seg) {
     const S = ride.seg, t = ride.elapsed - S.t0, best = records.seg[S.climb.id];
     const frac = Math.min(1, (cur - S.d0) / S.climb.length);
-    $('seg-name').textContent = S.climb.name;
-    $('seg-time').textContent = fmtTime(t);
-    $('seg-left').textContent = tr('{n} m to the top', { n: Math.max(0, Math.round((S.climb.length - (cur - S.d0)))) });
+    const left = Math.max(0, Math.round((S.climb.length - (cur - S.d0))));
+    $('seg-name').textContent = `${S.climb.sprint ? '⚡' : '⛰'} ${S.climb.name}`;
+    panel.classList.toggle('sprint', !!S.climb.sprint);
+    $('seg-time').textContent = S.climb.sprint && t < 60 ? `${t.toFixed(1)} ${tr('s')}` : fmtTime(t);
+    $('seg-left').textContent = S.climb.sprint ? `${tr('{n} m to the line', { n: left })} · ${Math.round((S.vmax || ride.v) * 3.6)} ${tr('km/h')} ${tr('max')}` : tr('{n} m to the top', { n: left });
     $('seg-best').textContent = best ? tr('best {time}', { time: fmtTime(best) }) : tr('no record yet');
     // on pace: compare with the best time scaled to the distance done so far
     const pace = best ? t - traceTime(records.segTrace[S.climb.id], best, S.climb.length, cur - S.d0) : 0;
@@ -1617,8 +1626,8 @@ function showSummary(e, { live = false } = {}) {
   $('sum-seg-rows').innerHTML = rows.map(([name, t, x]) => {
     const lapRoute = routes.find((r) => r.id === e.routeId);
     const pb = x ? x.pb : t <= ((lapRoute && bestLap(lapRoute)) ?? Infinity);
-    const vs = x?.note ? esc(x.note) : x && x.best ? fmtDelta(t - x.best) : '';
-    return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>` : vs}</td></tr>`;
+    const vs = (x?.note ? esc(x.note) : x && x.best ? fmtDelta(t - x.best) : '') + (x?.top ? ` · ${x.top} ${tr('km/h')}` : '');
+    return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>${x?.top ? ` · ${x.top} ${tr('km/h')}` : ''}` : vs}</td></tr>`;
   }).join('');
   // files and intervals.icu: the ride just finished, or an older one whose full record is still kept
   shown = { entry: e, rec: live ? recorder : null };

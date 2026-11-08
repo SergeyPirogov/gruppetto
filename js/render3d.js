@@ -1435,6 +1435,10 @@ export class Scene3D {
       list.push({ d: c.start, text: `⛰ ${c.name}`, color: '#dc2626' });
       list.push({ d: c.end, text: `${t('TOP')} · ${c.name}`, color: '#dc2626', checker: true });
     }
+    for (const s of R.sprints || []) { // green, as in Zwift
+      list.push({ d: s.start, text: `⚡ ${s.name}`, color: '#16a34a' });
+      list.push({ d: s.start + s.length, text: `${t('SPRINT')} · ${t('LINE')}`, color: '#16a34a', checker: true });
+    }
     this.archList = { route: R, list };
     return list;
   }

@@ -643,6 +643,16 @@ export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22
     }
     ctx.stroke();
   }
+  // sprints: a green line along the road
+  ctx.strokeStyle = '#22c55e';
+  for (const s of route.sprints || []) {
+    ctx.beginPath();
+    for (let d = 0; d <= s.length; d += SEG_STEP) {
+      const at = route.wrap(s.start + d), x = (at / route.length) * W;
+      d ? ctx.lineTo(x, yOf(route.elevAt(at))) : ctx.moveTo(x, yOf(route.elevAt(at)));
+    }
+    ctx.stroke();
+  }
   for (const r of riders) {
     const d = route.wrap(r.dist);
     const px = pad + (d / route.length) * (W - pad * 2);
