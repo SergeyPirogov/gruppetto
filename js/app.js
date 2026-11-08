@@ -532,17 +532,22 @@ function renderPlan() {
 const VIDEOS_KEY = 'gruppetto-videos';
 let myVideos = (() => { try { return JSON.parse(localStorage.getItem(VIDEOS_KEY) || '[]'); } catch { return []; } })();
 function saveVideos() { try { localStorage.setItem(VIDEOS_KEY, JSON.stringify(myVideos)); } catch { /* private mode */ } }
-const currentVideo = () => myVideos.find((x) => x.id === settings.videoId) || null;
+/** Videos to ride from the first day, nothing to look for: picked by hand (first-person, steady camera, long). */
+const FEATURED_VIDEOS = [
+  { id: 'f-zugspitze', yt: 'fXaFHAGK6cA', name: 'Zugspitze valley, Alps', start: 120, kmh: 25, featured: true },
+  { id: 'f-south-tyrol', yt: 'JOWN4WmuItM', name: 'South Tyrol lake tour, Alps', start: 0, kmh: 25, featured: true },
+];
+const currentVideo = () => [...myVideos, ...FEATURED_VIDEOS].find((x) => x.id === settings.videoId) || null;
 
 function openVideoMenu() {
   $('vid-menu').hidden = false;
   $('vid-msg').hidden = true;
   const list = $('vid-list');
-  list.innerHTML = myVideos.length ? '' : `<p class="muted">${tr('No videos yet: paste a YouTube link above.')}</p>`;
-  for (const x of myVideos) {
+  list.innerHTML = '';
+  for (const x of [...myVideos, ...FEATURED_VIDEOS]) {
     const b = document.createElement('button');
     b.className = `option vid-item${x.id === settings.videoId ? ' sel' : ''}`;
-    b.innerHTML = `<b>${esc(x.name)}</b><small>${tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy"><span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`;
+    b.innerHTML = `<b>${esc(x.name)}</b><small>${tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy">${x.featured ? `<span class="tag">${tr('Featured')}</span>` : `<span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`}`;
     b.onclick = (ev) => {
       if (ev.target.closest('.vid-del')) {
         myVideos = myVideos.filter((y) => y !== x); saveVideos();

@@ -168,6 +168,7 @@ export const UK = {
   'To beat: {km} km in {time}': 'Побий: {km} км за {time}', 'Their ghost rides beside you exactly as they rode. Be ahead of it at the end, and the summary says by how much.': 'Привид їде поруч точно так, як їхав друг. Будь попереду на фініші, і в підсумку буде видно, на скільки.',
   'Set your name in Profile, so friends see who challenges them': 'Впиши своє ім’я в профілі, щоб друзі бачили, хто кидає виклик',
   'Privacy': 'Приватність', 'Send anonymous usage stats: which features are used, never your name, data or place': 'Надсилати анонімну статистику: які функції використовують, без імені, даних чи місця',
+  'Featured': 'Добірка',
   'Video rides': 'Відео-заїзди', 'Video ride': 'Відео-заїзд', 'Videos': 'Відео', 'YouTube link': 'Посилання на YouTube', 'Name': 'Назва', 'Start at': 'Старт з', 'Filmed at, km/h': 'Знято на швидкості, км/год', 'Add': 'Додати',
   'From {start}, filmed at {kmh} km/h': 'З {start}, знято на {kmh} км/год', 'A first-person ride from YouTube at your speed, instead of the 3D road.': 'Заїзд від першої особи з YouTube у твоєму темпі замість 3D-дороги.',
   'No videos yet: paste a YouTube link above.': 'Відео ще немає: встав посилання на YouTube вище.', 'That is not a YouTube link: copy it from the address bar or Share.': 'Це не посилання на YouTube: скопіюй його з адресного рядка або через «Поділитися».',
