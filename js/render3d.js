@@ -1613,7 +1613,7 @@ export class Scene3D {
         float cPh = fract(sin(dot(cRoot.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831;
         // wilder when you come by: jumping, waving fast; calm further off
         float cEx = 1.0 - smoothstep(12.0, 45.0, distance(cRoot.xz, uCrowdNear.xz));
-        float cSpd = mix(2.2, 7.5, cEx);
+        float cSpd = 5.0;
         // arms: round the shoulder, in the plane across the road
         if (aArm != 0.0) {
           vec2 sh0 = vec2(1.38, 0.2 * aArm);
@@ -1649,8 +1649,9 @@ export class Scene3D {
         float cH = fract(sin(dot(cRoot.xz, vec2(12.9898, 78.233))) * 43758.5453);
         float cPh = cH * 6.2831;
         float cType = floor(fract(cH * 7.13) * 4.0); // 0 waves in turn, 1 pumps both arms, 2 sways, 3 jumps
-        float cEx = 1.0 - smoothstep(12.0, 45.0, distance(cRoot.xz, uCrowdNear.xz)); // wilder as you come by
-        float cSpd = mix(1.8, 6.0, cEx) * (0.85 + fract(cH * 3.7) * 0.3);
+        float cEx = 1.0 - smoothstep(10.0, 60.0, distance(cRoot.xz, uCrowdNear.xz)); // wilder as you come by
+        // each fan's own steady tempo: tying it to how close you are made the phase leap as you came near (twitching)
+        float cSpd = 4.2 * (0.8 + fract(cH * 3.7) * 0.4);
         if (abs(aArm) > 0.001) {
           float sd = sign(aArm);
           vec2 sh0 = vec2(${S.y.toFixed(3)}, ${S.z.toFixed(3)} * sd);
