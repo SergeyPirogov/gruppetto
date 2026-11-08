@@ -81,7 +81,9 @@ function traceDist(trace, best, length, t) {
   return length * Math.max(0, Math.min(1, t / best));
 }
 const TRACE_STEP = 10;
-const gradeColor = (g) => g > 0.06 ? '#ef4444' : g > 0.03 ? '#f97316' : g < -0.02 ? '#60a5fa' : '#e8edf5';
+// the grade's colour, as climbing apps paint it: green to 2 %, yellow to 4, orange to 7, red to 10, then
+// dark red; flat white, downhill blue
+const gradeColor = (g) => g > 0.1 ? '#e11d48' : g > 0.07 ? '#ef4444' : g > 0.04 ? '#f97316' : g > 0.02 ? '#facc15' : g > 0.005 ? '#4ade80' : g < -0.02 ? '#60a5fa' : '#e8edf5';
 const fmtDelta = (d) => `${d < 0 ? '−' : '+'}${fmtTime(Math.abs(d))}`;
 const saveSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 
