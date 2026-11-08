@@ -1,6 +1,6 @@
 // Maps controller inputs (OpenBikeControl button IDs, Zwift Ride buttons) to app intents.
 //
-// Intents: harder, easier, left, right, togglePause, pause, resume, skip, toggleErg, camera, pacer, hud, gear (value), steer (degrees).
+// Intents: harder, easier, bigHarder, bigEasier, left, right, togglePause, pause, resume, skip, toggleErg, camera, pacer, hud, gear (value), steer (degrees).
 // A device may send several related IDs for one physical press (e.g. Shift Up + Increase Difficulty + Nav Up),
 // so intents from one message are de-duplicated before they run.
 
@@ -65,6 +65,7 @@ const RIDE_TO_INTENT = {
   shiftUpR: 'harder', shiftUpL: 'harder', up: 'harder',
   shiftDownR: 'easier', shiftDownL: 'easier', down: 'easier',
   paddleL: 'left', paddleR: 'right', a: 'toggleErg', z: 'skip',
+  left: 'bigEasier', right: 'bigHarder', // workout intensity ±5 %, free ride climb difficulty ±10 %
   b: 'togglePause', y: 'camera', powerUpL: 'pacer', powerUpR: 'hud',
   // onOffL / onOffR switch the controller itself off: left alone
 };

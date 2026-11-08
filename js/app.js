@@ -1758,7 +1758,7 @@ $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value
 const BUTTON_LABELS = {
   shiftUpL: 'left shift up (gear +)', shiftDownL: 'left shift down (gear −)', shiftUpR: 'right shift up (gear +)', shiftDownR: 'right shift down (gear −)',
   paddleL: 'left paddle (lane ◀)', paddleR: 'right paddle (lane ▶)',
-  up: '▲', down: '▼', left: '◀', right: '▶', a: 'A (ERG on/off)', b: 'B (pause)', y: 'Y (camera)', z: 'Z (skip interval)',
+  up: '▲', down: '▼', left: '◀ (easier: −5 % / −10 %)', right: '▶ (harder: +5 % / +10 %)', a: 'A (ERG on/off)', b: 'B (pause)', y: 'Y (camera)', z: 'Z (skip interval)',
   powerUpL: 'Power-up left (pacer)', powerUpR: 'Power-up right (HUD)', onOffL: 'on/off left', onOffR: 'on/off right',
 };
 
@@ -1780,7 +1780,25 @@ function onObcButtons(changes) {
   if (intents.has('harder') || intents.has('easier') || intents.has('gear')) obc.haptic(1);
 }
 
-/** Chase → isometric → side view (C, or Z on the Zwift Ride). */
+/**
+ * The big step (◀ / ▶ on the Zwift Ride): in a workout the intensity by 5 %, on a free ride the
+ * climb difficulty by 10 %, which the trainer feels on the next grade it is sent.
+ */
+function bigStep(dir) {
+  if (ride.workout && !ride.workoutDone) {
+    changeIntensity(dir * 5);
+    toast(`${tr('Intensity')} ${settings.intensity}%`);
+    return;
+  }
+  settings.difficulty = Math.max(0, Math.min(100, settings.difficulty + dir * 10));
+  saveSettings();
+  $('f-diff').value = settings.difficulty;
+  $('diff-val').textContent = `${settings.difficulty}%`;
+  ride.lastSentGrade = null;
+  toast(`${tr('Climb difficulty')} ${settings.difficulty}%`);
+}
+
+/** Chase → isometric → side view (C, or Y on the Zwift Ride). */
 function nextCamera() {
   if (!scene?.setCamera) return;
   const order = ['chase', 'iso', 'side'];
@@ -1807,6 +1825,8 @@ function runIntent(intent, value) {
     case 'toggleErg': toggleErg(); break;
     case 'camera': nextCamera(); break;
     case 'pacer': if (ride.pacer) togglePacer(); break;
+    case 'bigEasier': bigStep(-1); break;
+    case 'bigHarder': bigStep(+1); break;
     case 'hud': $('ride').classList.toggle('hud-hidden'); break;
     default: break;
   }

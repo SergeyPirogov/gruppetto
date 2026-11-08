@@ -270,6 +270,8 @@ test('Zwift Ride: shift buttons by direction, paddles change lane', async () => 
   for (const b of ['shiftDownR', 'shiftDownL', 'down']) assert.equal(rideIntent(b), 'easier');
   assert.equal(rideIntent('paddleL'), 'left');
   assert.equal(rideIntent('paddleR'), 'right');
+  assert.equal(rideIntent('left'), 'bigEasier');
+  assert.equal(rideIntent('right'), 'bigHarder');
   assert.equal(rideIntent('a'), 'toggleErg');
   assert.equal(rideIntent('b'), 'togglePause');
   assert.equal(rideIntent('z'), 'skip');
