@@ -3147,3 +3147,19 @@ $('btn-install').onclick = async () => {
   installPrompt = null;
   $('btn-install').hidden = true;
 };
+
+// ---------- ?demo: straight into a ride, a little below the first climb's crowd ----------
+if (new URLSearchParams(location.search).has('demo')) {
+  setTimeout(async () => {
+    const route = routes.find((r) => r.climbs?.length) || routes[0];
+    settings.routeId = route.id;
+    settings.mode = 'free';
+    $('sim').checked = true;
+    await startRide();
+    if (!ride) return;
+    const top = route.climbs[0]?.end ?? 0;
+    ride.dist = Math.max(0, top - 400);
+    const s = $('sim-power');
+    s.value = 260; s.oninput?.();
+  }, 600);
+}
