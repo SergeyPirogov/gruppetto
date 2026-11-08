@@ -12,7 +12,7 @@ import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
 /** Heart rate zones in bpm: from intervals.icu when connected, otherwise from the threshold heart rate (Profile). */
 const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNames, lthr: s.lthr });
 import { parseZwo, toZwo } from './zwo.js';
-import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
+import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
@@ -2169,6 +2169,7 @@ function historyEntry(r, samples) {
     race: r.race || null, raceLaps: r.raceLaps || null,
     maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
+    stops: stopsOf(samples.map((x) => x.power || 0)), // short pauses: how many and how long in all
     chart: { every, pw, hr, d, wb, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
     intervals: r.workout?.steps ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
       // a ramp shows where it starts and ends
@@ -2380,6 +2381,9 @@ function showSummary(e, { live = false } = {}) {
     [tr('Avg cadence'), `${sum.avgCadence} ${U.rpm}`],
     [tr('Work'), `${sum.kj} ${tr('kJ')}`],
   ] : [];
+  // short pauses: how many, how long; older rides from their 5 s chart
+  const stops = e.stops || stopsOf(e.chart.pw, e.chart.every);
+  if (sum && stops.sec) stats.push([tr('Not pedalling'), `${fmtTime(stops.sec)} · ${stops.n} ${lang === 'uk' ? plural(stops.n, ['зупинка', 'зупинки', 'зупинок']) : stops.n === 1 ? 'stop' : 'stops'}`]);
   if (sum) { const low = e.wbalMin ?? Math.min(...wb); stats.push([tr('Lowest W′bal'), `${(low / 1000).toFixed(1)} ${tr('kJ')} · ${Math.round((low / wPrime) * 100)}%`]); }
   if (sum && e.ramp && sum.best1min) stats.push([tr('Estimated FTP'), `${Math.round(sum.best1min * 0.75)} ${U.W}`]);
   if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([tr('vs {name}', { name: e.ghostName || tr('ghost') }), `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} ${U.m} ${e.ghostGap >= 0 ? '🏆' : ''}`]);
@@ -2673,7 +2677,7 @@ function hoverSummaryChart(samples, every, wPrime) {
     const r = c.getBoundingClientRect(), x = Math.max(0, Math.min(r.width, ev.clientX - r.left));
     const i = Math.round((x / r.width) * (samples.length - 1)), s = samples[i];
     const row = (dot, label, v) => (v ? `<span><i style="background:${dot}"></i>${label}<b>${v}</b></span>` : '');
-    tip.innerHTML = `<b class="tip-time">${fmtTime(i * every)}</b>`
+    tip.innerHTML = `<b class="tip-time">${fmtTime(i * every)}${s.power > 0 ? '' : ` · ${tr('paused')}`}</b>`
       + row('#ffc21a', tr('Power'), s.power ? `${Math.round(s.power)} ${U.W}` : '')
       + row('#ffffff', tr('Plan'), s.target ? `${Math.round(s.target)} ${U.W}` : '')
       + row('#ff4d5e', tr('Heart rate'), s.heartRate ? `${Math.round(s.heartRate)} ${U.bpm}` : '')
@@ -2735,6 +2739,9 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp, wPr
     hr.forEach((v, i) => { if (!v) return; const y = h - (v / hMax) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
     g.stroke();
   }
+  // pauses: faint bands where there was no power at all
+  g.fillStyle = 'rgba(148,163,184,.12)';
+  samples.forEach((s, i) => { if (!(s.power > 0)) g.fillRect(x(i) - w / samples.length / 2, 0, Math.max(1, w / samples.length), h); });
   // W′bal: violet, from full at the top to empty at the bottom
   if (samples.some((s) => s.wbal < wPrime)) {
     g.strokeStyle = '#a78bfa'; g.lineWidth = 2; g.beginPath();

@@ -117,3 +117,12 @@ export function formBand(tsb) {
   if (tsb > -30) return 'optimal';     // productive training load
   return 'overload';
 }
+
+/** Pauses in pedalling: runs of 3 s and more without power, { n, sec } (the first and last seconds count too). */
+export function stopsOf(powers, every = 1) {
+  let n = 0, sec = 0, run = 0;
+  const end = () => { if (run * every >= 3) { n++; sec += run * every; } run = 0; };
+  for (const p of powers) { if (p > 0) end(); else run++; }
+  end();
+  return { n, sec };
+}

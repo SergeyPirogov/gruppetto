@@ -772,3 +772,11 @@ test('Time of day by the sun where you are: Kyiv in November is night at 17:30, 
   assert.ok(p.morning && p.midday && p.evening && p.night && p.morning < p.midday && p.midday < p.evening && p.evening < p.night);
   assert.equal(placeFromZone('Mars/Base', new Date('2026-01-15')).lat, 45);
 });
+
+test('Short pauses: runs of 3 s and more without power, how many and how long', async () => {
+  const { stopsOf } = await import('../js/power.js');
+  const p = [200, 200, 0, 0, 200, 0, 0, 0, 0, 210, 220, 0, 0, 0];
+  assert.deepEqual(stopsOf(p), { n: 2, sec: 7 }); // the 2 s gap is no pause; 4 s and the last 3 s are
+  assert.deepEqual(stopsOf([180, 0, 190, 0], 5), { n: 2, sec: 10 }); // a 5 s chart: each empty point is 5 s
+  assert.deepEqual(stopsOf([150, 160]), { n: 0, sec: 0 });
+});
