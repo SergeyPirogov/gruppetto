@@ -944,3 +944,17 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .install-btn { border-color: rgba(255, 122, 26, .55) !important; color: #ffb27a !important; }
 .stat small.pw-side { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; line-height: 1.15; }
 .stat small.pw-side #m-ftp-pct { color: #fff; font-weight: 700; }
+
+/* ---------- Installed app with the title bar hidden (window controls overlay, #30) ---------- */
+/* the lobby header becomes the title bar: drag the window by it, clear of the window buttons */
+@media (display-mode: window-controls-overlay) {
+  .lobby-top {
+    -webkit-app-region: drag; app-region: drag;
+    padding-top: max(10px, env(titlebar-area-y, 0px));
+    padding-left: max(24px, calc(env(titlebar-area-x, 0px) + 12px));
+    padding-right: max(24px, calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + 12px));
+    min-height: env(titlebar-area-height, 0px);
+  }
+  .lobby-top button, .lobby-top a, .lobby-top input, .lobby-top select { -webkit-app-region: no-drag; app-region: no-drag; }
+  #ride .hud-top, #ride .hud-right, #ride .hud-left { margin-top: env(titlebar-area-height, 0px); }
+}

@@ -1020,8 +1020,14 @@ function preflight() {
   });
 }
 
+/** Opened as an installed app (its own window), not in a browser tab. */
+const installedApp = () => matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: fullscreen)').matches;
+
 async function startRide() {
-  if (!(await preflight())) return;
+  // the installed app rides full screen: no title bar over the road (asked now, while the click counts)
+  const wentFull = installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
+  if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); return; }
+  if (await wentFull) rideFullscreen = true;
   const route = routes.find((r) => r.id === settings.routeId) || routes[0];
   const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
@@ -1962,8 +1968,11 @@ async function offerDraft() {
   };
 }
 
+let rideFullscreen = false; // full screen was ours (installed app): leave it with the ride
 function finishRide() {
   if (!ride) return;
+  if (rideFullscreen && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  rideFullscreen = false;
   advance();
   clearInterval(rideTimer);
   keepAwake(false);
