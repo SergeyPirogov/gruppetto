@@ -1516,7 +1516,8 @@ const PASS_AFTER = 3;
 /** How long `r` has been held back by a wheel right ahead (within 3 m, in line) that is slower than r would go alone. */
 function heldBy(r, others, dt) {
   const wheel = others.find((o) => o !== r && o.dist - r.dist > 0 && o.dist - r.dist < 4 && Math.abs(o.lane - r.lane) < 0.8);
-  const held = wheel && (r.vFree ?? r.v) > (wheel.v ?? 0) + 0.3;
+  // any real edge counts: 0.1 m/s (0.4 km/h) — 3.1 W/kg behind 2.9 is ~0.6 km/h, which 0.3 m/s took for a draw
+  const held = wheel && (r.vFree ?? r.v) > (wheel.v ?? 0) + 0.1;
   return held ? (r.heldFor || 0) + dt : Math.max(0, (r.heldFor || 0) - dt * 2);
 }
 function pickLane(r, others, home) {
