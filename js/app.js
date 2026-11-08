@@ -222,7 +222,7 @@ function updateDeviceUI() {
     val.textContent = on && reading[d.key] ? reading[d.key]() : '';
   }
   document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
-  renderRailDots();
+  renderRailDots(); renderToday();
   // nothing to ride on: the trainer's chip asks to be connected
   document.querySelector('.dev-chip[data-key="trainer"]')?.classList.toggle('need', !trainer.connected && !$('sim').checked);
 }
@@ -2589,26 +2589,34 @@ function renderGreeting() {
 }
 
 /**
- * The Today card: what you are about to ride. A workout shows its shape (and «Today · intervals.icu» when it is
- * today's plan); a free ride or a race, the route.
+ * The «Ready to ride» card: everything the ride will be, one row each with how to change it: the route, the mode
+ * (today's intervals.icu workout says so), the ghost, what you ride on. The route's profile, or the workout's
+ * shape, beside it.
  */
 function renderToday() {
   const r = routes.find((x) => x.id === settings.routeId) || routes[0];
   const w = allWorkouts().find((x) => x.id === settings.mode) || null;
   const today = localDate(new Date());
-  const kicker = $('today-kicker'), title = $('today-title'), sub = $('today-sub');
-  if (w) {
-    kicker.textContent = w.source === 'intervals' ? (w.date === today ? tr('Today · intervals.icu') : `intervals.icu · ${dayLabel(w.date)}`) : tr('Workout');
-    title.textContent = w.name;
-    sub.textContent = `${Math.round(totalDuration(w) / 60)} ${U.min} · ${r?.name || ''}`;
-  } else if (settings.mode === 'race') {
-    kicker.textContent = `🏁 ${tr('Race')}`;
-    title.textContent = r?.name || '';
-    sub.textContent = r && !r.oneWay ? tr('{km} km against the bunch, from a standing start.', { km: (r.length * (settings.raceLaps || 1) / 1000).toFixed(1) }) : tr('To the finish line against the bunch.');
-  } else {
-    kicker.textContent = tr('Free ride');
-    title.textContent = r?.name || '';
-    sub.textContent = r ? `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}` : '';
+  const g = r && settings.mode !== 'race' ? rideGhost(r.id) : null;
+  $('today-kicker').textContent = w?.source === 'intervals' && w.date === today ? tr('Ready to ride · today\'s plan from intervals.icu') : tr('Ready to ride');
+  const mode = w ? `${w.name} · ${Math.round(totalDuration(w) / 60)} ${U.min}`
+    : settings.mode === 'race' ? `🏁 ${tr('Race')} · ${r && !r.oneWay ? ((settings.raceLaps || 1) === 1 ? tr('1 lap') : tr('{n} laps', { n: settings.raceLaps })) : tr('to the finish')}`
+      : tr('Free ride');
+  const ghost = g ? (g.friend ? tr('{name}, {km} km in {time}', { name: g.name || tr('A friend'), km: (g.summary.distance / 1000).toFixed(1), time: fmtTime(g.summary.duration) })
+    : `${settings.ghost === 'last' ? tr('Last ride') : tr('Your best')}: ${(g.summary.distance / 1000).toFixed(1)} ${U.km} ${tr('in')} ${fmtTime(g.summary.duration)}`) : null;
+  const on = trainer.connected ? `<span class="ok-dot"></span>${esc(trainer.name || tr('Trainer'))}` : $('sim').checked ? tr('Simulator (no trainer)') : `<span class="need-dot"></span>${tr('Trainer not connected')}`;
+  const row = (label, value, action, act) => `<dt>${label}</dt><dd><span>${value}</span>${action ? `<button class="today-change" data-act="${act}">${action}</button>` : ''}</dd>`;
+  $('today-rows').innerHTML = [
+    row(tr('Route'), `<b>${esc(r?.name || '')}</b> <small>${r ? `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}` : ''}</small>`, `${tr('Change')} ↓`, 'routes'),
+    row(tr('Mode'), `<b>${esc(mode)}</b>`, `${tr('Change')} ↓`, 'modes'),
+    ghost ? row(tr('Ghost'), esc(ghost), `${tr('Change')} ↓`, 'routes') : '',
+    row(tr('Riding on'), on, trainer.connected ? '' : tr('Connect'), 'devices'),
+  ].join('');
+  for (const b of $('today-rows').querySelectorAll('[data-act]')) {
+    b.onclick = () => {
+      if (b.dataset.act === 'devices') openDrawer('devices');
+      else $(b.dataset.act === 'modes' ? 'sec-modes' : 'sec-routes').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
   }
   const c = $('today-wk');
   c.hidden = !w;

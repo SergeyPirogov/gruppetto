@@ -84,9 +84,8 @@
       <!-- today: what you are about to ride, and the button -->
       <section class="today">
         <div class="today-text">
-          <small id="today-kicker" class="today-kicker"></small>
-          <b id="today-title" class="today-title"></b>
-          <span id="today-sub" class="today-sub"></span>
+          <small id="today-kicker" class="today-kicker">Ready to ride</small>
+          <dl id="today-rows" class="today-rows"></dl>
           <div class="ride-box">
             <div id="ride-summary" class="ride-summary"></div>
             <button id="btn-start" class="primary big">Ride ▶</button>
@@ -105,7 +104,7 @@
       <!-- the rider at a glance: form, this week, level -->
       <button id="week-box" class="week-box" data-open="history" hidden></button>
 
-      <section class="lobby-modes">
+      <section class="lobby-modes" id="sec-modes">
         <div id="plan-box" class="plan-box" hidden>
           <h2>Plan <small>intervals.icu</small></h2>
           <div id="plan-list" class="options mode-list plan-list"></div>
@@ -114,7 +113,7 @@
         <div id="mode-list" class="options mode-list"></div>
       </section>
 
-      <section class="lobby-routes">
+      <section class="lobby-routes" id="sec-routes">
         <h2>Routes</h2>
         <div id="ghost-box" class="ghost-box" hidden>
           <h2>Shadow ride <small>race a ghost of your earlier ride</small></h2>
