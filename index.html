@@ -199,6 +199,7 @@
             <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
             <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
           </div>
+          <label>W′ (anaerobic reserve), kJ <input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"></label>
           <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
 
           <h3 class="fields-head">Ride</h3>
@@ -327,6 +328,7 @@
         <div class="stat power"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><div class="st-body"><label>Power <span id="m-zone" class="zone-tag">Z1</span></label><div class="st-val"><b id="m-power">0</b><span>W</span></div></div><small class="pw-side"><span id="m-ftp-pct">0% FTP</span><span id="m-wkg">0.0 W/kg</span></small></div>
         <div class="stat hr"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><div class="st-body"><label>HR <span id="m-hr-zone" class="zone-tag" hidden></span></label><div class="st-val"><b id="m-hr">—</b><span>bpm</span></div></div><small id="m-hr-avg"></small></div>
         <div class="stat cad"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><div class="st-body"><label>Cadence</label><div class="st-val"><b id="m-cad">0</b><span>rpm</span></div></div><small id="m-cad-avg"></small></div>
+        <div class="stat wbal" title="W′bal: the anaerobic reserve above FTP"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4"/><path d="M6 10v4M9 10v4"/></svg><div class="st-body"><label>W′bal</label><div class="st-val"><b id="m-wbal">20.0</b><span>kJ</span></div><i class="wbal-bar"></i></div><small id="m-wbal-warn">100%</small></div>
       </div>
       <div id="wk-intensity" class="board intensity" hidden>
         <button id="wk-int-down" class="pill-btn" aria-label="Decrease intensity">−</button>
@@ -433,7 +435,7 @@
     <main class="sum-main">
       <div id="sum-hero" class="sum-hero"></div>
       <div class="sum-chart card">
-        <div class="sum-chart-head"><h2>Power &amp; heart rate</h2><span class="legend"><i class="lg-power"></i>Power <span id="lg-plan" hidden><i class="lg-plan"></i>Plan</span> <i class="lg-hr"></i>Heart rate <span id="lg-cad" hidden><i class="lg-cad"></i>Cadence</span></span></div>
+        <div class="sum-chart-head"><h2>Power &amp; heart rate</h2><span class="legend"><i class="lg-power"></i>Power <span id="lg-plan" hidden><i class="lg-plan"></i>Plan</span> <i class="lg-hr"></i>Heart rate <i class="lg-wbal"></i>W′bal <span id="lg-cad" hidden><i class="lg-cad"></i>Cadence</span></span></div>
         <canvas id="sum-chart"></canvas>
       </div>
       <div id="sum-stats" class="stats"></div>

@@ -6,6 +6,7 @@ import { rideIntent } from '../js/controls.js';
 import { routes } from '../js/routes.js';
 import { workouts, targetAt, totalDuration } from '../js/workouts.js';
 import { Recorder, normalizedPower, bestAverage } from '../js/recorder.js';
+import { wbalStep, wbalSeries, timeToEmpty } from '../js/wbal.js';
 
 const dv = (bytes) => new DataView(new Uint8Array(bytes).buffer);
 
@@ -643,4 +644,22 @@ test('FIT: a last lap under a minute joins the lap before', () => {
   assert.equal(laps([0, 100, 170]), 2); // 30 s tail: merged
   assert.equal(laps([0, 100]), 2);
   assert.equal(laps([0, 100, 130]), 3); // 70 s: a lap of its own
+});
+
+test('W′bal: drains joule for joule above FTP, refills below it, warns how long is left', () => {
+  const cp = 250, wp = 20000;
+  // 60 s at 350 W: 100 W over, 6 kJ gone
+  const bal = wbalSeries(Array(60).fill(350), cp, wp).at(-1);
+  assert.equal(bal, 14000);
+  // at 450 W the 14 kJ left last 70 s
+  assert.equal(timeToEmpty(bal, 450, cp), 70);
+  assert.equal(timeToEmpty(bal, 200, cp), Infinity);
+  // below FTP it comes back, faster when emptier and further below; never above full nor below empty
+  const back = wbalStep(bal, 150, cp, wp);
+  assert.ok(back > bal && back - bal === (wp - bal) * (100 / wp));
+  assert.ok(wbalStep(wbalStep(1000, 0, cp, wp), 0, cp, wp) - wbalStep(1000, 0, cp, wp) < wbalStep(1000, 0, cp, wp) - 1000);
+  assert.equal(wbalStep(wp, 100, cp, wp), wp);
+  assert.equal(wbalStep(500, 900, cp, wp), 0);
+  // 5 s chunks of a history chart: the same drain
+  assert.equal(wbalSeries([350, 350], cp, wp, 5).at(-1), 19000);
 });

@@ -135,6 +135,8 @@ export const UK = {
   // summary
   'Ride complete': 'Заїзд завершено', 'Power & heart rate': 'Потужність і пульс', 'Laps & climbs': 'Кола й підйоми',
   'Time': 'Час', 'Distance': 'Дистанція', 'Avg power': 'Сер. потужність', 'Avg heart rate': 'Сер. пульс', 'Elevation gain': 'Набір висоти',
+  'Lowest W′bal': 'Мін. W′bal', '~{s} s to empty': 'до відмови ~{s} с', 'W′ (anaerobic reserve), kJ': 'W′ (анаеробний запас), кДж',
+  'W′bal: the anaerobic reserve above FTP': 'W′bal: анаеробний запас понад FTP',
   'Max power': 'Макс. потужність', 'Max heart rate': 'Макс. пульс', 'Avg cadence': 'Сер. каденс', 'Work': 'Робота', 'Estimated FTP': 'Оцінка FTP',
   'vs {name}': 'проти: {name}', 'ghost': 'привид', 'best': 'рекорд',
   'Download .FIT': 'Завантажити .FIT', 'Upload to intervals.icu': 'Вивантажити в intervals.icu', 'Send to intervals.icu': 'Надіслати в intervals.icu', 'Delete ride': 'Видалити заїзд',

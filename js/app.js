@@ -15,6 +15,7 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
+import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
@@ -27,7 +28,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
-  name: 'Me', weight: 75, height: 178, ftp: 200, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
+  name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
@@ -339,6 +340,7 @@ function initLobby() {
   bind('f-weight', 'weight');
   bind('f-height', 'height');
   bind('f-ftp', 'ftp');
+  bind('f-wprime', 'wPrimeKj');
   bind('f-lthr', 'lthr');
   bind('f-diff', 'difficulty');
   bind('f-chainring', 'chainring');
@@ -1054,7 +1056,7 @@ async function startRide() {
     gain: 0, lastElev: route.elevAt(0), laps: 0, lapStartT: 0, lapTimes: [], efforts: [], seg: null, prevDist: 0,
     hold: null, splits: [], splitFrom: { t: 0, d: 0, i: 0 }, // free ride: power held in ERG, manual laps
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
-    powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
+    powerHist: [], wbal: wPrimeJ(), wbalMin: wPrimeJ(), target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
     cda: riderCdA(settings.height, settings.weight), // air drag from your height and weight
     gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
     bots: racing
@@ -1503,6 +1505,9 @@ function tick(power, cadence, hr) {
 
   ride.powerHist.push(power);
   if (ride.powerHist.length > 3) ride.powerHist.shift();
+  // W′bal: the anaerobic reserve above FTP, drained and refilled second by second
+  ride.wbal = wbalStep(ride.wbal ?? wPrimeJ(), power, settings.ftp, wPrimeJ(), 1);
+  ride.wbalMin = Math.min(ride.wbalMin ?? wPrimeJ(), ride.wbal);
   // running averages for the board (zeros left out, as in the ride summary)
   const A = ride.avg ||= { hr: 0, hrN: 0, cad: 0, cadN: 0 };
   if (hr > 0) { A.hr += hr; A.hrN++; }
@@ -1513,11 +1518,27 @@ function tick(power, cadence, hr) {
   renderStepList();
 }
 
+/** W′ in joules, from the profile (kJ). */
+function wPrimeJ() { return Math.max(1, (settings.wPrimeKj || DEFAULT_W_PRIME / 1000) * 1000); }
+
+/** W′bal on the board: what is left in kJ and a bar; above FTP with less than a minute to go, how long. */
+function updateWbalHud(p3) {
+  const full = wPrimeJ(), bal = ride.wbal ?? full, frac = bal / full;
+  $('m-wbal').textContent = (bal / 1000).toFixed(1);
+  const row = document.querySelector('.stat.wbal');
+  row.style.setProperty('--fill', `${Math.round(frac * 100)}%`);
+  const left = timeToEmpty(bal, p3, settings.ftp);
+  const warn = left < WARN_SECONDS;
+  row.classList.toggle('warn', warn);
+  $('m-wbal-warn').textContent = warn ? tr('~{s} s to empty', { s: Math.max(5, Math.round(left / 5) * 5) }) : `${Math.round(frac * 100)}%`;
+}
+
 function updateHud(cadence, hr, grade) {
   const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
   $('m-power').textContent = p3;
   $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} ${U.wkg}`;
   $('m-ftp-pct').textContent = `${Math.round((p3 / settings.ftp) * 100)}% FTP`;
+  updateWbalHud(p3);
   updateWindHud();
   // power zone: the board's bar and a Z1–Z7 tag take the zone's colour (in a workout the number itself
   // shows how close you are to the target, below)
@@ -2055,21 +2076,23 @@ function tss(sum, ftp) {
 }
 
 function historyEntry(r, samples) {
-  const every = 5, pw = [], hr = [], d = [], tg = [], cd = [];
+  const every = 5, pw = [], hr = [], d = [], tg = [], cd = [], wb = [];
+  const wPrime = wPrimeJ(), wbal = wbalSeries(samples.map((x) => x.power || 0), settings.ftp, wPrime);
   for (let i = 0; i < samples.length; i += every) {
     const chunk = samples.slice(i, i + every);
+    wb.push(Math.round(wbal[Math.min(samples.length, i + every) - 1]));
     const avg = (k) => { const v = chunk.map((x) => x[k] || 0).filter((x) => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
     pw.push(avg('power')); hr.push(avg('heartRate')); tg.push(avg('target')); cd.push(avg('cadence'));
     d.push(Math.round((chunk[chunk.length - 1].distance || 0) * 10) / 10); // distance at the end of each 5 s, for ghosts
   }
   return {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
-    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, summary: r.summary,
+    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(Math.min(...wbal)) : wPrime, summary: r.summary,
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
     race: r.race || null, raceLaps: r.raceLaps || null,
     maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
-    chart: { every, pw, hr, d, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
+    chart: { every, pw, hr, d, wb, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
     intervals: r.workout?.steps ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
       // a ramp shows where it starts and ends
       const st = r.workout.steps[x.step], k = (r.intensity ?? 100) / 100;
@@ -2159,11 +2182,13 @@ function showSummary(e, { live = false } = {}) {
     [tr('Avg heart rate'), sum.avgHr || '—', sum.avgHr ? U.bpm : ''],
   ] : [[tr('Time'), '0:00', '']];
   $('sum-hero').innerHTML = hero.map(([k, v, u]) => `<div><label>${k}</label><b>${v}</b><span>${u}</span></div>`).join('');
-  const chartSamples = e.chart.pw.map((p, i) => ({ power: p, heartRate: e.chart.hr[i], target: e.chart.tg?.[i] || 0, cadence: e.chart.cd?.[i] || 0 }));
+  // W′bal: saved second by second since it was added, worked out from the 5 s power of older rides
+  const wPrime = e.wPrime || wPrimeJ(), wb = e.chart.wb || wbalSeries(e.chart.pw, e.ftp || settings.ftp, wPrime, e.chart.every);
+  const chartSamples = e.chart.pw.map((p, i) => ({ power: p, heartRate: e.chart.hr[i], target: e.chart.tg?.[i] || 0, cadence: e.chart.cd?.[i] || 0, wbal: wb[i] ?? wPrime }));
   $('lg-plan').hidden = !e.chart.tg; $('lg-cad').hidden = !e.chart.cd;
   renderZones(e);
   renderIntervals(e);
-  requestAnimationFrame(() => drawSummaryChart($('sum-chart'), chartSamples, 2, e.ftp || settings.ftp));
+  requestAnimationFrame(() => drawSummaryChart($('sum-chart'), chartSamples, 2, e.ftp || settings.ftp, wPrime));
   const stats = sum ? [
     [tr('Elevation gain'), `${Math.round(sum.elevationGain)} ${U.m}`],
     ['NP', sum.normalizedPower ? `${sum.normalizedPower} ${U.W}` : '—'],
@@ -2173,6 +2198,7 @@ function showSummary(e, { live = false } = {}) {
     [tr('Avg cadence'), `${sum.avgCadence} ${U.rpm}`],
     [tr('Work'), `${sum.kj} ${tr('kJ')}`],
   ] : [];
+  if (sum) { const low = e.wbalMin ?? Math.min(...wb); stats.push([tr('Lowest W′bal'), `${(low / 1000).toFixed(1)} ${tr('kJ')} · ${Math.round((low / wPrime) * 100)}%`]); }
   if (sum && e.ramp && sum.best1min) stats.push([tr('Estimated FTP'), `${Math.round(sum.best1min * 0.75)} ${U.W}`]);
   if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([tr('vs {name}', { name: e.ghostName || tr('ghost') }), `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} ${U.m} ${e.ghostGap >= 0 ? '🏆' : ''}`]);
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
@@ -2362,7 +2388,7 @@ function renderHistory() {
 }
 
 /** Power (filled, smoothed over 10 s) and heart rate (line) over the whole ride. */
-function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp) {
+function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp, wPrime = wPrimeJ()) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = canvas.clientWidth, h = canvas.clientHeight;
   canvas.width = w * dpr; canvas.height = h * dpr;
@@ -2407,6 +2433,12 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp) {
     g.strokeStyle = '#ff4d5e'; g.lineWidth = 2; g.beginPath();
     let started = false;
     hr.forEach((v, i) => { if (!v) return; const y = h - (v / hMax) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
+    g.stroke();
+  }
+  // W′bal: violet, from full at the top to empty at the bottom
+  if (samples.some((s) => s.wbal < wPrime)) {
+    g.strokeStyle = '#a78bfa'; g.lineWidth = 2; g.beginPath();
+    samples.forEach((s, i) => { const y = 4 + (1 - (s.wbal ?? wPrime) / wPrime) * (h - 8); i ? g.lineTo(x(i), y) : g.moveTo(x(i), y); });
     g.stroke();
   }
   // the FTP line again on top of the fill, with its value
@@ -2575,6 +2607,7 @@ async function connectIntervals({ quiet = false } = {}) {
     const maxHr = athlete.maxHr || athlete.hrZones?.at(-1);
     if (maxHr) settings.maxHr = maxHr;
     if (athlete.lthr) { settings.lthr = athlete.lthr; $('f-lthr').value = athlete.lthr; }
+    if (athlete.wPrime) { settings.wPrimeKj = Math.round(athlete.wPrime / 100) / 10; $('f-wprime').value = settings.wPrimeKj; }
     if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
     saveSettings();
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};
