@@ -183,4 +183,10 @@ export const UK = {
   'Pacer on / off': 'Пейсер увімк. / вимк.', 'Hide / show the dashboard': 'Сховати / показати табло',
   'Full screen': 'На весь екран', 'Simulator: power ±10 W': 'Симулятор: потужність ±10 Вт',
   'Menu: Finish and Settings': 'Меню: Завершити й Налаштування', 'This list': 'Цей список',
+  // after the ride (#9)
+  'Time in power zones': 'Час у зонах потужності', 'Time in heart rate zones': 'Час у пульсових зонах',
+  'Target, W': 'Ціль, Вт', 'Power, W': 'Потужність, Вт', 'HR': 'Пульс', '{n} of {m} on target': '{n} з {m} у цілі',
+  'Max heart rate, bpm': 'Макс. пульс, уд/хв', 'for heart rate zones': 'для пульсових зон',
+  'Set your max heart rate in Profile to see heart rate zones.': 'Вкажіть максимальний пульс у Профілі, щоб бачити пульсові зони.',
+  'Very light': 'Дуже легко', 'Light': 'Легко', 'Moderate': 'Помірно', 'Hard': 'Важко', 'Maximum': 'Максимум',
 };

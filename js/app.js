@@ -7,7 +7,8 @@ import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
-import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats } from './workouts.js';
+import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
+import { rideIntervals, timeInZones, HR_ZONES } from './analysis.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration } from './sound.js';
@@ -21,7 +22,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
-  name: 'Me', weight: 75, height: 178, ftp: 200, difficulty: 50, routeId: 'rolling', mode: 'free',
+  name: 'Me', weight: 75, height: 178, ftp: 200, maxHr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
@@ -292,6 +293,7 @@ function initLobby() {
   bind('f-weight', 'weight');
   bind('f-height', 'height');
   bind('f-ftp', 'ftp');
+  bind('f-maxhr', 'maxHr');
   bind('f-diff', 'difficulty');
   bind('f-chainring', 'chainring');
   bind('f-shift', 'shiftMode', false);
@@ -502,6 +504,12 @@ function closeWorkoutMenu() { $('wk-menu').hidden = true; }
 function chooseWorkout(w) {
   settings.mode = w.id; settings.lastWorkout = w.id; saveSettings();
   closeWorkoutDetail(); closeWorkoutMenu(); renderModes();
+}
+
+/** [lo, hi] watts of a range step at this intensity, or null. */
+function stepBand(s, intensity = settings.intensity) {
+  const r = s && (s.rangeW || (s.range && s.range.map((f) => f * settings.ftp)));
+  return r ? r.map((v) => Math.round((v * intensity) / 100)) : null;
 }
 
 /** "62–65 % · 150–158 W", "40 → 62 %", "Free" for one step. */
@@ -1046,9 +1054,11 @@ function tick(power, cadence, hr) {
     }
   }
 
+  const onPlan = ride.workout && !ride.workoutDone;
   recorder.add({
     power, cadence, heartRate: hr, speed: ride.v, distance: ride.dist,
     altitude: elev, elevationGain: ride.gain,
+    target: onPlan ? ride.target : null, step: onPlan ? ride.stepIndex ?? null : null, // the plan, for the summary
   });
 
   ride.powerHist.push(power);
@@ -1353,7 +1363,7 @@ function finishRide() {
   keepAwake(false);
   const sum = recorder.summary();
   const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
-  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
+  lastRide = { workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
   ride = null;
   if (trainer.connected && trainer.controllable) {
     trainer.setSimulation(0);
@@ -1383,17 +1393,25 @@ function tss(sum, ftp) {
 }
 
 function historyEntry(r, samples) {
-  const every = 5, pw = [], hr = [], d = [];
+  const every = 5, pw = [], hr = [], d = [], tg = [], cd = [];
   for (let i = 0; i < samples.length; i += every) {
     const chunk = samples.slice(i, i + every);
     const avg = (k) => { const v = chunk.map((x) => x[k] || 0).filter((x) => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
-    pw.push(avg('power')); hr.push(avg('heartRate'));
+    pw.push(avg('power')); hr.push(avg('heartRate')); tg.push(avg('target')); cd.push(avg('cadence'));
     d.push(Math.round((chunk[chunk.length - 1].distance || 0) * 10) / 10); // distance at the end of each 5 s, for ghosts
   }
   return {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, summary: r.summary,
-    tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [], chart: { every, pw, hr, d },
+    tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
+    maxHr: settings.maxHr || 0,
+    chart: { every, pw, hr, d, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
+    intervals: r.workout ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
+      // a ramp shows where it starts and ends
+      const st = r.workout.steps[x.step], k = (r.intensity ?? 100) / 100;
+      const a = stepWatts(st, 0, settings.ftp), b = stepWatts(st, 1, settings.ftp);
+      return a !== null && b !== null && a !== b ? { ...x, ramp: [Math.round(a * k), Math.round(b * k)] } : x;
+    }) : [],
   };
 }
 
@@ -1464,7 +1482,10 @@ function showSummary(e, { live = false } = {}) {
     [tr('Avg heart rate'), sum.avgHr || '—', sum.avgHr ? U.bpm : ''],
   ] : [[tr('Time'), '0:00', '']];
   $('sum-hero').innerHTML = hero.map(([k, v, u]) => `<div><label>${k}</label><b>${v}</b><span>${u}</span></div>`).join('');
-  const chartSamples = e.chart.pw.map((p, i) => ({ power: p, heartRate: e.chart.hr[i] }));
+  const chartSamples = e.chart.pw.map((p, i) => ({ power: p, heartRate: e.chart.hr[i], target: e.chart.tg?.[i] || 0, cadence: e.chart.cd?.[i] || 0 }));
+  $('lg-plan').hidden = !e.chart.tg; $('lg-cad').hidden = !e.chart.cd;
+  renderZones(e);
+  renderIntervals(e);
   requestAnimationFrame(() => drawSummaryChart($('sum-chart'), chartSamples, 2, e.ftp || settings.ftp));
   const stats = sum ? [
     [tr('Elevation gain'), `${Math.round(sum.elevationGain)} ${U.m}`],
@@ -1502,6 +1523,37 @@ function showSummary(e, { live = false } = {}) {
   $('btn-delete-ride').dataset.id = e.id;
   $('btn-delete-ride').textContent = tr('Delete ride');
   scheduleUpload(canUpload);
+}
+
+/** Time in power zones (and heart rate zones when max heart rate is set), as bars. */
+function renderZones(e) {
+  const ftp = e.ftp || settings.ftp, every = e.chart.every;
+  const total = e.chart.pw.length * every;
+  const bars = (zones) => zones.map((z) => {
+    const pct = total ? (z.sec / total) * 100 : 0;
+    return `<div class="zb"><span class="zn">Z${z.z}</span><span class="zt">${esc(tr(z.name))}</span><span class="zbar"><i style="width:${pct.toFixed(1)}%;background:${z.color}"></i></span><span class="zs">${z.sec ? fmtTime(z.sec) : '—'}</span><span class="zp">${pct >= 0.5 ? Math.round(pct) : 0}%</span></div>`;
+  }).join('');
+  $('sum-zones-power').innerHTML = bars(timeInZones(e.chart.pw, ftp, POWER_ZONES, every));
+  const maxHr = e.maxHr || settings.maxHr;
+  const hasHr = e.chart.hr.some((x) => x > 0);
+  $('sum-zones-hr-box').hidden = !hasHr;
+  $('sum-zones-hr').innerHTML = maxHr ? bars(timeInZones(e.chart.hr, maxHr, HR_ZONES, every, { skipZero: true })) : `<p class="muted">${tr('Set your max heart rate in Profile to see heart rate zones.')}</p>`;
+  $('sum-zones').hidden = !total;
+}
+
+/** The workout's intervals: target against what you rode, in the band or not. */
+function renderIntervals(e) {
+  const rows = e.intervals || [];
+  $('sum-intervals').hidden = !rows.length;
+  if (!rows.length) return;
+  const inBand = rows.filter((r) => r.target && r.ok).length, withT = rows.filter((r) => r.target).length;
+  $('sum-int-score').textContent = withT ? tr('{n} of {m} on target', { n: inBand, m: withT }) : '';
+  $('sum-int-rows').innerHTML = rows.map((r, i) => {
+    const tgt = r.ramp ? `${r.ramp[0]} → ${r.ramp[1]}` : r.lo !== null ? `${r.lo}–${r.hi}` : r.target || '—';
+    const d = r.diff === null ? '' : `${r.diff >= 0 ? '+' : '−'}${Math.abs(r.diff)}`;
+    const pct = r.target ? Math.round((r.power / r.target) * 100) : null;
+    return `<tr class="${r.target ? (r.ok ? 'ok' : r.diff > 0 ? 'over' : 'under') : ''}"><td>${i + 1}</td><td>${fmtTime(r.dur)}</td><td>${tgt}</td><td><b>${r.power}</b></td><td class="dv">${d}${pct !== null ? ` <small>${pct}%</small>` : ''}</td><td>${r.hr || '—'}</td><td>${r.cad || '—'}</td></tr>`;
+  }).join('');
 }
 
 /** Recent rides in the lobby (latest five) and the full list in the drawer. */
@@ -1548,6 +1600,22 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp) {
   const grad = g.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, 'rgba(255,194,26,.85)'); grad.addColorStop(1, 'rgba(255,194,26,.15)');
   g.fillStyle = grad; g.fill();
+  // cadence: thin, on its own scale (0–150 rpm)
+  const cad = smooth('cadence', Math.max(1, Math.round(smoothN / 2)));
+  if (cad.some((v) => v > 0)) {
+    g.strokeStyle = 'rgba(56,214,232,.55)'; g.lineWidth = 1; g.beginPath();
+    let started = false;
+    cad.forEach((v, i) => { if (!v) { started = false; return; } const y = h - (v / 150) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
+    g.stroke();
+  }
+  // the plan: the workout's target as a white step line
+  if (samples.some((s) => s.target > 0)) {
+    g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 1.5; g.beginPath();
+    let started = false;
+    let py = 0;
+    samples.forEach((s, i) => { if (!(s.target > 0)) { started = false; return; } const y = h - (s.target / pMax) * (h - 8); if (started) { g.lineTo(x(i), py); g.lineTo(x(i), y); } else g.moveTo(x(i), y); py = y; started = true; });
+    g.stroke();
+  }
   if (hr.some((v) => v > 0)) {
     g.strokeStyle = '#ff4d5e'; g.lineWidth = 2; g.beginPath();
     let started = false;

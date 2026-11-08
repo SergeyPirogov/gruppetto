@@ -474,3 +474,18 @@ test('a GPX track that ends where it began becomes a loop, closed smoothly', asy
   const out = new Route(routeFromTrack({ name: 'Out', points: pts.slice(0, 40) }));
   assert.equal(out.oneWay, true);
 });
+
+test('after the ride: intervals as ridden and time in zones (#9)', async () => {
+  const { rideIntervals, timeInZones, HR_ZONES } = await import('../js/analysis.js');
+  const s = [];
+  for (let i = 0; i < 10; i++) s.push({ step: 0, target: 100, power: 100, heartRate: 120, cadence: 90 });
+  for (let i = 0; i < 10; i++) s.push({ step: 1, target: 200, power: 170, heartRate: 150, cadence: 0 });
+  for (let i = 0; i < 5; i++) s.push({ step: null, target: null, power: 150 });
+  const rows = rideIntervals(s, (i) => (i === 1 ? [190, 210] : null));
+  assert.equal(rows.length, 2);
+  assert.deepEqual([rows[0].dur, rows[0].power, rows[0].ok, rows[0].cad], [10, 100, true, 90]);
+  assert.deepEqual([rows[1].power, rows[1].diff, rows[1].ok, rows[1].lo, rows[1].cad], [170, -30, false, 190, 0]);
+  const z = timeInZones([100, 160, 260, 0], 200, undefined, 5);
+  assert.deepEqual(z.slice(0, 5).map((x) => x.sec), [10, 0, 5, 0, 0]); // 0 W and 100 W in Z1, 160 W (80 %) in Z3
+  assert.equal(z[5].sec, 5); // 260 W = 130 % of FTP: Z6, anaerobic
+});

@@ -371,6 +371,30 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
 .legend i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-left: 8px; }
 .lg-power { background: #ffc21a; }
 .lg-hr { background: #ff4d5e; }
+.lg-plan { background: #fff; height: 2px !important; }
+.lg-cad { background: #38d6e8; height: 2px !important; }
+#lg-plan, #lg-cad { display: inline-flex; align-items: center; gap: 6px; }
+#lg-plan[hidden], #lg-cad[hidden] { display: none; }
+.sum-intervals table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .92rem; }
+.sum-intervals th { text-align: left; font-weight: 600; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; padding: 0 6px 6px; }
+.sum-intervals td { padding: 6px; border-top: 1px solid var(--line); }
+.sum-intervals tr.ok td.dv { color: #3ecf8e; }
+.sum-intervals tr.over td.dv { color: #f97316; }
+.sum-intervals tr.under td.dv { color: #60a5fa; }
+.sum-intervals td small { color: var(--muted); }
+.int-score { color: var(--muted); font-size: .9rem; }
+.sum-zones { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 16px; }
+.sum-zones[hidden] { display: none; }
+.sum-zones .card[hidden] { display: none; }
+.zbars { display: grid; gap: 6px; }
+.zb { display: grid; grid-template-columns: 28px 110px 1fr 52px 36px; gap: 8px; align-items: center; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.zn { font-weight: 700; }
+.zt { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.zbar { height: 10px; background: #0d1420; border-radius: 5px; overflow: hidden; }
+.zbar i { display: block; height: 100%; border-radius: 5px; }
+.zs { text-align: right; }
+.zp { text-align: right; color: var(--muted); }
+@media (max-width: 560px) { .zb { grid-template-columns: 26px 1fr 48px 34px; } .zt { display: none; } .sum-intervals th:nth-child(6), .sum-intervals td:nth-child(6), .sum-intervals th:nth-child(7), .sum-intervals td:nth-child(7) { display: none; } }
 #sum-chart { width: 100%; height: 160px; display: block; }
 .sum-main .stats { margin: 0 0 16px; }
 .sum-actions { display: flex; flex-wrap: wrap; gap: 8px; }
