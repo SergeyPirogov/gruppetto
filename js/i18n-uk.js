@@ -169,6 +169,7 @@ export const UK = {
   'Set your name in Profile, so friends see who challenges them': 'Впиши своє ім’я в профілі, щоб друзі бачили, хто кидає виклик',
   'Privacy': 'Приватність', 'Send anonymous usage stats: which features are used, never your name, data or place': 'Надсилати анонімну статистику: які функції використовують, без імені, даних чи місця',
   'Your plan': 'Твій план', 'Your workouts': 'Твої тренування', 'imported and built': 'імпортовані й створені', 'Gruppetto workouts': 'Тренування Gruppetto',
+  'time': 'час',
   'Lowest W′bal': 'Мін. W′bal', '~{s} s to empty': 'до відмови ~{s} с', 'W′ (anaerobic reserve), kJ': 'W′ (анаеробний запас), кДж',
   'W′bal: the anaerobic reserve above FTP': 'W′bal: анаеробний запас понад FTP',
   'Max power': 'Макс. потужність', 'Max heart rate': 'Макс. пульс', 'Avg cadence': 'Сер. каденс', 'Work': 'Робота', 'Estimated FTP': 'Оцінка FTP',

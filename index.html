@@ -88,10 +88,6 @@
         <div id="lobby-msg" class="lobby-msg" hidden></div>
         <div id="route-list" class="route-list"></div>
         <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" hidden>
-        <div id="history-box" class="history-box" hidden>
-          <div class="hist-head"><h2>Recent rides</h2><span id="history-week"></span><button class="ghost" data-open="history">All rides</button></div>
-          <div id="history-recent" class="hist-list"></div>
-        </div>
       </section>
       <aside class="lobby-side">
         <div id="plan-box" class="plan-box" hidden>
@@ -103,6 +99,12 @@
         <div class="ride-box">
           <div id="ride-summary" class="ride-summary"></div>
           <button id="btn-start" class="primary big">Ride ▶</button>
+        </div>
+        <!-- the rider at a glance: level, this week, form; then the latest rides -->
+        <button id="week-box" class="week-box" data-open="history" hidden></button>
+        <div id="history-box" class="history-box" hidden>
+          <div class="hist-head"><h2>Recent rides</h2><span id="history-week"></span><button class="ghost" data-open="history">All rides</button></div>
+          <div id="history-recent" class="hist-list"></div>
         </div>
       </aside>
     </main>

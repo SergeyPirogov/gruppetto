@@ -1026,3 +1026,39 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 640px) { .challenge-box { grid-template-columns: auto 1fr; } .ch-actions { grid-column: 1 / -1; } }
 .sum-chart-head h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; color: var(--muted); }
+
+/* ---------- Lobby: the side column stays in view; the rider's week and latest rides under Ride ---------- */
+@media (min-width: 861px) {
+  .lobby-side { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 32px); overflow-y: auto; scrollbar-width: thin; padding-right: 2px; }
+  .lobby-side .mode-list { max-height: none; overflow: visible; }
+}
+.week-box { display: grid; gap: 8px; margin-top: 16px; padding: 14px 16px; text-align: left; border-radius: 14px; border: 1px solid var(--line); background: linear-gradient(135deg, #1b2740, #121a28); color: var(--text); cursor: pointer; }
+.week-box[hidden] { display: none; }
+.week-box:hover { border-color: var(--accent); }
+.wb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.wb-head b { font-size: 1.05rem; }
+.wb-head small, .wb-form small { color: var(--muted); font-size: .75rem; }
+.week-box .lvl-bar { margin: 0; height: 6px; }
+.wb-label { margin-top: 4px; font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.wb-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.wb-stats span { display: grid; }
+.wb-stats b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.wb-stats small { color: var(--muted); font-size: .7rem; }
+.wb-form { font-size: .85rem; }
+.lobby-side .history-box { margin-top: 16px; }
+.lobby-side .hist-head h2 { margin: 0; }
+.lobby-side #history-week { display: none; } /* the week card above says it */
+.lobby-side .hist-row { grid-template-columns: 46px 1fr auto; padding: 8px 10px; }
+.lobby-side .hist-row .hist-nums:last-child { display: none; }
+/* the trainer's chip when there is nothing to ride on */
+.dev-chip.need { border-color: rgba(255, 122, 26, .7); color: #ffd3a8; background: rgba(255, 122, 26, .1); }
+.dev-chip.need i { background: #ff7a1a; box-shadow: 0 0 6px #ff7a1a; animation: chip-need 1.6s ease-in-out infinite; }
+@keyframes chip-need { 50% { opacity: .35; } }
+/* route cards: a little lift, and a fuller profile */
+.route-cards .option { transition: transform .15s ease, border-color .15s ease; }
+.route-cards .option:hover { transform: translateY(-2px); }
+@media (max-width: 860px) {
+  .top-actions button { white-space: nowrap; }
+  .lvl-chip { display: none !important; } /* the week card has the level; the top bar keeps room for Profile */
+}
+@media (max-width: 520px) { .top-actions [data-open="icu"] { display: none; } } /* in the drawer's tabs: the top bar keeps to what fits */

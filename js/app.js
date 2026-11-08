@@ -222,6 +222,8 @@ function updateDeviceUI() {
     val.textContent = on && reading[d.key] ? reading[d.key]() : '';
   }
   document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
+  // nothing to ride on: the trainer's chip asks to be connected
+  document.querySelector('.dev-chip[data-key="trainer"]')?.classList.toggle('need', !trainer.connected && !$('sim').checked);
 }
 
 /** A setting changed during a ride: takes effect now, not at the next start. */
@@ -2532,7 +2534,8 @@ function renderHistory() {
     const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
     return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
   };
-  $('history-recent').innerHTML = history.slice(0, 5).map(row).join('');
+  $('history-recent').innerHTML = history.slice(0, 3).map(row).join('');
+  renderWeek();
   $('history-box').hidden = !history.length;
   $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
   const week = history.filter((e) => Date.now() - Date.parse(e.date) < 7 * 864e5);
@@ -2540,6 +2543,24 @@ function renderHistory() {
   for (const b of document.querySelectorAll('.hist-row')) {
     b.onclick = () => { $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e); };
   }
+}
+
+/** The lobby's card for the rider: level and how far to the next, this week's rides, time, distance and TSS, form. */
+function renderWeek() {
+  const box = $('week-box');
+  box.hidden = !history.length;
+  if (box.hidden) return;
+  const L = levelOf(progress.xp);
+  const week = history.filter((e) => Date.now() - Date.parse(e.date) < 7 * 864e5);
+  const sum = (k) => week.reduce((a, e) => a + (k(e) || 0), 0);
+  const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness : null;
+  const f = icu ? { ctl: icu.at(-1).ctl, form: icu.at(-2).ctl - icu.at(-2).atl } : fitnessSeries(history, { days: 90 }).at(-1);
+  const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
+  box.innerHTML = `<span class="wb-head"><b>${tr('Level {n}', { n: L.level })}</b><small>${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</small></span>
+    <span class="lvl-bar"><i style="width:${Math.round(L.frac * 100)}%"></i></span>
+    <span class="wb-label">${tr('This week')}</span>
+    <span class="wb-stats"><span><b>${week.length}</b><small>${tr('rides')}</small></span><span><b>${fmtTime(sum((e) => e.summary?.duration))}</b><small>${tr('time')}</small></span><span><b>${Math.round(sum((e) => e.summary?.distance) / 1000)}</b><small>${U.km}</small></span><span><b>${sum((e) => e.tss)}</b><small>TSS</small></span></span>
+    ${f ? `<span class="wb-form">${tr('Form')} <b class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</b> <small>${esc(BAND[formBand(f.form)])} · ${tr('Fitness')} ${Math.round(f.ctl)}</small></span>` : ''}`;
 }
 
 /** Power (filled, smoothed over 10 s) and heart rate (line) over the whole ride. */
