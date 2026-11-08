@@ -168,3 +168,7 @@ npm test
 - Експорт у `.FIT`, пряме завантаження в Strava
 - Мультиплеєр (спільні заїзди з друзями)
 - PWA — встановлення як застосунку
+
+## Licence
+
+Copyright © 2026 Serhii Pirohov. All rights reserved. Copying, modifying, redistributing or hosting this code is not allowed without written permission. See [LICENSE](LICENSE). Third-party parts keep their own licences (three.js: MIT; models: CC0, see `assets/CREDITS.md`).

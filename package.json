@@ -1,1 +1,13 @@
-{"name":"power-up","private":true,"type":"module","scripts":{"start":"python3 tools/serve.py 8000","test":"node --test tests/*.test.mjs"},"devDependencies":{"@garmin/fitsdk":"^21.221.0"}}
+{
+  "name": "power-up",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 tools/serve.py 8000",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "@garmin/fitsdk": "^21.221.0"
+  },
+  "license": "SEE LICENSE IN LICENSE"
+}
