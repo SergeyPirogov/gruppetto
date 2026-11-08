@@ -3024,7 +3024,7 @@ function shift(dir) {
     ride.lastSentGrade = null; // send the new resistance on the next tick
     if (ride.simulated) {
       const s = $('sim-power');
-      s.value = Number(s.value) + dir * 10;
+      s.value = Number(s.value) + dir * 5;
       s.oninput();
     }
   }
@@ -3146,7 +3146,7 @@ window.addEventListener('keydown', (e) => {
   else if (c === 'KeyM') toggleMinimap();
   else if (ride.simulated && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(c)) {
     const s = $('sim-power');
-    s.value = Number(s.value) + (c === 'Equal' || c === 'NumpadAdd' ? 10 : -10);
+    s.value = Number(s.value) + (c === 'Equal' || c === 'NumpadAdd' ? 5 : -5);
     s.oninput();
   }
 });
