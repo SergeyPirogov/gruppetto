@@ -32,7 +32,11 @@ export class IntervalsClient {
     }
     if (res.status === 401 || res.status === 403) throw new IntervalsError(res.status, 'intervals.icu rejected the API key. Check the key and athlete ID.');
     if (res.status === 404) throw new IntervalsError(404, 'Athlete not found. Check the ID (e.g. i123456) or leave the field empty.');
-    if (!res.ok) throw new IntervalsError(res.status, `intervals.icu returned error ${res.status}.`);
+    if (!res.ok) {
+      let why = '';
+      try { why = (await res.text()).replace(/\s+/g, ' ').trim().slice(0, 160); } catch { /* no body */ }
+      throw new IntervalsError(res.status, `intervals.icu returned error ${res.status}${why ? `: ${why}` : '.'}`);
+    }
     const text = await res.text();
     return text ? JSON.parse(text) : null;
   }
@@ -75,14 +79,20 @@ export class IntervalsClient {
 
   /** Upload a FIT (or TCX) file; pairs it with the planned workout when eventId is given. Returns the new activity id. */
   async uploadActivity(data, { name, description, eventId, filename = 'powerup.fit' }) {
-    const form = new FormData();
     const type = filename.endsWith('.tcx') ? 'application/vnd.garmin.tcx+xml' : 'application/vnd.ant.fit';
-    form.append('file', new Blob([data], { type }), filename);
-    const res = await this.request('/activities', {
-      method: 'POST',
-      body: form,
-      params: { name, description, paired_event_id: eventId || undefined },
-    });
+    const send = (pair) => {
+      const form = new FormData();
+      form.append('file', new Blob([data], { type }), filename);
+      return this.request('/activities', { method: 'POST', body: form, params: { name, description, paired_event_id: pair || undefined } });
+    };
+    let res;
+    try {
+      res = await send(eventId);
+    } catch (e) {
+      // the planned workout could not be paired (moved or deleted meanwhile): keep the ride, unpaired
+      if (!eventId || e.status !== 422) throw e;
+      res = await send(null);
+    }
     const list = Array.isArray(res) ? res : res?.activities || (res ? [res] : []);
     return list[0]?.id || null;
   }

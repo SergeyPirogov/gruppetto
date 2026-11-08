@@ -504,3 +504,24 @@ test('sprint segments: flat, straight, clear of climbs and of each other (#38)',
     for (let i = 1; i < r.sprints.length; i++) assert.ok(r.sprints[i].start - r.sprints[i - 1].start >= 1500);
   }
 });
+
+test('intervals.icu upload: a planned workout that cannot be paired (422) still uploads the ride, unpaired', async () => {
+  const { IntervalsClient } = await import('../js/intervals.js');
+  const calls = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const u = new URL(url);
+    calls.push(u.searchParams.get('paired_event_id'));
+    if (u.searchParams.get('paired_event_id')) return new Response('{"error":"Event not found"}', { status: 422 });
+    return new Response(JSON.stringify({ id: 'i77', activities: [{ id: 'i77' }] }), { status: 200 });
+  };
+  try {
+    const c = new IntervalsClient({ apiKey: 'test', athleteId: 'i1' });
+    const id = await c.uploadActivity(new Uint8Array([1, 2, 3]), { name: 'x', description: 'y', eventId: 99 });
+    assert.equal(id, 'i77');
+    assert.deepEqual(calls, ['99', null]);
+    // any other error is not retried, and says what the server said
+    globalThis.fetch = async () => new Response('Bad file', { status: 400 });
+    await assert.rejects(c.uploadActivity(new Uint8Array([1]), { name: 'x', eventId: 5 }), /error 400: Bad file/);
+  } finally { globalThis.fetch = realFetch; }
+});
