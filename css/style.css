@@ -1235,3 +1235,18 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 /* in the lobby the rail is the way between sections: the drawer shows only its close button; mid-ride (no rail) its tabs stay */
 #drawer:not(.in-ride) .drawer-tabs button:not(.drawer-close) { display: none; }
 #drawer:not(.in-ride) .drawer-tabs { margin-bottom: 6px; }
+
+/* =================== the rail's sections as pages (lobby): beside the rail, the width of the lobby's column =================== */
+.drawer.as-page, .wk-menu.as-page { left: 76px; z-index: 30; background: var(--bg); }
+.drawer.as-page .drawer-bg, .wk-menu.as-page .drawer-bg { display: none; }
+.drawer.as-page .drawer-panel { position: absolute; inset: 0; width: auto; border: 0; box-shadow: none; padding: 28px max(32px, calc((100% - 1240px) / 2 + 32px)) 48px; background: var(--bg); }
+.drawer.as-page .drawer-tabs { display: none; } /* the rail is the way between sections */
+.drawer.as-page .drawer-panel > .card { max-width: none; }
+.wk-menu.as-page { display: block; }
+.wk-menu.as-page[hidden] { display: none; }
+.wk-menu.as-page .wk-menu-panel { position: absolute; inset: 0; width: auto; max-width: none; max-height: none; margin: 0; border: 0; border-radius: 0; box-shadow: none; overflow-y: auto; padding: 28px max(32px, calc((100% - 1240px) / 2 + 32px)) 48px; background: var(--bg); }
+.wk-menu.as-page .wk-menu-head .drawer-close { display: none; }
+@media (max-width: 860px) {
+  .drawer.as-page, .wk-menu.as-page { left: 0; top: 53px; } /* under the rail's row of icons */
+  .drawer.as-page .drawer-panel, .wk-menu.as-page .wk-menu-panel { padding: 16px 16px 40px; }
+}

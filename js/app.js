@@ -567,6 +567,11 @@ function renderModes() {
 /** The workout menu: planned intervals.icu workouts first, then the built-in ones. */
 function openWorkoutMenu() {
   const menu = $('wk-menu'), list = $('wk-menu-list');
+  // a page beside the rail, like the other sections
+  menu.classList.add('as-page');
+  $('drawer').hidden = true;
+  markRail('workouts');
+  menu.querySelector('.wk-menu-panel').scrollTop = 0;
   list.innerHTML = '';
   const add = (w, tag) => {
     const b = document.createElement('button');
@@ -862,6 +867,9 @@ function openDrawer(panel) {
   const drawer = $('drawer');
   drawer.hidden = false;
   drawer.classList.toggle('in-ride', !!ride);
+  // in the lobby a section is a page beside the rail; mid-ride it slides over the road
+  drawer.classList.toggle('as-page', !ride);
+  if (!ride) { $('wk-menu').hidden = true; drawer.querySelector('.drawer-panel').scrollTop = 0; }
   for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
   if (panel === 'progress') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
   for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
@@ -869,10 +877,11 @@ function openDrawer(panel) {
 }
 /** The rail lights the section open in the drawer, and Ride again once it closes. */
 function markRail(panel) {
-  for (const b of document.querySelectorAll('.rail .rail-btn')) b.classList.toggle('on', panel ? b.dataset.open === panel : b.hasAttribute('data-home'));
+  for (const b of document.querySelectorAll('.rail .rail-btn')) b.classList.toggle('on', panel ? (b.dataset.open || b.dataset.page) === panel : b.hasAttribute('data-home'));
 }
-// the drawer closes by its ✕, its backdrop, Escape, or a click elsewhere: the rail follows
-new MutationObserver(() => { if ($('drawer').hidden) markRail(null); }).observe($('drawer'), { attributes: true, attributeFilter: ['hidden'] });
+// a page closes by Escape, Ride in the rail, or another page: the rail follows
+const railFollow = new MutationObserver(() => { if ($('drawer').hidden && $('wk-menu').hidden) markRail(null); });
+for (const id of ['drawer', 'wk-menu']) railFollow.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
 
 function initDrawer() {
   const drawer = $('drawer');
