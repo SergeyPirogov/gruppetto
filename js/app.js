@@ -1262,29 +1262,32 @@ function drawMinimap() {
   const g = canvas.getContext('2d'), route = ride.route, { pts, step } = routeShape(route);
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   g.clearRect(0, 0, W, H);
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   const big = $('minimap-box').classList.contains('big');
   const L = route.length;
-  // big: the whole route; small: about 1.2 km round you, as in Zwift (a whole long route in a little box is a scribble)
+  const raw = (d, wrap = true) => { // route point (metres) at distance d (riders wrap round a loop)
+    const dd = route.oneWay || !wrap ? Math.max(0, Math.min(L, d)) : ((d % L) + L) % L;
+    const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
+    return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t];
+  };
+  // heading up: the map turns so that you always ride toward the top, eased so it does not twitch
+  const [mx, my] = raw(ride.dist);
+  const [ax, ay] = raw(ride.dist + 60), [bx, by] = raw(ride.dist - 20);
+  const want = -Math.PI / 2 - Math.atan2(ay - by, ax - bx);
+  if (ride.mapRot === undefined) ride.mapRot = want;
+  ride.mapRot += Math.atan2(Math.sin(want - ride.mapRot), Math.cos(want - ride.mapRot)) * 0.6;
+  const c = Math.cos(ride.mapRot), sn = Math.sin(ride.mapRot);
+  const rot = ([x, y]) => [c * (x - mx) - sn * (y - my), sn * (x - mx) + c * (y - my)];
+  // big: the whole route fitted; small: about 1.2 km round you, you a little below the middle to see ahead
   const pad = big ? 24 : 12;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pts) { const [x, y] = rot(p); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
   let k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
   let ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
   if (!big) {
-    const SPAN = 1200; // metres across the shorter side
-    const kLocal = Math.min(W, H) / SPAN;
-    if (kLocal > k) { // only when the route is bigger than that
-      const dd = route.oneWay ? Math.max(0, Math.min(L, ride.dist)) : ((ride.dist % L) + L) % L;
-      const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
-      const mx = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, my = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t;
-      k = kLocal; ox = W / 2 - mx * k; oy = H / 2 - my * k;
-    }
+    const kLocal = Math.min(W, H) / 1200;
+    if (kLocal > k) { k = kLocal; ox = W / 2; oy = H * 0.62; }
   }
-  const at = (d, wrap = true) => { // map point at distance d along the route (riders wrap round a loop)
-    const dd = route.oneWay || !wrap ? Math.max(0, Math.min(L, d)) : ((d % L) + L) % L;
-    const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
-    return [ox + (pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t) * k, oy + (pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t) * k];
-  };
+  const at = (d, wrap = true) => { const [x, y] = rot(raw(d, wrap)); return [ox + x * k, oy + y * k]; };
   const line = (from, to, color, width) => {
     g.beginPath();
     for (let d = from; d <= to; d += step) { const [px, py] = at(Math.min(d, to), false); d === from ? g.moveTo(px, py) : g.lineTo(px, py); }
