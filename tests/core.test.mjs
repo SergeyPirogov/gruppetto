@@ -134,11 +134,13 @@ test('intervals.icu workout_doc conversion', () => {
     { duration: 240, power: { min: 88, max: 94, units: '%ftp' } },
     { duration: 300, power: { value: 2, units: 'power_zone' } },
     { duration: 180, hr: { value: 80, units: '%lthr' } },
-    { duration: 60, power: { start: 100, end: 200, units: 'w' } },
+    { duration: 60, power: { start: 100, end: 200, units: 'w' }, ramp: true },
+    { duration: 1800, power: { start: 150, end: 158, units: 'w' } },
+    { duration: 600, power: { start: 62, end: 65, units: '%ftp' } },
     { duration: 0, power: { value: 50 } },
   ];
   const s = convertSteps(doc);
-  assert.equal(s.length, 1 + 6 + 4);
+  assert.equal(s.length, 1 + 6 + 6);
   assert.deepEqual(s[0], { dur: 600, power: 0.5, to: 0.75, text: '' });
   assert.equal(s[1].text, 'Hold it!');
   assert.equal(stepWatts(s[1], 0, 200), 190);
@@ -147,6 +149,12 @@ test('intervals.icu workout_doc conversion', () => {
   assert.equal(stepWatts(s[8], 0, 200), 130);       // Z2 ≈ 65 %
   assert.equal(stepWatts(s[9], 0, 200), null);      // HR target → free ride
   assert.equal(stepWatts(s[10], 0.5, 200), 150);    // watts ramp
+  // a range (no ramp mark) is ridden at its middle, flat, and keeps its band for the chart
+  assert.equal(stepWatts(s[11], 0, 200), 154);
+  assert.equal(stepWatts(s[11], 1, 200), 154);
+  assert.deepEqual(s[11].rangeW, [150, 158]);
+  assert.equal(stepWatts(s[12], 0.9, 200), 127);   // 63.5 % of 200
+  assert.deepEqual(s[12].range.map((x) => +x.toFixed(2)), [0.62, 0.65]);
   const w = eventToWorkout({ id: 42, name: 'Sweet spot', start_date_local: '2026-11-06T00:00:00', workout_doc: { steps: doc } });
   assert.equal(w.id, 'icu:42');
   assert.equal(w.eventId, 42);
@@ -444,4 +452,25 @@ test('OSM scenery: woods, water and buildings laid out relative to the road (#25
   const q = overpassQuery([[48.45, 24.55], [48.46, 24.56]]);
   assert.match(q, /way\["landuse"="forest"\]\(48\.44,24\.52,48\.48,24\.56\)/); // the box the road runs through
   assert.match(q, /way\["building"\]\(around:150,48\.45000,24\.55000\);way\["building"\]\(around:150,48\.46000,24\.56000\);/);
+});
+
+test('a GPX track that ends where it began becomes a loop, closed smoothly', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  const { Route } = await import('../js/routes.js');
+  const m = 1 / 111320, lat0 = 50.36, lon0 = 30.46, mx = 1 / (111320 * Math.cos((lat0 * Math.PI) / 180));
+  const at = (n, e, ele) => ({ lat: lat0 + n * m, lon: lon0 + e * mx, ele });
+  const pts = [];
+  // a 1 km square, climbing 20 m on the way out and back down, ending 120 m short of the start
+  for (let d = 0; d <= 1000; d += 50) pts.push(at(d, 0, 150 + d * 0.02));
+  for (let d = 50; d <= 1000; d += 50) pts.push(at(1000, d, 170));
+  for (let d = 950; d >= 0; d -= 50) pts.push(at(d, 1000, 150 + d * 0.02));
+  for (let d = 950; d >= 120; d -= 50) pts.push(at(0, d, 150));
+  const r = new Route(JSON.parse(JSON.stringify(routeFromTrack({ name: 'Square', points: pts }))));
+  assert.equal(r.oneWay, false);
+  assert.ok(Math.abs(r.length - 4000) < 120, `length ${r.length}`);
+  assert.ok(Math.abs(r.elevAt(r.length - 5) - r.elevAt(0)) < 0.5, `seam ${r.elevAt(r.length - 5)} vs ${r.elevAt(0)}`);
+  assert.ok(Math.abs(r.gradeAt(r.length)) < 0.02, `grade across the start line ${r.gradeAt(r.length)}`);
+  // and a track that ends far from its start stays point to point
+  const out = new Route(routeFromTrack({ name: 'Out', points: pts.slice(0, 40) }));
+  assert.equal(out.oneWay, true);
 });

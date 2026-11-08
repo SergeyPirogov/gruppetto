@@ -553,6 +553,28 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .wk-menu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .wk-menu-head h2 { margin: 0; }
 .wk-menu-list { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.wk-detail { z-index: 46; }
+.wkd-panel { width: min(820px, calc(100vw - 24px)); display: grid; gap: 10px; }
+.wkd-panel h2 { margin: 0; font-size: 1.6rem; }
+.wkd-back { background: none; border: 0; color: var(--accent); font-weight: 700; padding: 4px 0; }
+.wkd-stats { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.wkd-stats div { display: grid; }
+.wkd-stats label { font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.wkd-stats b { font-size: 1.25rem; }
+.wkd-chart { width: 100%; height: 150px; display: block; border-radius: 8px; background: #0d1420; }
+.wkd-axis { display: flex; justify-content: space-between; font-size: .72rem; color: var(--muted); margin-top: -4px; }
+.wkd-notes { white-space: pre-wrap; color: #c9d4e3; line-height: 1.5; font-size: .95rem; }
+.wkd-notes:empty { display: none; }
+.wkd-h { margin: 6px 0 0; font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.wkd-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 40vh; overflow-y: auto; }
+.wkd-steps li { display: grid; grid-template-columns: 10px 56px 64px 1fr; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: 6px; background: #121a28; font-size: .9rem; }
+.wkd-steps i { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+.wkd-steps .t { color: var(--muted); font-variant-numeric: tabular-nums; }
+.wkd-steps .d { font-variant-numeric: tabular-nums; }
+.wkd-steps small { color: var(--muted); }
+.wkd-steps .x { color: var(--muted); font-weight: 600; }
+.wkd-actions { display: flex; gap: 10px; justify-content: flex-end; align-items: center; position: sticky; bottom: -20px; padding: 10px 0 4px; background: var(--bg); }
+.wkd-ride { width: auto; padding: 12px 22px; }
 
 /* grade ahead (#29): next 200 m and 1 km under the current grade */
 .stat .grade-next { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; color: #9fb0c6; font-size: .66rem; white-space: nowrap; line-height: 1.2; }
@@ -642,3 +664,14 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .btn-map table { border-collapse: collapse; margin-top: 6px; }
 .btn-map td { padding: 2px 10px 2px 0; vertical-align: top; }
 .btn-map td:first-child { color: var(--text); white-space: nowrap; }
+
+/* keyboard cheat sheet over the ride */
+.keys-help { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(5, 9, 16, .55); }
+.keys-help[hidden] { display: none; }
+.keys-panel { width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 48px); overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px 18px; }
+.keys-panel h2 { margin: 0; }
+.keys-panel dl { display: grid; grid-template-columns: auto 1fr; gap: 7px 16px; margin: 0; align-items: baseline; }
+.keys-panel dt { white-space: nowrap; text-align: right; }
+.keys-panel dd { margin: 0; color: #c9d4e3; }
+.keys-panel dd small { color: var(--muted); }
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: #1a2333; font: 600 .8rem/1.4 inherit; text-align: center; color: var(--fg, #fff); }

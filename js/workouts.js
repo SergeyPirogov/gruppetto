@@ -81,6 +81,24 @@ export function stepWatts(st, frac, ftp) {
   return Math.round(p * ftp);
 }
 
+/** Average and normalized power, IF and TSS of a workout at `ftp` (free steps count as half FTP). */
+export function workoutStats(w, ftp) {
+  let sum = 0, sum4 = 0, n = 0, roll = [], acc = 0;
+  for (const st of w.steps) {
+    for (let i = 0; i < st.dur; i++) {
+      const p = stepWatts(st, (i + 0.5) / st.dur, ftp) ?? ftp * 0.5;
+      sum += p; n++;
+      roll.push(p); acc += p;
+      if (roll.length > 30) acc -= roll.shift();
+      if (roll.length === 30) sum4 += (acc / 30) ** 4;
+    }
+  }
+  if (!n) return { dur: 0, avg: 0, np: 0, if: 0, tss: 0 };
+  const np = n >= 30 ? (sum4 / (n - 29)) ** 0.25 : sum / n;
+  const IF = np / ftp;
+  return { dur: n, avg: Math.round(sum / n), np: Math.round(np), if: IF, tss: Math.round((n / 3600) * IF * IF * 100) };
+}
+
 /** Power zones by fraction of FTP (Coggan's seven, as Zwift and TrainingPeaks use them). */
 export const POWER_ZONES = [
   { z: 1, name: 'Recovery', upTo: 0.55, color: '#8a94a6' },

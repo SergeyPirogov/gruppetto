@@ -7,6 +7,7 @@ import { landFromOsm } from './osm.js';
 const TURN = 2.5;          // the 3D renderer multiplies curvature by this; divide it back out
 const MAX_KM = 150;
 const MIN_RADIUS = 12;     // m: tighter kinks in the track are GPS noise, not road
+const LOOP_GAP = 1000;     // m: a track ending this close to its start is ridden as a loop
 
 /** Track points [{lat, lon, ele|null}] and the track's name from GPX text. */
 export function parseGpx(text) {
@@ -104,6 +105,11 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
   }
   // the road between the track's points: a smooth curve through them (centripetal Catmull-Rom),
   // not straight lines with a kink at every point; planner tracks have points tens of metres apart
+  // a track that ends near where it began (within 1 km) becomes a loop: the road runs on from the end
+  // back to the start, so you can ride it lap after lap
+  const gap = Math.hypot(xy0[xy0.length - 1][0] - xy0[0][0], xy0[xy0.length - 1][1] - xy0[0][1]);
+  const loop = gap < LOOP_GAP && xy0.length > 3;
+  if (loop && gap > 1) { xy0.push(xy0[0].slice()); rawEle.push(rawEle[0]); }
   const { xy, ele } = curveThrough(xy0, rawEle);
 
   const cum = [0];
@@ -134,9 +140,15 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
   // running median (±100 m) first drops dips and humps narrower than that; then smooth over ~±60 m
   // so the grade changes over a hundred metres or so, like a road's, not with every 1 m step of the
   // survey or every GPS wobble
-  const elev = smooth(median(E, source === 'terrain' ? 20 : 6), 16, 3);
+  // a loop is smoothed round the start line too: its end runs on into its beginning
+  const wrap = (a, fn) => {
+    if (!loop || a.length < 400) return fn(a);
+    const P = 200, ext = fn(a.slice(-P).concat(a, a.slice(0, P)));
+    return ext.slice(P, P + a.length);
+  };
+  const elev = wrap(E, (a) => smooth(median(a, source === 'terrain' ? 20 : 6), 16, 3));
   // heading from positions smoothed over ~±20 m, then the change per segment
-  const sx = smooth(X, 4), sy = smooth(Y, 4);
+  const sx = wrap(X, (a) => smooth(a, 4)), sy = wrap(Y, (a) => smooth(a, 4));
   const head = [];
   for (let k = 0; k < n - 1; k++) head.push(Math.atan2(sy[k + 1] - sy[k], sx[k + 1] - sx[k]));
   head.push(head[head.length - 1]);
@@ -148,7 +160,7 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     while (a < -Math.PI) a += 2 * Math.PI;
     dh.push(Math.max(-maxTurn, Math.min(maxTurn, a)));
   }
-  dh = smooth(dh, 3, 2); // bends come in and out gradually
+  dh = wrap(dh, (a) => smooth(a, 3, 2)); // bends come in and out gradually
   // map north-up (x east, y north) onto the renderer's heading sense: it turns toward +right for +curve
   const curve = dh.map((a) => (-a * SEG) / TURN);
 
@@ -158,14 +170,14 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     ...(scenery || {}),
     id: `gpx-${Date.now().toString(36)}`,
     name: title.slice(0, 40),
-    description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. Point to point, finish at ${(total / 1000).toFixed(1)} km.`,
+    description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. ${loop ? `A loop of ${(total / 1000).toFixed(1)} km.` : `Point to point, finish at ${(total / 1000).toFixed(1)} km.`}`,
     elevSource: source,
     startHeading: Math.round(head[0] * 1000) / 1000, // map radians (from east, anticlockwise)
     // the real shape for the minimap, every 50 m, north up (x east, y south), in whole metres
     map: Array.from({ length: Math.ceil(n / 10) + 1 }, (_, i) => Math.min(n - 1, i * 10)).flatMap((k) => [Math.round(sx[k]), Math.round(-sy[k])]),
     theme: 'meadow',
     custom: true,
-    oneWay: true,
+    oneWay: !loop,
     elev: elev.map((e) => Math.round(e * 100) / 100), // cm: at 0.1 m the 20 m grade could only move in 0.5 % steps
     curve: curve.map((c) => Math.round(c * 1e5) / 1e5),
   };

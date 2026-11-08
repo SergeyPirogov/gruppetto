@@ -100,6 +100,7 @@ export function eventToWorkout(e) {
     date,
     name: e.name || 'Workout from intervals.icu',
     description: e.description ? e.description.split('\n')[0].slice(0, 90) : 'From the intervals.icu calendar',
+    notes: (e.description || '').trim(), // the whole text, for the workout page
     steps,
   };
 }
@@ -142,14 +143,17 @@ function convertTarget(s) {
   const p = s.power;
   if (!p || s.freeride) return { free: true };
   const units = String(p.units || '%ftp').toLowerCase();
-  let a, b;
-  if (p.start !== undefined && p.end !== undefined) { a = p.start; b = p.end; }
-  else if (p.min !== undefined && p.max !== undefined) { a = b = (p.min + p.max) / 2; }
+  // a ramp is marked `ramp`; otherwise start/end (or min/max) is a range: ride its middle, show the band
+  let a, b, lo = null, hi = null;
+  if (p.start !== undefined && p.end !== undefined && s.ramp) { a = p.start; b = p.end; }
+  else if (p.start !== undefined && p.end !== undefined) { lo = Math.min(p.start, p.end); hi = Math.max(p.start, p.end); a = b = (lo + hi) / 2; }
+  else if (p.min !== undefined && p.max !== undefined) { lo = p.min; hi = p.max; a = b = (p.min + p.max) / 2; }
   else if (p.value !== undefined) { a = b = p.value; }
   else return { free: true };
+  const band = (k) => (lo !== null && hi > lo ? { range: [lo * k, hi * k] } : {});
 
   if (units === 'w' || units === 'watts') {
-    return a === b ? { watts: Math.round(a) } : { watts: Math.round(a), wattsTo: Math.round(b) };
+    return a === b ? { watts: Math.round(a), ...(lo !== null && hi > lo ? { rangeW: [Math.round(lo), Math.round(hi)] } : {}) } : { watts: Math.round(a), wattsTo: Math.round(b) };
   }
   if (units.includes('zone')) {
     a = ZONE_FTP[Math.max(1, Math.min(7, Math.round(a)))] ?? 0.6;
@@ -157,7 +161,7 @@ function convertTarget(s) {
     return a === b ? { power: a } : { power: a, to: b };
   }
   if (units.includes('ftp')) {
-    return a === b ? { power: a / 100 } : { power: a / 100, to: b / 100 };
+    return a === b ? { power: a / 100, ...band(1 / 100) } : { power: a / 100, to: b / 100 };
   }
   return { free: true }; // %MMP, HR or pace targets: ride by feel, no ERG
 }

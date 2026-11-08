@@ -72,6 +72,26 @@
       </div>
     </div>
 
+    <!-- one workout, on its own page: read it, then ride it -->
+    <div id="wk-detail" class="wk-menu wk-detail" hidden>
+      <div class="drawer-bg" data-wkd-close></div>
+      <div class="wk-menu-panel wkd-panel">
+        <div class="wk-menu-head"><button class="wkd-back" data-wkd-close>‹ <span>Back</span></button><button class="drawer-close" data-wkd-close aria-label="Close">✕</button></div>
+        <div id="wkd-tag"></div>
+        <h2 id="wkd-name"></h2>
+        <div id="wkd-stats" class="wkd-stats"></div>
+        <canvas id="wkd-chart" class="wkd-chart"></canvas>
+        <div id="wkd-axis" class="wkd-axis"></div>
+        <div id="wkd-notes" class="wkd-notes"></div>
+        <h3 class="wkd-h">Intervals</h3>
+        <ol id="wkd-steps" class="wkd-steps"></ol>
+        <div class="wkd-actions">
+          <button id="wkd-select" class="pill-btn">Select</button>
+          <button id="wkd-ride" class="primary wkd-ride">Ride this workout ▶</button>
+        </div>
+      </div>
+    </div>
+
   </section>
 
   <!-- settings drawer: over the lobby, and over the ride too -->
@@ -136,7 +156,7 @@
           <button id="btn-obc">Connect</button>
         </div>
         <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
-        <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or ↑/↓)</label>
+        <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
       </div>
       <div class="card" data-panel="profile">
         <h2>Profile &amp; settings</h2>
@@ -284,6 +304,7 @@
         <div class="controls">
           <button id="btn-pause" class="pill-btn">Pause</button>
           <button id="btn-finish" class="pill-btn danger">Finish</button>
+          <button id="btn-keys" class="pill-btn icon-btn" title="Keyboard (?)" aria-label="Keyboard (?)"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
           <button id="btn-settings" class="pill-btn icon-btn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
         </div>
       </div>
@@ -299,6 +320,12 @@
       </div>
     </div>
     <div id="paused" class="paused" hidden>PAUSED</div>
+    <div id="keys-help" class="keys-help" hidden>
+      <div class="keys-panel">
+        <div class="wk-menu-head"><h2>Keyboard</h2><button class="drawer-close" data-keys-close aria-label="Close">✕</button></div>
+        <dl id="keys-list"></dl>
+      </div>
+    </div>
     <div id="toast" class="toast" hidden></div>
   </section>
 

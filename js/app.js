@@ -7,7 +7,7 @@ import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
-import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone } from './workouts.js';
+import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats } from './workouts.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration } from './sound.js';
@@ -354,11 +354,9 @@ function renderRouteList() {
 function localizeClimbs(r) {
   if (r.custom) {
     const src = r.elevSource || (/no elevation/.test(r.description) ? 'none' : 'gpx');
-    r.description = tr({
-      none: 'Imported from GPX (no elevation in the file: flat). Point to point, finish at {km} km.',
-      terrain: 'Imported from GPX (elevation from a terrain model). Point to point, finish at {km} km.',
-      gpx: 'Imported from GPX. Point to point, finish at {km} km.',
-    }[src], { km: (r.length / 1000).toFixed(1) });
+    const from = tr({ none: 'Imported from GPX (no elevation in the file: flat).', terrain: 'Imported from GPX (elevation from a terrain model).', gpx: 'Imported from GPX.' }[src]);
+    const km = (r.length / 1000).toFixed(1);
+    r.description = `${from} ${r.oneWay ? tr('Point to point, finish at {km} km.', { km }) : tr('A loop of {km} km: ride it lap after lap.', { km })}`;
   }
   for (const c of r.climbs) { const m = /^Climb (\d+)$/.exec(c.name); c.name = m ? tr('Climb {n}', { n: m[1] }) : tr(c.name); }
 }
@@ -444,7 +442,7 @@ function renderPlan() {
     b.dataset.id = w.id;
     const day = dayLabel(w.date);
     b.innerHTML = `<span class="tag plan-day ${day}">${tr(day === 'today' ? 'Today' : 'Tomorrow')}</span><b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min}${w.description ? ` · ${esc(w.description)}` : ''}</small><canvas></canvas>`;
-    b.onclick = () => { settings.mode = w.id; settings.lastWorkout = w.id; saveSettings(); renderModes(); };
+    b.onclick = () => openWorkoutDetail(w);
     b.classList.toggle('sel', settings.mode === w.id);
     list.append(b);
     requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
@@ -470,7 +468,7 @@ function renderModes() {
     ? `<span class="wk-pick-head"><b>${esc(w.name)}</b><span class="wk-change">${tr('Workouts')} ›</span></span><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`
     : `<span class="wk-pick-head"><b>${tr('Workout')}</b><span class="wk-change">${tr('Choose')} ›</span></span><small>${tr('Structured intervals in ERG: the trainer holds the target power.')}</small>`;
   wb.onclick = (ev) => {
-    if (w && settings.mode !== w.id && !ev.target.closest('.wk-change')) { settings.mode = w.id; saveSettings(); renderModes(); return; }
+    if (w && !ev.target.closest('.wk-change')) { openWorkoutDetail(w); return; }
     openWorkoutMenu();
   };
   ml.append(free, wb);
@@ -489,7 +487,7 @@ function openWorkoutMenu() {
     b.className = 'option';
     b.dataset.id = w.id;
     b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`;
-    b.onclick = () => { settings.mode = w.id; settings.lastWorkout = w.id; saveSettings(); closeWorkoutMenu(); renderModes(); };
+    b.onclick = () => openWorkoutDetail(w);
     b.classList.toggle('sel', w.id === settings.mode);
     list.append(b);
     requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
@@ -499,6 +497,74 @@ function openWorkoutMenu() {
   menu.hidden = false;
 }
 function closeWorkoutMenu() { $('wk-menu').hidden = true; }
+
+function chooseWorkout(w) {
+  settings.mode = w.id; settings.lastWorkout = w.id; saveSettings();
+  closeWorkoutDetail(); closeWorkoutMenu(); renderModes();
+}
+
+/** "62–65 % · 150–158 W", "40 → 62 %", "Free" for one step. */
+function stepTarget(s) {
+  const ftp = settings.ftp, pct = (x) => Math.round((x / ftp) * 100);
+  if (s.free) return tr('Free ride');
+  const range = s.rangeW || (s.range && s.range.map((f) => f * ftp));
+  if (range) { const [lo, hi] = range.map((v) => scaleW(Math.round(v))); return `${lo}–${hi} ${U.W} <small>${pct(lo)}–${pct(hi)} %</small>`; }
+  const a = scaleW(stepWatts(s, 0, ftp)), b = scaleW(stepWatts(s, 1, ftp));
+  return a === b ? `${a} ${U.W} <small>${pct(a)} %</small>` : `${a} → ${b} ${U.W} <small>${pct(a)} → ${pct(b)} %</small>`;
+}
+
+const fmtDur = (sec) => (sec >= 3600 ? `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}` : sec % 60 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : `${sec / 60} ${U.min}`);
+
+/** A workout on its own page: chart, numbers, the coach's notes and every interval, then Ride. */
+function openWorkoutDetail(w) {
+  const ftp = settings.ftp;
+  const st = workoutStats(w, ftp);
+  const k = settings.intensity / 100;
+  const day = w.date ? dayLabel(w.date) : null;
+  $('wkd-tag').innerHTML = w.source === 'intervals' ? `<span class="tag">intervals.icu${day ? ` · ${esc(day === 'today' ? tr('Today') : day === 'tomorrow' ? tr('Tomorrow') : day)}` : ''}</span>` : '';
+  $('wkd-name').textContent = w.name;
+  const stat = (label, v) => `<div><label>${label}</label><b>${v}</b></div>`;
+  $('wkd-stats').innerHTML = stat(tr('Time'), fmtTime(st.dur))
+    + stat('TSS', Math.round(st.tss * k * k))
+    + stat('IF', (st.if * k).toFixed(2))
+    + stat(tr('Avg'), `${Math.round(st.avg * k)} ${U.W}`)
+    + stat('NP', `${Math.round(st.np * k)} ${U.W}`)
+    + (settings.intensity !== 100 ? stat(tr('Intensity'), `${settings.intensity}%`) : '');
+  $('wkd-notes').textContent = w.notes || w.description || '';
+  // every interval, repeats folded: "4 ×" over the steps that repeat back to back
+  const key = (s) => JSON.stringify([s.dur, s.power, s.to, s.watts, s.wattsTo, s.range, s.rangeW, s.free, s.text]);
+  const rows = [];
+  let t0 = 0;
+  for (let i = 0; i < w.steps.length;) {
+    let folded = false;
+    for (let len = 1; len <= 4 && !folded; len++) {
+      let reps = 1;
+      while (i + (reps + 1) * len <= w.steps.length && w.steps.slice(i + reps * len, i + (reps + 1) * len).every((s, j) => key(s) === key(w.steps[i + j]))) reps++;
+      if (reps > 1) {
+        rows.push({ reps, t: t0, steps: w.steps.slice(i, i + len) });
+        t0 += reps * w.steps.slice(i, i + len).reduce((a, s) => a + s.dur, 0);
+        i += reps * len; folded = true;
+      }
+    }
+    if (!folded) { rows.push({ reps: 1, t: t0, steps: [w.steps[i]] }); t0 += w.steps[i].dur; i++; }
+  }
+  const li = (s, t) => {
+    const mid = scaleW(stepWatts(s, 0.5, ftp));
+    const col = s.free || mid === null ? '#64748b' : zoneColor(mid / ftp);
+    return `<li><i style="background:${col}"></i><span class="t">${t === null ? '' : fmtTime(t)}</span><span class="d">${fmtDur(s.dur)}</span><span>${stepTarget(s)}${s.cad ? ` <small>· ${Array.isArray(s.cad) ? s.cad.join('–') : s.cad} ${U.rpm}</small>` : ''}${s.text ? ` <small>· ${esc(s.text)}</small>` : ''}</span></li>`;
+  };
+  $('wkd-steps').innerHTML = rows.map((r) => (r.reps > 1
+    ? `<li class="x"><span></span><span class="t">${fmtTime(r.t)}</span><span>${r.reps} ×</span><span></span></li>${r.steps.map((s) => li(s, null)).join('')}`
+    : li(r.steps[0], r.t))).join('');
+  const total = totalDuration(w);
+  $('wkd-axis').innerHTML = [0, 0.25, 0.5, 0.75, 1].map((f) => `<span>${fmtTime(Math.round(total * f))}</span>`).join('');
+  $('wkd-select').onclick = () => chooseWorkout(w);
+  $('wkd-ride').onclick = () => { chooseWorkout(w); startRide(); };
+  $('wkd-select').textContent = settings.mode === w.id ? tr('Selected ✓') : tr('Select');
+  $('wk-detail').hidden = false;
+  requestAnimationFrame(() => drawWorkoutChart($('wkd-chart'), w, -1));
+}
+function closeWorkoutDetail() { $('wk-detail').hidden = true; }
 
 /** The selected route, large, at the top of the lobby. */
 function showRoute() {
@@ -544,7 +610,11 @@ function initDrawer() {
   for (const el of document.querySelectorAll('#lobby [data-open], #drawer [data-open]')) el.addEventListener('click', () => open(el.dataset.open));
   for (const el of drawer.querySelectorAll('[data-close]')) el.addEventListener('click', () => { drawer.hidden = true; });
   window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !drawer.hidden) drawer.hidden = true; });
-  window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !$('wk-menu').hidden) closeWorkoutMenu(); });
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Escape') return;
+    if (!$('wk-detail').hidden) closeWorkoutDetail(); else if (!$('wk-menu').hidden) closeWorkoutMenu();
+  });
+  $('wk-detail').addEventListener('click', (e) => { if (e.target.closest('[data-wkd-close]')) closeWorkoutDetail(); });
   $('wk-menu').addEventListener('click', (e) => { if (e.target.closest('[data-wk-close]')) closeWorkoutMenu(); });
   // first visit with nothing to ride on: show the devices
   if (!trainer.connected && !$('sim').checked && !localStorage.getItem('powerup-seen-drawer')) {
@@ -1234,12 +1304,15 @@ function drawWorkoutChart(canvas, w, t) {
   const total = totalDuration(w);
   const ftp = settings.ftp;
   const wattsOf = (s, f) => scaleW(stepWatts(s, f, ftp)) ?? ftp * 0.5;
-  const maxW = Math.max(...w.steps.map((s) => Math.max(wattsOf(s, 0), wattsOf(s, 1)))) * 1.05;
+  const topOf = (s) => (s.rangeW ? scaleW(s.rangeW[1]) : s.range ? scaleW(Math.round(s.range[1] * ftp)) : 0);
+  const maxW = Math.max(...w.steps.map((s) => Math.max(wattsOf(s, 0), wattsOf(s, 1), topOf(s)))) * 1.05;
   let x0 = 0;
   for (const s of w.steps) {
     const x1 = x0 + s.dur;
-    const a = wattsOf(s, 0), b = wattsOf(s, 1);
-    ctx.fillStyle = s.free ? '#64748b' : zoneColor(((a + b) / 2) / ftp);
+    // a range target (like intervals.icu): solid up to its low end, a lighter band up to the high end
+    const range = (s.rangeW || (s.range && s.range.map((f) => f * ftp)))?.map((v) => scaleW(Math.round(v)));
+    const a = range ? range[0] : wattsOf(s, 0), b = range ? range[0] : wattsOf(s, 1);
+    ctx.fillStyle = s.free ? '#64748b' : zoneColor((range ? (range[0] + range[1]) / 2 : (a + b) / 2) / ftp);
     ctx.globalAlpha = t >= 0 && x1 <= t ? 0.45 : 1;
     ctx.beginPath();
     ctx.moveTo((x0 / total) * W, H);
@@ -1248,6 +1321,11 @@ function drawWorkoutChart(canvas, w, t) {
     ctx.lineTo((x1 / total) * W, H);
     ctx.closePath();
     ctx.fill();
+    if (range) {
+      const [lo, hi] = range;
+      ctx.globalAlpha *= 0.5;
+      ctx.fillRect((x0 / total) * W, H - (hi / maxW) * H, ((x1 - x0) / total) * W, ((hi - lo) / maxW) * H);
+    }
     x0 = x1;
   }
   ctx.globalAlpha = 1;
@@ -2016,27 +2094,69 @@ for (const el of [document.querySelector('#ride .controls'), $('sim-ctl')]) {
   el.addEventListener('mouseleave', () => { controlsPinned = false; showControls(); });
 }
 
+/** Everything from the keyboard, for riders without a controller. */
+const KEYS = [
+  [['Space'], 'Pause / resume'],
+  [['↑', 'W'], 'Harder: next gear (in ERG +1 % intensity)'],
+  [['↓', 'S'], 'Easier: previous gear (in ERG −1 % intensity)'],
+  [['⇧ ↑', 'PgUp'], 'Big step harder: workout +5 %, free ride climbs +10 %, hold +20 W'],
+  [['⇧ ↓', 'PgDn'], 'Big step easier'],
+  [['←', 'A'], 'Lane left'],
+  [['→', 'D'], 'Lane right'],
+  [['E'], 'ERG on / off (free ride: hold this power)'],
+  [['N'], 'Skip the interval (free ride: new lap)'],
+  [['P'], 'Pacer on / off'],
+  [['C'], 'Camera'],
+  [['H'], 'Hide / show the dashboard'],
+  [['F'], 'Full screen'],
+  [['+', '−'], 'Simulator: power ±10 W'],
+  [['Esc'], 'Menu: Finish and Settings'],
+  [['?'], 'This list'],
+];
+function toggleKeysHelp(show = $('keys-help').hidden) {
+  $('keys-list').innerHTML = KEYS.map(([k, what]) => `<dt>${k.map((x) => `<kbd>${x}</kbd>`).join(' ')}</dt><dd>${esc(tr(what))}</dd>`).join('');
+  $('keys-help').hidden = !show;
+}
+$('btn-keys').onclick = () => toggleKeysHelp();
+$('keys-help').addEventListener('click', (e) => { if (e.target === $('keys-help') || e.target.closest('[data-keys-close]')) toggleKeysHelp(false); });
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+}
+
 window.addEventListener('keydown', (e) => {
+  // the workout page in the lobby: Enter rides it
+  if (!ride && !$('wk-detail').hidden && e.code === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); $('wkd-ride').click(); return; }
   if (!ride) return;
   // settings open, or typing in a field: the keys belong to them, not to the ride
   if (!$('drawer').hidden || e.target.closest?.('input, select, textarea')) return;
-  if (e.code === 'Escape') {
-    if ($('ride').classList.contains('show-controls')) hideControls();
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const c = e.code;
+  if (c === 'Escape') {
+    if (!$('keys-help').hidden) toggleKeysHelp(false);
+    else if ($('ride').classList.contains('show-controls')) hideControls();
     else { showControls(0); $('btn-pause').focus(); }
+    return;
   }
-  if (e.code === 'Space') { e.preventDefault(); togglePause(); }
-  if (e.code === 'BracketRight') shift(+1);
-  if (e.code === 'BracketLeft') shift(-1);
-  if (e.code === 'ArrowLeft') { e.preventDefault(); steer(-1); }
-  if (e.code === 'ArrowRight') { e.preventDefault(); steer(+1); }
-  if (e.code === 'KeyN') skipInterval();
-  if (e.code === 'KeyP' && ride.pacer) togglePacer();
-  if (e.code === 'KeyE') toggleErg();
-  if (e.code === 'KeyC') nextCamera();
-  if (ride.simulated && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
-    e.preventDefault();
+  if (c === 'Slash' || c === 'KeyK') { toggleKeysHelp(); return; }
+  if (e.repeat && !['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract', 'BracketLeft', 'BracketRight'].includes(c)) return;
+  const up = c === 'ArrowUp' || c === 'KeyW', down = c === 'ArrowDown' || c === 'KeyS';
+  if (c === 'Space') { e.preventDefault(); togglePause(); }
+  else if (c === 'PageUp' || (up && e.shiftKey)) { e.preventDefault(); bigStep(+1); }
+  else if (c === 'PageDown' || (down && e.shiftKey)) { e.preventDefault(); bigStep(-1); }
+  else if (up || c === 'BracketRight') { e.preventDefault(); shift(+1); }
+  else if (down || c === 'BracketLeft') { e.preventDefault(); shift(-1); }
+  else if (c === 'ArrowLeft' || c === 'KeyA') { e.preventDefault(); steer(-1); }
+  else if (c === 'ArrowRight' || c === 'KeyD') { e.preventDefault(); steer(+1); }
+  else if (c === 'KeyN') skipInterval();
+  else if (c === 'KeyP') { if (ride.pacer) togglePacer(); }
+  else if (c === 'KeyE') toggleErg();
+  else if (c === 'KeyC') nextCamera();
+  else if (c === 'KeyH') runIntent('hud');
+  else if (c === 'KeyF') toggleFullscreen();
+  else if (ride.simulated && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(c)) {
     const s = $('sim-power');
-    s.value = Number(s.value) + (e.code === 'ArrowUp' ? 10 : -10);
+    s.value = Number(s.value) + (c === 'Equal' || c === 'NumpadAdd' ? 10 : -10);
     s.oninput();
   }
 });
