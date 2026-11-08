@@ -2290,7 +2290,7 @@ async function drawRideCard(e, c) {
   // brand
   try {
     const img = new Image(); img.src = 'logo.svg'; await img.decode();
-    g.drawImage(img, P, P - 8, 78, 60);
+    g.drawImage(img, P, P - 6, 64, 56);
   } catch { /* no logo */ }
   g.fillStyle = '#fff'; g.font = font(800, 44); g.fillText('Gruppetto', P + 92, P + 38);
   g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(500, 30);
