@@ -2527,12 +2527,10 @@ function renderHistory() {
     const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
     return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
   };
-  $('history-recent').innerHTML = history.slice(0, 8).map(row).join('');
+  // the lobby has no list of rides: they are in History
   renderWeek();
-  $('history-box').hidden = !history.length;
   $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
-  const week = history.filter((e) => Date.now() - Date.parse(e.date) < 7 * 864e5);
-  $('history-week').textContent = week.length ? `${tr('This week')}: ${week.length} ${lang === 'uk' ? plural(week.length, ['заїзд', 'заїзди', 'заїздів']) : `ride${week.length > 1 ? 's' : ''}`} · ${fmtTime(week.reduce((a, e) => a + (e.summary?.duration || 0), 0))} · TSS ${week.reduce((a, e) => a + (e.tss || 0), 0)}` : '';
+  // (the week's numbers are on the lobby's tiles)
   for (const b of document.querySelectorAll('.hist-row')) {
     b.onclick = () => { $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e); };
   }
