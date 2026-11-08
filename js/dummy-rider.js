@@ -172,9 +172,9 @@ export class DummyRider {
     J.shoulders = J.shoulderL.clone().add(J.shoulderR).multiplyScalar(0.5);
 
     const colors = { ...KIT, ...(cfg.colors || {}), jersey: jersey || '#15808a', stripe: stripe || '#ff8a1f' };
-    // gloves in the kit's colours: the jersey colour, the cuff in the accent colour
-    colors.glove = cfg.colors?.glove || colors.jersey;
-    colors.cuff = cfg.colors?.cuff || colors.stripe;
+    // the "gloves" are the colour of the skin: bare hands, the wrist joint smoothed over by the cuff
+    colors.glove = cfg.colors?.glove || colors.skin;
+    colors.cuff = cfg.colors?.cuff || colors.skin;
     const mats = {};
     const mat = (name) => (mats[name] ||= new THREE.MeshStandardMaterial({
       color: colors[name] || '#cccccc', flatShading: false, roughness: 0.85, metalness: 0, side: THREE.DoubleSide, // smooth skin and kit
@@ -232,7 +232,7 @@ export class DummyRider {
             if (along > wrist.length() - 0.035) r = Math.max(r, v.clone().sub(axis.clone().multiplyScalar(along)).length());
           }
         });
-        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.02, 0.05, 20, 1, true), mat('cuff'));
+        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.92, r * 1.04, 0.05, 20, 1, true), mat('cuff')); // narrower toward the hand: its inside never shows
         cuff.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
         cuff.position.copy(axis).multiplyScalar(wrist.length() - 0.012);
         cuff.castShadow = true;
