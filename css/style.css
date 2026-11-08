@@ -820,3 +820,6 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 @media (pointer: coarse) {
   #sim-power { height: 36px; touch-action: pan-y; }
 }
+
+.dev-chip .chip-val { font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.dev-chip .chip-val:empty { display: none; }

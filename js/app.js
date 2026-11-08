@@ -99,8 +99,9 @@ trainer.addEventListener('data', ({ detail: d }) => {
   if (!ride && now - lastLobbyUpdate > 500) { lastLobbyUpdate = now; updateDeviceUI(); } // live readings in the lobby
   advance(now); // keeps the ride clock running even when the tab is hidden and frames stop
 });
-hrm.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); });
-cadenceSensor.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.cadence = d.cadence; live.cadAt = now; cadenceSamples.add(now, d.cadence); });
+hrm.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); if (!ride && now - lastLobbyUpdate > 500) { lastLobbyUpdate = now; updateDeviceUI(); } });
+cadenceSensor.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.cadence = d.cadence; live.cadAt = now; cadenceSamples.add(now, d.cadence); if (!ride && now - lastLobbyUpdate > 500) { lastLobbyUpdate = now; updateDeviceUI(); } });
+setInterval(() => { if (!ride) updateDeviceUI(); }, 1000); // stale readings fall to 0 / — in the lobby
 controller.addEventListener('press', ({ detail: name }) => onControllerButton(name));
 obc.addEventListener('buttons', ({ detail: changes }) => onObcButtons(changes));
 obc.addEventListener('disconnect', () => obcState.clear());
@@ -163,6 +164,8 @@ function deviceStatus(d) {
       ? ` · ${tr('second controller: “+ controller”')}` : '';
     return `${d.dev.name}${units}${label ? ` · ${tr('pressed: {label}', { label })}` : ` · ${tr('press any button')}`}${hint}`;
   }
+  if (d.dev === hrm) { const hr = fresh(live.hr, live.hrAt); return `${d.dev.name} · ${hr ? `❤ ${hr} ${U.bpm}` : tr('waiting for a reading…')}`; }
+  if (d.dev === cadenceSensor) return `${d.dev.name} · ${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`;
   return d.dev.name;
 }
 
@@ -182,9 +185,16 @@ function updateDeviceUI() {
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
   $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
   // lobby top bar: a dot per device, lit when connected
+  // with the live reading on the chip, so you see at a glance that each one is working
+  const reading = { trainer: () => `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`, hr: () => { const v = fresh(live.hr, live.hrAt); return v ? `❤ ${v}` : '—'; }, cad: () => `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}` };
   for (const d of DEVICES) {
     const chip = document.querySelector(`.dev-chip[data-key="${d.key}"]`);
-    if (chip) chip.classList.toggle('on', d.dev.connected || (d.dev === cadenceSensor && trainer.connected));
+    if (!chip) continue;
+    const on = d.dev.connected || (d.dev === cadenceSensor && trainer.connected);
+    chip.classList.toggle('on', on);
+    let val = chip.querySelector('.chip-val');
+    if (!val) { val = document.createElement('b'); val.className = 'chip-val'; chip.append(val); }
+    val.textContent = on && reading[d.key] ? reading[d.key]() : '';
   }
   document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
 }

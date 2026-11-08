@@ -199,4 +199,5 @@ export const UK = {
   // time of day and weather (#41)
   'Time of day': 'Час доби', 'Midday': 'День', 'Morning': 'Ранок', 'Evening (golden hour)': 'Вечір (золота година)', 'Night': 'Ніч', 'By the clock': 'За годинником',
   'Weather': 'Погода', 'Clear': 'Ясно', 'Fog': 'Туман', 'Rain': 'Дощ',
+  'waiting for a reading…': 'чекаю на дані…',
 };
