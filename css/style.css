@@ -898,3 +898,14 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .pr-head { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 4px; }
 .pr-chip { padding: 4px 10px; border-radius: 999px; background: #2a1d12; border: 1px solid var(--accent); font-size: .85rem; }
 @media (max-width: 520px) { .pc-table { grid-template-columns: repeat(3, 1fr); } }
+
+/* ---------- Fitness, fatigue, form (#54) ---------- */
+.fitness { margin-bottom: 18px; }
+.fit-nums { display: grid; grid-template-columns: 1fr 1fr 1.6fr; gap: 6px; margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+.fit-nums div { background: #121a28; border-radius: 8px; padding: 6px 10px; display: grid; }
+.fit-nums label { font-size: .7rem; color: var(--muted); }
+.fit-nums b { font-size: 1.3rem; }
+.fit-nums small { font-size: .72rem; color: var(--muted); }
+.c-fit { color: #38bdf8; } .c-fat { color: #f472b6; } .c-form { color: #f59e0b; }
+.lg-fit { background: #38bdf8; } .lg-fat { background: #f472b6; } .lg-form { background: #f59e0b; }
+#fit-chart { width: 100%; height: 140px; display: block; }

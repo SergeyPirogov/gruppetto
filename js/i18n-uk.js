@@ -223,4 +223,7 @@ export const UK = {
   'New power records': 'Нові рекорди потужності', 'Your rides suggest FTP {w} W': 'Ваші заїзди кажуть: FTP {w} Вт',
   '95 % of your best 20 minutes ({w} W, {date})': '95 % найкращих 20 хвилин ({w} Вт, {date})', '75 % of your best minute in a ramp test ({w} W)': '75 % найкращої хвилини рамп-тесту ({w} Вт)',
   'now {w} W': 'зараз {w} Вт', 'Set FTP to {w} W': 'Встановити FTP {w} Вт', 'FTP set to {w} W': 'FTP встановлено: {w} Вт',
+  // form (#54)
+  'Form': 'Форма', 'Fitness': 'Тренованість', 'Fatigue': 'Втома', 'very fresh: losing fitness': 'дуже свіжі: тренованість падає', 'fresh: ready to race': 'свіжі: готові до гонки',
+  'neutral': 'нейтрально', 'productive load': 'продуктивне навантаження', 'overreaching: rest': 'перевантаження: відпочиньте',
 };

@@ -578,3 +578,21 @@ test('power curve and FTP suggestion (#34, #35)', async () => {
   assert.equal(s.ftp, Math.round(b[1200] * 0.95)); // only the recent ride counts
   assert.equal(ftpSuggestion(rides, 230, { now }), null); // already above
 });
+
+test('fitness, fatigue and form (#54)', async () => {
+  const { fitnessSeries, formBand } = await import('../js/power.js');
+  const now = Date.parse('2026-11-08T20:00:00');
+  // 4 weeks of 60 TSS a day, then 10 rest days
+  const rides = [];
+  for (let i = 37; i >= 10; i--) rides.push({ date: new Date(now - i * 864e5).toISOString(), tss: 60 });
+  const s = fitnessSeries(rides, { now });
+  const last = s[s.length - 1];
+  assert.ok(last.ctl > 18 && last.ctl < 28, `ctl ${last.ctl}`);    // 28 days at 60: ≈ 29, then 10 days of rest
+  assert.ok(last.atl < last.ctl, 'fatigue drops faster than fitness after rest');
+  assert.ok(last.form > 0, 'rested: positive form');
+  const busy = s.find((p) => p.date === new Date(now - 15 * 864e5).toISOString().slice(0, 10));
+  assert.ok(busy.form < 0, 'in the middle of the block: negative form');
+  assert.equal(formBand(-20), 'optimal');
+  assert.equal(formBand(10), 'fresh');
+  assert.deepEqual(fitnessSeries([], { now }), []);
+});

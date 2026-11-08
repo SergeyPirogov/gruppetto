@@ -10,7 +10,7 @@ import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, HR_ZONES } from './analysis.js';
 import { parseZwo, toZwo } from './zwo.js';
-import { DURS, bestsFromSamples, powerCurve, ftpSuggestion } from './power.js';
+import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
@@ -826,7 +826,7 @@ function openDrawer(panel) {
   drawer.hidden = false;
   drawer.classList.toggle('in-ride', !!ride);
   for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
-  if (panel === 'history') renderPowerCurve(); // its chart needs the panel on screen to size itself
+  if (panel === 'history') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
   for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
 }
 
@@ -2151,8 +2151,46 @@ function renderPowerCurve() {
   });
 }
 
+/** Fitness, fatigue and form over the last 90 days (#54). */
+function renderFitness() {
+  const s = fitnessSeries(history, { days: 90 });
+  const box = $('fitness-box');
+  box.hidden = s.length < 2;
+  if (box.hidden) return;
+  const now = s[s.length - 1], band = formBand(now.form);
+  const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
+  $('fit-nums').innerHTML = `<div><label>${tr('Fitness')}</label><b class="c-fit">${Math.round(now.ctl)}</b></div><div><label>${tr('Fatigue')}</label><b class="c-fat">${Math.round(now.atl)}</b></div><div><label>${tr('Form')}</label><b class="c-form">${now.form >= 0 ? '+' : ''}${Math.round(now.form)}</b><small>${esc(BAND[band])}</small></div>`;
+  requestAnimationFrame(() => {
+    const c = $('fit-chart'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = c.clientWidth, H = c.clientHeight;
+    if (!W) return;
+    c.width = W * dpr; c.height = H * dpr;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const top = Math.max(10, ...s.map((p) => Math.max(p.ctl, p.atl))) * 1.1, lo = Math.min(0, ...s.map((p) => p.form)) * 1.1;
+    const span = top - lo, x = (i) => (i / (s.length - 1)) * W, y = (v) => H - 14 - ((v - lo) / span) * (H - 20);
+    // form as bars round zero: green fresh, grey neutral, orange productive, red overreaching
+    const bw = Math.max(1, W / s.length - 1);
+    s.forEach((p, i) => {
+      const b = formBand(p.form);
+      g.fillStyle = { transition: '#94a3b8', fresh: '#22c55e', neutral: '#64748b', optimal: '#f59e0b', overload: '#ef4444' }[b];
+      g.globalAlpha = 0.55;
+      g.fillRect(x(i) - bw / 2, Math.min(y(0), y(p.form)), bw, Math.abs(y(p.form) - y(0)));
+    });
+    g.globalAlpha = 1;
+    g.strokeStyle = 'rgba(255,255,255,.15)'; g.beginPath(); g.moveTo(0, y(0)); g.lineTo(W, y(0)); g.stroke();
+    const line = (k, color, w) => { g.beginPath(); s.forEach((p, i) => (i ? g.lineTo(x(i), y(p[k])) : g.moveTo(x(i), y(p[k])))); g.strokeStyle = color; g.lineWidth = w; g.stroke(); };
+    line('atl', '#f472b6', 1.5);
+    line('ctl', '#38bdf8', 2.5);
+    g.fillStyle = 'rgba(255,255,255,.45)'; g.font = '11px system-ui';
+    const fmt = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+    g.fillText(fmt(s[0].date), 2, H - 2);
+    g.fillText(fmt(now.date), W - 44, H - 2);
+  });
+}
+
 function renderHistory() {
   renderPowerCurve();
+  renderFitness();
   const row = (e) => {
     const s = e.summary || {};
     const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });

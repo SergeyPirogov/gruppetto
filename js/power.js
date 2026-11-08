@@ -63,3 +63,40 @@ export function ftpSuggestion(entries, ftp, { days = 90, now = Date.now() } = {}
   if (!est || est < ftp * 1.02 || est - ftp < 3) return null;
   return { ftp: est, ...why };
 }
+
+/**
+ * Fitness, fatigue and form (#54), as TrainingPeaks and intervals.icu draw them: daily TSS smoothed over
+ * 42 days (fitness, CTL) and over 7 days (fatigue, ATL); form (TSB) = yesterday's fitness − fatigue.
+ * Returns one point per day from the first ride (or `days` back) to `now`.
+ */
+export function fitnessSeries(entries, { days = 90, now = Date.now() } = {}) {
+  const day = (t) => Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / 864e5); // local calendar day
+  const tssByDay = new Map();
+  for (const e of entries) {
+    if (!e.tss) continue;
+    const d = day(Date.parse(e.date));
+    tssByDay.set(d, (tssByDay.get(d) || 0) + e.tss);
+  }
+  if (!tssByDay.size) return [];
+  const today = day(now), first = Math.min(...tssByDay.keys());
+  const kC = 1 - Math.exp(-1 / 42), kA = 1 - Math.exp(-1 / 7);
+  let ctl = 0, atl = 0;
+  const out = [];
+  for (let d = first; d <= today; d++) {
+    const form = ctl - atl; // the morning's form: before today's ride
+    const t = tssByDay.get(d) || 0;
+    ctl += (t - ctl) * kC;
+    atl += (t - atl) * kA;
+    if (d > today - days) out.push({ day: d, date: new Date(d * 864e5).toISOString().slice(0, 10), tss: t, ctl, atl, form });
+  }
+  return out;
+}
+
+/** A word for a form value, the usual bands. */
+export function formBand(tsb) {
+  if (tsb > 25) return 'transition';   // fresh, losing fitness
+  if (tsb > 5) return 'fresh';
+  if (tsb > -10) return 'neutral';
+  if (tsb > -30) return 'optimal';     // productive training load
+  return 'overload';
+}
