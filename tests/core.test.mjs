@@ -757,3 +757,18 @@ test('intervals.icu: the planned workouts already ridden are the events the day\
   assert.deepEqual([...done], ['4242']);
   assert.match(asked, /\/activities\?oldest=2026-11-08&newest=2026-11-08/);
 });
+
+test('Time of day by the sun where you are: Kyiv in November is night at 17:30, in June broad day; the phases follow', async () => {
+  const { sunAt, phaseOf, placeFromZone, phasesOfDay } = await import('../js/sun.js');
+  const kyiv = placeFromZone('Europe/Kyiv');
+  assert.equal(phaseOf(sunAt(new Date('2026-11-08T10:30:00Z'), kyiv)), 'midday');  // 12:30
+  assert.equal(phaseOf(sunAt(new Date('2026-11-08T15:30:00Z'), kyiv)), 'night');   // 17:30
+  assert.equal(phaseOf(sunAt(new Date('2026-06-21T14:30:00Z'), kyiv)), 'midday');  // 17:30 in summer
+  assert.equal(phaseOf(sunAt(new Date('2026-06-21T17:00:00Z'), kyiv)), 'evening'); // 20:00, the golden hour
+  assert.equal(phaseOf(sunAt(new Date('2026-06-21T02:30:00Z'), kyiv)), 'morning'); // 5:30
+  // sunset in Kyiv on 8 November is about 16:20 local (14:20 UTC): the sun near the horizon then
+  assert.ok(Math.abs(sunAt(new Date('2026-11-08T14:20:00Z'), kyiv).elevation) < 2);
+  const p = phasesOfDay(new Date('2026-11-08T12:00:00Z'), kyiv);
+  assert.ok(p.morning && p.midday && p.evening && p.night && p.morning < p.midday && p.midday < p.evening && p.evening < p.night);
+  assert.equal(placeFromZone('Mars/Base', new Date('2026-01-15')).lat, 45);
+});

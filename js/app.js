@@ -15,6 +15,7 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
+import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
@@ -366,6 +367,8 @@ function initLobby() {
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
   bind('f-time', 'timeOfDay', false);
+  $('f-time').addEventListener('change', renderTimeHint);
+  renderTimeHint();
   bind('f-weather', 'weather', false);
   bind('f-wind', 'wind', false);
   $('f-wind').addEventListener('change', () => { if (ride?.wind) { ride.wind.base = windBase(); updateWindHud(); } }); // takes effect mid-ride too
@@ -2550,6 +2553,23 @@ function renderWeek() {
     tile(tr('Level {n}', { n: L.level }), `${L.xp} XP`, tr('{left} to level {n}', { left: L.to - L.xp, n: L.level + 1 }), `<span class="lvl-bar"><i style="width:${Math.round(L.frac * 100)}%"></i></span>`),
   ].join('');
 }
+
+/** Under «Time of day» with «By the sun»: when each look begins today here. */
+function renderTimeHint() {
+  const el = $('f-time-hint');
+  el.hidden = settings.timeOfDay !== 'auto';
+  if (el.hidden) return;
+  const p = phasesOfDay(new Date(), placeFromZone());
+  const hm = (d) => d ? d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '—';
+  el.textContent = tr('Today here: morning {a} · day {b} · golden hour {c} · night {d}', { a: hm(p.morning), b: hm(p.midday), c: hm(p.evening), d: hm(p.night) });
+}
+// «By the sun»: mid-ride the look follows the sun as it moves (checked each minute, changed only when the look does)
+setInterval(() => {
+  if (!ride || settings.timeOfDay !== 'auto' || !scene) return;
+  const look = phaseOf(sunAt(new Date(), placeFromZone()));
+  if (ride.look && look !== ride.look) scene.setAtmosphere?.('auto', settings.weather);
+  ride.look = look;
+}, 60000);
 
 /** The rail's profile button: your initial on your jersey's colour. */
 function renderAvatar() {

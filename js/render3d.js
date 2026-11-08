@@ -4,6 +4,7 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
+import { sunAt, phaseOf, placeFromZone } from './sun.js';
 import { loadRiderModel, ModelRider } from './rider-model.js';
 import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadNature, natureMaterials } from './nature.js';
@@ -574,11 +575,10 @@ const TIMES = {
   evening: { sky: ['#5a7cb6', '#ffcf9e'], fog: '#f1cfae', fogMix: 0.5, sunY: 0.18, light: '#ffd29a', lightI: 2.5, hemi: 0.62, hemiColor: '#b9c8ec', exposure: 1.03, glow: '#ffbe7a', disk: '#ffe2a6', diskSize: 120, dim: 0.85 },
   night: { sky: ['#03050c', '#131c35'], fog: '#0e1526', fogMix: 0.92, sunY: 0.55, light: '#9fb6ff', lightI: 0.7, hemi: 0.2, exposure: 1.25, glow: '#6f86c8', disk: '#e8eefc', diskSize: 34, dim: 0.22, night: true, fogNear: 60, fogFar: 700 },
 };
-/** The hour's look: 'auto' picks it from the local clock. */
-export function timeOfDay(time, date = new Date()) {
+/** The hour's look: 'auto' picks it from the sun where you are (sun.js), not from fixed hours. */
+export function timeOfDay(time, date = new Date(), place = placeFromZone()) {
   if (time !== 'auto') return TIMES[time] || time === 'midday' ? time : 'midday';
-  const h = date.getHours() + date.getMinutes() / 60;
-  return h >= 5 && h < 9 ? 'morning' : h >= 9 && h < 17.5 ? 'midday' : h >= 17.5 && h < 21 ? 'evening' : 'night';
+  return phaseOf(sunAt(date, place));
 }
 /** A route's theme under the chosen time of day and weather: sky, fog, sun and how dim the distance is. */
 export function atmosphereFor(base, time = 'midday', weather = 'clear') {
