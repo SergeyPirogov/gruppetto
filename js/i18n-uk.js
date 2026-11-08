@@ -136,6 +136,12 @@ export const UK = {
   // summary
   'Ride complete': 'Заїзд завершено', 'Power & heart rate': 'Потужність і пульс', 'Laps & climbs': 'Кола й підйоми',
   'Time': 'Час', 'Distance': 'Дистанція', 'Avg power': 'Сер. потужність', 'Avg heart rate': 'Сер. пульс', 'Elevation gain': 'Набір висоти',
+  'Challenge a friend 👻': 'Виклик другу 👻', 'A link: your friend rides against your ghost': 'Посилання: друг їде проти твого привида',
+  'Race my ghost on {route} in Gruppetto: {km} km in {time}': 'Обжени мого привида на «{route}» у Gruppetto: {km} км за {time}',
+  'Link copied: send it to a friend': 'Посилання скопійовано: надішли його другу', 'Copy the link': 'Скопіюй посилання',
+  'This challenge link is broken or from a newer Gruppetto: ask for a new one.': 'Посилання на виклик пошкоджене або з новішого Gruppetto: попроси нове.',
+  '{name} challenges you: {km} km of {route} in {time}. Ride it and race their ghost 👻': '{name} кидає тобі виклик: {km} км маршруту «{route}» за {time}. Їдь і обжени привида 👻',
+  'Friend': 'Друг', 'A friend': 'Друг',
   'Lowest W′bal': 'Мін. W′bal', '~{s} s to empty': 'до відмови ~{s} с', 'W′ (anaerobic reserve), kJ': 'W′ (анаеробний запас), кДж',
   'W′bal: the anaerobic reserve above FTP': 'W′bal: анаеробний запас понад FTP',
   'Max power': 'Макс. потужність', 'Max heart rate': 'Макс. пульс', 'Avg cadence': 'Сер. каденс', 'Work': 'Робота', 'Estimated FTP': 'Оцінка FTP',

@@ -6,6 +6,7 @@ import { rideIntent } from '../js/controls.js';
 import { routes } from '../js/routes.js';
 import { workouts, targetAt, totalDuration } from '../js/workouts.js';
 import { Recorder, normalizedPower, bestAverage } from '../js/recorder.js';
+import { encodeChallenge, decodeChallenge, challengeIn } from '../js/challenge.js';
 import { wbalStep, wbalSeries, timeToEmpty } from '../js/wbal.js';
 
 const dv = (bytes) => new DataView(new Uint8Array(bytes).buffer);
@@ -662,4 +663,19 @@ test('W′bal: drains joule for joule above FTP, refills below it, warns how lon
   assert.equal(wbalStep(500, 900, cp, wp), 0);
   // 5 s chunks of a history chart: the same drain
   assert.equal(wbalSeries([350, 350], cp, wp, 5).at(-1), 19000);
+});
+
+test('Challenge link: a ride packs into the address and comes back as a ghost', async () => {
+  const d = Array.from({ length: 720 }, (_, i) => (i + 1) * 41.3), pw = d.map((_, i) => 180 + (i % 50));
+  const e = { routeId: 'rolling', date: '2026-11-08T10:00:00Z', summary: { duration: 3600, distance: 29736 }, chart: { every: 5, d, pw } };
+  const code = await encodeChallenge(e, 'Serhii');
+  assert.match(code, /^[\w-]+$/);
+  assert.ok(code.length < 4000, `an hour's ride fits a link: ${code.length}`);
+  assert.equal(challengeIn(`#challenge=${code}`), code);
+  assert.equal(challengeIn('#other'), '');
+  const g = await decodeChallenge(code);
+  assert.equal(g.friend, true); assert.equal(g.name, 'Serhii'); assert.equal(g.routeId, 'rolling');
+  assert.deepEqual(g.chart.pw, pw);
+  assert.ok(g.chart.d.every((x, i) => Math.abs(x - d[i]) <= 1), 'distance within a metre');
+  assert.equal(await decodeChallenge('not-a-ride'), null);
 });

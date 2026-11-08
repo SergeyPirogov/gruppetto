@@ -15,6 +15,7 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
+import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -836,10 +837,10 @@ function updateSummary() {
   const r = routes.find((x) => x.id === settings.routeId);
   const sel = document.querySelector('#mode-list .sel b');
   const raceLaps = settings.mode === 'race' && r && !r.oneWay ? ((settings.raceLaps || 1) === 1 ? tr('1 lap') : tr('{n} laps', { n: settings.raceLaps })) : null;
-  const g = r && pickGhost(r.id);
+  const g = r && rideGhost(r.id);
   const free = settings.mode === 'free';
   const pacer = free && settings.freePacer ? `🚴 ${settings.pacerName?.trim() || tr('Pacer')} ${settings.freePacerWkg} ${U.wkg}` : null;
-  el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? `👻 ${settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null, pacer].filter(Boolean).join(' · ');
+  el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? `👻 ${g.friend ? g.name || tr('Friend') : settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null, pacer].filter(Boolean).join(' · ');
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
@@ -1074,7 +1075,7 @@ async function startRide() {
       : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     race: racing ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
-    ghost: racing ? null : (() => { const g = pickGhost(route.id); return g ? { entry: g, name: settings.ghost === 'last' ? tr('Last ride') : tr('Your best'), color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
+    ghost: racing ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
     pacer: racing ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
@@ -2118,6 +2119,42 @@ function saveToHistory(r, samples) {
   return e;
 }
 
+// ---------- A friend's ride from a link (#challenge) ----------
+// The last challenge opened stays until another one comes: on its route its ghost rides instead of yours.
+const CHALLENGE_KEY = 'gruppetto-challenge';
+let challenge = (() => { try { return JSON.parse(localStorage.getItem(CHALLENGE_KEY) || 'null'); } catch { return null; } })();
+function saveChallenge() { try { localStorage.setItem(CHALLENGE_KEY, JSON.stringify(challenge)); } catch { /* private mode */ } }
+/** The ghost to ride with on this route: a friend's challenge first, then your own best or last ride. */
+function rideGhost(routeId) {
+  if (settings.ghost !== 'off' && challenge?.routeId === routeId) return challenge;
+  return pickGhost(routeId);
+}
+const ghostLabel = (g) => (g.friend ? g.name || tr('Friend') : settings.ghost === 'last' ? tr('Last ride') : tr('Your best'));
+
+/** The link to race this ride's ghost: shared where the device can, copied otherwise. */
+async function challengeFriend(e) {
+  const route = routes.find((r) => r.id === e.routeId);
+  const url = `${location.origin}${location.pathname}#challenge=${await encodeChallenge(e, settings.name)}`;
+  const text = tr('Race my ghost on {route} in Gruppetto: {km} km in {time}', { route: route?.name || '', km: (e.summary.distance / 1000).toFixed(1), time: fmtTime(e.summary.duration) });
+  if (navigator.share) { try { await navigator.share({ title: 'Gruppetto', text, url }); return; } catch (err) { if (err.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(tr('Link copied: send it to a friend')); } catch { prompt(tr('Copy the link'), url); }
+}
+
+/** A page opened from a challenge link: the friend's ride becomes the ghost of its route, which is picked. */
+async function openChallenge() {
+  const code = challengeIn(location.hash);
+  if (!code) return;
+  window.history.replaceState(null, '', location.pathname + location.search); // not «history»: that is the rides
+  const c = await decodeChallenge(code);
+  const route = c && routes.find((r) => r.id === c.routeId && !r.custom);
+  if (!route) { alertBox(tr('This challenge link is broken or from a newer Gruppetto: ask for a new one.')); return; }
+  challenge = c; saveChallenge();
+  settings.routeId = route.id;
+  if (settings.ghost === 'off') settings.ghost = 'best';
+  saveSettings(); markRoute(); showRoute(); updateSummary();
+  infoBox(tr('{name} challenges you: {km} km of {route} in {time}. Ride it and race their ghost 👻', { name: c.name || tr('A friend'), km: (c.summary.distance / 1000).toFixed(1), route: route.name, time: fmtTime(c.summary.duration) }));
+}
+
 // ---------- Shadow ride (#24) ----------
 // Race a ghost of an earlier ride on the same route: it rides where you were at the same moment.
 /** Rides on this route that can ride as a ghost (they carry a distance trace). */
@@ -2224,6 +2261,7 @@ function showSummary(e, { live = false } = {}) {
   }).join('');
   // files and intervals.icu: the ride just finished, or an older one whose full record is still kept
   shown = { entry: e, rec: live ? recorder : null };
+  $('btn-challenge').hidden = !(e.chart?.d?.length > 1 && !e.race && routes.some((r) => r.id === e.routeId && !r.custom));
   const files = (on) => {
     for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !on; $(id).disabled = !sum; }
     document.querySelector('#summary .hint:last-of-type').hidden = !on;
@@ -2774,6 +2812,7 @@ $('f-pacer-name').oninput = () => {
   if (ride?.pacer) ride.pacer.name = settings.pacerName.trim() || tr('Pacer');
 };
 $('btn-settings').onclick = () => openDrawer('profile');
+$('btn-challenge').onclick = () => challengeFriend(shown.entry);
 $('btn-dev-lost').onclick = () => openDrawer('devices');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
 $('f-free-pacer').checked = !!settings.freePacer;
@@ -3270,3 +3309,7 @@ if (new URLSearchParams(location.search).has('demo')) {
     s.value = 260; s.oninput?.();
   };
 }
+
+// a challenge link: when the page opens with one, and when one is opened in the app already open
+openChallenge();
+window.addEventListener('hashchange', openChallenge);
