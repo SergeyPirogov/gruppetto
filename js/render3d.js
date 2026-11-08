@@ -909,6 +909,9 @@ export class Scene3D {
     this.buildings = route.buildings || [];
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    // road markings: flush with the asphalt (raised, they swallowed the bottom of the tyres), pulled
+    // forward in depth instead so they never flicker through it
+    this.lineMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
     this.natureMats = this.nature ? natureMaterials(this.nature) : null;
     // wind: metres of sway per metre² of height, so a 9 m tree's crown moves ~15-20 cm, grass ~7 cm
     const WIND = { Bark_NormalTree: 0.0022, Leaves_NormalTree: 0.0022, Leaves_Pine: 0.0018, Leaves_TwistedTree: 0.03, Leaves: 0.12, Flowers: 0.15, Grass: 0.16 };
@@ -1324,9 +1327,9 @@ export class Scene3D {
     };
     ribbon(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, 0.02, verge.clone().multiplyScalar(0.85));
     ribbon(-ROAD_HALF, ROAD_HALF, 0.05, rgb(T.road[0]), this.roadMat);
-    ribbon(-ROAD_HALF * 0.9 - 0.07, -ROAD_HALF * 0.9 + 0.07, 0.07, rgb(T.line));
-    ribbon(ROAD_HALF * 0.9 - 0.07, ROAD_HALF * 0.9 + 0.07, 0.07, rgb(T.line));
-    ribbon(-0.055, 0.055, 0.075, rgb(T.line), this.mat, true);
+    ribbon(-ROAD_HALF * 0.9 - 0.07, -ROAD_HALF * 0.9 + 0.07, 0.052, rgb(T.line), this.lineMat);
+    ribbon(ROAD_HALF * 0.9 - 0.07, ROAD_HALF * 0.9 + 0.07, 0.052, rgb(T.line), this.lineMat);
+    ribbon(-0.055, 0.055, 0.052, rgb(T.line), this.lineMat, true);
 
     // scenery placements
     const place = {};
