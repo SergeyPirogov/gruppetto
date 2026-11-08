@@ -1639,7 +1639,7 @@ export class Scene3D {
     patchShader(mat, 'fan', (sh) => {
       sh.uniforms.uCrowdTime = this.crowdTime;
       sh.uniforms.uCrowdNear = this.crowdNear;
-      sh.vertexShader = `uniform float uCrowdTime;\nuniform vec3 uCrowdNear;\nattribute float aPart;\nattribute float aArm;\nattribute vec3 aSkin;\nattribute vec3 aHair;\n${sh.vertexShader
+      sh.vertexShader = `uniform float uCrowdTime;\nuniform vec3 uCrowdNear;\nattribute float aPart;\nattribute float aArm;\nattribute float aCloth;\nattribute vec3 aSkin;\nattribute vec3 aHair;\n${sh.vertexShader
         .replace('#include <color_vertex>', `#include <color_vertex>
         #ifdef USE_INSTANCING_COLOR
           vColor.xyz = aPart < 0.5 ? color : (aPart < 1.5 ? instanceColor : (aPart < 2.5 ? aSkin : aHair));
@@ -1652,6 +1652,7 @@ export class Scene3D {
         float cEx = 1.0 - smoothstep(10.0, 60.0, distance(cRoot.xz, uCrowdNear.xz)); // wilder as you come by
         // each fan's own steady tempo: tying it to how close you are made the phase leap as you came near (twitching)
         float cSpd = 4.2 * (0.8 + fract(cH * 3.7) * 0.4);
+        transformed.x += aCloth * sin(uCrowdTime * 9.0 - aCloth * 5.0 + cPh) * 0.09; // a flag in the hand flutters
         if (abs(aArm) > 0.001) {
           float sd = sign(aArm);
           vec2 sh0 = vec2(${S.y.toFixed(3)}, ${S.z.toFixed(3)} * sd);
@@ -1711,7 +1712,8 @@ export class Scene3D {
           const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), face), new THREE.Vector3(s, s, s));
           fans.push([m, SHIRTS[Math.floor(hash(seed + i * 7.7) * SHIRTS.length)], seed + i * 11.3]);
           const fl = hash(seed + i * 8.9);
-          if (fl < 0.16) flagsUA.push(m); else if (fl < 0.24) flagsTeam.push([m, SHIRTS[Math.floor(hash(seed + i * 9.1) * SHIRTS.length)]]);
+          if (!this.fanModels) { if (fl < 0.16) flagsUA.push(m); else if (fl < 0.24) flagsTeam.push([m, SHIRTS[Math.floor(hash(seed + i * 9.1) * SHIRTS.length)]]); }
+          else if (fl < 0.05) flagsUA.push(m); // the people carry their own; a few flags on poles stand among them
         }
       }
     }

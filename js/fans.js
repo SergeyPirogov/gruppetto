@@ -114,6 +114,30 @@ function dress(pos, index, clothed, rounds = 8, puff = 0.012) {
 }
 
 /**
+ * A flag held in the hand: the pole runs along the forearm, from just below the hand to a metre above it;
+ * the cloth (blue over yellow, or one colour) hangs from its top, flying out to the side. Pieces in the
+ * model's own space, with aCloth (0 at the pole, 1 at the free edge) for the flutter.
+ */
+function flagGeometry(hand, elbow) {
+  const dir = hand.clone().sub(elbow).normalize();
+  const bottom = hand.clone().addScaledVector(dir, -0.22), top = hand.clone().addScaledVector(dir, 1.05);
+  const pole = new THREE.CylinderGeometry(0.014, 0.014, bottom.distanceTo(top), 6);
+  pole.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir));
+  pole.translate((bottom.x + top.x) / 2, (bottom.y + top.y) / 2, (bottom.z + top.z) / 2);
+  const W = 0.8, H = 0.27, pieces = [{ part: 'pole', pos: pole.attributes.position.array, index: pole.index.array }];
+  for (const [k, ua] of [[0, 'blue'], [1, 'yellow']]) {
+    const g = new THREE.PlaneGeometry(W, H, 8, 1).translate(top.x + W / 2, top.y - H / 2 - k * H, top.z);
+    const P = g.attributes.position.array, cloth = new Float32Array(P.length / 3);
+    for (let i = 0; i < cloth.length; i++) cloth[i] = (P[i * 3] - top.x) / W;
+    // both faces, so it shows from either side of the road
+    const idx = Array.from(g.index.array), back = [];
+    for (let t = 0; t < idx.length; t += 3) back.push(idx[t], idx[t + 2], idx[t + 1]);
+    pieces.push({ part: 'cloth', ua, pos: P, index: [...idx, ...back], cloth });
+  }
+  return pieces;
+}
+
+/**
  * Bakes every body × pose × outfit × hairstyle into an indexed BufferGeometry: position, normal, color,
  * aPart (see PART) and aArm (−1…1: how much the vertex follows the left (−) or right (+) arm). Facing +x,
  * feet at y = 0, about 1.8 m tall. Returns { variants: [geometry…], shoulder: { y, z } } or null.
@@ -158,6 +182,10 @@ export async function loadFanModels() {
       turnWorld(bones.lowerarm_r, Z, -pose.er);
       const bodyPos = skinned(body);
       const eyePos = extras.map(skinned);
+      // a flag on a pole in the raised left hand, the cloth flying out to that side
+      const hand = new THREE.Vector3(), elbow = new THREE.Vector3();
+      bones.hand_l.getWorldPosition(hand); bones.lowerarm_l.getWorldPosition(elbow);
+      const flagFor = pose.l > 40 ? flagGeometry(hand, elbow) : null;
       for (const outfit of OUTFITS) {
         // body: parts and arm weights per vertex, then the clothes smoothed
         const g = body.geometry, SI = g.attributes.skinIndex, SW = g.attributes.skinWeight, n = g.attributes.position.count;
@@ -176,19 +204,22 @@ export async function loadFanModels() {
         }
         const pos = bodyPos.slice();
         dress(pos, g.index.array, clothed);
-        for (const hair of B.hair) {
-          const P = [], C = [], A = [], R = [], I = [];
-          const add = (positions, index, partFn, armFn = () => 0) => {
+        const looks = B.hair.map((hair) => ({ hair, flag: null }));
+        if (flagFor && outfit === OUTFITS[0]) looks.push({ hair: B.hair[0], flag: 'ua' }, { hair: B.hair[1], flag: 'team' });
+        for (const { hair, flag } of looks) {
+          const P = [], C = [], A = [], R = [], I = [], K = [];
+          const add = (positions, index, partFn, armFn = () => 0, clothFn = () => 0) => {
             const base = P.length / 3;
             for (let i = 0; i < positions.length / 3; i++) {
               const x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2];
               P.push(z, y, -x); // facing +z → facing +x (the left arm to −z)
               const p = partFn(i);
-              const own = { trousers: outfit.trousers, shoes: outfit.shoes, eye: '#1d1d1f' }[p];
+              const own = { trousers: outfit.trousers, shoes: outfit.shoes, eye: '#1d1d1f', pole: '#d9d4c7', blue: '#0057b7', yellow: '#ffd700' }[p];
               const c = new THREE.Color(own || '#ffffff');
               C.push(c.r, c.g, c.b);
               R.push(own ? PART.own : PART[p]);
               A.push(armFn(i));
+              K.push(clothFn(i));
             }
             for (let t = 0; t < index.length; t++) I.push(base + index[t]);
           };
@@ -202,8 +233,15 @@ export async function loadFanModels() {
               add(wp, idx, () => 'hair');
             }
           }
+          if (flag) {
+            for (const piece of flagFor) {
+              const part = piece.part === 'cloth' ? (flag === 'ua' ? piece.ua : 'shirt') : piece.part;
+              add(piece.pos, piece.index, () => part, () => -pose.wave[0], (i) => piece.cloth?.[i] || 0);
+            }
+          }
           const geo = new THREE.BufferGeometry();
           geo.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+          geo.setAttribute('aCloth', new THREE.Float32BufferAttribute(K, 1));
           geo.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
           geo.setAttribute('aPart', new THREE.Float32BufferAttribute(R, 1));
           geo.setAttribute('aArm', new THREE.Float32BufferAttribute(A, 1));

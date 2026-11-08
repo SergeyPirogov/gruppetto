@@ -16,7 +16,7 @@ import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formB
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
-import { unlockAudio, beep, say, spokenDuration } from './sound.js';
+import { unlockAudio, beep, say, spokenDuration, crowd } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
@@ -1240,9 +1240,22 @@ function advance(now = performance.now()) {
   }
 }
 
+/** How close the fans are: 1 at the top of a climb, fading over the last ~190 m below it and 25 m past it. */
+function crowdLevel() {
+  const R = ride.route, L = R.length;
+  let best = 0;
+  for (const c of R.climbs || []) {
+    let x = c.end - ride.dist; // metres to the top
+    if (!R.oneWay) { x = ((x % L) + L) % L; if (x > L - 25) x -= L; }
+    if (x > -25 && x < 190) best = Math.max(best, x < 0 ? 1 + x / 25 : 1 - x / 210);
+  }
+  return best;
+}
+
 function frame(now) {
   if (!ride) return;
   advance(now);
+  if (settings.sound && !ride.paused) crowd(crowdLevel());
   if (ride.race) {
     const c = ride.race.countdown, el = $('countdown');
     const txt = ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
