@@ -16,7 +16,7 @@ const SADDLE0 = new THREE.Vector2(-0.15, 1.03);           // built-in bike, when
 const HAND0 = new THREE.Vector3(0.545, 0.97, 0.225);
 const BB = new THREE.Vector2(0, 0.29);                     // bottom bracket in the rider group
 const CRANK = 0.17;
-const KIT = { skin: '#d49a72', shorts: '#1d1f24', sock: '#f2f2f2', shoe: '#f3f4f6', sole: '#dfe2e6', hair: '#2a2018' };
+const KIT = { glove: '#1b1d22', cuff: '#2b2f36', skin: '#d49a72', shorts: '#1d1f24', sock: '#f2f2f2', shoe: '#f3f4f6', sole: '#dfe2e6', hair: '#2a2018' };
 
 /** Loads assets/rider/dummy.gltf once: { dummy: gltf, cfg }, or null when it is missing. */
 export async function loadDummyRider() {
@@ -210,6 +210,32 @@ export class DummyRider {
       this.parts[node.name] = pivot;
     }
     group.add(this.root);
+    // cycling gloves: the hand in the glove colour and a cuff round the end of the forearm, which also
+    // covers where the forearm and the hand meet ("gloves": false in dummy.json for bare hands)
+    if (cfg.gloves !== false) {
+      for (const s of 'LR') {
+        this.parts[`hand${s}`].traverse((o) => { if (o.isMesh) o.material = mat('glove'); });
+        const arm = this.parts[`lowerArm${s}`];
+        const wrist = J[`wrist${s}`].clone().sub(J[`elbow${s}`]); // the wrist in the forearm's frame
+        const axis = wrist.clone().normalize();
+        // the forearm's radius just before the wrist, from its own vertices
+        let r = 0;
+        arm.traverse((o) => {
+          if (!o.isMesh) return;
+          const p = o.geometry.attributes.position, v = new THREE.Vector3();
+          for (let i = 0; i < p.count; i++) {
+            v.fromBufferAttribute(p, i);
+            const along = v.dot(axis);
+            if (along > wrist.length() - 0.035) r = Math.max(r, v.clone().sub(axis.clone().multiplyScalar(along)).length());
+          }
+        });
+        const cuff = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.06, r * 1.02, 0.05, 20, 1, true), mat('cuff'));
+        cuff.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis);
+        cuff.position.copy(axis).multiplyScalar(wrist.length() - 0.012);
+        cuff.castShadow = true;
+        arm.add(cuff);
+      }
+    }
     if (model.head && cfg.head !== false) this._modelHead(model.head);
     else if (cfg.helmet !== false) this.parts.head.add(this._helmet(jersey));
 
@@ -271,7 +297,7 @@ export class DummyRider {
     // The thumb (the inner edge of the hand, toward the stem) keeps its modelled shape along the inside
     // of the hood: curled with the fingers it hooked out sideways. "thumbZ": where it starts across
     // the hand (metres from the wrist, inward), blended over 2 cm so the skin does not tear.
-    const thumbZ = cfg.thumbZ ?? -0.045;
+    const thumbZ = cfg.thumbZ ?? -1; // off: in this model the inner edge past the knuckles is the curled fingertips, not the thumb
     // ... and turns down round the hand's length, so it wraps the inside of the hood ("thumbDown", degrees)
     const thumbDown = THREE.MathUtils.degToRad(cfg.thumbDown ?? 85), ty0 = cfg.thumbPivotY ?? -0.035, tu0 = cfg.thumbPivotU ?? -0.02;
     for (const s of 'LR') {
@@ -280,7 +306,7 @@ export class DummyRider {
         if (!o.isMesh || !curl) return;
         const pos = o.geometry.attributes.position;
         // shorter fingers ("fingerLength" of the modelled length): tucked under the hood, not sticking out
-        const len = cfg.fingerLength ?? 0.35;
+        const len = cfg.fingerLength ?? 0.15;
         let tip = kx;
         for (let i = 0; i < pos.count; i++) {
           const dx = pos.getX(i) - kx, u = inward * pos.getZ(i);
