@@ -15,6 +15,7 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
+import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
@@ -2124,11 +2125,47 @@ function historyEntry(r, samples) {
 
 function saveToHistory(r, samples) {
   const e = historyEntry(r, samples);
+  // XP, level and badges: what this ride earned shows in its summary
+  const got = addRide(progress, e);
+  progress = got.progress; saveProgress();
+  e.earned = { xp: got.progress.xp, badges: got.badges.map((b) => b.id), levelUp: got.levelUp ? levelOf(got.progress.xp).level : 0 };
   history.unshift(e);
   history = history.slice(0, 100);
   saveHistory();
   renderHistory();
   return e;
+}
+
+// ---------- Levels and achievements (#progress) ----------
+const PROGRESS_KEY = 'gruppetto-progress';
+let progress = (() => { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || 'null'); } catch { return null; } })() || progressFrom(history);
+function saveProgress() { try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch { /* private mode */ } }
+const badgeName = (b) => `${b.icon} ${tr(b.name)}`;
+
+/** The level chip in the lobby and the progress card in History: level, XP to the next, totals, every badge. */
+function renderProgress() {
+  const L = levelOf(progress.xp), pct = Math.round(L.frac * 100);
+  const chip = $('lvl-chip');
+  chip.hidden = !progress.rides;
+  chip.innerHTML = `<b>${tr('Level {n}', { n: L.level })}</b><i style="--p:${pct}%"></i>`;
+  chip.title = tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 });
+  const box = $('progress-box');
+  box.hidden = !progress.rides;
+  if (box.hidden) return;
+  const n = Object.keys(progress.badges).length;
+  box.innerHTML = `<div class="sum-chart-head"><h2>${tr('Level {n}', { n: L.level })}</h2><span class="muted">${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</span></div>
+    <div class="lvl-bar"><i style="width:${pct}%"></i></div>
+    <div class="lvl-totals"><span><b>${progress.rides}</b> ${tr('rides')}</span><span><b>${Math.round(progress.km)}</b> ${U.km}</span><span><b>${progress.gain}</b> ${tr('m climbed')}</span><span><b>${n}/${BADGES.length}</b> ${tr('badges')}</span></div>
+    <div class="badges">${BADGES.map((b) => { const at = progress.badges[b.id]; return `<div class="badge${at ? ' got' : ''}" title="${esc(tr(b.how))}"><span>${b.icon}</span><b>${esc(tr(b.name))}</b><small>${at ? new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : esc(tr(b.how))}</small></div>`; }).join('')}</div>`;
+}
+
+/** What a ride earned, on its summary: a new level and new badges. */
+function renderEarned(e) {
+  const box = $('sum-earned'), got = e.earned;
+  const items = got ? [...(got.levelUp ? [`<span class="earn-lvl">⬆ ${tr('Level {n}!', { n: got.levelUp })}</span>`] : []),
+    ...got.badges.map((id) => BADGES.find((b) => b.id === id)).filter(Boolean).map((b) => `<span class="earn-badge" title="${esc(tr(b.how))}">${badgeName(b)}</span>`)] : [];
+  box.hidden = !items.length;
+  box.innerHTML = items.length ? `<span class="pr-head">${tr('Earned on this ride')}</span>${items.join('')}` : '';
 }
 
 // ---------- A friend's ride from a link (#challenge) ----------
@@ -2273,6 +2310,7 @@ function showSummary(e, { live = false } = {}) {
   }).join('');
   // files and intervals.icu: the ride just finished, or an older one whose full record is still kept
   shown = { entry: e, rec: live ? recorder : null };
+  renderEarned(e);
   $('btn-challenge').hidden = !(e.chart?.d?.length > 1 && !e.race && routes.some((r) => r.id === e.routeId && !r.custom));
   const files = (on) => {
     for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !on; $(id).disabled = !sum; }
@@ -2444,6 +2482,7 @@ function renderFitness() {
 
 function renderHistory() {
   renderWhy();
+  renderProgress();
   renderPowerCurve();
   renderFitness();
   const row = (e) => {

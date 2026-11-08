@@ -8,6 +8,7 @@ import { workouts, targetAt, totalDuration } from '../js/workouts.js';
 import { Recorder, normalizedPower, bestAverage } from '../js/recorder.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from '../js/challenge.js';
 import { wPrimeSuggestion, rampFtp } from '../js/power.js';
+import { addRide, progressFrom, levelOf, rideXp } from '../js/progress.js';
 import { wbalStep, wbalSeries, timeToEmpty } from '../js/wbal.js';
 
 const dv = (bytes) => new DataView(new Uint8Array(bytes).buffer);
@@ -692,4 +693,20 @@ test('FTP test and W′ from rides: 75 % of the ramp minute; W′ through the be
   assert.equal(wPrimeSuggestion([ride({ 300: 260, 1200: 258 })], 20, { now }), null, 'implausibly small');
   assert.equal(wPrimeSuggestion([ride({ 300: 300 })], 20, { now }), null, 'no 20 minutes');
   assert.equal(wPrimeSuggestion([{ ...ride({ 300: 300, 1200: 250 }), date: '2026-01-01T10:00:00Z' }], 15, { now }), null, 'too old');
+});
+
+test('Levels and badges: XP for every ride once, levels a little longer each, badges for firsts, totals and habits', () => {
+  const r = (id, date, km, gain, min, extra = {}) => ({ id, date, summary: { distance: km * 1000, elevationGain: gain, duration: min * 60 }, ...extra });
+  assert.equal(rideXp(r('a', '2026-11-01', 30, 300, 60)), 300 + 300 + 60);
+  assert.deepEqual([levelOf(0).level, levelOf(499).level, levelOf(500).level, levelOf(1500).level], [1, 1, 2, 3]);
+  let { progress: p, badges, levelUp } = addRide(undefined, r('a', '2026-11-01T10:00:00Z', 30, 300, 60));
+  assert.deepEqual(badges.map((b) => b.id), ['first', 'hour']);
+  assert.equal(levelUp, true);
+  assert.equal(addRide(p, r('a', '2026-11-01T10:00:00Z', 30, 300, 60)).progress.rides, 1, 'a ride counts once');
+  ({ progress: p } = addRide(p, r('b', '2026-11-02T10:00:00Z', 40, 100, 70)));
+  const third = addRide(p, r('c', '2026-11-03T10:00:00Z', 40, 100, 70, { ramp: true }));
+  assert.deepEqual(third.badges.map((b) => b.id), ['km100', 'streak3', 'ramp']);
+  // from a history kept before: the same totals, oldest first
+  const h = progressFrom([r('c', '2026-11-03T10:00:00Z', 40, 100, 70, { ramp: true }), r('b', '2026-11-02T10:00:00Z', 40, 100, 70), r('a', '2026-11-01T10:00:00Z', 30, 300, 60)]);
+  assert.equal(h.km, 110); assert.equal(h.rides, 3); assert.ok(h.badges.streak3 && h.badges.ramp);
 });
