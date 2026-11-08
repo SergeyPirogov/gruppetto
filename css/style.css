@@ -1223,3 +1223,5 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .ghost-bar .ghost-opts button.sel small { color: #ffd3a8; }
 @media (max-width: 1100px) { .ghost-bar .ghost-opts small { display: none; } } /* narrower: the names only, details on hover */
 .lobby-cols { grid-template-columns: minmax(0, 1fr) !important; } /* no rides column on the lobby: History has them */
+.time-hint { grid-column: 1 / -1; margin: -4px 0 2px; color: var(--muted); font-size: .78rem; } /* under Time of day and Weather, a row of its own so both fields keep in line */
+.time-hint[hidden] { display: none; }
