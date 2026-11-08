@@ -863,7 +863,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .race-head { display: flex; align-items: baseline; gap: 8px; padding: 2px 12px 6px; border-bottom: 1px solid rgba(255,255,255,.08); }
 .race-head b { font-size: 1.5rem; }
 .race-head span { font-size: .72rem; color: #9fb0c6; }
-.race-row { display: grid; grid-template-columns: 18px 10px 1fr auto; gap: 8px; align-items: center; padding: 4px 12px; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.race-row { display: grid; grid-template-columns: 18px 10px 1fr auto auto; gap: 8px; align-items: center; padding: 4px 12px; font-size: .82rem; font-variant-numeric: tabular-nums; }
 .race-row.me { background: rgba(255, 138, 31, .18); }
 .race-row .rp { color: #9fb0c6; font-weight: 700; }
 .race-row i { width: 10px; height: 10px; border-radius: 50%; }
@@ -1290,3 +1290,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .draft-tag span { color: #fff; font-size: .85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .draft-tag .dt-bar { grid-column: 1 / -1; display: block; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .12); overflow: hidden; }
 .draft-tag .dt-bar i { display: block; height: 100%; background: #2fd4f0; transition: width .3s ease; }
+.race-row .rw { color: #9fb0c6; font-size: .74rem; } .race-row .rw::after { content: ' W/kg'; font-size: .66rem; opacity: .8; }
+.race-row .rg { min-width: 48px; text-align: right; }
+#ride .hud-right .race-board { width: 270px; align-self: flex-end; } /* wider than the column: names, W/kg and gaps all fit */
+.race-row { column-gap: 6px; padding: 4px 10px; }
+.race-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

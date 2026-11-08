@@ -1397,6 +1397,11 @@ function raceStandings() {
   return all.map((r) => ({ r, t: time(r) })).sort((a, b) => (a.t !== null && b.t !== null ? a.t - b.t : a.t !== null ? -1 : b.t !== null ? 1 : b.r.dist - a.r.dist));
 }
 /** The board while racing: your place, laps and distance to go, and the riders round you with gaps in seconds. */
+/** W/kg right now: a bot's power this moment over its weight, yours from the last 3 s. */
+function wkgNow(r) {
+  if (r.me) return ride.powerHist.length ? ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length / Math.max(30, settings.weight) : 0;
+  return (r.power ?? 0) / Math.max(30, r.weight || 70);
+}
 function updateRaceBoard() {
   const R = ride.race, list = raceStandings(), i = list.findIndex((x) => x.r.me);
   const L = ride.route.length, toGo = Math.max(0, R.distance - ride.dist);
@@ -1407,7 +1412,7 @@ function updateRaceBoard() {
   const from = Math.max(0, Math.min(i - 2, list.length - 5)), rows = list.slice(from, from + 5);
   $('race-rows').innerHTML = rows.map(({ r, t }, k) => {
     const gap = r.me ? '' : t !== null && R.done ? fmtDelta(t - R.myTime) : `${r.dist >= ride.dist ? '+' : '−'}${(Math.abs(r.dist - ride.dist) / v).toFixed(1)}${tr('s')}`;
-    return `<div class="race-row${r.me ? ' me' : ''}"><span class="rp">${from + k + 1}</span><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.me ? tr('You') : r.name)}</b><span class="rg">${t !== null ? '🏁 ' : ''}${gap}</span></div>`;
+    return `<div class="race-row${r.me ? ' me' : ''}"><span class="rp">${from + k + 1}</span><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.me ? tr('You') : r.name)}</b><span class="rw">${wkgNow(r).toFixed(1)}</span><span class="rg">${t !== null ? '🏁 ' : ''}${gap}</span></div>`;
   }).join('');
 }
 /** You crossed the line: your place, a cheer, and the summary a few seconds later. */
@@ -1439,7 +1444,7 @@ function updateAhead() {
     .slice(0, 3);
   $('ahead').hidden = !ahead.length;
   $('ahead-rows').innerHTML = ahead.map(({ r, gap }) => {
-    const wkg = r.wkg ?? (r.power ? r.power / settings.weight : 0);
+    const wkg = r.weight ? wkgNow(r) : r.wkg ?? (r.power ? r.power / settings.weight : 0); // a bot's W/kg right now
     return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}${tr('s')}</span><small>${Math.round(gap)} ${U.m}${wkg ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''}</small></div>`;
   }).join('');
 }
@@ -1517,9 +1522,15 @@ function pickLane(r, others, home) {
     // otherwise back home, only when it is clear well ahead (10 m), so a pass is not cut short across the wheel
     return near(home, -6, 10) ? cur : home;
   }
-  const free = LANES.filter((l) => !near(l, -3, 15)).sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
+  // the pass: just wide enough, as in a bunch: a line 0.95 m beside the wheel being passed (shoulders ~15 cm
+  // apart), the side that is clear and the nearer one; only when both are taken, a whole lane further out
+  const wheel = others.filter((o) => o !== r && o.dist - r.dist > 0 && o.dist - r.dist < 4 && Math.abs(o.lane - r.lane) < 0.9).sort((a, b) => a.dist - b.dist)[0];
+  const base = wheel ? wheel.lane : cur;
+  const lines = [base - PASS_SIDE, base + PASS_SIDE, base - 2 * PASS_SIDE, base + 2 * PASS_SIDE].filter((l) => l >= -2.6 && l <= 2.6);
+  const free = lines.filter((l) => !near(l, -3, 15)).sort((a, b) => Math.abs(a - r.lane) - Math.abs(b - r.lane) || Math.abs(a) - Math.abs(b));
   return free.length ? free[0] : cur;
 }
+const PASS_SIDE = 0.95;
 
 /** Called once per second of riding. */
 function tick(power, cadence, hr) {
