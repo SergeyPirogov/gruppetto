@@ -1254,6 +1254,7 @@ function advance(now = performance.now()) {
     ride.vFree = stepSpeed(ride.vFree ?? ride.v, power, grade, dt, settings.weight, { cda: ride.cda, wind: W.head });
     // on a wheel: no riding into the back of the rider ahead (the overtake logic swings you out instead)
     for (const o of pack) if (Math.abs(o.lane - ride.lane) < 0.8) ride.v = Math.min(ride.v, wheelCap(o.dist - ride.dist, o.v ?? ride.v));
+    ride.heldFor = heldBy(ride, pack, dt);
     const moved = ride.v * dt;
     if (ride.race && !ride.race.done && ride.dist < ride.race.distance && ride.dist + moved >= ride.race.distance) {
       ride.race.myTime = ride.elapsed - ride.race.t0 + dt * (ride.race.distance - ride.dist) / Math.max(1e-6, moved);
@@ -1267,6 +1268,7 @@ function advance(now = performance.now()) {
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
     ride.pedal = animCadence < 5 ? levelPedals(ride.pedal, dt) : ride.pedal + (animCadence / 60) * Math.PI * 2 * dt;
     ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt, ride) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
+    ride.lane = keepApart(ride, ride.lane, [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])]);
     if (ride.ghost) {
       const G = ride.ghost, before = G.dist;
       G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
@@ -1298,14 +1300,14 @@ function advance(now = performance.now()) {
     // overtaking: a rider closing on someone in the same lane swings out to a free one, then back
     if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
       ride.laneCheck = 0;
-      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
+      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, heldFor: ride.heldFor, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
       for (const b of ride.bots) b.laneTarget = pickLane(b, solid, b.home);
       if (!ride.steeredAt || ride.elapsed - ride.steeredAt > 4) { // unless you steered yourself just now
         const me = solid[0], t = pickLane(me, solid, ride.laneHome ?? START_LANE);
         if (t !== ride.laneTarget) { ride.laneTarget = t; ride.autoLane = true; }
       }
     }
-    for (const b of ride.bots) b.lane = easeLane(b.lane, b.laneTarget, dt, b);
+    for (const b of ride.bots) b.lane = keepApart(b, easeLane(b.lane, b.laneTarget, dt, b), [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b), ...(pacerOn() ? [ride.pacer] : [])]);
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
       // his steady pace, harder up the climbs and easier down, and never perfectly even
@@ -1324,6 +1326,7 @@ function advance(now = performance.now()) {
       b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd), wind: W.head });
       b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, b.weight, { cda: b.cda, wind: W.head });
       for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
+      b.heldFor = heldBy(b, wheels.map((o, k) => (k === 0 ? { ...o, v: ride.v } : o)), dt);
       const before = b.dist;
       b.dist += b.v * dt;
       if (ride.race && before < ride.race.distance && b.dist >= ride.race.distance && !ride.race.finish.has(b)) {
@@ -1459,22 +1462,54 @@ function easeLane(lane, target, dt, s) {
   if (Math.abs(d) < 0.005 || (target - next) * d < 0) { s.lv = 0; return target; }
   return next;
 }
+/**
+ * No riding through each other: alongside someone (overlapping wheels, within a bike's length) a rider keeps at
+ * least a shoulder's width (0.8 m) to the side, on the side it is on; its sideways speed stops there.
+ */
+const SIDE_GAP = 0.8, BIKE_LEN = 1.9;
+function keepApart(r, lane, others) {
+  for (const o of others) {
+    if (!o || o === r || Math.abs(o.dist - r.dist) >= BIKE_LEN) continue;
+    const side = Math.sign(r.lane - o.lane) || Math.sign(lane - o.lane) || 1;
+    if (Math.abs(lane - o.lane) < SIDE_GAP) { lane = o.lane + side * SIDE_GAP; r.lv = 0; }
+  }
+  return Math.max(-2.6, Math.min(2.6, lane));
+}
 /** Top speed behind a wheel `gap` m ahead: eases down to its speed instead of braking at the last moment. */
 function wheelCap(gap, v) {
   return gap > 0 && gap < 2.5 ? v + Math.max(0, gap - 0.9) * 1.5 : Infinity;
 }
+/**
+ * Slipstream first, then the pass: a faster rider comes up onto the wheel ahead and sits in its shelter; only once
+ * it has been held back there (could go faster, kept to the wheel's speed) for 3 s does it pull out and pass, as in
+ * a real bunch. Steering yourself overrides it.
+ */
+const PASS_AFTER = 3;
+/** How long `r` has been held back by a wheel right ahead (within 3 m, in line) that is slower than r would go alone. */
+function heldBy(r, others, dt) {
+  const wheel = others.find((o) => o !== r && o.dist - r.dist > 0 && o.dist - r.dist < 3 && Math.abs(o.lane - r.lane) < 0.8);
+  const held = wheel && (r.vFree ?? r.v) > (wheel.v ?? 0) + 0.3;
+  return held ? (r.heldFor || 0) + dt : Math.max(0, (r.heldFor || 0) - dt * 2);
+}
 function pickLane(r, others, home) {
-  const near = (lane, from, to, closing = false) => others.some((o) => o !== r
-    && (Math.abs((o.laneTarget ?? o.lane) - lane) < 0.9 || Math.abs(o.lane - lane) < 0.9)
-    && o.dist - r.dist > from && o.dist - r.dist < to
-    // only someone you are faster than on your own: on a wheel at the same power you sit in and draft
-    && (!closing || (r.vFree ?? r.v ?? 0) > (o.vFree ?? o.v ?? 0) + 0.3));
+  const near = (lane, from, to, closing = false) => others.some((o) => {
+    if (o === r || !(Math.abs((o.laneTarget ?? o.lane) - lane) < 0.9 || Math.abs(o.lane - lane) < 0.9)) return false;
+    const gap = o.dist - r.dist;
+    if (!closing) return gap > from && gap < to;
+    // a pass: on this rider's wheel (within 3 m) and held back by it long enough
+    return gap > from && gap < 3 && (r.heldFor || 0) >= PASS_AFTER;
+  });
   const cur = r.laneTarget ?? r.lane;
   // never change course while alongside someone: finish the pass in the lane you chose
   if (others.some((o) => o !== r && Math.abs(o.dist - r.dist) < 3.5 && Math.abs(o.lane - r.lane) >= 0.9 && Math.abs(o.lane - r.lane) < 2)) return cur;
-  // nobody just ahead: drift back home only when it is clear as far ahead as a pass begins (15 m); with a shorter
-  // check, a rider 10–15 m ahead sent you out and let you back in every quarter second, a twitch across the road
-  if (!near(cur, -0.5, 15, true)) return near(home, -6, 15) ? cur : home;
+  // not passing: on a wheel just ahead (within 8 m, nearly in line), tuck into its line for the full shelter
+  if (!near(cur, -0.5, 15, true)) {
+    // (in line with where it is heading, not where it is now: a pass already begun is not pulled back onto the wheel)
+    const wheel = others.filter((o) => o !== r && o.dist - r.dist > 0.3 && o.dist - r.dist < 8 && Math.abs(o.lane - cur) < 0.9 && Math.abs(o.lane - r.lane) < 0.9).sort((a, b) => a.dist - b.dist)[0];
+    if (wheel) return wheel.lane;
+    // otherwise back home, only when it is clear well ahead (10 m), so a pass is not cut short across the wheel
+    return near(home, -6, 10) ? cur : home;
+  }
   const free = LANES.filter((l) => !near(l, -3, 15)).sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
   return free.length ? free[0] : cur;
 }
