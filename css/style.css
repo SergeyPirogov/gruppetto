@@ -1173,3 +1173,10 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .need-dot { background: #ff7a1a; box-shadow: 0 0 6px #ff7a1a; }
 @media (min-width: 861px) { .today .ride-summary { display: none; } } /* the rows above say it; the text stays for the floating bar */
 .today-kicker { margin-bottom: 4px; }
+
+/* Ride at the bottom of the screen, always (the lobby's top card is gone): what is picked, and the button */
+.lobby-body .ride-box { position: fixed; left: 76px; right: 0; bottom: 0; z-index: 20; margin: 0; display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 20px; padding: 12px 24px calc(12px + env(safe-area-inset-bottom, 0px)); background: rgba(15, 20, 32, .94); border-top: 1px solid var(--line); backdrop-filter: blur(10px); }
+.lobby-body .ride-summary { display: block !important; flex: 0 1 auto; text-align: right; font-size: 1rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lobby-body .ride-box #btn-start { width: auto; flex: none; padding: 13px 40px; font-size: 1.15rem; border-radius: 999px; }
+.lobby-body .lobby-main { padding-bottom: 110px; }
+@media (max-width: 860px) { .lobby-body .ride-box { left: 0; justify-content: space-between; } .lobby-body .ride-summary { text-align: left; font-size: .9rem; } }

@@ -222,7 +222,7 @@ function updateDeviceUI() {
     val.textContent = on && reading[d.key] ? reading[d.key]() : '';
   }
   document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
-  renderRailDots(); renderToday();
+  renderRailDots();
   // nothing to ride on: the trainer's chip asks to be connected
   document.querySelector('.dev-chip[data-key="trainer"]')?.classList.toggle('need', !trainer.connected && !$('sim').checked);
 }
@@ -844,33 +844,18 @@ function closeWorkoutDetail() { $('wk-detail').hidden = true; }
 
 /** The selected route, large, at the top of the lobby. */
 function showRoute() {
+  // OpenStreetMap's licence (ODbL) asks for the attribution wherever its data shows: a route built with its map
   const r = routes.find((x) => x.id === settings.routeId) || routes[0];
-  if (!r) return;
-  $('rh-name').textContent = r.name;
-  $('rh-meta').textContent = `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}`;
-  $('rh-desc').textContent = r.description;
-  // OpenStreetMap's licence (ODbL) asks for the attribution wherever its data shows
-  if (r.land) $('rh-desc').insertAdjacentHTML('beforeend', ` <small class="osm-attr">${tr('Map data')} © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> ${tr('contributors')}</small>`);
+  $('osm-attr').hidden = !r?.land;
   renderGhostPicker();
-  // the timed climbs, with this device's record on each
-  $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} ${U.km} · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
-    + (r.sprints || []).map((s) => `<li class="sprint"><b>⚡ ${esc(s.name)}</b> ${s.length} ${U.m}${records.seg[s.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[s.id])}${records.top?.[s.id] ? ` · ${records.top[s.id]} ${tr('km/h')}` : ''}</span>` : ''}</li>`).join('')
-    + (bestLap(r) ? `<li><b>⏱ ${r.oneWay ? tr('Best time') : tr('Best lap')}</b> <span class="pb">${fmtTime(bestLap(r))}</span></li>` : '');
-  requestAnimationFrame(() => drawProfile($('rh-profile'), r, [], `${themeFor(r.theme).accent}cc`));
   updateSummary();
-}
-
-// the floating Ride bar: shown while the card's Ride button is off the screen
-$('ride-float-go').onclick = () => $('btn-start').click();
-if ('IntersectionObserver' in window) {
-  new IntersectionObserver(([e]) => { $('ride-float').hidden = e.isIntersecting; }, { threshold: 0.6 }).observe($('btn-start'));
 }
 
 /** "Rolling Hills · Sweet Spot 3×10" above the Ride button. */
 function updateSummary() {
   const el = $('ride-summary');
   if (!el) return;
-  renderToday(); renderGreeting(); renderAvatar();
+  renderGreeting(); renderAvatar();
   const r = routes.find((x) => x.id === settings.routeId);
   const sel = document.querySelector('#mode-list .sel b');
   const raceLaps = settings.mode === 'race' && r && !r.oneWay ? ((settings.raceLaps || 1) === 1 ? tr('1 lap') : tr('{n} laps', { n: settings.raceLaps })) : null;
@@ -878,7 +863,6 @@ function updateSummary() {
   const free = settings.mode === 'free';
   const pacer = free && settings.freePacer ? `🚴 ${settings.pacerName?.trim() || tr('Pacer')} ${settings.freePacerWkg} ${U.wkg}` : null;
   el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? `👻 ${g.friend ? g.name || tr('Friend') : settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null, pacer].filter(Boolean).join(' · ');
-  $('ride-float-text').textContent = el.textContent;
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
@@ -2586,42 +2570,6 @@ function renderGreeting() {
   const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
   $('greet').textContent = named ? `${hello}, ${settings.name.trim()}` : hello;
   $('greet-date').textContent = new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
-}
-
-/**
- * The «Ready to ride» card: everything the ride will be, one row each with how to change it: the route, the mode
- * (today's intervals.icu workout says so), the ghost, what you ride on. The route's profile, or the workout's
- * shape, beside it.
- */
-function renderToday() {
-  const r = routes.find((x) => x.id === settings.routeId) || routes[0];
-  const w = allWorkouts().find((x) => x.id === settings.mode) || null;
-  const today = localDate(new Date());
-  const g = r && settings.mode !== 'race' ? rideGhost(r.id) : null;
-  $('today-kicker').textContent = w?.source === 'intervals' && w.date === today ? tr('Ready to ride · today\'s plan from intervals.icu') : tr('Ready to ride');
-  const mode = w ? `${w.name} · ${Math.round(totalDuration(w) / 60)} ${U.min}`
-    : settings.mode === 'race' ? `🏁 ${tr('Race')} · ${r && !r.oneWay ? ((settings.raceLaps || 1) === 1 ? tr('1 lap') : tr('{n} laps', { n: settings.raceLaps })) : tr('to the finish')}`
-      : tr('Free ride');
-  const ghost = g ? (g.friend ? tr('{name}, {km} km in {time}', { name: g.name || tr('A friend'), km: (g.summary.distance / 1000).toFixed(1), time: fmtTime(g.summary.duration) })
-    : `${settings.ghost === 'last' ? tr('Last ride') : tr('Your best')}: ${(g.summary.distance / 1000).toFixed(1)} ${U.km} ${tr('in')} ${fmtTime(g.summary.duration)}`) : null;
-  const on = trainer.connected ? `<span class="ok-dot"></span>${esc(trainer.name || tr('Trainer'))}` : $('sim').checked ? tr('Simulator (no trainer)') : `<span class="need-dot"></span>${tr('Trainer not connected')}`;
-  const row = (label, value, action, act) => `<dt>${label}</dt><dd><span>${value}</span>${action ? `<button class="today-change" data-act="${act}">${action}</button>` : ''}</dd>`;
-  $('today-rows').innerHTML = [
-    row(tr('Route'), `<b>${esc(r?.name || '')}</b> <small>${r ? `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}` : ''}</small>`, `${tr('Change')} ↓`, 'routes'),
-    row(tr('Mode'), `<b>${esc(mode)}</b>`, `${tr('Change')} ↓`, 'modes'),
-    ghost ? row(tr('Ghost'), esc(ghost), `${tr('Change')} ↓`, 'routes') : '',
-    row(tr('Riding on'), on, trainer.connected ? '' : tr('Connect'), 'devices'),
-  ].join('');
-  for (const b of $('today-rows').querySelectorAll('[data-act]')) {
-    b.onclick = () => {
-      if (b.dataset.act === 'devices') openDrawer('devices');
-      else $(b.dataset.act === 'modes' ? 'sec-modes' : 'sec-routes').scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
-  }
-  const c = $('today-wk');
-  c.hidden = !w;
-  document.querySelector('.today').classList.toggle('has-wk', !!w);
-  if (w) requestAnimationFrame(() => drawWorkoutChart(c, w, -1));
 }
 
 /** The rail's dots: devices (green: ready to ride, amber: nothing to ride on) and intervals.icu (green: linked). */

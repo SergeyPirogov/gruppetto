@@ -81,25 +81,6 @@
           <div class="ch-actions"><button id="ch-ride" class="primary">Ride now ▶</button><button id="ch-drop" class="ghost">Dismiss</button></div>
         </div>
 
-      <!-- today: what you are about to ride, and the button -->
-      <section class="today">
-        <div class="today-text">
-          <small id="today-kicker" class="today-kicker">Ready to ride</small>
-          <dl id="today-rows" class="today-rows"></dl>
-          <div class="ride-box">
-            <div id="ride-summary" class="ride-summary"></div>
-            <button id="btn-start" class="primary big">Ride ▶</button>
-          </div>
-        </div>
-        <div class="today-art">
-          <canvas id="today-wk" class="today-wk" hidden></canvas>
-          <div class="route-hero">
-            <div class="rh-text"><small>Route</small><b id="rh-name"></b><span id="rh-meta"></span><p id="rh-desc"></p></div>
-            <canvas id="rh-profile"></canvas>
-            <ul id="rh-climbs" class="rh-climbs"></ul>
-          </div>
-        </div>
-      </section>
 
       <!-- the rider at a glance: form, this week, level -->
       <button id="week-box" class="week-box" data-open="history" hidden></button>
@@ -115,6 +96,7 @@
 
       <section class="lobby-routes" id="sec-routes">
         <h2>Routes</h2>
+        <p id="osm-attr" class="hint osm-attr" hidden>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
         <div id="ghost-box" class="ghost-box" hidden>
           <h2>Shadow ride <small>race a ghost of your earlier ride</small></h2>
           <div class="ghost-opts">
@@ -132,8 +114,11 @@
           <div id="history-recent" class="hist-list"></div>
         </div>
     </main>
-    <!-- Ride within reach while the routes and modes are scrolled through (desktop; phones have their own bar) -->
-    <div id="ride-float" class="ride-float" hidden><span id="ride-float-text"></span><button id="ride-float-go" class="primary">Ride ▶</button></div>
+    <!-- what is picked and Ride, always at the bottom of the screen -->
+    <div class="ride-box">
+      <div id="ride-summary" class="ride-summary"></div>
+      <button id="btn-start" class="primary big">Ride ▶</button>
+    </div>
     </div>
     </div>
 

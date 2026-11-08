@@ -173,6 +173,7 @@ export const UK = {
   'Good night': 'Доброї ночі', 'Good morning': 'Доброго ранку', 'Good afternoon': 'Добрий день', 'Good evening': 'Добрий вечір',
   'Today · intervals.icu': 'Сьогодні · intervals.icu', '{left} to level {n}': 'ще {left} до рівня {n}', 'Routes': 'Маршрути', 'Install': 'Встановити', 'intervals': 'intervals',
   'Ready to ride': 'Готовий до заїзду', "Ready to ride · today's plan from intervals.icu": 'Готовий до заїзду · сьогоднішній план з intervals.icu',
+  'Map data © ': 'Дані карти © ', ' contributors': ' учасники',
   'Ghost': 'Привид', 'Riding on': 'На чому',
   'Trainer not connected': 'Тренажер не підключено', 'Simulator (no trainer)': 'Симулятор (без тренажера)', 'to the finish': 'до фінішу', 'in': 'за',
   '{name}, {km} km in {time}': '{name}, {km} км за {time}', 'Trainer': 'Тренажер',
