@@ -2558,7 +2558,9 @@ function renderWeek() {
 function renderAvatar() {
   const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
   const a = $('avatar');
-  a.textContent = named ? settings.name.trim()[0].toUpperCase() : '🙂';
+  // your initial; before a name is set, a plain head-and-shoulders outline
+  if (named) a.textContent = settings.name.trim()[0].toUpperCase();
+  else a.innerHTML = '<svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="9" r="3.6"/><path d="M5.5 19.5c1.2-3.3 3.6-5 6.5-5s5.3 1.7 6.5 5"/></svg>';
   a.style.background = settings.jersey;
   $('open-profile').title = named ? settings.name.trim() : tr('Profile');
 }
