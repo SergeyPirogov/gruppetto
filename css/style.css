@@ -1180,3 +1180,5 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .lobby-body .ride-box #btn-start { width: auto; flex: none; padding: 13px 40px; font-size: 1.15rem; border-radius: 999px; }
 .lobby-body .lobby-main { padding-bottom: 110px; }
 @media (max-width: 860px) { .lobby-body .ride-box { left: 0; justify-content: space-between; } .lobby-body .ride-summary { text-align: left; font-size: .9rem; } }
+.week-box:hover { background: none; } /* a button: the generic hover lit the gaps between the tiles */
+.week-box:hover .wb-tile { background: #151f30; }
