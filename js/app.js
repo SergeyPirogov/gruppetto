@@ -16,7 +16,7 @@ import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formB
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
-import { unlockAudio, beep, say, spokenDuration } from './sound.js';
+import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
@@ -1255,7 +1255,7 @@ function crowdLevel() {
 function frame(now) {
   if (!ride) return;
   advance(now);
-  // (the synthesised applause sounded odd: off until there is a real recording, #45)
+  if (settings.sound) { if (ride.paused) crowdOff(); else crowd(crowdLevel()); }
   if (ride.race) {
     const c = ride.race.countdown, el = $('countdown');
     const txt = ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
@@ -1989,6 +1989,7 @@ function finishRide() {
   advance();
   clearInterval(rideTimer);
   keepAwake(false);
+  crowdOff();
   const sum = recorder.summary();
   const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
   lastRide = { race: raceResults(), raceLaps: ride.race?.laps, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };

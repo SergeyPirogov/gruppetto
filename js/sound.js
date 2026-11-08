@@ -50,42 +50,51 @@ export function spokenDuration(sec) {
 
 
 // ---------- The fans at the top of a climb (#45) ----------
-// Applause, whistles and whoops, no steady noise (that read as wind). `level` 0…1: how close the crowd is.
-let clapBuf = null, lastCrowd = 0;
+// Recorded, not made up (BigSoundBank, CC0): a crowd of 600 applauding, looped with cross-fades, and
+// shouts of "Yeah!" now and then from either side. `level` 0…1: how close the crowd is.
+let crowdBufs = null, crowdLoading = false, crowdBus = null, bedUntil = 0, lastShout = 0;
+async function loadCrowd() {
+  crowdLoading = true;
+  const get = async (f) => ctx.decodeAudioData(await (await fetch(`assets/sounds/${f}`)).arrayBuffer());
+  try {
+    const [bed, y1, y2] = await Promise.all(['crowd-applause.mp3', 'crowd-yeah-1.mp3', 'crowd-yeah-2.mp3'].map(get));
+    crowdBufs = { bed, shouts: [y1, y2] };
+  } catch { crowdBufs = null; }
+}
 export function crowd(level) {
-  if (!ctx || level <= 0) return;
-  const now = ctx.currentTime, dt = Math.min(0.1, now - lastCrowd);
-  lastCrowd = now;
-  if (!clapBuf) {
-    const n = Math.round(ctx.sampleRate * 0.03);
-    clapBuf = ctx.createBuffer(1, n, ctx.sampleRate);
-    const d = clapBuf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * 0.18)); // a sharp slap that dies fast
+  if (!ctx) return;
+  if (!crowdBufs) { if (level > 0 && !crowdLoading) loadCrowd(); return; }
+  const t = ctx.currentTime;
+  if (!crowdBus) { crowdBus = ctx.createGain(); crowdBus.gain.value = 0; crowdBus.connect(ctx.destination); }
+  crowdBus.gain.setTargetAtTime(Math.min(1, level) * 0.55, t, 0.8);
+  if (level <= 0.01) return;
+  // the applause bed: 20 s pieces from the steady middle of the recording, each fading into the next
+  if (t > bedUntil - 2.5) {
+    const start = Math.max(t, bedUntil - 2), len = 20, src = ctx.createBufferSource(), g = ctx.createGain();
+    src.buffer = crowdBufs.bed;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.linearRampToValueAtTime(1, start + 2);
+    g.gain.setValueAtTime(1, start + len - 2);
+    g.gain.linearRampToValueAtTime(0.0001, start + len);
+    src.connect(g).connect(crowdBus);
+    src.start(start, 4 + Math.random() * 2, len);
+    bedUntil = start + len;
   }
-  // claps: dozens of hands, each its own time and pitch
-  const claps = level * 26 * dt + Math.random();
-  for (let k = 1; k <= claps; k++) {
-    const src = ctx.createBufferSource(), band = ctx.createBiquadFilter(), g = ctx.createGain();
-    src.buffer = clapBuf;
-    band.type = 'bandpass'; band.frequency.value = 900 + Math.random() * 1600; band.Q.value = 1.2;
-    g.gain.value = (0.05 + Math.random() * 0.07) * level;
-    src.connect(band).connect(g).connect(ctx.destination);
-    src.start(now + Math.random() * dt);
+  // a shout now and then, more often close to the fans, left or right
+  if (t - lastShout > 1.2 && Math.random() < level * 0.02) {
+    lastShout = t;
+    const src = ctx.createBufferSource(), g = ctx.createGain(), pan = ctx.createStereoPanner();
+    src.buffer = crowdBufs.shouts[Math.floor(Math.random() * crowdBufs.shouts.length)];
+    src.playbackRate.value = 0.92 + Math.random() * 0.16;
+    g.gain.value = (0.35 + Math.random() * 0.4) * level;
+    pan.pan.value = Math.random() * 1.6 - 0.8;
+    src.connect(g).connect(pan).connect(crowdBus);
+    src.start(t);
   }
-  if (Math.random() < level * dt * 0.9) whoop(level, now);
 }
 
-function whoop(level, t) {
-  const o = ctx.createOscillator(), g = ctx.createGain();
-  const whistle = Math.random() < 0.55;
-  o.type = whistle ? 'sine' : 'triangle';
-  const f0 = whistle ? 1900 + Math.random() * 600 : 330 + Math.random() * 180;
-  o.frequency.setValueAtTime(f0, t);
-  o.frequency.linearRampToValueAtTime(f0 * (whistle ? 1.35 : 1.7), t + 0.22);
-  if (whistle) o.frequency.linearRampToValueAtTime(f0 * 0.9, t + 0.5);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.035 * level, t + 0.04);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + (whistle ? 0.55 : 0.32));
-  o.connect(g).connect(ctx.destination);
-  o.start(t); o.stop(t + 0.6);
+/** The crowd goes quiet (end of the ride). */
+export function crowdOff() {
+  if (crowdBus && ctx) crowdBus.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+  bedUntil = 0;
 }
