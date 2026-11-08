@@ -815,3 +815,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   #ride #btn-keys { display: none; } /* no keyboard on a phone */
 }
 .wk-head > div[hidden] { display: none; }
+
+/* touch screens: a slider you can actually grab with a finger */
+@media (pointer: coarse) {
+  #sim-power { height: 36px; touch-action: pan-y; }
+}

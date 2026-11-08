@@ -2356,7 +2356,13 @@ $('ride').addEventListener('touchstart', () => showControls(4000), { passive: tr
 for (const el of [document.querySelector('#ride .controls'), $('sim-ctl')]) {
   el.addEventListener('mouseenter', () => { controlsPinned = true; showControls(0); });
   el.addEventListener('mouseleave', () => { controlsPinned = false; showControls(); });
+  // touch: kept out while a finger is on them (dragging the slider), then a few seconds more
+  el.addEventListener('touchstart', () => { controlsPinned = true; showControls(0); }, { passive: true });
+  const release = () => { controlsPinned = false; showControls(4000); };
+  el.addEventListener('touchend', release, { passive: true });
+  el.addEventListener('touchcancel', release, { passive: true });
 }
+$('ride').addEventListener('touchmove', () => { if (!controlsPinned) showControls(4000); }, { passive: true });
 
 /** Everything from the keyboard, for riders without a controller. */
 const KEYS = [

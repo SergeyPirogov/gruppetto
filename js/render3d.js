@@ -13,7 +13,11 @@ import { CSM } from '../vendor/three/addons/csm/CSM.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
-const AHEAD = 7, BEHIND = 1;   // chunks kept around the rider
+// phones and small touch screens: a lighter world (?quality=low / high to force either)
+const Q_PARAM = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('quality');
+const LOW = Q_PARAM === 'low' || (Q_PARAM !== 'high' && typeof matchMedia !== 'undefined'
+  && matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820);
+const AHEAD = LOW ? 4 : 7, BEHIND = 1;   // chunks kept around the rider (200 m each)
 const ROAD_HALF = 3.6;         // m
 const TURN = 2.5;              // curvature exaggeration relative to the 2D renderer
 const V_EXAG = 1.5;            // vertical exaggeration
@@ -44,8 +48,8 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
-const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || 2; // ?csm=3 to compare
-const CSM_FAR = 240;
+const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || (LOW ? 1 : 2); // ?csm=3 to compare
+const CSM_FAR = LOW ? 120 : 240;
 const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
 let preloaded = null;
 /** Starts the bike, rider and scenery downloads once, from the lobby, so the ride starts with them ready. */
@@ -561,7 +565,7 @@ export class Scene3D {
     this.canvas = canvas;
     this._orbitControls(canvas);
     if (typeof window !== 'undefined' && new URLSearchParams(location.search).has('debug')) window.__scene3d = this; // for inspecting in devtools
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -709,7 +713,7 @@ export class Scene3D {
 
   /** Device pixels per CSS pixel: the screen's, up to 2, times the adaptive quality scale. */
   _pixelRatio() {
-    return Math.max(0.75, Math.min(window.devicePixelRatio || 1, 2) * (this.quality ?? 1));
+    return Math.max(LOW ? 0.6 : 0.75, Math.min(window.devicePixelRatio || 1, LOW ? 1.25 : 2) * (this.quality ?? 1));
   }
 
   /**
@@ -722,7 +726,7 @@ export class Scene3D {
     if (this.qAcc < 2) return;
     const avg = this.qAcc / this.qN; this.qAcc = 0; this.qN = 0;
     const q = this.quality ?? 1;
-    const next = avg > 0.021 ? Math.max(0.6, q - 0.1) : avg < 0.0135 ? Math.min(1, q + 0.1) : q;
+    const next = avg > 0.021 ? Math.max(LOW ? 0.5 : 0.6, q - 0.1) : avg < 0.0135 ? Math.min(1, q + 0.1) : q;
     if (Math.abs(next - q) > 1e-3) { this.quality = next; this.resize(); }
   }
 
@@ -872,7 +876,7 @@ export class Scene3D {
     this.minElev = route.minElev;
 
     const fogColor = rgb(this.t.fog);
-    this.scene.fog = new THREE.Fog(fogColor, 150, 1500);
+    this.scene.fog = new THREE.Fog(fogColor, LOW ? 120 : 150, LOW ? 850 : 1500); // phones build less ahead: the fog closes in before it ends
     this.scene.background = col(this.t.sky[1]);
 
     this.hemi = new THREE.HemisphereLight(col(this.t.sky[1]), rgb(this.t.grass[0]).multiplyScalar(0.65), 0.8); // softer fill so the sun's shading reads on the rider
@@ -886,7 +890,7 @@ export class Scene3D {
     this.csmDone = new WeakSet();
     this.csm = new CSM({
       camera: this.camera, parent: this.scene, cascades: CSM_CASCADES, maxFar: CSM_FAR, mode: 'practical',
-      shadowMapSize: 2048, lightDirection: this.sunDirection.clone().negate(), lightIntensity: this.t.sun ? 2.3 : 3.0,
+      shadowMapSize: LOW ? 1024 : 2048, lightDirection: this.sunDirection.clone().negate(), lightIntensity: this.t.sun ? 2.3 : 3.0,
       lightNear: 1, lightFar: 1500, lightMargin: 150, shadowBias: -0.0004,
     });
     this.csm.fade = true;
@@ -1269,8 +1273,8 @@ export class Scene3D {
           };
           if (sc.type === 'flowers') {
             if (this.nature) {
-              for (let q = 0; q < 7; q++) put('flower', mtx(...spot(q, 3.2), hash(a * 5 + q) * 6.28, 0.8 + hash(a * 7 + q) * 0.6));
-              for (let q = 7; q < 10; q++) put('clover', mtx(...spot(q, 2.6), hash(a + q * 9) * 6.28, 0.8 + hash(a + q) * 0.5));
+              for (let q = 0; q < (LOW ? 3 : 7); q++) put('flower', mtx(...spot(q, 3.2), hash(a * 5 + q) * 6.28, 0.8 + hash(a * 7 + q) * 0.6));
+              for (let q = 7; q < (LOW ? 8 : 10); q++) put('clover', mtx(...spot(q, 2.6), hash(a + q * 9) * 6.28, 0.8 + hash(a + q) * 0.5));
             } else {
               for (let q = 0; q < 14; q++) flowers.push([...spot(q, 3.2), flowerPalette[(q + j) % flowerPalette.length]]);
             }
@@ -1306,7 +1310,7 @@ export class Scene3D {
         const a = a0 + r;
         for (const side of [-1, 1]) {
           const lim = reach[r] ? reach[r].lim[side > 0 ? 1 : 0] : Infinity;
-          for (let q = 0; q < 30; q++) {
+          for (let q = 0; q < (LOW ? 10 : 30); q++) { // a third of the grass on phones
             const hq = (k) => hash(a * 11.3 + side * 5.7 + q * 2.9 + k * 7.1);
             const o = side * (ROAD_HALF + 0.75 + hq(0) ** 2.4 * 30);
             if (Math.abs(o) > lim - 1 || (T3c.beach && side === T3c.dip.side && Math.abs(o) > 9)) continue;
@@ -1642,7 +1646,8 @@ export class Scene3D {
         this._csmMaterials(R.group);
       }
       const d = r.dist;
-      const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
+      // phones draw riders within 150 m only: further up the road they are a few pixels, and each is ~110k triangles
+      const visible = Math.abs(d - dist) < (LOW && !r.self ? 150 : CHUNK * SEG * AHEAD);
       // a ghost just behind you rides through the chase camera: hidden there (its gap is shown over your head)
       const inCamera = r.ghost && d < dist - 0.8 && d > dist - 7;
       R.group.visible = visible && this.modelsReady && !inCamera;
