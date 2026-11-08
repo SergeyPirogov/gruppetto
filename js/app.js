@@ -3168,6 +3168,7 @@ if (new URLSearchParams(location.search).has('demo')) {
     const route = routes.find((r) => r.climbs?.length) || routes[0];
     settings.routeId = route.id;
     settings.mode = 'free';
+    settings.camera = 'chase'; // the demo is seen from behind the rider
     $('sim').checked = true;
     await startRide();
     if (!ride) return;
