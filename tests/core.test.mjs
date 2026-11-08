@@ -317,10 +317,11 @@ test('intervals.icu cadence targets', () => {
 
 test('drafting saves most drag right on the wheel and none far back or off to the side', async () => {
   const { draftFactor } = await import('../js/physics.js');
-  assert.ok(draftFactor(0.8, 0) > 0.3);
-  assert.ok(draftFactor(2.5, 0) > 0 && draftFactor(2.5, 0) < draftFactor(1, 0));
-  assert.equal(draftFactor(5, 0), 0);
-  assert.equal(draftFactor(1, 1.2), 0);
+  assert.ok(draftFactor(2.0, 0) > 0.3);                                  // on the wheel (centres 2 m apart)
+  assert.ok(draftFactor(4, 0) > 0 && draftFactor(4, 0) < draftFactor(2, 0));
+  assert.equal(draftFactor(6, 0), 0);
+  assert.equal(draftFactor(2, 1.2), 0);
+  assert.equal(draftFactor(0.8, 0), 0);                                   // overlapping wheels: no such thing
   assert.equal(draftFactor(-1, 0), 0);
 });
 
@@ -627,7 +628,7 @@ test('wind: headwind slows you, tailwind speeds you up, the trainer feels it as 
   assert.ok(g > 0.028 && g < 0.038, String(g));
   assert.ok(windGrade(8.33, -6, 0.32, 75) < 0);
   // crosswind: the shelter moves to the lee side of the wheel
-  assert.ok(draftFactor(1, -0.6, 6) > draftFactor(1, 0, 6));
+  assert.ok(draftFactor(2, -0.6, 6) > draftFactor(2, 0, 6));
 });
 
 import { encodeActivity } from '../js/fit.js';
@@ -783,13 +784,13 @@ test('Short pauses: runs of 3 s and more without power, how many and how long', 
 
 test('Shelter in a bunch: deeper behind a line of riders, a little for the one in front, never more than half', async () => {
   const { packDraft, draftFactor } = await import('../js/physics.js');
-  const one = packDraft([{ gap: 1, sideways: 0 }]);
-  assert.equal(one, draftFactor(1, 0));                                           // a single wheel: as before
-  const line = packDraft([{ gap: 1, sideways: 0 }, { gap: 5, sideways: 0 }, { gap: 9, sideways: 0.3 }]);
+  const one = packDraft([{ gap: 2, sideways: 0 }]);
+  assert.equal(one, draftFactor(2, 0));                                           // a single wheel: as before
+  const line = packDraft([{ gap: 2, sideways: 0 }, { gap: 6, sideways: 0 }, { gap: 10, sideways: 0.3 }]);
   assert.ok(line > one + 0.08 && line <= 0.5, `a line of three: ${line}`);
-  assert.equal(packDraft([{ gap: 5, sideways: 0 }, { gap: 9, sideways: 0 }]), 0);  // no wheel close: no bunch shelter
-  const pushed = packDraft([{ gap: -0.6, sideways: 0 }]);
+  assert.equal(packDraft([{ gap: 6, sideways: 0 }, { gap: 10, sideways: 0 }]), 0); // no wheel close: no bunch shelter
+  const pushed = packDraft([{ gap: -2.1, sideways: 0 }]);
   assert.ok(pushed > 0.03 && pushed <= 0.04, `the one in front: ${pushed}`);
-  assert.equal(packDraft([{ gap: -3, sideways: 0 }]), 0);                         // too far behind
-  assert.ok(packDraft(Array.from({ length: 12 }, (_, i) => ({ gap: 1 + i * 1.5, sideways: 0 }))) <= 0.5);
+  assert.equal(packDraft([{ gap: -4, sideways: 0 }]), 0);                         // too far behind
+  assert.ok(packDraft(Array.from({ length: 12 }, (_, i) => ({ gap: 2 + i * 2, sideways: 0 }))) <= 0.5);
 });

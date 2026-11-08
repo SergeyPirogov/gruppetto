@@ -1471,14 +1471,20 @@ const SIDE_GAP = 0.8, BIKE_LEN = 1.9;
 function keepApart(r, lane, others) {
   for (const o of others) {
     if (!o || o === r || Math.abs(o.dist - r.dist) >= BIKE_LEN) continue;
-    const side = Math.sign(r.lane - o.lane) || Math.sign(lane - o.lane) || 1;
-    if (Math.abs(lane - o.lane) < SIDE_GAP) { lane = o.lane + side * SIDE_GAP; r.lv = 0; }
+    // never pushed aside, only stopped: not closer sideways than a shoulder's width, or than it already is
+    const now = Math.abs(r.lane - o.lane), next = Math.abs(lane - o.lane), floor = Math.min(SIDE_GAP, now);
+    if (next < floor) { const side = Math.sign(r.lane - o.lane) || 1; lane = o.lane + side * floor; r.lv = 0; }
   }
   return Math.max(-2.6, Math.min(2.6, lane));
 }
-/** Top speed behind a wheel `gap` m ahead: eases down to its speed instead of braking at the last moment. */
+/**
+ * Top speed behind a wheel `gap` m ahead (centre to centre): coming up on it, a rider eases off at no more than
+ * 1.5 m/s² so as to settle on the wheel (2 m) at its speed; before, the brake came in at 3.6 m and the picture
+ * jumped (up to 19 m/s², measured).
+ */
+const EASE_OFF = 1.5;
 function wheelCap(gap, v) {
-  return gap > 0 && gap < 2.5 ? v + Math.max(0, gap - 0.9) * 1.5 : Infinity;
+  return gap > 0 && gap < 14 ? v + Math.sqrt(2 * EASE_OFF * Math.max(0, gap - 2.0)) : Infinity;
 }
 /**
  * Slipstream first, then the pass: a faster rider comes up onto the wheel ahead and sits in its shelter; only once
@@ -1488,7 +1494,7 @@ function wheelCap(gap, v) {
 const PASS_AFTER = 3;
 /** How long `r` has been held back by a wheel right ahead (within 3 m, in line) that is slower than r would go alone. */
 function heldBy(r, others, dt) {
-  const wheel = others.find((o) => o !== r && o.dist - r.dist > 0 && o.dist - r.dist < 3 && Math.abs(o.lane - r.lane) < 0.8);
+  const wheel = others.find((o) => o !== r && o.dist - r.dist > 0 && o.dist - r.dist < 4 && Math.abs(o.lane - r.lane) < 0.8);
   const held = wheel && (r.vFree ?? r.v) > (wheel.v ?? 0) + 0.3;
   return held ? (r.heldFor || 0) + dt : Math.max(0, (r.heldFor || 0) - dt * 2);
 }
@@ -1497,8 +1503,8 @@ function pickLane(r, others, home) {
     if (o === r || !(Math.abs((o.laneTarget ?? o.lane) - lane) < 0.9 || Math.abs(o.lane - lane) < 0.9)) return false;
     const gap = o.dist - r.dist;
     if (!closing) return gap > from && gap < to;
-    // a pass: on this rider's wheel (within 3 m) and held back by it long enough
-    return gap > from && gap < 3 && (r.heldFor || 0) >= PASS_AFTER;
+    // a pass: on this rider's wheel (within 4 m) and held back by it long enough
+    return gap > from && gap < 4 && (r.heldFor || 0) >= PASS_AFTER;
   });
   const cur = r.laneTarget ?? r.lane;
   // never change course while alongside someone: finish the pass in the lane you chose

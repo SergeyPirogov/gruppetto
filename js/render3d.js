@@ -880,9 +880,8 @@ export class Scene3D {
   }
 
   /**
-   * The feeling of speed: the view widens as you go faster (up to +9° at 55 km/h, like a camera that can't keep up),
-   * and the camera trembles a little with the road's surface, more the faster you ride; standing still, nothing.
-   * The orbit view and the isometric one are left still.
+   * The feeling of speed: the view widens as you go faster (up to +9° at 55 km/h, like a camera that can't keep up).
+   * No tremble: on a screen it read as the picture jumping. The isometric view is left as it is.
    */
   _speedFeel(dt, dist) {
     if (!dt || this.camMode === 'iso') return;
@@ -896,12 +895,6 @@ export class Scene3D {
     const base = { chase: 62, eyes: 72, side: 58, front: 48 }[this.camMode] ?? 62;
     const fov = base + k * k * 9;
     if (Math.abs(this.camera.fov - fov) > 0.02) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
-    const O = this.orbit;
-    if (O && (O.yaw || O.pitch || O.zoom !== 1)) return;
-    // the road's grain: a few centimetres of tremble, faster and larger with speed (none in the rider's eyes view)
-    const amp = (this.camMode === 'eyes' ? 0.006 : 0.012) * k, t = this.clock;
-    this.camera.position.y += (Math.sin(t * 37) * 0.6 + Math.sin(t * 53 + 1.3) * 0.4) * amp;
-    this.camera.position.x += Math.sin(t * 29 + 0.7) * amp * 0.5;
   }
 
   /** 'cartoon' (default) or 'pixel': low-res render, limited palette with dithering and outlines. */

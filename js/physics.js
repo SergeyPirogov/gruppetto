@@ -54,13 +54,14 @@ export function windGrade(v, head, cda, mass, { rho = DEFAULTS.rho, bikeMass = D
 }
 
 /**
- * Drafting: the share of air drag saved riding behind someone, from the gap to the wheel ahead (m) and
- * the sideways offset (m). About a third right on the wheel, fading to nothing by 4 m back or once you
- * are half a bike width out of their line.
+ * Drafting: the share of air drag saved riding behind someone, from the gap between the two bikes' centres (m)
+ * and the sideways offset (m). A bike is ~1.7 m long, so 2 m is the wheel: a few tens of centimetres tyre to
+ * tyre. About a third there, fading to nothing by 5.5 m back or once you are half a bike width out of their line.
  */
+export const WHEEL_GAP = 2.0;
 export function draftFactor(gap, sideways, cross = 0) {
-  if (gap <= 0.3 || gap >= 4) return 0;
-  const along = gap <= 1 ? 1 : 1 - (gap - 1) / 3;
+  if (gap <= 1.0 || gap >= 5.5) return 0;
+  const along = gap <= 2.6 ? 1 : 1 - (gap - 2.6) / 2.9;
   // in a crosswind the shelter moves downwind of the wheel ahead: sit half a bike out to the lee side
   const lee = Math.max(-0.7, Math.min(0.7, cross * 0.1));
   const side = Math.max(0, 1 - Math.abs(sideways + lee) / 0.8);
@@ -76,16 +77,16 @@ export function draftFactor(gap, sideways, cross = 0) {
  * Returns the share of air drag saved (0 … 0.5).
  */
 export function packDraft(others, cross = 0) {
-  const ahead = others.filter((o) => o.gap > 0.3 && o.gap < 4);
+  const ahead = others.filter((o) => o.gap > 1.0 && o.gap < 5.5);
   let best = 0;
   for (const o of ahead) best = Math.max(best, draftFactor(o.gap, o.sideways, cross));
-  // a bunch: riders further up the same line (up to 12 m ahead, within a bike width) deepen the shelter
-  const line = others.filter((o) => o.gap >= 4 && o.gap < 12 && Math.abs(o.sideways) < 1).length;
+  // a bunch: riders further up the same line (up to 13 m ahead, within a bike width) deepen the shelter
+  const line = others.filter((o) => o.gap >= 5.5 && o.gap < 13 && Math.abs(o.sideways) < 1).length;
   const deep = best > 0 ? Math.min(0.15, line * 0.05) * (best / 0.33) : 0;
   // pushed from behind: someone close on your wheel
   let push = 0;
   for (const o of others) {
-    if (o.gap < 0 && o.gap > -2 && Math.abs(o.sideways) < 0.8) push = Math.max(push, 0.04 * (1 - (-o.gap - 0.5) / 1.5) * (1 - Math.abs(o.sideways) / 0.8));
+    if (o.gap < -1.0 && o.gap > -3.5 && Math.abs(o.sideways) < 0.8) push = Math.max(push, 0.04 * Math.min(1, 1 - (-o.gap - 2.0) / 1.5) * (1 - Math.abs(o.sideways) / 0.8));
   }
   return Math.min(0.5, best + deep + Math.max(0, push));
 }
