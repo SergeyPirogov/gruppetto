@@ -1,7 +1,8 @@
 // Video rides (#video): a first-person ride from YouTube instead of the 3D road. The video runs at your speed
 // divided by the speed it was filmed at (0.25–2×, YouTube's range), pauses when you stop, and starts where the
 // ride begins (past an intro). The road under it is flat: without the filmed ride's track, its climbs would not
-// match the picture. With the track (a GPX of the filmed ride), the road is that track, with its climbs, and
+// match the picture. YouTube's own controls are off: no title, «More videos» or pause button over the road (the
+// quality is then YouTube's choice, by the player's size and the connection). With the track (a GPX of the filmed ride), the road is that track, with its climbs, and
 // the video is held where you are on it: the spot your distance reaches, at the track's share of the video. YouTube picks the picture's quality from the player's size and the connection; its own
 // controls (the gear for quality) show when the mouse is over the video.
 
@@ -81,7 +82,7 @@ export class VideoRide {
     // the iframe made here, not by the API: with the page's origin and a referrer policy that sends it, as YouTube
     // now requires (without them: «Error 153, video player configuration error»)
     const q = new URLSearchParams({ enablejsapi: '1', origin: location.origin, start: String(Math.floor(this.video.start || 0)), autoplay: '1', mute: '1',
-      controls: '1', disablekb: '1', rel: '0', playsinline: '1', iv_load_policy: '3', cc_load_policy: '0', modestbranding: '1' });
+      controls: '0', disablekb: '1', rel: '0', playsinline: '1', iv_load_policy: '3', cc_load_policy: '0', modestbranding: '1' });
     const f = document.createElement('iframe');
     f.src = `https://www.youtube.com/embed/${encodeURIComponent(this.video.yt)}?${q}`;
     f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
