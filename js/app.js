@@ -1401,6 +1401,14 @@ function updateHud(cadence, hr, grade) {
   $('m-zone').textContent = `Z${zone.z}`;
   $('m-zone').style.background = zone.color;
   $('m-zone').title = tr(zone.name);
+  // heart rate zone, from your max heart rate (Profile); no max set → no tag
+  const hrz = $('m-hr-zone'), hrNow = Math.round(hr || 0);
+  hrz.hidden = !(settings.maxHr > 0 && hrNow > 0);
+  if (!hrz.hidden) {
+    const f = hrNow / settings.maxHr, z = HR_ZONES.find((x) => f < x.upTo) || HR_ZONES[HR_ZONES.length - 1];
+    hrz.textContent = `Z${z.z}`; hrz.style.background = z.color; hrz.title = tr(z.name);
+    document.querySelector('.stat.hr').style.setProperty('--c', z.color);
+  }
   if (!ride.workout || ride.workoutDone) $('m-power').style.color = p3 > 0 ? zone.color : '';
   else $('m-power').style.color = '';
   $('m-cad').textContent = Math.round(cadence);

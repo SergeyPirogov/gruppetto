@@ -117,10 +117,5 @@ export function powerZone(frac) {
 
 /** Zone colour by fraction of FTP. */
 export function zoneColor(frac) {
-  if (frac < 0.6) return '#8a94a6';
-  if (frac < 0.76) return '#3b82f6';
-  if (frac < 0.9) return '#22c55e';
-  if (frac < 1.05) return '#eab308';
-  if (frac < 1.19) return '#f97316';
-  return '#ef4444';
+  return powerZone(frac).color; // one table for the zone tag, the bars, the workout chart and the summary
 }
