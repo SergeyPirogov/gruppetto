@@ -1723,6 +1723,19 @@ function renderStepList() {
  * The strip along the bottom of the ride (as in Zwift): the ride so far, power as bars coloured by zone
  * and heart rate as a line. At least ten minutes wide, squeezed as the ride gets longer.
  */
+/** A small dark tag with the FTP value, just above the dashed FTP line (below it when there is no room). */
+function ftpTag(g, x, yF, ftp, align = 'left') {
+  const t = `FTP ${ftp} W`;
+  g.font = '600 11px system-ui, -apple-system, sans-serif';
+  const tw = g.measureText(t).width, bw = tw + 10, bh = 16;
+  const bx = align === 'right' ? x - bw : x, by = yF - bh - 3 < 0 ? yF + 3 : yF - bh - 3;
+  g.fillStyle = 'rgba(10,15,25,.72)';
+  g.beginPath(); g.roundRect(bx, by, bw, bh, 4); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.9)'; g.textBaseline = 'middle';
+  g.fillText(t, bx + 5, by + bh / 2 + 0.5);
+  g.textBaseline = 'alphabetic';
+}
+
 function drawTrace() {
   const c = $('trace');
   if (!c || !c.clientWidth) return;
@@ -1761,6 +1774,7 @@ function drawTrace() {
   let on = false;
   for (const p of hrPts) { if (!p) { on = false; continue; } on ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); on = true; }
   g.stroke();
+  ftpTag(g, w - 4, yF, ftp, 'right');
 }
 
 function drawWorkoutChart(canvas, w, t) {
@@ -2226,7 +2240,6 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp) {
   // FTP reference line
   const yF = h - (ftp / pMax) * (h - 8);
   g.strokeStyle = 'rgba(255,255,255,.18)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
-  g.fillStyle = 'rgba(255,255,255,.4)'; g.font = '11px system-ui'; g.fillText(`FTP ${ftp} W`, 6, yF - 4);
   g.beginPath(); g.moveTo(0, h);
   pw.forEach((v, i) => g.lineTo(x(i), h - (v / pMax) * (h - 8)));
   g.lineTo(w, h); g.closePath();
@@ -2255,6 +2268,9 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp) {
     hr.forEach((v, i) => { if (!v) return; const y = h - (v / hMax) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
     g.stroke();
   }
+  // the FTP line again on top of the fill, with its value
+  g.strokeStyle = 'rgba(255,255,255,.45)'; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
+  ftpTag(g, 6, yF, ftp);
 }
 
 // ---------- A ride card to share (#52) ----------
