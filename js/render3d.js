@@ -570,7 +570,8 @@ const mixHex = (a, b, t) => '#' + mixRgb(hexRgb(a), hexRgb(b), t).map((v) => Mat
 const TIMES = {
   // midday is each route's own look; the others recolour the sky, the fog and the sun
   morning: { sky: ['#78a9de', '#ffd8b0'], fog: '#f0dcc6', fogMix: 0.55, sunY: 0.3, light: '#ffd09a', lightI: 2.4, hemi: 0.75, exposure: 1.02, glow: '#ffc890', disk: '#fff0d0', diskSize: 90, dim: 0.95 },
-  evening: { sky: ['#4a6aa6', '#ffaa6a'], fog: '#eab08a', fogMix: 0.6, sunY: 0.16, light: '#ff9e5a', lightI: 2.6, hemi: 0.55, exposure: 1.0, glow: '#ff9a50', disk: '#ffd27a', diskSize: 130, dim: 0.8 },
+  // golden hour: a low sun of warm gold (not red), the sky's cool fill in the shadows, a peach horizon
+  evening: { sky: ['#5a7cb6', '#ffcf9e'], fog: '#f1cfae', fogMix: 0.5, sunY: 0.18, light: '#ffd29a', lightI: 2.5, hemi: 0.62, hemiColor: '#b9c8ec', exposure: 1.03, glow: '#ffbe7a', disk: '#ffe2a6', diskSize: 120, dim: 0.85 },
   night: { sky: ['#03050c', '#131c35'], fog: '#0e1526', fogMix: 0.92, sunY: 0.55, light: '#9fb6ff', lightI: 0.7, hemi: 0.2, exposure: 1.25, glow: '#6f86c8', disk: '#e8eefc', diskSize: 34, dim: 0.22, night: true, fogNear: 60, fogFar: 700 },
 };
 /** The hour's look: 'auto' picks it from the local clock. */
@@ -588,7 +589,7 @@ export function atmosphereFor(base, time = 'midday', weather = 'clear') {
   if (T) {
     t.sky = [...T.sky];
     t.fog = mixRgb(base.fog, hexRgb(T.fog), T.fogMix);
-    Object.assign(a, { sunY: T.sunY, light: T.light, lightI: T.lightI, hemi: T.hemi, exposure: T.exposure, glow: T.glow, disk: T.disk, diskSize: T.diskSize, dim: T.dim, night: !!T.night });
+    Object.assign(a, { sunY: T.sunY, light: T.light, lightI: T.lightI, hemi: T.hemi, hemiColor: T.hemiColor || null, exposure: T.exposure, glow: T.glow, disk: T.disk, diskSize: T.diskSize, dim: T.dim, night: !!T.night });
     if (T.fogNear) { a.fogNear = T.fogNear; a.fogFar = Math.min(a.fogFar, T.fogFar); }
   }
   if (weather === 'fog' || weather === 'rain') {
@@ -987,7 +988,7 @@ export class Scene3D {
     const fogC = rgb(this.t.fog);
     this.scene.fog.color.copy(fogC); this.scene.fog.near = a.fogNear; this.scene.fog.far = a.fogFar;
     this.scene.background = col(this.t.sky[1]);
-    this.hemi.color.copy(col(this.t.sky[1])); this.hemi.intensity = a.hemi;
+    this.hemi.color.copy(col(a.hemiColor || this.t.sky[1])); this.hemi.intensity = a.hemi; // the sky's fill: its own colour when the horizon would tint it
     this.hemi.groundColor.copy(rgb(this.t.grass[0]).multiplyScalar(0.65 * (a.night ? 0.3 : 1)));
     for (const l of this.csm.lights) { l.color.set(a.light); l.intensity = a.lightI; }
     this.renderer.toneMappingExposure = a.exposure;

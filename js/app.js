@@ -992,7 +992,9 @@ function routeHeading(route, d) {
 /** This moment's wind for you: gusts round the set strength, split into head- and crosswind as the road turns. */
 /** The wind's strength for this ride, m/s: none in a workout. */
 function windBase() {
-  return ride?.workout ? 0 : WIND_SPEED[settings.wind] ?? 0;
+  // only in a race: there the wind is tactics (shelter in the bunch, attack into a headwind); in a free ride or a
+  // workout it only slows you down
+  return ride?.race ? WIND_SPEED[settings.wind] ?? 0 : 0;
 }
 function updateWind() {
   const W = ride.wind;
@@ -1094,9 +1096,7 @@ async function startRide() {
   track('ride-start', [racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
-  // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
-  // not in a workout: there the power is set, so the wind would only drag the speed down (and in ERG
-  // it changes nothing you feel)
+  // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little; races only
   ride.wind = { base: windBase(), toward: Math.random() * Math.PI * 2, speed: 0, head: 0, cross: 0, rel: 0 };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
