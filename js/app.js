@@ -862,7 +862,7 @@ function updateSummary() {
   const g = r && rideGhost(r.id);
   const free = settings.mode === 'free';
   const pacer = free && settings.freePacer ? `🚴 ${settings.pacerName?.trim() || tr('Pacer')} ${settings.freePacerWkg} ${U.wkg}` : null;
-  el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? `👻 ${g.friend ? g.name || tr('Friend') : settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null, pacer].filter(Boolean).join(' · ');
+  el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? (g.friend ? tr('against {name}', { name: g.name || tr('a friend') }) : settings.ghost === 'last' ? tr('against your last ride') : tr('against your best ride')) : null, pacer].filter(Boolean).join(' · ');
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
