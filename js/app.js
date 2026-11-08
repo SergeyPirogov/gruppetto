@@ -180,7 +180,8 @@ function updateDeviceUI() {
     const viaTrainer = d.dev === cadenceSensor && !d.dev.connected && trainer.connected;
     btn.textContent = d.dev.connected ? tr('Disconnect') : viaTrainer ? tr('Change') : tr('Connect');
     btn.title = viaTrainer ? tr('Connect a separate cadence sensor instead of the trainer') : '';
-    btn.classList.toggle('ok', d.dev.connected || viaTrainer);
+    btn.classList.toggle('ok', !d.dev.connected && viaTrainer); // "Change": the cadence comes from the trainer
+    btn.classList.toggle('danger', d.dev.connected); // "Disconnect" in red
   }
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
   $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
