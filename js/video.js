@@ -1,7 +1,8 @@
 // Video rides (#video): a first-person ride from YouTube instead of the 3D road. The video runs at your speed
 // divided by the speed it was filmed at (0.25–2×, YouTube's range), pauses when you stop, and starts where the
 // ride begins (past an intro). The road under it is flat: without the filmed ride's track, its climbs would not
-// match the picture. YouTube picks the picture's quality from the player's size and the connection; its own
+// match the picture. With the track (a GPX of the filmed ride), the road is that track, with its climbs, and
+// the video is held where you are on it: the spot your distance reaches, at the track's share of the video. YouTube picks the picture's quality from the player's size and the connection; its own
 // controls (the gear for quality) show when the mouse is over the video.
 
 /** The video id in a YouTube link (watch?v=, youtu.be/, shorts/, embed/) or a bare id, '' when none. */
@@ -21,6 +22,15 @@ export function secondsOf(x) {
 
 /** The start in a link's t= or start=, seconds. */
 export const startInLink = (u) => secondsOf((/[?&#](?:t|start)=([\dhms:]+)/.exec(String(u || '')) || [])[1]);
+
+/**
+ * Where the video should be for a distance ridden along a track: as far into the ride's part of the video as you
+ * are along the track (the filmed rider's pace taken as even, the track having no times). Seconds.
+ */
+export function videoTimeAt(dist, trackLength, start, duration) {
+  const ride = Math.max(1, duration - start);
+  return start + Math.min(1, Math.max(0, dist / Math.max(1, trackLength))) * ride;
+}
 
 /** The playback rate for your speed against the filmed one, in YouTube's range, in 0.05 steps; 0 = pause (stopped). */
 export function videoRate(kmh, filmedKmh) {
@@ -62,8 +72,8 @@ function noCaptions(p) {
 
 /** A video playing in el (a container), kept in step with your speed by follow(). */
 export class VideoRide {
-  constructor(el, video, { onEnd = () => {}, onError = () => {} } = {}) {
-    this.el = el; this.video = video; this.onEnd = onEnd; this.onError = onError; this.rate = 0; this.player = null; this.ended = false;
+  constructor(el, video, { onEnd = () => {}, onError = () => {}, trackLength = 0 } = {}) {
+    this.el = el; this.video = video; this.onEnd = onEnd; this.onError = onError; this.trackLength = trackLength; this.rate = 0; this.player = null; this.ended = false;
   }
 
   async start() {
@@ -94,12 +104,26 @@ export class VideoRide {
     });
   }
 
-  /** Your speed (km/h) and whether the ride is paused: the video's rate, play or pause. */
-  follow(kmh, paused) {
+  /**
+   * Your speed (km/h), whether the ride is paused and how far you are (m): the video's rate, play or pause. With a
+   * track, the video is kept at your spot on it: far off (a pause, a sprint), it jumps there; near, its rate
+   * leans toward it.
+   */
+  follow(kmh, paused, dist = 0) {
     const p = this.player;
     if (!p?.getPlayerState || this.ended || this.failed) return;
-    const rate = paused ? 0 : videoRate(kmh, this.video.kmh);
     const state = p.getPlayerState();
+    const duration = p.getDuration?.() || 0;
+    let filmed = this.video.kmh;
+    let lean = 1;
+    if (this.trackLength && duration > (this.video.start || 0) + 60) {
+      const start = this.video.start || 0;
+      filmed = (this.trackLength / (duration - start)) * 3.6; // the filmed rider's average, from the track and the video
+      const want = videoTimeAt(dist, this.trackLength, start, duration), now = p.getCurrentTime?.() || 0, off = want - now;
+      if (Math.abs(off) > 8) { p.seekTo(want, true); return; }
+      lean = 1 + Math.max(-0.3, Math.min(0.3, off * 0.08)); // a little faster when behind, slower when ahead
+    }
+    const rate = paused || kmh < 1.5 ? 0 : videoRate(kmh * lean, filmed);
     if (!rate) { if (state === 1) p.pauseVideo(); this.rate = 0; return; }
     if (state !== 1 && state !== 3) p.playVideo();
     if (Math.abs(rate - this.rate) >= 0.05) { p.setPlaybackRate(rate); this.rate = rate; }

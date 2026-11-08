@@ -531,13 +531,23 @@ function renderPlan() {
 // ---------- Video rides (#video) ----------
 const VIDEOS_KEY = 'gruppetto-videos';
 let myVideos = (() => { try { return JSON.parse(localStorage.getItem(VIDEOS_KEY) || '[]'); } catch { return []; } })();
-function saveVideos() { try { localStorage.setItem(VIDEOS_KEY, JSON.stringify(myVideos)); } catch { /* private mode */ } }
+function saveVideos() { try { localStorage.setItem(VIDEOS_KEY, JSON.stringify(myVideos)); return true; } catch { return false; } }
 /** Videos to ride from the first day, nothing to look for: picked by hand (first-person, steady camera, long). */
 const FEATURED_VIDEOS = [
   { id: 'f-zugspitze', yt: 'fXaFHAGK6cA', name: 'Zugspitze valley, Alps', start: 120, kmh: 25, featured: true },
-  { id: 'f-south-tyrol', yt: 'JOWN4WmuItM', name: 'South Tyrol lake tour, Alps', start: 0, kmh: 25, featured: true },
+  { id: 'f-south-tyrol', yt: 'JOWN4WmuItM', name: 'South Tyrol: Reschen to the Vinschgau, Alps', start: 0, kmh: 25, gpxUrl: 'assets/videos/JOWN4WmuItM.gpx', featured: true },
 ];
 const currentVideo = () => [...myVideos, ...FEATURED_VIDEOS].find((x) => x.id === settings.videoId) || null;
+
+/** The road under a video: its GPX track (kept with the video, or a featured one's file), else a flat road. */
+async function videoRoute(v) {
+  try {
+    let def = v.gpx;
+    if (!def && v.gpxUrl) def = routeFromTrack(parseGpx(await (await fetch(v.gpxUrl)).text()), v.gpxUrl);
+    if (def) return new Route({ ...def, id: `video:${v.yt}`, name: v.name, custom: false });
+  } catch (err) { console.info('Video track unusable, a flat road', err); }
+  return new Route({ id: `video:${v.yt}`, name: v.name, description: '', length: 200000, hills: [], curves: [], theme: 'meadow' });
+}
 
 function openVideoMenu() {
   $('vid-menu').hidden = false;
@@ -547,7 +557,7 @@ function openVideoMenu() {
   for (const x of [...myVideos, ...FEATURED_VIDEOS]) {
     const b = document.createElement('button');
     b.className = `option vid-item${x.id === settings.videoId ? ' sel' : ''}`;
-    b.innerHTML = `<b>${esc(x.name)}</b><small>${tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy">${x.featured ? `<span class="tag">${tr('Featured')}</span>` : `<span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`}`;
+    b.innerHTML = `<b>${esc(x.name)}</b><small>${x.gpx || x.gpxUrl ? tr('From {start}, with its GPS track: real climbs, the video where you are', { start: fmtTime(x.start || 0) }) : tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy">${x.featured ? `<span class="tag">${tr('Featured')}</span>` : `<span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`}`;
     b.onclick = (ev) => {
       if (ev.target.closest('.vid-del')) {
         myVideos = myVideos.filter((y) => y !== x); saveVideos();
@@ -561,12 +571,19 @@ function openVideoMenu() {
   }
 }
 $('vid-url').addEventListener('input', () => { const t = startInLink($('vid-url').value); if (t && !$('vid-start').value) $('vid-start').value = fmtTime(t); });
-$('vid-save').onclick = () => {
+$('vid-save').onclick = async () => {
   const yt = youtubeId($('vid-url').value);
   const msg = $('vid-msg');
   if (!yt) { msg.hidden = false; msg.textContent = tr('That is not a YouTube link: copy it from the address bar or Share.'); return; }
   const v = { id: `v${Date.now()}`, yt, name: $('vid-name').value.trim() || tr('YouTube ride'), start: secondsOf($('vid-start').value) || startInLink($('vid-url').value), kmh: Math.min(60, Math.max(5, Number($('vid-kmh').value) || 25)) };
-  myVideos.unshift(v); saveVideos();
+  // its GPS track, when given: the road with the filmed climbs, and the video kept where you are
+  const file = $('vid-gpx').files?.[0];
+  if (file) {
+    try { v.gpx = routeFromTrack(parseGpx(await file.text()), file.name); } catch (err) { msg.hidden = false; msg.textContent = `${file.name}: ${tr(err.message)}`; return; }
+  }
+  myVideos.unshift(v);
+  if (!saveVideos()) { myVideos.shift(); msg.hidden = false; msg.textContent = tr('Not enough browser storage for this route'); return; }
+  $('vid-gpx').value = '';
   settings.videoId = v.id; settings.mode = 'video'; saveSettings();
   for (const id of ['vid-url', 'vid-name', 'vid-start']) $(id).value = '';
   track('video-add');
@@ -1130,9 +1147,8 @@ async function startRide() {
   if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); return; }
   if (await wentFull) rideFullscreen = true;
   const video = settings.mode === 'video' ? currentVideo() : null;
-  // a video ride: a flat road under the picture (its climbs are only in the video)
-  const route = video ? new Route({ id: `video:${video.yt}`, name: video.name, description: '', length: 200000, hills: [], curves: [], theme: 'meadow' })
-    : routes.find((r) => r.id === settings.routeId) || routes[0];
+  // a video ride: its filmed track when it has one (the real climbs), a flat road otherwise
+  const route = video ? (await videoRoute(video)) : routes.find((r) => r.id === settings.routeId) || routes[0];
   const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   const racing = settings.mode === 'race';
@@ -1173,7 +1189,7 @@ async function startRide() {
       $('video-layer').hidden = true; $('ride').classList.remove('video-mode');
       toast(`${tr(why.message)} ${tr('Riding on the 3D road.')}`);
     };
-    ride.videoRide = new VideoRide($('video-layer'), video, { onEnd: () => toast(tr('The video is over: Finish when you like')), onError: toRoad });
+    ride.videoRide = new VideoRide($('video-layer'), video, { onEnd: () => toast(tr('The video is over: Finish when you like')), onError: toRoad, trackLength: video.gpx || video.gpxUrl ? route.length : 0 });
     ride.videoRide.start().catch((err) => toRoad(err.code ? err : { message: 'YouTube could not be reached.' }));
     track('video-ride');
   }
@@ -1401,7 +1417,7 @@ function frame(now) {
     ...(ride.climbGhost ? [ride.climbGhost] : []),
   ];
   if (ride.videoRide) {
-    if (now - (ride.videoAt || 0) > 250) { ride.videoAt = now; ride.videoRide.follow(ride.v * 3.6, ride.paused); }
+    if (now - (ride.videoAt || 0) > 250) { ride.videoAt = now; ride.videoRide.follow(ride.v * 3.6, ride.paused, ride.dist); }
   } else scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
   // the ghost's gap rides over your head, where the bots carry their names

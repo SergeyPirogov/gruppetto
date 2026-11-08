@@ -172,6 +172,8 @@ export const UK = {
   'The link has no valid video id.': 'У посиланні немає правильного id відео.', 'The browser cannot play this video.': 'Браузер не може відтворити це відео.',
   'The video is gone or private.': 'Відео видалене або приватне.', 'The author does not allow this video to play outside YouTube.': 'Автор не дозволяє відтворювати це відео поза YouTube.',
   'YouTube refused the player (configuration): reload the page.': 'YouTube відхилив плеєр (налаштування): перезавантаж сторінку.',
+  'GPS track': 'GPS-трек', 'From {start}, with its GPS track: real climbs, the video where you are': 'З {start}, з GPS-треком: справжні підйоми, відео там, де ти',
+  "The filmed ride's GPX: its climbs on the trainer, and the video kept where you are": 'GPX знятого заїзду: його підйоми на тренажері, а відео — там, де ти на маршруті',
   'Featured': 'Добірка',
   'Video rides': 'Відео-заїзди', 'Video ride': 'Відео-заїзд', 'Videos': 'Відео', 'YouTube link': 'Посилання на YouTube', 'Name': 'Назва', 'Start at': 'Старт з', 'Filmed at, km/h': 'Знято на швидкості, км/год', 'Add': 'Додати',
   'From {start}, filmed at {kmh} km/h': 'З {start}, знято на {kmh} км/год', 'A first-person ride from YouTube at your speed, instead of the 3D road.': 'Заїзд від першої особи з YouTube у твоєму темпі замість 3D-дороги.',
