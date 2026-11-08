@@ -1757,7 +1757,7 @@ $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value
 
 const BUTTON_LABELS = {
   shiftUpL: 'left shift up (gear +)', shiftDownL: 'left shift down (gear −)', shiftUpR: 'right shift up (gear +)', shiftDownR: 'right shift down (gear −)',
-  paddleL: 'left paddle', paddleR: 'right paddle',
+  paddleL: 'left paddle (lane ◀)', paddleR: 'right paddle (lane ▶)',
   up: '▲', down: '▼', left: '◀', right: '▶', a: 'A (ERG on/off)', b: 'B (pause)', y: 'Y (camera)', z: 'Z (skip interval)',
   powerUpL: 'Power-up left (pacer)', powerUpR: 'Power-up right (HUD)', onOffL: 'on/off left', onOffR: 'on/off right',
 };

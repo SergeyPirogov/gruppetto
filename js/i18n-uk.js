@@ -70,7 +70,7 @@ export const UK = {
   'Plan': 'План', 'Today': 'Сьогодні', 'Tomorrow': 'Завтра', 'Nothing planned for today or tomorrow': 'На сьогодні й завтра нічого не заплановано',
   'in {s} s': 'через {s} с',
   'ERG on/off (E)': 'ERG увімк./вимк. (E)', 'ERG off: the trainer simulates the road, ride to the target by feel': 'ERG вимкнено: тренажер імітує дорогу, тримай ціль сам', 'ERG on: the trainer holds the target power': 'ERG увімкнено: тренажер тримає цільову потужність',
-  'Buttons': 'Кнопки', 'Shift up / down (both sides), ▲ ▼': 'Перемикання вгору / вниз (обидва боки), ▲ ▼', 'Gear + / − (in ERG: intensity ±1 %)': 'Передача + / − (в ERG: інтенсивність ±1 %)', 'Paddles': 'Лопатки', 'Right: gear +, left: gear −': 'Права: передача +, ліва: −',
+  'Buttons': 'Кнопки', 'Shift up / down (both sides), ▲ ▼': 'Перемикання вгору / вниз (обидва боки), ▲ ▼', 'Gear + / − (in ERG: intensity ±1 %)': 'Передача + / − (в ERG: інтенсивність ±1 %)', 'Paddles (brake levers)': 'Лопатки (гальмівні важелі)', 'Change lane: left / right': 'Зміна смуги: вліво / вправо',
   'Change lane': 'Змінити смугу', 'Pause / resume': 'Пауза / далі', 'ERG on/off': 'ERG увімк./вимк.', 'Skip interval': 'Пропустити інтервал',
   'Power-up left': 'Power-up лівий', 'Power-up right': 'Power-up правий', 'Pacer on/off': 'Пейсер увімк./вимк.', 'Hide / show the HUD': 'Сховати / показати табло',
   'Profile & settings': 'Профіль і налаштування', 'Language': 'Мова', 'Name': 'Ім\'я', 'Jersey color': 'Колір джерсі',

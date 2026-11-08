@@ -59,12 +59,12 @@ export function obcIntents(changes, prev) {
   return intents;
 }
 
-// Zwift Ride: the shift buttons go by direction on both units (up = harder, down = easier), the
-// paddles by side (right harder, left easier), ▲ / ▼ like the shift buttons.
+// Zwift Ride: the shift buttons go by direction on both units (up = harder, down = easier), ▲ / ▼
+// the same; the paddles (the brake levers) change lane: left paddle left, right paddle right.
 const RIDE_TO_INTENT = {
-  shiftUpR: 'harder', shiftUpL: 'harder', paddleR: 'harder', up: 'harder',
-  shiftDownR: 'easier', shiftDownL: 'easier', paddleL: 'easier', down: 'easier',
-  left: 'left', right: 'right', a: 'toggleErg', z: 'skip',
+  shiftUpR: 'harder', shiftUpL: 'harder', up: 'harder',
+  shiftDownR: 'easier', shiftDownL: 'easier', down: 'easier',
+  paddleL: 'left', paddleR: 'right', a: 'toggleErg', z: 'skip',
   b: 'togglePause', y: 'camera', powerUpL: 'pacer', powerUpR: 'hud',
   // onOffL / onOffR switch the controller itself off: left alone
 };
