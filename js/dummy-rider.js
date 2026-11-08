@@ -213,9 +213,9 @@ export class DummyRider {
       this.parts[node.name] = pivot;
     }
     group.add(this.root);
-    // cycling gloves: the hand in the glove colour and a cuff round the end of the forearm, which also
-    // covers where the forearm and the hand meet ("gloves": false in dummy.json for bare hands)
-    if (cfg.gloves !== false) {
+    // optional cycling gloves ("gloves": true in dummy.json): the hand in the glove colour and a cuff
+    // round the end of the forearm. Off by default: bare hands, no band at the wrist.
+    if (cfg.gloves === true) {
       for (const s of 'LR') {
         this.parts[`hand${s}`].traverse((o) => { if (o.isMesh) o.material = mat('glove'); });
         const arm = this.parts[`lowerArm${s}`];
