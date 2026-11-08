@@ -1377,10 +1377,10 @@ function drawTrace() {
   const s = recorder.samples, n = s.length;
   if (!n) return;
   const ftp = settings.ftp, BAR = 3;
-  const cols = Math.floor((w - 8) / BAR);
+  const cols = Math.floor(w / BAR);
   const span = Math.max(600, n);              // seconds across the strip
   const per = span / cols;                     // seconds per bar
-  const pMax = Math.max(ftp * 1.6, 1), top = 5, base = h - 3, H = base - top;
+  const pMax = Math.max(ftp * 1.6, 1), top = 6, base = h, H = base - top; // as the profile beside it: flush with the bottom, 6 px clear at the top
   const hrLo = 60, hrHi = Math.max(190, settings.maxHr || 0);
   const hrPts = [];
   for (let i = 0; i * per < n; i++) {
@@ -1388,7 +1388,7 @@ function drawTrace() {
     let p = 0, hr = 0, hn = 0;
     for (let k = a; k < b; k++) { p += s[k].power || 0; if (s[k].heartRate > 0) { hr += s[k].heartRate; hn++; } }
     p /= b - a;
-    const x = 4 + i * BAR;
+    const x = i * BAR;
     const bh = Math.max(1, Math.min(1, p / pMax) * H);
     g.fillStyle = zoneColor(p / ftp);
     g.fillRect(x, base - bh, BAR - 1, bh);
@@ -1398,7 +1398,7 @@ function drawTrace() {
   // FTP line
   const yF = base - (ftp / pMax) * H;
   g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.setLineDash([3, 4]);
-  g.beginPath(); g.moveTo(4, yF); g.lineTo(w - 4, yF); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
   g.strokeStyle = '#ff4d5e'; g.lineWidth = 1.6; g.beginPath();
   let on = false;
   for (const p of hrPts) { if (!p) { on = false; continue; } on ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); on = true; }
