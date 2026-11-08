@@ -1061,25 +1061,31 @@ export class Scene3D {
   _mountains() {
     this.rings = [];
     const fog = rgb(this.t.fog);
-    const layers = this.t.layers.filter((l) => l.kind !== 'sea').slice(0, 2);
+    const near = this.t.layers.filter((l) => l.kind !== 'sea').slice(0, 2);
+    // a third ridge, farthest and palest, behind the first: the haze between ridges gives the distance its depth
+    const layers = near.length ? [{ ...near[0], far: true }, ...near] : near;
     layers.forEach((L, li) => {
-      const R = li === 0 ? 2600 : 1900, N = 220;
-      const amp = L.amp * (li === 0 ? 3900 : 2100);
+      const far = !!L.far, idx = far ? 0 : li - 1;
+      const R = far ? 3150 : idx === 0 ? 2600 : 1900, N = far ? 160 : 220;
+      const amp = L.amp * (far ? 4600 : idx === 0 ? 3900 : 2100);
+      const freq = far ? L.freq * 0.7 + 0.5 : L.freq;
       const pos = [], cs = [];
       const dim = (this.atm?.dim ?? 1) ** 2.2; // dusk and night darken the far hills (vertex colours are linear: dim as perceived)
       const veil = this.atmWeather === 'fog' ? 0.6 : this.atmWeather === 'rain' ? 0.35 : 0; // fog and rain swallow the far hills
-      const base = col(L.base).lerp(fog, (li === 0 ? 0.3 : 0.18) + veil).multiplyScalar(dim), top = col(L.top).lerp(fog, (li === 0 ? 0.25 : 0.12) + veil).multiplyScalar(dim);
-      const snow = col('#f6f9fc').lerp(fog, 0.12).multiplyScalar(dim);
+      const haze = far ? 0.55 : idx === 0 ? 0.3 : 0.18, hazeTop = far ? 0.5 : idx === 0 ? 0.25 : 0.12;
+      const base = col(L.base).lerp(fog, Math.min(0.9, haze + veil)).multiplyScalar(dim), top = col(L.top).lerp(fog, Math.min(0.9, hazeTop + veil)).multiplyScalar(dim);
+      const snow = col('#f6f9fc').lerp(fog, far ? 0.4 : 0.12).multiplyScalar(dim);
+      const seed = far ? 7 : idx;
       const hgt = (i) => {
         const u = (i / N) * Math.PI * 2;
-        let r = 0.55 + 0.25 * Math.sin(u * L.freq * 2 + li) + 0.15 * Math.sin(u * L.freq * 5.3 + li * 2) + 0.08 * Math.sin(u * 23);
+        let r = 0.55 + 0.25 * Math.sin(u * freq * 2 + seed) + 0.15 * Math.sin(u * freq * 5.3 + seed * 2) + 0.08 * Math.sin(u * 23 + seed);
         if (L.flat) r = Math.min(r, L.flat);
         return r * amp;
       };
-      // two bands per column (rock below the snow line, snow above) so colours never smear
-      const snowY = amp * 0.62;
       const H = [];
-      for (let i = 0; i <= N; i++) H.push(hgt(i % N) + (hash((i % N) + li * 99) - 0.5) * amp * 0.12);
+      for (let i = 0; i <= N; i++) H.push(hgt(i % N) + (hash((i % N) + seed * 99) - 0.5) * amp * 0.12);
+      // the snow line wanders a little from column to column, as it does on real slopes
+      const snowY = (i) => amp * (0.58 + (hash((i % N) * 3.7 + seed * 17) - 0.5) * 0.12);
       const quad = (a0, a1, y00, y01, y10, y11, c0, c1) => {
         const v = (a, y) => [Math.cos(a) * R, y, Math.sin(a) * R];
         const P = [v(a0, y00), v(a1, y10), v(a0, y01), v(a1, y10), v(a1, y11), v(a0, y01)];
@@ -1089,16 +1095,21 @@ export class Scene3D {
       for (let i = 0; i < N; i++) {
         const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
         const h0 = H[i], h1 = H[i + 1];
-        const m0 = L.snow ? Math.min(h0, snowY) : h0, m1 = L.snow ? Math.min(h1, snowY) : h1;
-        const topC = base.clone().lerp(top, Math.min(1, Math.max(m0, m1) / amp));
-        quad(a0, a1, -250, m0, -250, m1, base, topC);
-        if (L.snow && (h0 > snowY || h1 > snowY)) quad(a0, a1, m0, h0, m1, h1, snow, snow);
+        // baked relief: a face rising along the ridge catches the light, a falling one is in shade
+        const shade = 1 + Math.max(-1, Math.min(1, (h1 - h0) / (amp * 0.08))) * (far ? 0.08 : 0.16);
+        const s0 = snowY(i), s1 = snowY(i + 1);
+        const m0 = L.snow ? Math.min(h0, s0) : h0, m1 = L.snow ? Math.min(h1, s1) : h1;
+        const topC = base.clone().lerp(top, Math.min(1, Math.max(m0, m1) / amp)).multiplyScalar(shade);
+        quad(a0, a1, -250, m0, -250, m1, base.clone().multiplyScalar(0.96 + (shade - 1) * 0.4), topC);
+        // snow in the shade goes a cool blue, as at altitude
+        const snowC = shade >= 1 ? snow.clone().multiplyScalar(Math.min(1.04, shade)) : snow.clone().lerp(col('#b9c9e4').multiplyScalar(dim), (1 - shade) * 4).multiplyScalar(0.96);
+        if (L.snow && (h0 > s0 || h1 > s1)) quad(a0, a1, m0, h0, m1, h1, snowC, snowC);
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
       g.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3));
       const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
-      mesh.renderOrder = -5;
+      mesh.renderOrder = far ? -6 : -5;
       this.rings.push(mesh);
       this.scene.add(mesh);
     });
