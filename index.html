@@ -71,8 +71,22 @@
     <div id="wk-menu" class="wk-menu" hidden>
       <div class="drawer-bg" data-wk-close></div>
       <div class="wk-menu-panel">
-        <div class="wk-menu-head"><h2>Workouts</h2><button class="drawer-close" data-wk-close aria-label="Close">✕</button></div>
+        <div class="wk-menu-head"><h2>Workouts</h2><span class="wk-menu-tools"><button id="wk-new" class="pill-btn">+ New workout</button><button id="wk-import" class="pill-btn">Import .zwo</button><input id="wk-import-file" type="file" accept=".zwo,.xml" multiple hidden></span><button class="drawer-close" data-wk-close aria-label="Close">✕</button></div>
         <div id="wk-menu-list" class="options wk-menu-list"></div>
+      </div>
+    </div>
+
+    <!-- the workout builder (#36): blocks stacked into a workout -->
+    <div id="wk-builder" class="wk-menu wk-detail" hidden>
+      <div class="drawer-bg" data-wb-close></div>
+      <div class="wk-menu-panel wkd-panel wb-panel">
+        <div class="wk-menu-head"><h2>Workout builder</h2><button class="drawer-close" data-wb-close aria-label="Close">✕</button></div>
+        <div class="wb-meta"><label>Name <input id="wb-name" maxlength="60"></label><label>Notes <input id="wb-desc" maxlength="200" placeholder="What it is for, how to ride it"></label></div>
+        <canvas id="wb-chart" class="wkd-chart"></canvas>
+        <div id="wb-stats" class="wb-stats"></div>
+        <ol id="wb-blocks" class="wb-blocks"></ol>
+        <div id="wb-add" class="wb-add"></div>
+        <div class="wkd-actions"><button class="pill-btn" data-wb-close>Cancel</button><button id="wb-save" class="primary wkd-ride">Save workout</button></div>
       </div>
     </div>
 
@@ -90,6 +104,9 @@
         <h3 class="wkd-h">Intervals</h3>
         <ol id="wkd-steps" class="wkd-steps"></ol>
         <div class="wkd-actions">
+          <button id="wkd-delete" class="pill-btn wkd-del" hidden>Delete</button>
+          <button id="wkd-edit" class="pill-btn" hidden>Edit</button>
+          <button id="wkd-zwo" class="pill-btn" title="For Zwift and other apps">Download .zwo</button>
           <button id="wkd-select" class="pill-btn">Select</button>
           <button id="wkd-ride" class="primary wkd-ride">Ride this workout ▶</button>
         </div>

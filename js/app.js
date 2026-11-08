@@ -9,6 +9,7 @@ import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, HR_ZONES } from './analysis.js';
+import { parseZwo, toZwo } from './zwo.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
@@ -468,7 +469,11 @@ function alertBox(msg) {
   clearTimeout(alertBox.t); alertBox.t = setTimeout(() => { el.hidden = true; }, 6000);
 }
 
-const allWorkouts = () => [...icuWorkouts, ...workouts];
+// your own workouts: imported from .zwo files or made in the builder (#28, #36)
+const MY_KEY = 'gruppetto.workouts';
+let myWorkouts = (() => { try { return JSON.parse(localStorage.getItem(MY_KEY) || '[]'); } catch { return []; } })();
+const saveMyWorkouts = () => { try { localStorage.setItem(MY_KEY, JSON.stringify(myWorkouts)); } catch { /* storage full or blocked */ } };
+const allWorkouts = () => [...icuWorkouts, ...myWorkouts, ...workouts];
 
 /** Today's and tomorrow's workouts from the intervals.icu calendar, right in the lobby. */
 function renderPlan() {
@@ -541,17 +546,153 @@ function openWorkoutMenu() {
     const b = document.createElement('button');
     b.className = 'option';
     b.dataset.id = w.id;
-    b.innerHTML = `${tag ? `<span class="tag">intervals.icu · ${esc(tag)}</span>` : ''}<b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`;
+    b.innerHTML = `${tag ? `<span class="tag${tag === 'mine' ? ' mine' : ''}">${tag === 'mine' ? tr('Mine') : `intervals.icu · ${esc(tag)}`}</span>` : ''}<b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`;
     b.onclick = () => openWorkoutDetail(w);
     b.classList.toggle('sel', w.id === settings.mode);
     list.append(b);
     requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
   };
   for (const w of icuWorkouts) add(w, dayLabel(w.date));
+  for (const w of myWorkouts) add(w, 'mine');
   for (const w of workouts) add(w);
   menu.hidden = false;
 }
 function closeWorkoutMenu() { $('wk-menu').hidden = true; }
+
+/** Adds a workout of your own (or replaces the one with its id), and selects it. */
+function addMyWorkout(w) {
+  const i = myWorkouts.findIndex((x) => x.id === w.id);
+  if (i >= 0) myWorkouts[i] = w; else myWorkouts.unshift(w);
+  saveMyWorkouts();
+  settings.mode = w.id; settings.lastWorkout = w.id; saveSettings();
+  renderModes();
+}
+
+$('wk-import').onclick = () => $('wk-import-file').click();
+$('wk-import-file').onchange = async (e) => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  let n = 0, last = null;
+  for (const f of files) {
+    try {
+      const w = parseZwo(await f.text());
+      last = { id: `my:${Date.now()}-${n}`, source: 'mine', ...w, description: w.description || tr('Imported from {file}', { file: f.name }) };
+      myWorkouts.unshift(last); n++;
+    } catch (err) { toast(`${f.name}: ${tr(err.message)}`); }
+  }
+  if (!n) return;
+  saveMyWorkouts();
+  toast(n === 1 ? tr('Workout imported: {name}', { name: last.name }) : tr('{n} workouts imported', { n }));
+  openWorkoutMenu();
+  if (n === 1) openWorkoutDetail(last);
+};
+$('wk-new').onclick = () => { closeWorkoutMenu(); openBuilder(null); };
+
+// ---------- Workout builder (#36) ----------
+// Blocks you can stack; each turns into steps. Percentages are of FTP, durations in minutes (intervals in seconds).
+const BLOCKS = {
+  warmup: { label: 'Warm-up', make: () => ({ min: 10, from: 45, to: 70 }) },
+  steady: { label: 'Steady', make: () => ({ min: 10, pct: 75 }) },
+  intervals: { label: 'Intervals', make: () => ({ reps: 5, onSec: 60, onPct: 120, offSec: 60, offPct: 55 }) },
+  ramp: { label: 'Ramp', make: () => ({ min: 5, from: 60, to: 100 }) },
+  free: { label: 'Free ride', make: () => ({ min: 5 }) },
+  cooldown: { label: 'Cool-down', make: () => ({ min: 8, from: 65, to: 40 }) },
+};
+function blocksToSteps(blocks) {
+  const steps = [];
+  for (const b of blocks) {
+    if (b.type === 'intervals') for (let i = 0; i < b.reps; i++) { steps.push({ dur: Math.round(b.onSec), power: b.onPct / 100 }, { dur: Math.round(b.offSec), power: b.offPct / 100 }); }
+    else if (b.type === 'steady') steps.push({ dur: Math.round(b.min * 60), power: b.pct / 100 });
+    else if (b.type === 'free') steps.push({ dur: Math.round(b.min * 60), free: true });
+    else steps.push({ dur: Math.round(b.min * 60), power: b.from / 100, ...(b.to !== b.from ? { to: b.to / 100 } : {}) });
+  }
+  return steps.filter((s) => s.dur > 0);
+}
+/** Steps of an imported workout as blocks you can edit (on/off pairs back to back become Intervals). */
+function stepsToBlocks(steps) {
+  const out = [];
+  for (let i = 0; i < steps.length;) {
+    const s = steps[i];
+    if (!s.free && s.to === undefined && i + 3 < steps.length) {
+      const on = s, off = steps[i + 1];
+      let reps = 1;
+      while (i + reps * 2 + 1 < steps.length && [0, 1].every((k) => { const a = steps[i + reps * 2 + k], b = [on, off][k]; return a.dur === b.dur && a.power === b.power && a.to === undefined && !a.free; })) reps++;
+      if (reps > 1 && !off.free && off.to === undefined) {
+        out.push({ type: 'intervals', reps, onSec: on.dur, onPct: Math.round(on.power * 100), offSec: off.dur, offPct: Math.round(off.power * 100) });
+        i += reps * 2; continue;
+      }
+    }
+    if (s.free) out.push({ type: 'free', min: +(s.dur / 60).toFixed(2) });
+    else if (s.to !== undefined) out.push({ type: i === 0 && s.to > s.power ? 'warmup' : i === steps.length - 1 && s.to < s.power ? 'cooldown' : 'ramp', min: +(s.dur / 60).toFixed(2), from: Math.round(s.power * 100), to: Math.round(s.to * 100) });
+    else out.push({ type: 'steady', min: +(s.dur / 60).toFixed(2), pct: Math.round(s.power * 100) });
+    i++;
+  }
+  return out;
+}
+let building = null;
+function openBuilder(w) {
+  building = w
+    ? { id: w.id, name: w.name, description: w.description || '', blocks: w.blocks ? structuredClone(w.blocks) : stepsToBlocks(w.steps) }
+    : { id: null, name: tr('My workout'), description: '', blocks: [{ type: 'warmup', ...BLOCKS.warmup.make() }, { type: 'intervals', ...BLOCKS.intervals.make() }, { type: 'cooldown', ...BLOCKS.cooldown.make() }] };
+  $('wb-name').value = building.name;
+  $('wb-desc').value = building.description;
+  $('wb-add').innerHTML = Object.entries(BLOCKS).map(([k, v]) => `<button class="pill-btn" data-add="${k}">+ ${esc(tr(v.label))}</button>`).join('');
+  renderBuilder();
+  $('wk-builder').hidden = false;
+}
+function renderBuilder() {
+  const B = building;
+  const field = (i, key, label, unit, step = 1) => `<label>${label}<span><input type="number" step="${step}" min="0" data-i="${i}" data-k="${key}" value="${B.blocks[i][key]}">${unit}</span></label>`;
+  $('wb-blocks').innerHTML = B.blocks.map((b, i) => {
+    const f = b.type === 'intervals'
+      ? field(i, 'reps', '×', '') + field(i, 'onSec', tr('on'), tr('s')) + field(i, 'onPct', '', '%') + field(i, 'offSec', tr('off'), tr('s')) + field(i, 'offPct', '', '%')
+      : b.type === 'steady' ? field(i, 'min', '', U.min, 0.5) + field(i, 'pct', '', '%')
+        : b.type === 'free' ? field(i, 'min', '', U.min, 0.5)
+          : field(i, 'min', '', U.min, 0.5) + field(i, 'from', '', '%') + field(i, 'to', '→', '%');
+    return `<li><b>${esc(tr(BLOCKS[b.type].label))}</b><div class="wb-fields">${f}</div><span class="wb-move"><button data-up="${i}" aria-label="Up">↑</button><button data-down="${i}" aria-label="Down">↓</button><button data-del="${i}" aria-label="Remove">✕</button></span></li>`;
+  }).join('');
+  const w = { name: B.name, steps: blocksToSteps(B.blocks) };
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null;
+  $('wb-stats').textContent = st ? `${fmtTime(st.dur)} · TSS ${st.tss} · IF ${st.if.toFixed(2)} · NP ${st.np} ${U.W}` : '';
+  $('wb-save').disabled = !w.steps.length;
+  requestAnimationFrame(() => { if (w.steps.length) drawWorkoutChart($('wb-chart'), w, -1); else $('wb-chart').getContext('2d').clearRect(0, 0, 9999, 9999); });
+}
+$('wb-blocks').addEventListener('input', (e) => {
+  const el = e.target.closest('input[data-i]');
+  if (!el) return;
+  building.blocks[+el.dataset.i][el.dataset.k] = Math.max(0, Number(el.value) || 0);
+  const w = { steps: blocksToSteps(building.blocks) };
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null;
+  $('wb-stats').textContent = st ? `${fmtTime(st.dur)} · TSS ${st.tss} · IF ${st.if.toFixed(2)} · NP ${st.np} ${U.W}` : '';
+  if (w.steps.length) drawWorkoutChart($('wb-chart'), w, -1);
+});
+$('wb-blocks').addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  const B = building.blocks;
+  if (t.dataset.del !== undefined) B.splice(+t.dataset.del, 1);
+  else if (t.dataset.up !== undefined && +t.dataset.up > 0) { const i = +t.dataset.up; [B[i - 1], B[i]] = [B[i], B[i - 1]]; }
+  else if (t.dataset.down !== undefined && +t.dataset.down < B.length - 1) { const i = +t.dataset.down; [B[i + 1], B[i]] = [B[i], B[i + 1]]; }
+  else return;
+  renderBuilder();
+});
+$('wb-add').addEventListener('click', (e) => {
+  const k = e.target.closest('[data-add]')?.dataset.add;
+  if (!k) return;
+  const B = building.blocks, at = k === 'warmup' ? 0 : B.length && B[B.length - 1].type === 'cooldown' && k !== 'cooldown' ? B.length - 1 : B.length;
+  B.splice(at, 0, { type: k, ...BLOCKS[k].make() });
+  renderBuilder();
+});
+$('wb-save').onclick = () => {
+  const B = building, steps = blocksToSteps(B.blocks);
+  if (!steps.length) return;
+  const w = { id: B.id || `my:${Date.now()}`, source: 'mine', name: $('wb-name').value.trim() || tr('My workout'), description: $('wb-desc').value.trim(), blocks: B.blocks, steps };
+  addMyWorkout(w);
+  $('wk-builder').hidden = true;
+  toast(tr('Saved: {name}', { name: w.name }));
+  openWorkoutDetail(w);
+};
+$('wk-builder').addEventListener('click', (e) => { if (e.target.closest('[data-wb-close]')) $('wk-builder').hidden = true; });
 
 function chooseWorkout(w) {
   settings.mode = w.id; settings.lastWorkout = w.id; saveSettings();
@@ -620,6 +761,26 @@ function openWorkoutDetail(w) {
   const total = totalDuration(w);
   $('wkd-axis').innerHTML = [0, 0.25, 0.5, 0.75, 1].map((f) => `<span>${fmtTime(Math.round(total * f))}</span>`).join('');
   $('wkd-select').onclick = () => chooseWorkout(w);
+  const mine = myWorkouts.includes(w);
+  $('wkd-edit').hidden = !mine;
+  $('wkd-delete').hidden = !mine;
+  $('wkd-delete').textContent = tr('Delete');
+  $('wkd-edit').onclick = () => { closeWorkoutDetail(); openBuilder(w); };
+  $('wkd-delete').onclick = () => {
+    const b = $('wkd-delete');
+    if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Tap again to delete'); return; }
+    b.dataset.armed = '';
+    myWorkouts = myWorkouts.filter((x) => x !== w); saveMyWorkouts();
+    if (settings.mode === w.id) { settings.mode = 'free'; saveSettings(); }
+    closeWorkoutDetail(); openWorkoutMenu(); renderModes();
+  };
+  $('wkd-zwo').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([toZwo(w)], { type: 'application/xml' }));
+    a.download = `${(w.name || 'workout').replace(/[^\w\- ]+/g, '').trim() || 'workout'}.zwo`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
   $('wkd-ride').onclick = () => { chooseWorkout(w); startRide(); };
   $('wkd-select').textContent = settings.mode === w.id ? tr('Selected ✓') : tr('Select');
   $('wk-detail').hidden = false;
@@ -781,7 +942,7 @@ const recorder = new Recorder();
 
 async function startRide() {
   const route = routes.find((r) => r.id === settings.routeId) || routes[0];
-  const workout = [...icuWorkouts, ...workouts].find((w) => w.id === settings.mode) || null;
+  const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   const racing = settings.mode === 'race';
   const laps = route.oneWay ? 1 : Math.max(1, settings.raceLaps || 1);

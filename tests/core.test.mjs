@@ -525,3 +525,31 @@ test('intervals.icu upload: a planned workout that cannot be paired (422) still 
     await assert.rejects(c.uploadActivity(new Uint8Array([1]), { name: 'x', eventId: 5 }), /error 400: Bad file/);
   } finally { globalThis.fetch = realFetch; }
 });
+
+test('.zwo workouts: read Zwift files and write them back (#28)', async () => {
+  const { parseZwo, toZwo } = await import('../js/zwo.js');
+  const zwo = `<workout_file><author>X</author><name>Over &amp; Under</name><description>Hard one</description><sportType>bike</sportType>
+  <workout>
+    <Warmup Duration="600" PowerLow="0.40" PowerHigh="0.75"/>
+    <SteadyState Duration="300" Power="0.88" Cadence="95">
+      <textevent timeoffset="10" message="settle in"/>
+    </SteadyState>
+    <IntervalsT Repeat="3" OnDuration="60" OffDuration="120" OnPower="1.2" OffPower="0.55" Cadence="100" CadenceResting="85"/>
+    <FreeRide Duration="180"/>
+    <Cooldown Duration="300" PowerLow="0.65" PowerHigh="0.4"/>
+  </workout></workout_file>`;
+  const w = parseZwo(zwo);
+  assert.equal(w.name, 'Over & Under');
+  assert.equal(w.steps.length, 1 + 1 + 6 + 1 + 1);
+  assert.deepEqual(w.steps[0], { dur: 600, power: 0.4, to: 0.75 });
+  assert.deepEqual(w.steps[1], { dur: 300, power: 0.88, cad: [92, 98] });
+  assert.deepEqual(w.steps[2], { dur: 60, power: 1.2, cad: [97, 103] });
+  assert.deepEqual(w.steps[3], { dur: 120, power: 0.55, cad: [82, 88] });
+  assert.equal(w.steps[8].free, true);
+  assert.deepEqual(w.steps[9], { dur: 300, power: 0.65, to: 0.4 });
+  // back out and in again: the same steps
+  const again = parseZwo(toZwo(w));
+  assert.deepEqual(again.steps.map((s) => [s.dur, s.power, s.to, !!s.free]), w.steps.map((s) => [s.dur, s.power, s.to, !!s.free]));
+  assert.match(toZwo(w), /<IntervalsT Repeat="3" OnDuration="60" OffDuration="120" OnPower="1.2" OffPower="0.55"/);
+  assert.throws(() => parseZwo('<html></html>'), /Not a Zwift workout/);
+});

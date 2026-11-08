@@ -211,4 +211,11 @@ export const UK = {
   'to go': 'до фінішу', '🏆 You win! {time}': '🏆 Перемога! {time}', '🏁 {n} of {m} · {time}': '🏁 {n} з {m} · {time}', 'GO!': 'СТАРТ!',
   'Get ready': 'Приготуйтесь', 'Race results': 'Результати гонки', '{n} of {m}': '{n} з {m}', '* still riding: the time at their speed': '* ще їдуть: час за їхньою швидкістю',
   '1 lap': '1 коло',
+  // my workouts, .zwo, builder (#28, #36)
+  'Mine': 'Мої', '+ New workout': '+ Нове тренування', 'Import .zwo': 'Імпорт .zwo', 'Delete': 'Видалити', 'Edit': 'Змінити', 'Download .zwo': 'Завантажити .zwo',
+  'For Zwift and other apps': 'Для Zwift та інших застосунків', 'Imported from {file}': 'Імпортовано з {file}', 'Workout imported: {name}': 'Тренування імпортовано: {name}',
+  '{n} workouts imported': 'Імпортовано тренувань: {n}', 'Not a Zwift workout (.zwo) file': 'Це не файл тренування Zwift (.zwo)', 'This workout has no steps': 'У цьому тренуванні немає кроків',
+  'Workout builder': 'Конструктор тренування', 'Name': 'Назва', 'Notes': 'Нотатки', 'What it is for, how to ride it': 'Для чого воно і як його їхати',
+  'Cancel': 'Скасувати', 'Save workout': 'Зберегти тренування', 'My workout': 'Моє тренування', 'Saved: {name}': 'Збережено: {name}',
+  'Warm-up': 'Розминка', 'Steady': 'Рівно', 'Intervals': 'Інтервали', 'Ramp': 'Рампа', 'Cool-down': 'Заминка', 'on': 'роб.', 'off': 'відп.',
 };
