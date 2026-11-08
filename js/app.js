@@ -2521,6 +2521,11 @@ async function openRideCard() {
 $('btn-card').onclick = openRideCard;
 $('card-view').addEventListener('click', (ev) => { if (ev.target.closest('[data-card-close]')) $('card-view').hidden = true; });
 
+/** A ride's file name: gruppetto-2026-11-08-1432 (your local start time). */
+function rideFileName(d) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `gruppetto-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
+}
 function download(kind) {
   const rec = shown.rec || recorder;
   const d = rec.startTime || new Date();
@@ -2528,7 +2533,7 @@ function download(kind) {
   const blob = fit ? new Blob([rec.toFIT()], { type: 'application/vnd.ant.fit' }) : new Blob([rec.toTCX()], { type: 'application/vnd.garmin.tcx+xml' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `powerup-${d.toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${fit ? 'fit' : 'tcx'}`;
+  a.download = `${rideFileName(d)}.${fit ? 'fit' : 'tcx'}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -2650,7 +2655,7 @@ async function uploadToIntervals() {
   const description = `${e.routeName} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`;
   try {
     const id = await icuClient.uploadActivity(rec.toFIT(), {
-      name, description, eventId: fromIcu ? e.eventId : undefined, filename: `gruppetto-${rec.startTime ? rec.startTime.getTime() : Date.now()}.fit`,
+      name, description, eventId: fromIcu ? e.eventId : undefined, filename: `${rideFileName(rec.startTime || new Date())}.fit`,
     });
     e.uploadedId = id || true;
     if (lastRide && rec === recorder) lastRide.uploadedId = e.uploadedId;
