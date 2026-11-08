@@ -612,6 +612,16 @@ $('wk-import-file').onchange = async (e) => {
 };
 $('wk-new').onclick = () => { closeWorkoutMenu(); openBuilder(null); };
 
+// ---------- Why Gruppetto: for a new rider ----------
+const WHY_KEY = 'gruppetto-why-closed';
+function renderWhy() {
+  let closed = false;
+  try { closed = !!localStorage.getItem(WHY_KEY); } catch { /* private mode */ }
+  $('why-box').hidden = closed || history.length > 0;
+}
+$('why-close').onclick = () => { try { localStorage.setItem(WHY_KEY, '1'); } catch { /* private mode */ } renderWhy(); };
+$('why-zwo').onclick = () => $('wk-import-file').click();
+
 // ---------- Workout builder (#36) ----------
 // Blocks you can stack; each turns into steps. Percentages are of FTP, durations in minutes (intervals in seconds).
 const BLOCKS = {
@@ -2415,6 +2425,7 @@ function renderFitness() {
 }
 
 function renderHistory() {
+  renderWhy();
   renderPowerCurve();
   renderFitness();
   const row = (e) => {

@@ -40,6 +40,20 @@
         <span class="draft-actions"><button id="draft-save" class="primary">Save ride</button><button id="draft-drop" class="ghost">Discard</button></span>
       </div>
       <section class="lobby-routes">
+        <!-- for a new rider (no rides yet), until closed: what Gruppetto gives, for one coming from Zwift -->
+        <div id="why-box" class="why-box" hidden>
+          <button class="why-close" id="why-close" aria-label="Close">✕</button>
+          <h2>Coming from Zwift?</h2>
+          <ul class="why-list">
+            <li><b>Free.</b> No subscription, no account.</li>
+            <li><b>In the browser.</b> Nothing to install; opened once, it rides offline.</li>
+            <li><b>Your workouts.</b> Zwift's .zwo files open here, and your intervals.icu plan comes in by itself.</li>
+            <li><b>Your devices.</b> Smart trainers, heart rate, Zwift Ride, Play and Click controllers.</li>
+            <li><b>With friends.</b> Send a ride as a link: they race your ghost.</li>
+            <li><b>Your rides stay yours.</b> On this device, and to intervals.icu or any app as .FIT.</li>
+          </ul>
+          <div class="why-actions"><button id="why-zwo" class="pill-btn">Import .zwo</button><button id="why-icu" class="pill-btn" data-open="icu">Connect intervals.icu</button></div>
+        </div>
         <div class="route-hero">
           <div class="rh-text"><small>Route</small><b id="rh-name"></b><span id="rh-meta"></span><p id="rh-desc"></p></div>
           <canvas id="rh-profile"></canvas>
