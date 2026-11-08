@@ -1250,3 +1250,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   .drawer.as-page, .wk-menu.as-page { left: 0; top: 53px; } /* under the rail's row of icons */
   .drawer.as-page .drawer-panel, .wk-menu.as-page .wk-menu-panel { padding: 16px 16px 40px; }
 }
+/* workout cards (and the modes) read from the top: tag, name, a three-line description, the chart at the bottom, alike in every card */
+.wk-menu-list .option, .lobby-modes .mode-list .option { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; }
+.wk-menu-list .option .tag, .lobby-modes .mode-list .option .tag { align-self: flex-start; }
+.wk-menu-list .option small { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.wk-menu-list .option canvas, .lobby-modes .mode-list .option canvas { margin-top: auto; padding-top: 8px; box-sizing: content-box; }
