@@ -900,7 +900,7 @@ export class Scene3D {
     // a real road bends and doubles back: gentle side hills, and the land never reaches over another stretch
     if (route.custom) this.t3 = { ...this.t3, amp: 6, far: 0.2, wall: 0, rock: 0, snow: 0, dip: null, beach: false };
     this.reach = null;
-    this.archList = null; this.bannerCache = null; // arches are per route
+    this.archList = null; this.bannerCache = null; this.lineTexCache = null; // arches are per route
     // imported routes with OpenStreetMap data: woods, water and buildings where they really are
     this.land = route.land || null;
     this.buildings = route.buildings || [];
@@ -1568,9 +1568,38 @@ export class Scene3D {
       plane.rotation.y = side < 0 ? -Math.PI / 2 : Math.PI / 2;
       g.add(plane);
     }
+    // a line painted across the asphalt under the arch: chequered at a finish or a top, the arch's colour at a start
+    const line = new THREE.Mesh(new THREE.PlaneGeometry(A.checker ? 0.9 : 0.5, ROAD_HALF * 2 - 0.1), new THREE.MeshLambertMaterial({
+      map: this._lineTexture(A.color, A.checker), polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    }));
+    line.rotation.x = -Math.PI / 2;
+    line.position.set(0, 0.105, 0); // just over the asphalt (the road sits 5 cm above its centre line, the group 5 cm below)
+    line.receiveShadow = true;
+    g.add(line);
     g.position.set(f.x, this._roadY(d) - 0.05, f.z);
     g.rotation.y = -f.h;
     return g;
+  }
+
+  _lineTexture(color, checker) {
+    this.lineTexCache ||= new Map();
+    const key = `${color}|${checker}`;
+    if (this.lineTexCache.has(key)) return this.lineTexCache.get(key);
+    const c = document.createElement('canvas');
+    c.width = 64; c.height = 512;
+    const g = c.getContext('2d');
+    if (checker) { // two rows of squares across the road
+      const n = 16, sz = c.height / n;
+      for (let i = 0; i < n; i++) for (let j = 0; j < 2; j++) { g.fillStyle = (i + j) % 2 ? '#15171c' : '#f4f4f2'; g.fillRect(j * 32, i * sz, 32, sz); }
+    } else {
+      g.fillStyle = color; g.fillRect(0, 0, 64, 512);
+      g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(0, 0, 8, 512); g.fillRect(56, 0, 8, 512); // white edges
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    this.lineTexCache.set(key, tex);
+    return tex;
   }
 
   /** "GRUPPETTO" along the down tube, on both sides (shared by every bike). */
