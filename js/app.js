@@ -222,6 +222,7 @@ function updateDeviceUI() {
     val.textContent = on && reading[d.key] ? reading[d.key]() : '';
   }
   document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
+  renderRailDots();
   // nothing to ride on: the trainer's chip asks to be connected
   document.querySelector('.dev-chip[data-key="trainer"]')?.classList.toggle('need', !trainer.connected && !$('sim').checked);
 }
@@ -863,6 +864,7 @@ function showRoute() {
 function updateSummary() {
   const el = $('ride-summary');
   if (!el) return;
+  renderToday(); renderGreeting(); renderAvatar();
   const r = routes.find((x) => x.id === settings.routeId);
   const sel = document.querySelector('#mode-list .sel b');
   const raceLaps = settings.mode === 'race' && r && !r.oneWay ? ((settings.raceLaps || 1) === 1 ? tr('1 lap') : tr('{n} laps', { n: settings.raceLaps })) : null;
@@ -2167,10 +2169,7 @@ const badgeName = (b) => `${b.icon} ${tr(b.name)}`;
 /** The level chip in the lobby and the progress card in History: level, XP to the next, totals, every badge. */
 function renderProgress() {
   const L = levelOf(progress.xp), pct = Math.round(L.frac * 100);
-  const chip = $('lvl-chip');
-  chip.hidden = !progress.rides;
-  chip.innerHTML = `<b>${tr('Level {n}', { n: L.level })}</b><i style="--p:${pct}%"></i>`;
-  chip.title = tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 });
+  renderAvatar();
   const box = $('progress-box');
   box.hidden = !progress.rides;
   if (box.hidden) return;
@@ -2556,11 +2555,65 @@ function renderWeek() {
   const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness : null;
   const f = icu ? { ctl: icu.at(-1).ctl, form: icu.at(-2).ctl - icu.at(-2).atl } : fitnessSeries(history, { days: 90 }).at(-1);
   const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
-  box.innerHTML = `<span class="wb-head"><b>${tr('Level {n}', { n: L.level })}</b><small>${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</small></span>
-    <span class="lvl-bar"><i style="width:${Math.round(L.frac * 100)}%"></i></span>
-    <span class="wb-label">${tr('This week')}</span>
-    <span class="wb-stats"><span><b>${week.length}</b><small>${tr('rides')}</small></span><span><b>${fmtTime(sum((e) => e.summary?.duration))}</b><small>${tr('time')}</small></span><span><b>${Math.round(sum((e) => e.summary?.distance) / 1000)}</b><small>${U.km}</small></span><span><b>${sum((e) => e.tss)}</b><small>TSS</small></span></span>
-    ${f ? `<span class="wb-form">${tr('Form')} <b class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</b> <small>${esc(BAND[formBand(f.form)])} · ${tr('Fitness')} ${Math.round(f.ctl)}</small></span>` : ''}`;
+  const tile = (label, big, small, extra = '') => `<span class="wb-tile"><small class="wb-label">${label}</small><b>${big}</b><small>${small}</small>${extra}</span>`;
+  box.innerHTML = [
+    f ? tile(tr('Form'), `<span class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</span>`, `${esc(BAND[formBand(f.form)])} · ${tr('Fitness')} ${Math.round(f.ctl)}`) : '',
+    tile(tr('This week'), `${week.length} · ${fmtTime(sum((e) => e.summary?.duration))}`, `${Math.round(sum((e) => e.summary?.distance) / 1000)} ${U.km} · TSS ${sum((e) => e.tss)}`),
+    tile(tr('Level {n}', { n: L.level }), `${L.xp} XP`, tr('{left} to level {n}', { left: L.to - L.xp, n: L.level + 1 }), `<span class="lvl-bar"><i style="width:${Math.round(L.frac * 100)}%"></i></span>`),
+  ].join('');
+}
+
+/** The rail's profile button: your initial on your jersey's colour. */
+function renderAvatar() {
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  const a = $('avatar');
+  a.textContent = named ? settings.name.trim()[0].toUpperCase() : '🙂';
+  a.style.background = settings.jersey;
+  $('open-profile').title = named ? settings.name.trim() : tr('Profile');
+}
+
+/** «Good evening, Serhii» and the date over the lobby. */
+function renderGreeting() {
+  const h = new Date().getHours();
+  const hello = h < 5 ? tr('Good night') : h < 12 ? tr('Good morning') : h < 18 ? tr('Good afternoon') : tr('Good evening');
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  $('greet').textContent = named ? `${hello}, ${settings.name.trim()}` : hello;
+  $('greet-date').textContent = new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+/**
+ * The Today card: what you are about to ride. A workout shows its shape (and «Today · intervals.icu» when it is
+ * today's plan); a free ride or a race, the route.
+ */
+function renderToday() {
+  const r = routes.find((x) => x.id === settings.routeId) || routes[0];
+  const w = allWorkouts().find((x) => x.id === settings.mode) || null;
+  const today = localDate(new Date());
+  const kicker = $('today-kicker'), title = $('today-title'), sub = $('today-sub');
+  if (w) {
+    kicker.textContent = w.source === 'intervals' ? (w.date === today ? tr('Today · intervals.icu') : `intervals.icu · ${dayLabel(w.date)}`) : tr('Workout');
+    title.textContent = w.name;
+    sub.textContent = `${Math.round(totalDuration(w) / 60)} ${U.min} · ${r?.name || ''}`;
+  } else if (settings.mode === 'race') {
+    kicker.textContent = `🏁 ${tr('Race')}`;
+    title.textContent = r?.name || '';
+    sub.textContent = r && !r.oneWay ? tr('{km} km against the bunch, from a standing start.', { km: (r.length * (settings.raceLaps || 1) / 1000).toFixed(1) }) : tr('To the finish line against the bunch.');
+  } else {
+    kicker.textContent = tr('Free ride');
+    title.textContent = r?.name || '';
+    sub.textContent = r ? `${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}` : '';
+  }
+  const c = $('today-wk');
+  c.hidden = !w;
+  document.querySelector('.today').classList.toggle('has-wk', !!w);
+  if (w) requestAnimationFrame(() => drawWorkoutChart(c, w, -1));
+}
+
+/** The rail's dots: devices (green: ready to ride, amber: nothing to ride on) and intervals.icu (green: linked). */
+function renderRailDots() {
+  const dev = $('rail-dev-dot'), icu = $('rail-icu-dot');
+  if (dev) { dev.className = `rail-dot ${trainer.connected ? 'ok' : $('sim')?.checked ? '' : 'need'}`; }
+  if (icu) icu.className = `rail-dot ${icuClient ? 'ok' : ''}`;
 }
 
 /** Power (filled, smoothed over 10 s) and heart rate (line) over the whole ride. */
@@ -2814,6 +2867,7 @@ async function connectIntervals({ quiet = false } = {}) {
     if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
     saveSettings();
     if (!quiet) track('icu-connect');
+    renderRailDots();
     loadIcuHistory(client); // your power curve and form there, Zwift's rides included: not waited for
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};
     const notes = [];
@@ -2867,6 +2921,7 @@ function forgetIntervals() {
   settings.icuAthlete = '';
   icuStats = null;
   try { localStorage.removeItem(ICU_STATS_KEY); } catch { /* private mode */ }
+  renderRailDots();
   if (settings.mode.startsWith('icu:')) settings.mode = 'free';
   saveSettings();
   $('f-icu-key').value = '';
@@ -3002,6 +3057,8 @@ $('f-pacer-name').oninput = () => {
   if (ride?.pacer) ride.pacer.name = settings.pacerName.trim() || tr('Pacer');
 };
 $('btn-settings').onclick = () => openDrawer('profile');
+$('rail-workouts').onclick = () => openWorkoutMenu();
+for (const id of ['f-name', 'f-jersey']) $(id).addEventListener('input', () => { renderAvatar(); renderGreeting(); });
 $('btn-challenge').onclick = () => challengeFriend(shown.entry);
 $('btn-dev-lost').onclick = () => openDrawer('devices');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };

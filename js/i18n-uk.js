@@ -170,6 +170,8 @@ export const UK = {
   'Privacy': 'Приватність', 'Send anonymous usage stats: which features are used, never your name, data or place': 'Надсилати анонімну статистику: які функції використовують, без імені, даних чи місця',
   'Your plan': 'Твій план', 'Your workouts': 'Твої тренування', 'imported and built': 'імпортовані й створені', 'Gruppetto workouts': 'Тренування Gruppetto',
   'time': 'час',
+  'Good night': 'Доброї ночі', 'Good morning': 'Доброго ранку', 'Good afternoon': 'Добрий день', 'Good evening': 'Добрий вечір',
+  'Today · intervals.icu': 'Сьогодні · intervals.icu', '{left} to level {n}': 'ще {left} до рівня {n}', 'Routes': 'Маршрути', 'Install': 'Встановити', 'intervals': 'intervals', 'Ride': 'Їзда',
   'Lowest W′bal': 'Мін. W′bal', '~{s} s to empty': 'до відмови ~{s} с', 'W′ (anaerobic reserve), kJ': 'W′ (анаеробний запас), кДж',
   'W′bal: the anaerobic reserve above FTP': 'W′bal: анаеробний запас понад FTP',
   'Max power': 'Макс. потужність', 'Max heart rate': 'Макс. пульс', 'Avg cadence': 'Сер. каденс', 'Work': 'Робота', 'Estimated FTP': 'Оцінка FTP',

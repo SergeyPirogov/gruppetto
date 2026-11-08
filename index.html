@@ -29,20 +29,29 @@
 <body>
   <!-- ===== Lobby ===== -->
   <section id="lobby" class="screen">
+    <div class="lobby-shell">
+    <!-- the rail: where everything lives, one icon each (on phones, a row under the top bar) -->
+    <nav class="rail" aria-label="Gruppetto">
+      <a class="rail-logo home-link" href="./" data-home title="Gruppetto"><img class="mark" src="logo.svg" alt="Gruppetto"></a>
+      <button class="rail-btn on" data-home title="Ride"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-8h5l3 8M10 9l-1.5-3H6m9 3l-3 8"/></svg><span>Ride</span></button>
+      <button class="rail-btn" id="rail-workouts" title="Workouts"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 17h3V9h3v8h3V5h3v12h3v-6h3"/></svg><span>Workouts</span></button>
+      <button class="rail-btn" data-open="history" title="History"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 19V9m5 10V5m5 14v-7m5 7V8"/></svg><span>History</span></button>
+      <button class="rail-btn" data-open="devices" title="Devices"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 7h4"/></svg><i class="rail-dot" id="rail-dev-dot"></i><span>Devices</span></button>
+      <button class="rail-btn" data-open="icu" title="intervals.icu"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><i class="rail-dot" id="rail-icu-dot"></i><span>intervals</span></button>
+      <span class="rail-grow"></span>
+      <button class="rail-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, an icon in the dock, works offline"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span>Install</span></button>
+      <button class="rail-btn rail-me" data-open="profile" id="open-profile" title="Profile"><span class="avatar" id="avatar"></span><span>Profile</span></button>
+    </nav>
+    <div class="lobby-body">
     <header class="lobby-top">
       <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
+      <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
       <div class="dev-chips">
         <button class="dev-chip" data-key="trainer" data-open="devices"><i></i>Trainer</button>
         <button class="dev-chip" data-key="hr" data-open="devices"><i></i>Heart rate</button>
         <button class="dev-chip" data-key="cad" data-open="devices"><i></i>Cadence</button>
         <button class="dev-chip" data-key="ctl" data-open="devices"><i></i>Controllers</button>
         <button class="dev-chip sim-chip" data-key="sim" data-open="devices"><i></i>Simulator</button>
-      </div>
-      <div class="top-actions">
-        <button class="ghost install-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, an icon in the dock, works offline">Install app</button>
-        <button class="ghost lvl-chip" data-open="history" id="lvl-chip" hidden></button>
-        <button class="ghost" data-open="profile" id="open-profile">Profile</button>
-        <button class="ghost" data-open="icu">intervals.icu</button>
       </div>
     </header>
 
@@ -51,7 +60,6 @@
         <span id="draft-text"></span>
         <span class="draft-actions"><button id="draft-save" class="primary">Save ride</button><button id="draft-drop" class="ghost">Discard</button></span>
       </div>
-      <section class="lobby-routes">
         <!-- for a new rider (no rides yet), until closed: what Gruppetto gives, for one coming from Zwift -->
         <div id="why-box" class="why-box" hidden>
           <button class="why-close" id="why-close" aria-label="Close">✕</button>
@@ -66,17 +74,48 @@
           </ul>
           <div class="why-actions"><button id="why-zwo" class="pill-btn">Import .zwo</button><button id="why-icu" class="pill-btn" data-open="icu">Connect intervals.icu</button></div>
         </div>
-        <div class="route-hero">
-          <div class="rh-text"><small>Route</small><b id="rh-name"></b><span id="rh-meta"></span><p id="rh-desc"></p></div>
-          <canvas id="rh-profile"></canvas>
-          <ul id="rh-climbs" class="rh-climbs"></ul>
-        </div>
         <!-- a friend's challenge from a link: who, what to beat, and how -->
         <div id="challenge-box" class="challenge-box" hidden>
           <div class="ch-ghost">👻</div>
           <div class="ch-text"><b id="ch-title"></b><span id="ch-goal"></span><small id="ch-how"></small></div>
           <div class="ch-actions"><button id="ch-ride" class="primary">Ride now ▶</button><button id="ch-drop" class="ghost">Dismiss</button></div>
         </div>
+
+      <!-- today: what you are about to ride, and the button -->
+      <section class="today">
+        <div class="today-text">
+          <small id="today-kicker" class="today-kicker"></small>
+          <b id="today-title" class="today-title"></b>
+          <span id="today-sub" class="today-sub"></span>
+          <div class="ride-box">
+            <div id="ride-summary" class="ride-summary"></div>
+            <button id="btn-start" class="primary big">Ride ▶</button>
+          </div>
+        </div>
+        <div class="today-art">
+          <canvas id="today-wk" class="today-wk" hidden></canvas>
+          <div class="route-hero">
+            <div class="rh-text"><small>Route</small><b id="rh-name"></b><span id="rh-meta"></span><p id="rh-desc"></p></div>
+            <canvas id="rh-profile"></canvas>
+            <ul id="rh-climbs" class="rh-climbs"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- the rider at a glance: form, this week, level -->
+      <button id="week-box" class="week-box" data-open="history" hidden></button>
+
+      <section class="lobby-modes">
+        <div id="plan-box" class="plan-box" hidden>
+          <h2>Plan <small>intervals.icu</small></h2>
+          <div id="plan-list" class="options mode-list plan-list"></div>
+        </div>
+        <h2>Mode</h2>
+        <div id="mode-list" class="options mode-list"></div>
+      </section>
+
+      <section class="lobby-routes">
+        <h2>Routes</h2>
         <div id="ghost-box" class="ghost-box" hidden>
           <h2>Shadow ride <small>race a ghost of your earlier ride</small></h2>
           <div class="ghost-opts">
@@ -89,25 +128,13 @@
         <div id="route-list" class="route-list"></div>
         <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" hidden>
       </section>
-      <aside class="lobby-side">
-        <div id="plan-box" class="plan-box" hidden>
-          <h2>Plan <small>intervals.icu</small></h2>
-          <div id="plan-list" class="options mode-list plan-list"></div>
-        </div>
-        <h2>Mode</h2>
-        <div id="mode-list" class="options mode-list"></div>
-        <div class="ride-box">
-          <div id="ride-summary" class="ride-summary"></div>
-          <button id="btn-start" class="primary big">Ride ▶</button>
-        </div>
-        <!-- the rider at a glance: level, this week, form; then the latest rides -->
-        <button id="week-box" class="week-box" data-open="history" hidden></button>
         <div id="history-box" class="history-box" hidden>
           <div class="hist-head"><h2>Recent rides</h2><span id="history-week"></span><button class="ghost" data-open="history">All rides</button></div>
           <div id="history-recent" class="hist-list"></div>
         </div>
-      </aside>
     </main>
+    </div>
+    </div>
 
     <div id="wk-menu" class="wk-menu" hidden>
       <div class="drawer-bg" data-wk-close></div>
