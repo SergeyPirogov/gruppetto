@@ -342,6 +342,7 @@ function initLobby() {
   bind('f-time', 'timeOfDay', false);
   bind('f-weather', 'weather', false);
   bind('f-wind', 'wind', false);
+  $('f-wind').addEventListener('change', () => { if (ride?.wind) { ride.wind.base = windBase(); updateWindHud(); } }); // takes effect mid-ride too
   bind('f-bots', 'bots');
   // the pixel 3D style squares off the interface too (square corners, hard shadows)
   const pixelUi = () => document.body.classList.toggle('pixel-ui', settings.style === 'pixel');
@@ -959,6 +960,10 @@ function routeHeading(route, d) {
   return Math.atan2(ay - by, ax - bx);
 }
 /** This moment's wind for you: gusts round the set strength, split into head- and crosswind as the road turns. */
+/** The wind's strength for this ride, m/s: none in a workout. */
+function windBase() {
+  return ride?.workout ? 0 : WIND_SPEED[settings.wind] ?? 0;
+}
 function updateWind() {
   const W = ride.wind;
   if (!W) return;
@@ -973,7 +978,7 @@ function updateWind() {
 function updateWindHud() {
   const W = ride.wind, cell = $('wind-cell');
   cell.hidden = !W?.base;
-  if (cell.hidden) return;
+  if (cell.hidden) { scene?.setWind?.(0); return; }
   $('wind-arrow').style.transform = `rotate(${W.rel}rad)`;
   $('m-wind').textContent = Math.round(W.speed * 3.6);
   const kind = W.head > W.speed * 0.5 ? 'head' : W.head < -W.speed * 0.5 ? 'tail' : 'cross';
@@ -1057,7 +1062,9 @@ async function startRide() {
   };
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
   // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
-  ride.wind = { base: WIND_SPEED[settings.wind] ?? 0, toward: Math.random() * Math.PI * 2, speed: 0, head: 0, cross: 0, rel: 0 };
+  // not in a workout: there the power is set, so the wind would only drag the speed down (and in ERG
+  // it changes nothing you feel)
+  ride.wind = { base: windBase(), toward: Math.random() * Math.PI * 2, speed: 0, head: 0, cross: 0, rel: 0 };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
   $('wk-int').textContent = `${settings.intensity}%`;
