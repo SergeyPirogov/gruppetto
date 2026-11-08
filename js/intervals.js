@@ -58,6 +58,30 @@ export class IntervalsClient {
   }
 
   /**
+   * Your cycling power curve from all your rides there (Zwift's too, when they reach intervals.icu): the best
+   * watts for each of durs (seconds), all time and over the last 42 days, { all: {secs: w}, recent: {secs: w} }.
+   */
+  async powerCurves(durs) {
+    const res = await this.request('/power-curves', { params: { type: 'Ride', curves: 'all,42d' } });
+    const list = Array.isArray(res?.list) ? res.list : Array.isArray(res) ? res : [];
+    const pick = (c) => {
+      const out = {}, secs = c?.secs || [], w = c?.values || c?.watts || [];
+      for (const d of durs) { const i = secs.indexOf(d); if (i >= 0 && w[i] > 0) out[d] = Math.round(w[i]); }
+      return out;
+    };
+    return { all: pick(list[0]), recent: pick(list[1]) };
+  }
+
+  /** Fitness and fatigue by day (CTL, ATL) between two local dates (YYYY-MM-DD), as intervals.icu counts them. */
+  async fitness(oldest, newest) {
+    const res = await this.request('/wellness', { params: { oldest, newest } });
+    return (Array.isArray(res) ? res : [])
+      .filter((w) => /^\d{4}-\d{2}-\d{2}$/.test(w?.id || '') && Number.isFinite(w.ctl) && Number.isFinite(w.atl))
+      .map((w) => ({ date: w.id, ctl: w.ctl, atl: w.atl }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /**
    * Planned cycling workouts between two local dates (YYYY-MM-DD), converted to Gruppetto workouts.
    * The returned array carries `stats` explaining what was found and skipped.
    */

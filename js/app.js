@@ -2406,14 +2406,14 @@ function renderFtpTip(el, e = null) {
     rows.push({ title: tr('Ramp test: your FTP is {w} W', { w: rampFtp(b1) }), why: `${tr('75 % of your best minute in a ramp test ({w} W)', { w: Math.round(b1) })} · ${tr('now {w} W', { w: settings.ftp })}`,
       button: tr('Set FTP to {w} W', { w: rampFtp(b1) }), set: () => { settings.ftp = rampFtp(b1); $('f-ftp').value = settings.ftp; return tr('FTP set to {w} W', { w: settings.ftp }); } });
   } else if (!e?.ramp) {
-    const s = ftpSuggestion(history, settings.ftp);
+    const s = ftpSuggestion(curveEntries(), settings.ftp);
     if (s) {
       const from = s.ramp ? tr('75 % of your best minute in a ramp test ({w} W)', { w: s.w }) : tr('95 % of your best 20 minutes ({w} W, {date})', { w: s.w, date: new Date(s.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) });
       rows.push({ title: tr('Your rides suggest FTP {w} W', { w: s.ftp }), why: `${from} · ${tr('now {w} W', { w: settings.ftp })}`,
         button: tr('Set FTP to {w} W', { w: s.ftp }), set: () => { settings.ftp = s.ftp; $('f-ftp').value = s.ftp; return tr('FTP set to {w} W', { w: s.ftp }); } });
     }
   }
-  const wp = wPrimeSuggestion(history, settings.wPrimeKj || DEFAULT_W_PRIME / 1000);
+  const wp = wPrimeSuggestion(curveEntries(), settings.wPrimeKj || DEFAULT_W_PRIME / 1000);
   if (wp) {
     rows.push({ title: tr('Your rides suggest W′ {kj} kJ', { kj: wp.kj }), why: `${tr('from your best 5 and 20 minutes ({a} W, {b} W)', { a: wp.p5, b: wp.p20 })} · ${tr('now {kj} kJ', { kj: settings.wPrimeKj || DEFAULT_W_PRIME / 1000 })}`,
       button: tr('Set W′ to {kj} kJ', { kj: wp.kj }), set: () => { settings.wPrimeKj = wp.kj; $('f-wprime').value = wp.kj; return tr('W′ set to {kj} kJ', { kj: wp.kj }); } });
@@ -2428,7 +2428,7 @@ function renderFtpTip(el, e = null) {
 
 /** Power curve in History: best power for each duration, all time and the last 6 weeks. */
 function renderPowerCurve() {
-  const all = powerCurve(history), recent = powerCurve(history, { days: 42 });
+  const all = powerCurve(curveEntries()), recent = powerCurve(curveEntries(), { days: 42 });
   const box = $('power-curve-box');
   box.hidden = !Object.keys(all).length;
   if (box.hidden) return;
@@ -2461,7 +2461,10 @@ function renderPowerCurve() {
 
 /** Fitness, fatigue and form over the last 90 days (#54). */
 function renderFitness() {
-  const s = fitnessSeries(history, { days: 90 });
+  // intervals.icu's own when connected (it has every ride, Zwift's and these too), otherwise from the rides here
+  const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness : null;
+  const s = icu ? icu.map((p, i) => ({ date: p.date, ctl: p.ctl, atl: p.atl, form: i ? icu[i - 1].ctl - icu[i - 1].atl : p.ctl - p.atl })) : fitnessSeries(history, { days: 90 });
+  $('fit-src').hidden = !icu;
   const box = $('fitness-box');
   box.hidden = s.length < 2;
   if (box.hidden) return;
@@ -2767,6 +2770,7 @@ async function connectIntervals({ quiet = false } = {}) {
     if (athlete.wPrime) { settings.wPrimeKj = Math.round(athlete.wPrime / 100) / 10; $('f-wprime').value = settings.wPrimeKj; }
     if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
     saveSettings();
+    loadIcuHistory(client); // your power curve and form there, Zwift's rides included: not waited for
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};
     const notes = [];
     if (st.otherSport) notes.push(tr('other sports skipped: {n}', { n: st.otherSport }));
@@ -2784,11 +2788,41 @@ async function connectIntervals({ quiet = false } = {}) {
   }
 }
 
+// ---------- Your history in intervals.icu (Zwift's rides there too) ----------
+// The power curve and the form come from intervals.icu when it is connected: someone coming from Zwift has
+// their records and fitness from the first day, not from zero. Kept on this device for when it is offline.
+const ICU_STATS_KEY = 'gruppetto-icu-stats';
+let icuStats = (() => { try { return JSON.parse(localStorage.getItem(ICU_STATS_KEY) || 'null'); } catch { return null; } })();
+async function loadIcuHistory(client) {
+  const today = new Date();
+  const [curves, fitness] = await Promise.all([
+    client.powerCurves(DURS).catch(() => null),
+    client.fitness(localDate(new Date(today.getTime() - 90 * 864e5)), localDate(today)).catch(() => null),
+  ]);
+  if (!curves && !fitness) return;
+  icuStats = { at: Date.now(), curves: curves || icuStats?.curves || null, fitness: fitness?.length ? fitness : icuStats?.fitness || null };
+  try { localStorage.setItem(ICU_STATS_KEY, JSON.stringify(icuStats)); } catch { /* private mode */ }
+  renderPowerCurve(); renderFitness();
+}
+/**
+ * Your rides with intervals.icu's curve as two more «rides»: its all-time bests dated long ago (so they count
+ * for all time only) and its last 42 days dated today; for the power curve and the FTP and W′ suggestions.
+ */
+function curveEntries() {
+  const c = icuStats?.curves;
+  if (!c || !settings.icuKey) return history;
+  return [...history,
+    ...(Object.keys(c.all || {}).length ? [{ id: 'icu-all', date: '2000-01-01T00:00:00Z', bests: c.all, icu: true }] : []),
+    ...(Object.keys(c.recent || {}).length ? [{ id: 'icu-42d', date: new Date(icuStats.at).toISOString(), bests: c.recent, icu: true }] : [])];
+}
+
 function forgetIntervals() {
   icuClient = null;
   icuWorkouts = [];
   settings.icuKey = '';
   settings.icuAthlete = '';
+  icuStats = null;
+  try { localStorage.removeItem(ICU_STATS_KEY); } catch { /* private mode */ }
   if (settings.mode.startsWith('icu:')) settings.mode = 'free';
   saveSettings();
   $('f-icu-key').value = '';

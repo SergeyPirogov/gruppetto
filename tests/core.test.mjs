@@ -710,3 +710,20 @@ test('Levels and badges: XP for every ride once, levels a little longer each, ba
   const h = progressFrom([r('c', '2026-11-03T10:00:00Z', 40, 100, 70, { ramp: true }), r('b', '2026-11-02T10:00:00Z', 40, 100, 70), r('a', '2026-11-01T10:00:00Z', 30, 300, 60)]);
   assert.equal(h.km, 110); assert.equal(h.rides, 3); assert.ok(h.badges.streak3 && h.badges.ramp);
 });
+
+test('intervals.icu history: the power curve at our durations, all time and 42 days; form by day', async () => {
+  const { IntervalsClient } = await import('../js/intervals.js');
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    const body = String(url).includes('/power-curves')
+      ? { list: [{ id: 'all', secs: [1, 5, 60, 1200], values: [900, 850, 420, 265] }, { id: '42d', secs: [5, 60, 1200], values: [800, 400, 250] }] }
+      : [{ id: '2026-11-07', ctl: 52.4, atl: 60.1 }, { id: '2026-11-06', ctl: 52, atl: 58 }, { id: 'bad', ctl: 1, atl: 1 }];
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  const c = new IntervalsClient({ apiKey: 'k' });
+  assert.deepEqual(await c.powerCurves([5, 60, 300, 1200]), { all: { 5: 850, 60: 420, 1200: 265 }, recent: { 5: 800, 60: 400, 1200: 250 } });
+  assert.match(calls[0], /\/power-curves\?type=Ride&curves=all%2C42d/);
+  assert.deepEqual(await c.fitness('2026-08-09', '2026-11-07'), [{ date: '2026-11-06', ctl: 52, atl: 58 }, { date: '2026-11-07', ctl: 52.4, atl: 60.1 }]);
+  assert.match(calls[1], /\/wellness\?oldest=2026-08-09&newest=2026-11-07/);
+});

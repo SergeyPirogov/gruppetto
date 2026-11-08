@@ -1022,3 +1022,4 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .ch-text small { color: var(--muted); }
 .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 640px) { .challenge-box { grid-template-columns: auto 1fr; } .ch-actions { grid-column: 1 / -1; } }
+.sum-chart-head h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; color: var(--muted); }
