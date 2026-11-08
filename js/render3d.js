@@ -613,8 +613,8 @@ export class Scene3D {
    * pinch to zoom, double-click or double-tap to go back to the chase view.
    */
   _orbitControls(canvas) {
-    // default view: straight behind, a touch farther back than the plain chase position
-    const HOME = { yaw: 0, pitch: 0, zoom: 1.26 };
+    // default view: straight behind, at the chase position
+    const HOME = { yaw: 0, pitch: 0, zoom: 1.0 };
     this.orbit = { ...HOME };
     const O = this.orbit;
     const pts = new Map();
@@ -1668,7 +1668,8 @@ export class Scene3D {
       const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
       const px = me.f.x + me.f.rx * me.lane, pz = me.f.z + me.f.rz * me.lane;
       const ahead = this.frame(dist + 9);
-      const target = new THREE.Vector3(px - Math.cos(ch) * 4.3 - me.f.rx * me.lane * 0.2, this._roadY(dist - 4.3) + 2.25, pz - Math.sin(ch) * 4.3 - me.f.rz * me.lane * 0.2);
+      const BACK = 3.3, UP = 1.85; // close behind, a little above the head
+      const target = new THREE.Vector3(px - Math.cos(ch) * BACK - me.f.rx * me.lane * 0.2, this._roadY(dist - BACK) + UP, pz - Math.sin(ch) * BACK - me.f.rz * me.lane * 0.2);
       const look = new THREE.Vector3(px + Math.cos(ch) * 9 - me.f.rx * me.lane * 0.5, ahead.y + 0.75, pz + Math.sin(ch) * 9 - me.f.rz * me.lane * 0.5);
       const O = this.orbit;
       if (O.yaw || O.pitch || O.zoom !== 1) {
