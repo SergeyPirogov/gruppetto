@@ -11,6 +11,7 @@ import { loadBikeModel, ModelBike } from './bike-model.js';
 import { t } from './i18n.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
+import { loadFanModels } from './fans.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
 // phones and small touch screens: a lighter world (?quality=low / high to force either)
@@ -58,6 +59,8 @@ export function preloadModels() {
     bike: loadBikeModel(),
     rider: SHOW_RIDER ? loadDummyRider().then((d) => d || loadRiderModel()) : Promise.resolve(null),
     nature: loadNature().catch((e) => { console.warn('Nature models unavailable, using built-in shapes', e); return null; }),
+    // fans: people posed from the rider model (phones keep the simple figures: a crowd of them is heavy)
+    fans: LOW ? Promise.resolve(null) : loadFanModels().catch((e) => { console.warn('Fan models unavailable, using simple figures', e); return null; }),
   };
 }
 
@@ -652,8 +655,9 @@ export class Scene3D {
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the custom character on the next frame
     });
+    const fanLoad = models.fans.then((m) => { if (m) this.fanModels = m; });
     const ready = () => { this.modelsReady = true; };
-    Promise.allSettled([bikeLoad, riderLoad, natureLoad]).then(ready);
+    Promise.allSettled([bikeLoad, riderLoad, natureLoad, fanLoad]).then(ready);
     setTimeout(ready, 30000); // a stalled download must not hide the riders for good
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -1626,6 +1630,38 @@ export class Scene3D {
     return this.crowdModels;
   }
 
+  /** The material for the posed people: each instance's shirt, skin and hair colours, arms waving round the shoulders. */
+  _fanMaterial() {
+    if (this.fanMat) return this.fanMat;
+    this._crowdModels(); // the shared time and "where you are" uniforms
+    const S = this.fanModels.shoulder;
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    patchShader(mat, 'fan', (sh) => {
+      sh.uniforms.uCrowdTime = this.crowdTime;
+      sh.uniforms.uCrowdNear = this.crowdNear;
+      sh.vertexShader = `uniform float uCrowdTime;\nuniform vec3 uCrowdNear;\nattribute float aPart;\nattribute float aArm;\nattribute vec3 aSkin;\nattribute vec3 aHair;\n${sh.vertexShader
+        .replace('#include <color_vertex>', `#include <color_vertex>
+        #ifdef USE_INSTANCING_COLOR
+          vColor.xyz = aPart < 0.5 ? color : (aPart < 1.5 ? instanceColor : (aPart < 2.5 ? aSkin : aHair));
+        #endif`)
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec3 cRoot = instanceMatrix[3].xyz;
+        float cPh = fract(sin(dot(cRoot.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831;
+        float cEx = 1.0 - smoothstep(12.0, 45.0, distance(cRoot.xz, uCrowdNear.xz));
+        float cSpd = mix(2.0, 6.5, cEx);
+        if (abs(aArm) > 0.001) {
+          float sd = sign(aArm);
+          vec2 sh0 = vec2(${S.y.toFixed(3)}, ${S.z.toFixed(3)} * sd);
+          float ang = aArm * mix(0.10, 0.42, cEx) * sin(uCrowdTime * cSpd + cPh + sd);
+          vec2 p = transformed.yz - sh0;
+          transformed.yz = sh0 + vec2(p.x * cos(ang) - p.y * sin(ang), p.x * sin(ang) + p.y * cos(ang));
+        }
+        transformed.y += pow(max(0.0, sin(uCrowdTime * cSpd * 0.9 + cPh)), 3.0) * mix(0.0, 0.16, cEx);`)}`;
+    });
+    this.fanMat = mat;
+    return mat;
+  }
+
   /** Fans along both sides of the road over the last ~180 m of each climb, and cheers painted on the road. */
   _crowd(group, a0, rows, frames, heightAt) {
     const R = this.route, L = R.length, tops = [];
@@ -1648,7 +1684,7 @@ export class Scene3D {
       if (p <= 0) continue;
       for (const side of [-1, 1]) {
         const seed = (a0 + r) * 7.13 + side * 3.1;
-        const count = Math.floor(p * (LOW ? 2 : 4) + hash(seed));
+        const count = Math.floor(p * (LOW ? 2 : this.fanModels ? 3 : 4) + hash(seed));
         for (let i = 0; i < count; i++) {
           const along = hash(seed + i * 1.7) * SEG;
           const row = hash(seed + i * 2.9) < 0.6 ? 0 : 1; // in front of the fence, or behind it
@@ -1658,14 +1694,37 @@ export class Scene3D {
           const face = Math.atan2(side * f.rz, -side * f.rx) + (hash(seed + i * 6.3) - 0.5) * 0.7; // toward the road
           const s = 0.92 + hash(seed + i * 5.3) * 0.16;
           const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), face), new THREE.Vector3(s, s, s));
-          fans.push([m, SHIRTS[Math.floor(hash(seed + i * 7.7) * SHIRTS.length)]]);
+          fans.push([m, SHIRTS[Math.floor(hash(seed + i * 7.7) * SHIRTS.length)], seed + i * 11.3]);
           const fl = hash(seed + i * 8.9);
           if (fl < 0.16) flagsUA.push(m); else if (fl < 0.24) flagsTeam.push([m, SHIRTS[Math.floor(hash(seed + i * 9.1) * SHIRTS.length)]]);
         }
       }
     }
     const M = this._crowdModels();
-    if (fans.length) {
+    if (fans.length && this.fanModels) {
+      // people: a pose and outfit each, their own shirt, skin and hair
+      const V = this.fanModels.variants, byV = V.map(() => []);
+      const HAIR = ['#2a1d15', '#4a3426', '#7a5232', '#b88a52', '#d8c08c', '#1a1a1a', '#8a8a8a'];
+      fans.forEach((f, i) => byV[Math.floor(hash(i * 3.3 + a0 * 0.71) * V.length)].push(f));
+      byV.forEach((list, vi) => {
+        if (!list.length) return;
+        const src = V[vi], geo = new THREE.BufferGeometry();
+        for (const [k, attr] of Object.entries(src.attributes)) geo.setAttribute(k, attr);
+        geo.boundingSphere = src.boundingSphere;
+        geo.userData.borrowed = true;
+        const skin = new Float32Array(list.length * 3), hair = new Float32Array(list.length * 3);
+        list.forEach(([, , seed], i) => {
+          const sc = col(SKIN[Math.floor(hash(seed * 1.9) * SKIN.length)]), hc = col(HAIR[Math.floor(hash(seed * 2.7) * HAIR.length)]);
+          skin.set([sc.r, sc.g, sc.b], i * 3); hair.set([hc.r, hc.g, hc.b], i * 3);
+        });
+        geo.setAttribute('aSkin', new THREE.InstancedBufferAttribute(skin, 3));
+        geo.setAttribute('aHair', new THREE.InstancedBufferAttribute(hair, 3));
+        const im = new THREE.InstancedMesh(geo, this._fanMaterial(), list.length);
+        list.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
+        im.castShadow = true; im.frustumCulled = false;
+        group.add(im);
+      });
+    } else if (fans.length) {
       const im = new THREE.InstancedMesh(M.body, M.mat, fans.length);
       fans.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
       im.castShadow = true; im.frustumCulled = false;
@@ -1894,7 +1953,10 @@ export class Scene3D {
   _dispose(group) {
     this.scene.remove(group);
     const shared = new Set(Object.values(this.models || {}));
+    // the crowd's meshes are shared by every chunk (fans: each chunk's geometry borrows the baked attributes)
+    if (this.crowdModels) for (const k of ['body', 'flagUA', 'flagTeam']) shared.add(this.crowdModels[k]);
     group.traverse((o) => {
+      if (o.geometry?.userData.borrowed) return; // its tiny per-fan colours go with the garbage collector
       if (o.geometry && !shared.has(o.geometry) && !this.natureKeep?.has(o.geometry)) o.geometry.dispose();
       if (o.isInstancedMesh) o.dispose();
     });
