@@ -59,15 +59,15 @@ export function spokenDuration(sec) {
 
 
 // ---------- The fans at the top of a climb (#45) ----------
-// Recorded, not made up (BigSoundBank, CC0): shouts of "Yeah!" now and then from either side (the
-// applause bed went: it sounded like creaking). `level` 0…1: how close the crowd is.
-let crowdBufs = null, crowdLoading = false, crowdBus = null, bedUntil = 0, lastShout = 0, busLevel = -1, busAt = 0;
+// Recorded, not made up (BigSoundBank, CC0): the murmur of an outdoor crowd, shouts of "Yeah!" from
+// either side, and a horn, an air horn or a rattle now and then (no applause: it sounded like creaking). `level` 0…1: how close the crowd is.
+let crowdBufs = null, crowdLoading = false, crowdBus = null, bedUntil = 0, lastShout = 0, lastNoise = 0, busLevel = -1, busAt = 0;
 async function loadCrowd() {
   crowdLoading = true;
   const get = async (f) => ctx.decodeAudioData(await (await fetch(`assets/sounds/${f}`)).arrayBuffer());
   try {
-    const [y1, y2] = await Promise.all(['crowd-yeah-1.mp3', 'crowd-yeah-2.mp3'].map(get));
-    crowdBufs = { shouts: [y1, y2] };
+    const [murmur, y1, y2, horn, air, rattle] = await Promise.all(['crowd-murmur.m4a', 'crowd-yeah-1.mp3', 'crowd-yeah-2.mp3', 'crowd-horn.mp3', 'crowd-airhorn.mp3', 'crowd-rattle.mp3'].map(get));
+    crowdBufs = { murmur, shouts: [y1, y2], noise: [horn, air, rattle] };
   } catch { crowdBufs = null; }
 }
 export function crowd(level) {
@@ -89,6 +89,29 @@ export function crowd(level) {
     busLevel = want; busAt = t;
   }
   if (level <= 0.01) return;
+  // the murmur of the crowd: 25 s pieces from anywhere in the 80 s recording, each fading into the next
+  if (t > bedUntil - 3) {
+    const B = crowdBufs.murmur, len = 25, start = Math.max(t, bedUntil - 3), src = ctx.createBufferSource(), g = ctx.createGain();
+    src.buffer = B;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.linearRampToValueAtTime(0.75, start + 3);
+    g.gain.setValueAtTime(0.75, start + len - 3);
+    g.gain.linearRampToValueAtTime(0.0001, start + len);
+    src.connect(g).connect(crowdBus);
+    src.start(start, Math.random() * Math.max(0, B.duration - len - 1), len);
+    bedUntil = start + len;
+  }
+  // a horn, an air horn or a rattle now and then
+  if (t - lastNoise > 2.5 && Math.random() < level * 0.006) {
+    lastNoise = t;
+    const src = ctx.createBufferSource(), g = ctx.createGain(), pan = ctx.createStereoPanner();
+    src.buffer = crowdBufs.noise[Math.floor(Math.random() * crowdBufs.noise.length)];
+    src.playbackRate.value = 0.95 + Math.random() * 0.1;
+    g.gain.value = 0.25 + Math.random() * 0.2;
+    pan.pan.value = Math.random() * 1.6 - 0.8;
+    src.connect(g).connect(pan).connect(crowdBus);
+    src.start(t);
+  }
   // a shout now and then, more often close to the fans, left or right
   if (t - lastShout > 1.0 && Math.random() < level * 0.03) {
     lastShout = t;
