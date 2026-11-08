@@ -1113,7 +1113,7 @@ async function startRide() {
 /** Power (W) for physics at time t: the trainer's reading averaged over the last second. */
 function powerAt(t) {
   if (ride.simulated) {
-    if (ride.workout && ride.target !== null) return ride.target;
+    if (inErgStep()) return ride.target; // ERG holds the target; with ERG off the slider is your legs
     return Number($('sim-power').value);
   }
   return powerSamples.mean(t - 1000, t);
@@ -2745,6 +2745,7 @@ function toggleErg() {
   ride.lastSentTarget = null; ride.lastSentGrade = null; ride.lastSentWheel = null;
   ride.ergFactor = 1; ride.lowFor = 0;
   $('wk-erg-btn').classList.toggle('on', !ride.ergOff);
+  if (ride.simulated && ride.ergOff && ride.target) { const sp = $('sim-power'); sp.value = ride.target; sp.oninput?.(); } // the slider takes over from the target
   updateGear();
   toast(ride.ergOff ? tr('ERG off: the trainer simulates the road, ride to the target by feel') : tr('ERG on: the trainer holds the target power'));
 }
