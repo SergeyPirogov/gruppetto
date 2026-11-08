@@ -1232,3 +1232,6 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .drawer-tabs button:not(.drawer-close) { padding: 7px 11px; font-size: .9rem; }
 .drawer-tabs .drawer-close { margin-left: auto; flex: none; }
 @media (max-width: 520px) { .drawer-tabs .drawer-close { position: sticky; right: 0; box-shadow: -10px 0 12px var(--bg, #0f1420); } } /* the tabs scroll, the close button stays */
+/* in the lobby the rail is the way between sections: the drawer shows only its close button; mid-ride (no rail) its tabs stay */
+#drawer:not(.in-ride) .drawer-tabs button:not(.drawer-close) { display: none; }
+#drawer:not(.in-ride) .drawer-tabs { margin-bottom: 6px; }

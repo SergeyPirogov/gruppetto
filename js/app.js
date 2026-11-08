@@ -865,7 +865,14 @@ function openDrawer(panel) {
   for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
   if (panel === 'progress') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
   for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
+  markRail(panel);
 }
+/** The rail lights the section open in the drawer, and Ride again once it closes. */
+function markRail(panel) {
+  for (const b of document.querySelectorAll('.rail .rail-btn')) b.classList.toggle('on', panel ? b.dataset.open === panel : b.hasAttribute('data-home'));
+}
+// the drawer closes by its ✕, its backdrop, Escape, or a click elsewhere: the rail follows
+new MutationObserver(() => { if ($('drawer').hidden) markRail(null); }).observe($('drawer'), { attributes: true, attributeFilter: ['hidden'] });
 
 function initDrawer() {
   const drawer = $('drawer');
