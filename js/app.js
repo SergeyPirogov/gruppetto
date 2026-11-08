@@ -31,10 +31,15 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
+// the workout pacer used to start switched on: once, switch it off (P or the Pacer button brings him back)
+if (!settings.pacerOffByDefault) {
+  settings.pacer = false; settings.pacerOffByDefault = true;
+  try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ }
+}
 // ?debug: reach the current ride from devtools (jump along the route when testing laps and climbs)
 if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__ride', { get: () => ride });
@@ -1086,7 +1091,7 @@ async function startRide() {
   $('countdown').hidden = !racing;
   $('minimap-box').classList.toggle('big', !!settings.bigMap); $('minimap-size').textContent = settings.bigMap ? '⤡' : '⤢'; // as you left it
   ride.stepStats = [];
-  $('wk-pacer-btn').classList.toggle('on', settings.pacer !== false);
+  $('wk-pacer-btn').classList.toggle('on', settings.pacer === true);
   $('wk-erg-btn').classList.add('on'); // every workout starts in ERG
   $('paused').hidden = true;
   $('btn-pause').textContent = tr('Pause');
@@ -2706,7 +2711,7 @@ $('btn-finish').onclick = () => {
 $('btn-download').onclick = () => download('fit');
 $('wk-int-down').onclick = () => changeIntensity(-5);
 $('wk-int-up').onclick = () => changeIntensity(+5);
-$('f-pacer').checked = settings.pacer !== false;
+$('f-pacer').checked = settings.pacer === true;
 $('f-pacer-name').value = settings.pacerName || '';
 $('f-pacer-name').oninput = () => {
   settings.pacerName = $('f-pacer-name').value; saveSettings();
@@ -2737,11 +2742,11 @@ function toggleErg() {
 function togglePacer() {
   // in a workout the workout pacer, on a free ride the free-ride pacer
   const key = ride && !ride.workout ? 'freePacer' : 'pacer';
-  settings[key] = !(key === 'pacer' ? settings.pacer !== false : settings.freePacer);
+  settings[key] = !(key === 'pacer' ? settings.pacer === true : settings.freePacer);
   saveSettings();
-  $('f-pacer').checked = settings.pacer !== false;
+  $('f-pacer').checked = settings.pacer === true;
   $('f-free-pacer').checked = !!settings.freePacer;
-  $('wk-pacer-btn').classList.toggle('on', settings.pacer !== false);
+  $('wk-pacer-btn').classList.toggle('on', settings.pacer === true);
   const on = settings[key];
   if (ride?.pacer && on) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; ride.pacer.waitAt = null; } // rejoin beside you
   const who = settings.pacerName?.trim() || tr('Pacer');
@@ -2752,7 +2757,7 @@ function togglePacer() {
 /** The pacer is out on the road: the workout pacer in a workout, the free-ride pacer otherwise. */
 function pacerOn() {
   if (!ride?.pacer) return false;
-  return ride.pacer.free ? !!settings.freePacer : settings.pacer !== false;
+  return ride.pacer.free ? !!settings.freePacer : settings.pacer === true;
 }
 
 /**
