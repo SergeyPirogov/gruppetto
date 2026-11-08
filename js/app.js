@@ -1779,6 +1779,7 @@ function updateProgress() {
   if (ride.workout) {
     const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
     $('wk-name').textContent = ride.workout.name;
+    $('wk-name').title = ride.workout.name;
     $('wk-pct').textContent = ride.workoutDone ? tr('done') : `${Math.round(done * 100)}%`;
   }
 }
