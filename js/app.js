@@ -1758,8 +1758,8 @@ $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value
 const BUTTON_LABELS = {
   shiftUpL: 'left lever (gear −)', shiftDownL: 'left lever (gear −)', shiftUpR: 'right lever (gear +)', shiftDownR: 'right lever (gear +)',
   paddleL: 'left paddle', paddleR: 'right paddle',
-  up: '▲', down: '▼', left: '◀', right: '▶', a: 'A (pause)', b: 'B (ERG on/off)', y: 'Y (skip interval)', z: 'Z',
-  powerUpL: 'Power-up left', powerUpR: 'Power-up right (ERG on/off)', onOffL: 'on/off left', onOffR: 'on/off right',
+  up: '▲', down: '▼', left: '◀', right: '▶', a: 'A (pause)', b: 'B (ERG on/off)', y: 'Y (skip interval)', z: 'Z (camera)',
+  powerUpL: 'Power-up left (pacer)', powerUpR: 'Power-up right (HUD)', onOffL: 'on/off left', onOffR: 'on/off right',
 };
 
 function onControllerButton(name) {
@@ -1780,6 +1780,17 @@ function onObcButtons(changes) {
   if (intents.has('harder') || intents.has('easier') || intents.has('gear')) obc.haptic(1);
 }
 
+/** Chase → isometric → side view (C, or Z on the Zwift Ride). */
+function nextCamera() {
+  if (!scene?.setCamera) return;
+  const order = ['chase', 'iso', 'side'];
+  settings.camera = order[(order.indexOf(settings.camera) + 1) % order.length];
+  saveSettings();
+  scene.setCamera(settings.camera);
+  $('f-camera').value = settings.camera;
+  toast(tr({ chase: 'Camera: chase', iso: 'Camera: isometric', side: 'Camera: side view' }[settings.camera]));
+}
+
 function runIntent(intent, value) {
   if (!ride) return;
   switch (intent) {
@@ -1794,6 +1805,8 @@ function runIntent(intent, value) {
     case 'resume': if (ride.paused) togglePause(); break;
     case 'skip': skipInterval(); break;
     case 'toggleErg': toggleErg(); break;
+    case 'camera': nextCamera(); break;
+    case 'pacer': if (ride.pacer) togglePacer(); break;
     case 'hud': $('ride').classList.toggle('hud-hidden'); break;
     default: break;
   }
@@ -1954,13 +1967,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyN') skipInterval();
   if (e.code === 'KeyP' && ride.pacer) togglePacer();
   if (e.code === 'KeyE') toggleErg();
-  if (e.code === 'KeyC' && scene?.setCamera) {
-    const order = ['chase', 'iso', 'side'];
-    settings.camera = order[(order.indexOf(settings.camera) + 1) % order.length];
-    saveSettings();
-    scene.setCamera(settings.camera);
-    toast(tr({ chase: 'Camera: chase', iso: 'Camera: isometric', side: 'Camera: side view' }[settings.camera]));
-  }
+  if (e.code === 'KeyC') nextCamera();
   if (ride.simulated && (e.code === 'ArrowUp' || e.code === 'ArrowDown')) {
     e.preventDefault();
     const s = $('sim-power');
