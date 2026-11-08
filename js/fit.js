@@ -114,6 +114,8 @@ export function encodeActivity(samples, { start, lapStarts = [0], normalizedPowe
 
   const starts = [...new Set(lapStarts.filter((i) => i >= 0 && i < n))].sort((a, b) => a - b);
   if (!starts.length || starts[0] !== 0) starts.unshift(0);
+  // a last lap under a minute (the few seconds ridden after a workout ends) joins the one before
+  if (starts.length > 1 && n - starts[starts.length - 1] < 60) starts.pop();
   starts.forEach((s0, li) => {
     const s1 = li + 1 < starts.length ? starts[li + 1] : n;
     const part = samples.slice(s0, s1);

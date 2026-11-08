@@ -625,3 +625,22 @@ test('wind: headwind slows you, tailwind speeds you up, the trainer feels it as 
   // crosswind: the shelter moves to the lee side of the wheel
   assert.ok(draftFactor(1, -0.6, 6) > draftFactor(1, 0, 6));
 });
+
+import { encodeActivity } from '../js/fit.js';
+test('FIT: a last lap under a minute joins the lap before', () => {
+  const samples = Array.from({ length: 200 }, () => ({ power: 150, cadence: 90, heartRate: 130, speed: 8, distance: 0, altitude: 100 }));
+  // count lap messages (global 19) by walking the records
+  const laps = (lapStarts) => {
+    const d = new Uint8Array(encodeActivity(samples, { start: new Date(0), lapStarts })), dv = new DataView(d.buffer);
+    let p = d[0], end = d[0] + dv.getUint32(4, true), count = 0; const defs = {};
+    while (p < end) {
+      const h = d[p++], lt = h & 15;
+      if (h & 0x40) { const g = dv.getUint16(p + 2, d[p + 1] === 0), nf = d[p + 4]; let size = 0; for (let i = 0; i < nf; i++) size += d[p + 5 + i * 3 + 1]; defs[lt] = { g, size }; p += 5 + nf * 3; }
+      else { if (defs[lt].g === 19) count++; p += defs[lt].size; }
+    }
+    return count;
+  };
+  assert.equal(laps([0, 100, 170]), 2); // 30 s tail: merged
+  assert.equal(laps([0, 100]), 2);
+  assert.equal(laps([0, 100, 130]), 3); // 70 s: a lap of its own
+});
