@@ -8,7 +8,7 @@ import { loadRiderModel, ModelRider } from './rider-model.js';
 import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
-import { t } from './i18n.js';
+import { t, lang } from './i18n.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 import { loadFanModels } from './fans.js';
@@ -1761,7 +1761,8 @@ export class Scene3D {
       group.add(im);
     }
     // cheers painted on the asphalt on the way up
-    const WORDS = ['ДАВАЙ!', 'ALLEZ!', 'GO GO GO', 'ВПЕРЕД!', 'HUP HUP', 'ТИСНИ!', 'ALLEZ ALLEZ'];
+    // in the language of the interface (ALLEZ! is what every cycling fan shouts, in any language)
+    const WORDS = lang === 'uk' ? ['ДАВАЙ!', 'ВПЕРЕД!', 'ТИСНИ!', 'ЖМИ!', 'ALLEZ!', 'ДО ВЕРШИНИ!'] : ['GO GO GO', 'COME ON!', 'PUSH!', 'ALLEZ!', 'HUP HUP', 'TO THE TOP!'];
     for (const top of tops) {
       for (const [k, back] of [[0, 25], [1, 60], [2, 100], [3, 145]].values()) {
         const d = top - back;
