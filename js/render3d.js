@@ -1471,6 +1471,37 @@ export class Scene3D {
     return g;
   }
 
+  /** "GRUPPETTO" along the down tube, on both sides (shared by every bike). */
+  _frameDecal() {
+    if (!this.decalMat) {
+      const c = document.createElement('canvas');
+      c.width = 1024; c.height = 128;
+      const g = c.getContext('2d');
+      g.font = 'italic 900 104px system-ui, -apple-system, "Segoe UI", sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = 6;
+      g.fillStyle = '#ffffff';
+      g.fillText('GRUPPETTO', c.width / 2, c.height / 2 + 4, c.width - 40);
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 4;
+      this.decalMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false, side: THREE.DoubleSide });
+      this.decalGeo = new THREE.PlaneGeometry(0.36, 0.048);
+    }
+    // the down tube of the bike model, in the rider group: from (0.12, 0.40) to (0.36, 0.66), sides at z ≈ ±0.02
+    const g = new THREE.Group();
+    const a = new THREE.Vector2(0.12, 0.40), b = new THREE.Vector2(0.36, 0.66), mid = a.clone().add(b).multiplyScalar(0.5);
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    for (const side of [-1, 1]) {
+      const m = new THREE.Mesh(this.decalGeo, this.decalMat);
+      m.position.set(mid.x, mid.y, side * 0.028);
+      m.rotation.set(0, side < 0 ? Math.PI : 0, side < 0 ? -ang : ang); // readable from each side, rising toward the front
+      m.renderOrder = 3;
+      g.add(m);
+    }
+    return g;
+  }
+
   _bannerTexture(text, color, checker) {
     this.bannerCache ||= new Map();
     const key = `${text}|${color}|${checker}`;
@@ -1589,7 +1620,7 @@ export class Scene3D {
           const Model = this.riderModel.dummy ? DummyRider : ModelRider;
           R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
         }
-        if (this.bikeModel) R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color });
+        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color }); R.group.add(this._frameDecal()); }
         // a ghost (your own earlier ride): see-through, and drawn after the solid scene
         if (r.ghost) {
           R.group.traverse((o) => {
