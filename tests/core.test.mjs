@@ -265,10 +265,13 @@ test('low power starts the bike from standstill on a climb', () => {
   assert.ok(v * 3.6 > 2, `expected the rider to move, got ${(v * 3.6).toFixed(1)} km/h`);
 });
 
-test('Zwift Ride shifts by side: right unit harder, left unit easier', () => {
+test('Zwift Ride shifts by side: right unit harder, left unit easier', async () => {
   for (const b of ['shiftUpR', 'shiftDownR', 'paddleR']) assert.equal(rideIntent(b), 'harder');
   for (const b of ['shiftUpL', 'shiftDownL', 'paddleL']) assert.equal(rideIntent(b), 'easier');
   for (const b of ['b', 'powerUpR']) assert.equal(rideIntent(b), 'toggleErg');
+  const { obcIntents, OBC, OBC_SUPPORTED } = await import('../js/controls.js');
+  assert.ok(obcIntents([{ id: OBC.OK, value: 1 }], new Map()).has('toggleErg'));
+  assert.ok(OBC_SUPPORTED.includes(OBC.OK));
 });
 
 import { spokenDuration } from '../js/sound.js';

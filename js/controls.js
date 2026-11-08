@@ -10,6 +10,7 @@ export const OBC = {
   NAV_UP: 0x10, NAV_DOWN: 0x11, NAV_LEFT: 0x12, NAV_RIGHT: 0x13,
   STEER_LEFT: 0x18, STEER_RIGHT: 0x19, STEERING_ANGLE: 0x1b,
   ERG_UP: 0x30, ERG_DOWN: 0x31, SKIP: 0x32, PAUSE: 0x33, RESUME: 0x34,
+  OK: 0x14,
   HUD: 0x44,
 };
 
@@ -19,6 +20,7 @@ const OBC_DIGITAL = {
   [OBC.NAV_LEFT]: 'left', [OBC.STEER_LEFT]: 'left',
   [OBC.NAV_RIGHT]: 'right', [OBC.STEER_RIGHT]: 'right',
   [OBC.SKIP]: 'skip', [OBC.PAUSE]: 'pause', [OBC.RESUME]: 'resume', [OBC.HUD]: 'hud',
+  [OBC.OK]: 'toggleErg', // assign any button to OK in BikeControl to switch ERG in a workout
 };
 
 /** Button IDs this app understands (sent to the device in the App Information message). */
@@ -76,5 +78,5 @@ export const OBC_LABELS = {
   [OBC.STEER_LEFT]: 'steer ◀', [OBC.STEER_RIGHT]: 'steer ▶', [OBC.STEERING_ANGLE]: 'steering angle',
   [OBC.ERG_UP]: 'ERG +', [OBC.ERG_DOWN]: 'ERG −', [OBC.SKIP]: 'skip interval',
   [OBC.PAUSE]: 'pause', [OBC.RESUME]: 'resume', [OBC.HUD]: 'HUD',
-  0x14: 'OK', 0x15: 'back', 0x16: 'menu',
+  [OBC.OK]: 'OK (ERG on/off)', 0x15: 'back', 0x16: 'menu',
 };
