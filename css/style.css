@@ -134,6 +134,22 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .board.intensity .int-toggles { grid-column: 1 / -1; justify-self: stretch; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .board.intensity > span { white-space: nowrap; }
 .board.intensity[hidden] { display: none; }
+.wk-steps[hidden] { display: none; }
+.wk-steps { padding: 6px 6px 7px; gap: 5px; font-size: .78rem; }
+.ws-head { display: flex; justify-content: space-between; padding: 0 4px; color: #c9d4e3; }
+.ws-head b { color: #fff; }
+.ws-stars { color: #ffd23f; font-weight: 700; }
+.wk-steps ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.wk-steps li { position: relative; display: flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 6px; overflow: hidden; background: rgba(255, 255, 255, .04); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wk-steps li::before { content: ''; width: 4px; align-self: stretch; border-radius: 2px; background: var(--zc); flex: none; }
+.wk-steps li .st { width: 12px; flex: none; color: #ffd23f; text-align: center; }
+.wk-steps li span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.wk-steps li.done { opacity: .5; }
+.wk-steps li.cur { background: rgba(255, 255, 255, .1); font-weight: 700; font-size: .86rem; padding: 5px 7px; }
+.wk-steps li.cur .fill { position: absolute; inset: 0 auto 0 0; background: var(--zc); opacity: .35; z-index: -1; transition: width 1s linear; }
+.wk-steps li.cur { isolation: isolate; }
+.wk-steps li.more { justify-content: center; color: var(--muted, #9aa6b6); background: none; padding: 0; }
+.wk-steps li.more::before { display: none; }
 .hud-left { align-items: stretch; } /* the board and the intensity row share one width */
 .board.intensity .pill-btn { padding: 3px 12px; }
 .board.intensity b { color: #fff; }
@@ -147,7 +163,6 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .bottom-left { display: flex; flex-direction: column; gap: 8px; }
 .bottom-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .bottom-row { position: relative; display: flex; align-items: flex-end; gap: 12px; min-height: 36px; } /* the simulator and ghost tag sit above the strip */
-.bottom-row .ghost-tag { margin-left: auto; }
 .trace { width: 100%; height: 54px; display: block; background: var(--pill); border-radius: 12px; }
 #profile { width: 100%; height: 54px; background: var(--pill); border-radius: 12px; display: block; }
 .controls { display: flex; gap: 6px; }
@@ -196,6 +211,7 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
   .stat.power .st-val b { font-size: 1.35rem; }
   .st-val span { font-size: .66rem; }
   .board.intensity { padding: 4px 6px; font-size: .75rem; }
+  .wk-steps { display: none; } /* phones: the top panel is enough */
   .board.intensity .pill-btn { padding: 2px 9px; }
   .hud-center { top: auto; bottom: max(64px, calc(env(safe-area-inset-bottom, 0px) + 56px)); gap: 6px; }
   .topbar { width: min(460px, calc(100vw - 16px)); }
@@ -554,8 +570,7 @@ body.pixel-ui .ghost-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 }
 body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
 /* ghost tag: bottom centre, where the simulator slider sits; lifts above the slider while it is shown */
-#ride #ghost-tag { position: absolute; left: 50%; bottom: 6px; transform: translateX(-50%); white-space: nowrap; transition: bottom .25s ease; }
-#ride.show-controls #sim-ctl:not([hidden]) ~ #ghost-tag { bottom: 74px; }
+#ride #ghost-tag { align-self: flex-end; white-space: nowrap; } /* with the route progress, above the profile */
 @media (max-width: 720px) { #ride #ghost-tag { bottom: 70px; font-size: .78rem; } }
 
 /* ---------- Route groups and GPX import (#25) ---------- */

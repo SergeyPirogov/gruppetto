@@ -189,4 +189,5 @@ export const UK = {
   'Max heart rate, bpm': 'Макс. пульс, уд/хв', 'for heart rate zones': 'для пульсових зон',
   'Set your max heart rate in Profile to see heart rate zones.': 'Вкажіть максимальний пульс у Профілі, щоб бачити пульсові зони.',
   'Very light': 'Дуже легко', 'Light': 'Легко', 'Moderate': 'Помірно', 'Hard': 'Важко', 'Maximum': 'Максимум',
+  'Finish in': 'До кінця', 'Workout complete': 'Тренування завершено',
 };

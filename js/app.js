@@ -756,6 +756,8 @@ async function startRide() {
   $('sim-ctl').hidden = !simulated;
   $('workout-panel').hidden = !workout;
   $('wk-intensity').hidden = !workout;
+  $('wk-steps').hidden = !workout;
+  ride.stepStats = [];
   $('wk-pacer-btn').classList.toggle('on', settings.pacer !== false);
   $('wk-erg-btn').classList.add('on'); // every workout starts in ERG
   $('paused').hidden = true;
@@ -1056,6 +1058,10 @@ function tick(power, cadence, hr) {
   }
 
   const onPlan = ride.workout && !ride.workoutDone;
+  if (onPlan && ride.stepIndex !== undefined) {
+    const st = (ride.stepStats[ride.stepIndex] ||= { p: 0, t: 0, n: 0 });
+    st.p += power; st.t += ride.target || 0; st.n++;
+  }
   recorder.add({
     power, cadence, heartRate: hr, speed: ride.v, distance: ride.dist,
     altitude: elev, elevationGain: ride.gain,
@@ -1070,6 +1076,7 @@ function tick(power, cadence, hr) {
   if (cadence > 0) { A.cad += cadence; A.cadN++; }
   updateHud(cadence, hr, grade);
   drawTrace();
+  renderStepList();
 }
 
 function updateHud(cadence, hr, grade) {
@@ -1306,6 +1313,52 @@ function updateProgress() {
     $('wk-name').textContent = ride.workout.name;
     $('wk-pct').textContent = ride.workoutDone ? tr('done') : `${Math.round(done * 100)}%`;
   }
+}
+
+/** "10 min", "30 s", "1:30" */
+const stepDur = (sec) => (sec >= 60 && sec % 60 === 0 ? `${sec / 60} ${U.min}` : sec < 60 ? `${sec} ${tr('s')}` : fmtTime(sec));
+/** "10 min @ 270 W", "5 min 97→151 W", "30 min 151–158 W", "5 min free" for the list. */
+function stepLabel(s) {
+  if (s.free) return `${stepDur(s.dur)} ${tr('free')}`;
+  const band = stepBand(s);
+  if (band) return `${stepDur(s.dur)} ${band[0]}–${band[1]} ${U.W}`;
+  const a = scaleW(stepWatts(s, 0, settings.ftp)), b = scaleW(stepWatts(s, 1, settings.ftp));
+  return a === b ? `${stepDur(s.dur)} @ ${a} ${U.W}` : `${stepDur(s.dur)} ${a}→${b} ${U.W}`;
+}
+/** Whether a finished interval was ridden on target: inside its range, or within ±5 % of its mean target. */
+function stepOnTarget(s, st) {
+  if (!st || !st.n || s.free) return false;
+  const p = st.p / st.n, band = stepBand(s);
+  if (band) return p >= band[0] * 0.98 && p <= band[1] * 1.02;
+  const t = st.t / st.n;
+  return t > 0 && Math.abs(p - t) <= t * 0.05;
+}
+
+/** The workout's intervals on the left, as in Zwift: two done, the current one filling up, the next ones. */
+function renderStepList() {
+  const box = $('wk-steps');
+  if (!ride?.workout || box.hidden) return;
+  const steps = ride.workout.steps, cur = ride.workoutDone ? steps.length : (ride.stepIndex ?? 0);
+  const total = totalDuration(ride.workout);
+  $('ws-finish').innerHTML = ride.workoutDone ? `<b>${tr('Workout complete')}</b>` : `${tr('Finish in')} <b>${fmtTime(Math.max(0, total - ride.workoutT))}</b>`;
+  const stars = steps.slice(0, cur).filter((s, i) => stepOnTarget(s, ride.stepStats[i])).length;
+  $('ws-stars').textContent = `★ ${stars}/${steps.length}`;
+  const from = Math.max(0, cur - 2), to = Math.min(steps.length, from + 8);
+  let start = 0;
+  for (let i = 0; i < cur && i < steps.length; i++) start += steps[i].dur;
+  const html = [];
+  if (from > 0) html.push(`<li class="more">⋯ ${from}</li>`);
+  for (let i = from; i < to; i++) {
+    const s = steps[i], mid = scaleW(stepWatts(s, 0.5, settings.ftp));
+    const zc = s.free || mid === null ? '#64748b' : zoneColor(mid / settings.ftp);
+    if (i < cur) html.push(`<li class="done" style="--zc:${zc}"><span class="st">${stepOnTarget(s, ride.stepStats[i]) ? '★' : ''}</span><span>${esc(stepLabel(s))}</span></li>`);
+    else if (i === cur) {
+      const done = Math.min(1, Math.max(0, (ride.workoutT - start) / s.dur));
+      html.push(`<li class="cur" style="--zc:${zc}"><i class="fill" style="width:${(done * 100).toFixed(1)}%"></i><span class="st">▶</span><span>${esc(stepLabel(s))}</span></li>`);
+    } else html.push(`<li style="--zc:${zc}"><span class="st"></span><span>${esc(stepLabel(s))}</span></li>`);
+  }
+  if (to < steps.length) html.push(`<li class="more">+ ${steps.length - to}</li>`);
+  $('ws-list').innerHTML = html.join('');
 }
 
 /**
