@@ -200,6 +200,8 @@ export const UK = {
   'Time of day': 'Час доби', 'Midday': 'День', 'Morning': 'Ранок', 'Evening (golden hour)': 'Вечір (золота година)', 'Night': 'Ніч', 'By the clock': 'За годинником',
   'Weather': 'Погода', 'Clear': 'Ясно', 'Fog': 'Туман', 'Rain': 'Дощ',
   'waiting for a reading…': 'чекаю на дані…',
-  'Chainring': 'Зірка спереду', 'Rear cog': 'Зірка ззаду', '14 (Zwift Cog)': '14 (Zwift Cog)',
+  'Chainring': 'Зірка спереду', 'Rear cog': 'Зірка ззаду', '14 · Zwift': '14 · Zwift',
   'The gear your chain stays in: the buttons shift virtual gears on top of it.': 'Передача, у якій стоїть ланцюг: кнопки перемикають віртуальні передачі поверх неї.',
+  'Like Zwift': 'Як у Zwift', 'Via grade': 'Через нахил',
+  'The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.': 'Передача, у якій стоїть ланцюг (Zwift Cog: 14); кнопки перемикають віртуальні передачі поверх неї. «Через нахил» для тренажерів, що не приймають розмір колеса.',
 };

@@ -825,4 +825,5 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .dev-chip .chip-val:empty { display: none; }
 
 .fields-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.fields-note { font-size: .78rem; margin: -2px 0 6px; }
+.fields-note { grid-column: 1 / -1; font-size: .78rem; margin: -4px 0 0; }
+.fields-3.fields-gears { grid-template-columns: 1.9fr 1fr 1fr; }
