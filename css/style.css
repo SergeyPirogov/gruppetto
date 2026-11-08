@@ -1183,3 +1183,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .week-box:hover { background: none; } /* a button: the generic hover lit the gaps between the tiles */
 .week-box:hover .wb-tile { background: #151f30; }
 .avatar .ic { width: 18px; height: 18px; }
+/* the bottom bar: what is picked on the left, Ride on the right, both in line with the page's column */
+@media (min-width: 861px) {
+  .lobby-body .ride-box { justify-content: space-between; padding-left: max(32px, calc((100vw - 76px - 1240px) / 2 + 32px)); padding-right: max(32px, calc((100vw - 76px - 1240px) / 2 + 32px)); }
+  .lobby-body .ride-summary { text-align: left; }
+}
