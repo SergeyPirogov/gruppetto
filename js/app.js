@@ -9,7 +9,7 @@ import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, HR_ZONES } from './analysis.js';
-import { putRide, getRide, deleteRide } from './ride-store.js';
+import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration } from './sound.js';
@@ -1084,6 +1084,7 @@ function tick(power, cadence, hr) {
   if (hr > 0) { A.hr += hr; A.hrN++; }
   if (cadence > 0) { A.cad += cadence; A.cadN++; }
   updateHud(cadence, hr, grade);
+  if (ride.elapsed - (ride.draftAt || 0) >= 30) saveDraft();
   drawTrace();
   renderStepList();
 }
@@ -1472,6 +1473,54 @@ function togglePause() {
   if (ride.paused) showControls(0); else showControls();
 }
 
+/** The ride so far, kept in case the page closes before Finish (#: crash safety). */
+function saveDraft() {
+  if (!ride || recorder.samples.length < 10) return;
+  ride.draftAt = ride.elapsed;
+  const w = ride.workout;
+  putDraft({
+    start: (recorder.startTime || new Date()).getTime(), savedAt: Date.now(),
+    samples: recorder.samples, lapStarts: recorder.lapStarts,
+    meta: {
+      routeId: ride.route.id, routeName: ride.route.name, intensity: settings.intensity,
+      workout: w ? { id: w.id, name: w.name, source: w.source || null, eventId: w.eventId || null } : null,
+      lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts,
+    },
+  });
+}
+
+/** An unfinished ride found on opening the page: save it to history (then upload or download it) or discard it. */
+async function offerDraft() {
+  const d = await getDraft();
+  const box = $('draft-box');
+  if (!d || !d.samples?.length || ride) { box.hidden = true; return; }
+  if (d.samples.length < 30) { deleteDraft(); box.hidden = true; return; }
+  const when = new Date(d.start).toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  $('draft-text').textContent = tr('Unfinished ride: {route}{workout} · {time} · {when}', {
+    route: d.meta.routeName || '', workout: d.meta.workout ? ` · ${d.meta.workout.name}` : '', time: fmtTime(d.samples.length), when,
+  });
+  box.hidden = false;
+  $('draft-save').onclick = async () => {
+    const rec = new Recorder();
+    rec.samples = d.samples; rec.startTime = new Date(d.start); rec.lapStarts = d.lapStarts || [0];
+    const m = d.meta, full = allWorkouts().find((x) => x.id === m.workout?.id);
+    const r = {
+      workout: full || m.workout, intensity: m.intensity, route: routes.find((x) => x.id === m.routeId) || { id: m.routeId, name: m.routeName },
+      summary: rec.summary(), uploadedId: null, lapTimes: m.lapTimes || [], splits: m.splits || [], efforts: m.efforts || [], ramp: false, ghostGap: null,
+    };
+    const entry = saveToHistory(r, rec.samples);
+    await putRide({ id: entry.id, start: d.start, samples: rec.samples, lapStarts: rec.lapStarts });
+    await deleteDraft();
+    box.hidden = true;
+    showSummary(entry); // from history: .FIT / .TCX and Send to intervals.icu
+  };
+  $('draft-drop').onclick = async () => {
+    if ($('draft-drop').dataset.armed !== '1') { $('draft-drop').dataset.armed = '1'; $('draft-drop').textContent = tr('Tap again to discard'); return; }
+    await deleteDraft();
+    box.hidden = true;
+  };
+}
+
 function finishRide() {
   if (!ride) return;
   advance();
@@ -1487,6 +1536,7 @@ function finishRide() {
   }
   const entry = sum && sum.duration >= 30 ? saveToHistory(lastRide, recorder.samples) : null;
   if (entry) putRide({ id: entry.id, start: (recorder.startTime || new Date()).getTime(), samples: recorder.samples, lapStarts: recorder.lapStarts });
+  deleteDraft();
   $('ride').hidden = true;
   showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
 }
@@ -1523,7 +1573,7 @@ function historyEntry(r, samples) {
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
     maxHr: settings.maxHr || 0, eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     chart: { every, pw, hr, d, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
-    intervals: r.workout ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
+    intervals: r.workout?.steps ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
       // a ramp shows where it starts and ends
       const st = r.workout.steps[x.step], k = (r.intensity ?? 100) / 100;
       const a = stepWatts(st, 0, settings.ftp), b = stepWatts(st, 1, settings.ftp);
@@ -2384,6 +2434,15 @@ $('f-lang').innerHTML = LANGS.map((l) => `<option value="${l.id}">${l.name}</opt
 $('f-lang').value = lang;
 $('f-lang').onchange = () => setLang($('f-lang').value);
 initLobby();
+offerDraft();
+// leaving in the middle of a ride: keep what is there and ask first
+window.addEventListener('beforeunload', (e) => {
+  if (!ride || ride.elapsed < 10) return;
+  saveDraft();
+  e.preventDefault();
+  e.returnValue = '';
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && ride) saveDraft(); });
 // the 3D models download while you pick a route, so the ride opens with the real rider and bike
 (window.requestIdleCallback || ((f) => setTimeout(f, 800)))(() => {
   import('./render3d.js').then((m) => m.webglAvailable() && m.preloadModels()).catch(() => {});

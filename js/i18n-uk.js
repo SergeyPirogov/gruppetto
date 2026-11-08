@@ -193,4 +193,6 @@ export const UK = {
   // sprints (#38)
   'Sprint {n}': 'Спринт {n}', 'Sprint record': 'Рекорд спринту', '⚡ {name}: {m} m — sprint!': '⚡ {name}: {m} м — спринт!', '{n} m to the line': '{n} м до лінії',
   'top speed': 'макс. швидкість', 'max': 'макс.', 'SPRINT': 'СПРИНТ', 'LINE': 'ФІНІШ', '{name}: {time} 🏁': '{name}: {time} 🏁',
+  // unfinished ride
+  'Unfinished ride: {route}{workout} · {time} · {when}': 'Незавершений заїзд: {route}{workout} · {time} · {when}', 'Save ride': 'Зберегти заїзд', 'Discard': 'Відкинути', 'Tap again to discard': 'Ще раз, щоб відкинути',
 };

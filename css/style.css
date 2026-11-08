@@ -731,3 +731,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 /* sprint segments (#38): green where climbs are red */
 .seg-panel.sprint { border-color: rgba(34, 197, 94, .55); }
 .seg-panel.sprint #seg-fill { background: #22c55e; }
+
+/* an unfinished ride found on opening the page */
+.draft-box { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0; border-color: #b7791f; background: #2a2112; }
+.draft-box[hidden] { display: none; }
+.draft-actions { display: flex; gap: 8px; }
+.draft-actions button { padding: 7px 14px; }
