@@ -64,8 +64,8 @@ export function obcIntents(changes, prev) {
 const RIDE_TO_INTENT = {
   shiftUpR: 'harder', shiftDownR: 'harder', paddleR: 'harder', up: 'harder',
   shiftUpL: 'easier', shiftDownL: 'easier', paddleL: 'easier', down: 'easier',
-  left: 'left', right: 'right', a: 'togglePause', z: 'skip',
-  b: 'toggleErg', y: 'camera', powerUpL: 'pacer', powerUpR: 'hud',
+  left: 'left', right: 'right', a: 'toggleErg', z: 'skip',
+  b: 'togglePause', y: 'camera', powerUpL: 'pacer', powerUpR: 'hud',
   // onOffL / onOffR switch the controller itself off: left alone
 };
 
