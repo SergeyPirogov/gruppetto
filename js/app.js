@@ -1154,7 +1154,8 @@ async function startRide() {
   if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
   track('ride-start', [racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
-  if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
+  // on the grid in the first row with the bunch, the front wheel just behind the line (the bike is ~1.7 m long)
+  if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; ride.dist = -1.6; }
   // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little; races only
   ride.wind = { base: windBase(), toward: Math.random() * Math.PI * 2, speed: 0, head: 0, cross: 0, rel: 0 };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
