@@ -265,9 +265,9 @@ test('low power starts the bike from standstill on a climb', () => {
   assert.ok(v * 3.6 > 2, `expected the rider to move, got ${(v * 3.6).toFixed(1)} km/h`);
 });
 
-test('Zwift Ride shifts by side: right unit harder, left unit easier', async () => {
-  for (const b of ['shiftUpR', 'shiftDownR', 'paddleR']) assert.equal(rideIntent(b), 'harder');
-  for (const b of ['shiftUpL', 'shiftDownL', 'paddleL']) assert.equal(rideIntent(b), 'easier');
+test('Zwift Ride shifts: buttons by direction, paddles by side', async () => {
+  for (const b of ['shiftUpR', 'shiftUpL', 'paddleR', 'up']) assert.equal(rideIntent(b), 'harder');
+  for (const b of ['shiftDownR', 'shiftDownL', 'paddleL', 'down']) assert.equal(rideIntent(b), 'easier');
   assert.equal(rideIntent('a'), 'toggleErg');
   assert.equal(rideIntent('b'), 'togglePause');
   assert.equal(rideIntent('z'), 'skip');
