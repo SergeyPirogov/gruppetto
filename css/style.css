@@ -1216,3 +1216,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .lobby-body .ride-box { gap: 24px; }
 @media (max-width: 860px) { .ghost-bar .gb-label { display: none; } .ghost-bar .ghost-opts button { padding: 6px 9px; font-size: .78rem; } }
 @media (max-width: 520px) { .ghost-bar { display: none !important; } } /* no room beside Ride on a narrow phone */
+/* each ghost with what it rode, under its name (not only on hover) */
+.ghost-bar .ghost-opts { border-radius: 14px; }
+.ghost-bar .ghost-opts button { display: grid; justify-items: start; gap: 1px; padding: 5px 14px; border-radius: 11px; text-align: left; }
+.ghost-bar .ghost-opts small { display: block; font-size: .7rem; font-weight: 400; color: var(--muted); white-space: nowrap; }
+.ghost-bar .ghost-opts button.sel small { color: #ffd3a8; }
+@media (max-width: 1100px) { .ghost-bar .ghost-opts small { display: none; } } /* narrower: the names only, details on hover */
