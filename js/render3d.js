@@ -1479,8 +1479,12 @@ export class Scene3D {
       const g = c.getContext('2d');
       g.font = 'italic 900 104px system-ui, -apple-system, "Segoe UI", sans-serif';
       g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = 6;
-      g.fillStyle = '#ffffff';
+      // silver: a metallic gradient with a thin dark edge, readable on any frame colour
+      const silver = g.createLinearGradient(0, 14, 0, c.height - 14);
+      silver.addColorStop(0, '#f4f6f9'); silver.addColorStop(0.45, '#c3c9d1'); silver.addColorStop(0.55, '#9ea6b1'); silver.addColorStop(1, '#e1e5ea');
+      g.lineWidth = 5; g.strokeStyle = 'rgba(20, 24, 30, 0.55)'; g.lineJoin = 'round';
+      g.strokeText('GRUPPETTO', c.width / 2, c.height / 2 + 4, c.width - 40);
+      g.fillStyle = silver;
       g.fillText('GRUPPETTO', c.width / 2, c.height / 2 + 4, c.width - 40);
       const tex = new THREE.CanvasTexture(c);
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -1488,13 +1492,14 @@ export class Scene3D {
       this.decalMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, toneMapped: false, side: THREE.DoubleSide });
       this.decalGeo = new THREE.PlaneGeometry(0.36, 0.048);
     }
-    // the down tube of the bike model, in the rider group: from (0.12, 0.40) to (0.36, 0.66), sides at z ≈ ±0.02
+    // the down tube's axis in the bike model (measured by rays, rider group): from (0.12, 0.448) to
+    // (0.36, 0.722); its flat sides at z ≈ ±0.011
     const g = new THREE.Group();
-    const a = new THREE.Vector2(0.12, 0.40), b = new THREE.Vector2(0.36, 0.66), mid = a.clone().add(b).multiplyScalar(0.5);
+    const a = new THREE.Vector2(0.12, 0.448), b = new THREE.Vector2(0.36, 0.722), mid = a.clone().add(b).multiplyScalar(0.5);
     const ang = Math.atan2(b.y - a.y, b.x - a.x);
     for (const side of [-1, 1]) {
       const m = new THREE.Mesh(this.decalGeo, this.decalMat);
-      m.position.set(mid.x, mid.y, side * 0.028);
+      m.position.set(mid.x, mid.y, side * 0.016);
       m.rotation.set(0, side < 0 ? Math.PI : 0, side < 0 ? -ang : ang); // readable from each side, rising toward the front
       m.renderOrder = 3;
       g.add(m);
