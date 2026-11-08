@@ -16,7 +16,7 @@ import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formB
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
-import { unlockAudio, beep, say, spokenDuration, crowd } from './sound.js';
+import { unlockAudio, beep, say, spokenDuration } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
@@ -1255,7 +1255,7 @@ function crowdLevel() {
 function frame(now) {
   if (!ride) return;
   advance(now);
-  if (settings.sound && !ride.paused) crowd(crowdLevel());
+  // (the synthesised applause sounded odd: off until there is a real recording, #45)
   if (ride.race) {
     const c = ride.race.countdown, el = $('countdown');
     const txt = ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
