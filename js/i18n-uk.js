@@ -226,4 +226,5 @@ export const UK = {
   // form (#54)
   'Form': 'Форма', 'Fitness': 'Тренованість', 'Fatigue': 'Втома', 'very fresh: losing fitness': 'дуже свіжі: тренованість падає', 'fresh: ready to race': 'свіжі: готові до гонки',
   'neutral': 'нейтрально', 'productive load': 'продуктивне навантаження', 'overreaching: rest': 'перевантаження: відпочиньте',
+  'Share card': 'Картка заїзду', 'Share your ride': 'Поділіться заїздом', 'Download PNG': 'Завантажити PNG', 'Share…': 'Поділитися…',
 };

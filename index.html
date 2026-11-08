@@ -445,6 +445,7 @@
         <button id="btn-download-tcx">.TCX</button>
         <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
         <button id="btn-delete-ride" class="ghost" hidden>Delete ride</button>
+        <button id="btn-card">Share card</button>
         <button id="btn-again" class="ghost">Back to lobby</button>
       </div>
       <label class="check sum-icu" id="sum-icu" hidden><input type="checkbox" id="sum-icu-auto"> <span>Upload the ride to intervals.icu</span> <small id="sum-icu-count"></small></label>
@@ -453,7 +454,17 @@
     </main>
   </section>
 
-  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+      <!-- a picture of the ride to share (#52) -->
+    <div id="card-view" class="wk-menu" hidden>
+      <div class="drawer-bg" data-card-close></div>
+      <div class="wk-menu-panel card-panel">
+        <div class="wk-menu-head"><h2>Share your ride</h2><button class="drawer-close" data-card-close aria-label="Close">✕</button></div>
+        <canvas id="card-canvas" width="1080" height="1350"></canvas>
+        <div class="wkd-actions"><button id="card-download" class="pill-btn">Download PNG</button><button id="card-share" class="primary wkd-ride">Share…</button></div>
+      </div>
+    </div>
+
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>
