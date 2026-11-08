@@ -636,6 +636,9 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .wk-menu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .wk-menu-head h2 { margin: 0; }
 .wk-menu-list { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.wk-group-head { grid-column: 1 / -1; margin: 10px 0 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.wk-group-head:first-child { margin-top: 0; }
+.wk-group-head small { text-transform: none; letter-spacing: 0; margin-left: 6px; font-weight: 400; }
 .wk-detail { z-index: 46; }
 .wkd-panel { width: min(820px, calc(100vw - 24px)); display: grid; gap: 10px; }
 .wkd-panel h2 { margin: 0; font-size: 1.6rem; }

@@ -583,9 +583,17 @@ function openWorkoutMenu() {
     list.append(b);
     requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
   };
-  for (const w of icuWorkouts) add(w, dayLabel(w.date));
-  for (const w of myWorkouts) add(w, 'mine');
-  for (const w of workouts) add(w);
+  // three groups, each under its heading: your plan in intervals.icu, your own, and Gruppetto's (the FTP test first)
+  const head = (text, note = '') => {
+    const h = document.createElement('h3');
+    h.className = 'wk-group-head';
+    h.innerHTML = `${esc(text)}${note ? ` <small>${esc(note)}</small>` : ''}`;
+    list.append(h);
+  };
+  if (icuWorkouts.length) { head(tr('Your plan'), 'intervals.icu'); for (const w of icuWorkouts) add(w, dayLabel(w.date)); }
+  if (myWorkouts.length) { head(tr('Your workouts'), tr('imported and built')); for (const w of myWorkouts) add(w, 'mine'); }
+  head(tr('Gruppetto workouts'));
+  for (const w of [...workouts.filter((x) => x.ramp), ...workouts.filter((x) => !x.ramp)]) add(w);
   menu.hidden = false;
 }
 function closeWorkoutMenu() { $('wk-menu').hidden = true; }
