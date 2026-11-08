@@ -187,7 +187,7 @@ export const UK = {
   'Menu: Finish and Settings': 'Меню: Завершити й Налаштування', 'This list': 'Цей список',
   // after the ride (#9)
   'Time in power zones': 'Час у зонах потужності', 'Time in heart rate zones': 'Час у пульсових зонах',
-  'Target, W': 'Ціль, Вт', 'Power, W': 'Потужність, Вт', 'HR': 'Пульс', '{n} of {m} on target': '{n} з {m} у цілі',
+  'Target, W': 'Ціль, Вт', 'Power / target, W': 'Потужність / ціль, Вт', 'Power, W': 'Потужність, Вт', 'HR': 'Пульс', '{n} of {m} on target': '{n} з {m} у цілі',
   'Max heart rate, bpm': 'Макс. пульс, уд/хв', 'for heart rate zones': 'для пульсових зон',
   'Set your threshold heart rate (LTHR) in Profile, or connect intervals.icu, to see heart rate zones.': 'Вкажіть пороговий пульс (LTHR) у Профілі або підключіть intervals.icu, щоб бачити пульсові зони.',
   'Threshold heart rate (LTHR), bpm': 'Пороговий пульс (LTHR), уд/хв', 'Active recovery': 'Відновлення', 'VO2 max': 'VO2 max',

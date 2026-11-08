@@ -1582,6 +1582,10 @@ function updateHud(cadence, hr, grade) {
     const cls = !target ? '' : Math.abs(dev) <= 0.05 ? 'c-ok' : Math.abs(dev) <= 0.1 ? 'c-warn' : 'c-bad';
     tEl.className = cls;
     $('m-power').className = cls;
+    // ERG off: you hold the target yourself, so your power stands beside it ("152 / 155")
+    const byFeel = ride.ergOff && target && !ride.workoutDone;
+    if (byFeel) tEl.innerHTML = `${Math.round(p3)}<span class="wk-of"> / ${target}</span>`;
+    $('wk-target-label').textContent = byFeel ? tr('Power / target, W') : tr('Target, W');
     const P = ride.pacer;
     $('wk-pacer').hidden = !pacerOn();
     if (pacerOn()) {
@@ -1592,7 +1596,8 @@ function updateHud(cadence, hr, grade) {
     }
     $('wk-diff').textContent = target ? `${p3 - target >= 0 ? '+' : '−'}${Math.abs(Math.round(p3 - target))}` : '';
     $('wk-diff').className = cls;
-    if (ride.ergFactor < 1 && target) $('wk-diff').textContent = `ERG ${Math.round(ride.ergFactor * 100)}%`;
+    if (byFeel) $('wk-diff').textContent = ''; // the two numbers already say it
+    else if (ride.ergFactor < 1 && target) $('wk-diff').textContent = `ERG ${Math.round(ride.ergFactor * 100)}%`;
     $('wk-left').textContent = t ? fmtTime(ride.workoutDone ? 0 : t.remaining - 1) : '0:00';
     const cad = t?.step?.cad;
     const cadEl = $('wk-cad');
@@ -1668,7 +1673,11 @@ function drawMinimap() {
   };
   // heading up: the map turns so that you always ride toward the top, eased so it does not twitch
   const [mx, my] = raw(ride.dist);
-  const [ax, ay] = raw(ride.dist + 60), [bx, by] = raw(ride.dist - 20);
+  // the way the road runs here: from 20 m back to 60 m ahead, kept inside this lap (round the start
+  // line the end of a loop need not meet its beginning on the map, so the map spun after 20 m)
+  const here = route.oneWay ? ride.dist : ((ride.dist % L) + L) % L;
+  const back = Math.max(0, Math.min(L - 80, here - 20));
+  const [ax, ay] = raw(back + 80, false), [bx, by] = raw(back, false);
   const want = -Math.PI / 2 - Math.atan2(ay - by, ax - bx);
   if (ride.mapRot === undefined) ride.mapRot = want;
   ride.mapRot += Math.atan2(Math.sin(want - ride.mapRot), Math.cos(want - ride.mapRot)) * 0.6;

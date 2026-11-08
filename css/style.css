@@ -122,6 +122,7 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .wk-head b { font-size: 1.35rem; }
 #wk-chart { width: 100%; height: 36px; display: block; }
 #wk-target { font-size: 2rem; transition: color .3s; }
+#wk-target .wk-of { font-size: .55em; color: #c9d4e3; font-weight: 600; }
 #wk-diff { font-size: .85rem; font-weight: 700; margin-left: 4px; }
 .c-ok { color: #4ade80 !important; }
 .c-warn { color: #fbbf24 !important; }
