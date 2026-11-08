@@ -74,6 +74,8 @@ export const UK = {
   'Change lane': 'Змінити смугу', 'Pause / resume': 'Пауза / далі', 'ERG on/off': 'ERG увімк./вимк.', 'Skip interval': 'Пропустити інтервал',
   'Power-up left': 'Power-up лівий', 'Power-up right': 'Power-up правий', 'Pacer on/off': 'Пейсер увімк./вимк.', 'Hide / show the HUD': 'Сховати / показати табло',
   'Workout: intensity ∓5 %, free ride: climb difficulty ∓10 %': 'Тренування: інтенсивність ∓5 %, вільна їзда: складність підйомів ∓10 %',
+  'ERG off: the trainer simulates the road again': 'ERG вимкнено: тренажер знову імітує дорогу', 'ERG: holding {w} W': 'ERG: тримаю {w} Вт', 'Split {n}: {time} · {km} km · {w} W': 'Відрізок {n}: {time} · {km} км · {w} Вт', 'Split {n}': 'Відрізок {n}',
+  'ERG on/off (free ride: hold your power)': 'ERG увімк./вимк. (вільна їзда: тримати потужність)', 'Skip interval (free ride: new lap)': 'Пропустити інтервал (вільна їзда: нове коло)',
   'Profile & settings': 'Профіль і налаштування', 'Language': 'Мова', 'Name': 'Ім\'я', 'Jersey color': 'Колір джерсі',
   'Accent color (stripe, decals)': 'Колір акценту (смуга, наліпки)', 'Weight, kg': 'Вага, кг', 'Height, cm': 'Зріст, см', 'FTP, W': 'FTP, Вт',
   'Chainring (Zwift Cog 14T)': 'Передня зірка (Zwift Cog 14T)', 'Virtual gears': 'Віртуальні передачі',

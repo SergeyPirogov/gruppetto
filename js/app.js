@@ -652,6 +652,7 @@ async function startRide() {
     route, workout, simulated,
     dist: 0, v: 0, elapsed: 0, secAcc: 0, workoutT: 0, workoutDone: false,
     gain: 0, lastElev: route.elevAt(0), laps: 0, lapStartT: 0, lapTimes: [], efforts: [], seg: null, prevDist: 0,
+    hold: null, splits: [], splitFrom: { t: 0, d: 0, i: 0 }, // free ride: power held in ERG, manual laps
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
     powerHist: [], target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
     cda: riderCdA(settings.height, settings.weight), // air drag from your height and weight
@@ -953,8 +954,8 @@ function tick(power, cadence, hr) {
   }
   updateSpiralGuard(power, cadence);
   if (!ride.simulated && trainer.controllable) {
-    if (inErgStep()) {
-      const sendW = effectiveTarget();
+    if (inErgStep() || inHold()) {
+      const sendW = inHold() ? ride.hold : effectiveTarget();
       if (sendW !== ride.lastSentTarget) { trainer.setTargetPower(sendW); ride.lastSentTarget = sendW; }
       ride.lastSentGrade = null;
     } else {
@@ -1273,7 +1274,7 @@ function finishRide() {
   keepAwake(false);
   const sum = recorder.summary();
   const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
-  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
+  lastRide = { workout: ride.workout, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
   ride = null;
   if (trainer.connected && trainer.controllable) {
     trainer.setSimulation(0);
@@ -1313,7 +1314,7 @@ function historyEntry(r, samples) {
   return {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, summary: r.summary,
-    tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], efforts: r.efforts || [], chart: { every, pw, hr, d },
+    tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [], chart: { every, pw, hr, d },
   };
 }
 
@@ -1402,11 +1403,12 @@ function showSummary(e, { live = false } = {}) {
   const rows = [
     ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? tr('Finish') : tr('Lap {n}', { n: i + 1 }), t, null]),
     ...e.efforts.map((x) => [x.name, x.time, x]),
+    ...(e.splits || []).map((x, i) => [tr('Split {n}', { n: i + 1 }), x.time, { note: `${(x.dist / 1000).toFixed(2)} ${U.km} · ${x.power} ${U.W}` }]),
   ];
   $('sum-segments').hidden = !rows.length;
   $('sum-seg-rows').innerHTML = rows.map(([name, t, x]) => {
     const pb = x ? x.pb : t <= (records.lap[e.routeId] ?? Infinity);
-    const vs = x && x.best ? fmtDelta(t - x.best) : '';
+    const vs = x?.note ? esc(x.note) : x && x.best ? fmtDelta(t - x.best) : '';
     return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>` : vs}</td></tr>`;
   }).join('');
   // files and intervals.icu only for the ride just finished (older rides keep a summary, not the full record)
@@ -1686,7 +1688,8 @@ $('wk-erg-btn').onclick = () => toggleErg();
  * like a free ride (gears work again) while the targets stay on screen to ride to by feel.
  */
 function toggleErg() {
-  if (!ride?.workout || ride.workoutDone) return;
+  if (!ride) return;
+  if (!ride.workout || ride.workoutDone) { toggleHold(); return; }
   ride.ergOff = !ride.ergOff;
   ride.lastSentTarget = null; ride.lastSentGrade = null; ride.lastSentWheel = null;
   ride.ergFactor = 1; ride.lowFor = 0;
@@ -1758,7 +1761,7 @@ $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value
 const BUTTON_LABELS = {
   shiftUpL: 'left shift up (gear +)', shiftDownL: 'left shift down (gear −)', shiftUpR: 'right shift up (gear +)', shiftDownR: 'right shift down (gear −)',
   paddleL: 'left paddle (lane ◀)', paddleR: 'right paddle (lane ▶)',
-  up: '▲', down: '▼', left: '◀ (easier: −5 % / −10 %)', right: '▶ (harder: +5 % / +10 %)', a: 'A (ERG on/off)', b: 'B (pause)', y: 'Y (camera)', z: 'Z (skip interval)',
+  up: '▲', down: '▼', left: '◀ (easier: −5 % / −10 %)', right: '▶ (harder: +5 % / +10 %)', a: 'A (ERG / hold power)', b: 'B (pause)', y: 'Y (camera)', z: 'Z (skip interval / new lap)',
   powerUpL: 'Power-up left (pacer)', powerUpR: 'Power-up right (HUD)', onOffL: 'on/off left', onOffR: 'on/off right',
 };
 
@@ -1790,12 +1793,47 @@ function bigStep(dir) {
     toast(`${tr('Intensity')} ${settings.intensity}%`);
     return;
   }
+  if (inHold()) { setHold(ride.hold + dir * 20); toast(`ERG ${ride.hold} ${U.W}`); updateGear(); return; }
   settings.difficulty = Math.max(0, Math.min(100, settings.difficulty + dir * 10));
   saveSettings();
   $('f-diff').value = settings.difficulty;
   $('diff-val').textContent = `${settings.difficulty}%`;
   ride.lastSentGrade = null;
   toast(`${tr('Climb difficulty')} ${settings.difficulty}%`);
+}
+
+/**
+ * Free ride: hold the power you are riding at (rounded to 5 W) in ERG, whatever the road does, or
+ * let the trainer simulate the road again. The shifters then move the held power by 5 W, ◀ ▶ by 20 W.
+ */
+function toggleHold() {
+  if (ride.hold) {
+    ride.hold = null;
+    ride.lastSentTarget = null; ride.lastSentGrade = null; ride.lastSentWheel = null;
+    toast(tr('ERG off: the trainer simulates the road again'));
+  } else {
+    const h = ride.powerHist || [], now = h.length ? Math.round(h.reduce((x, y) => x + y, 0) / h.length / 5) * 5 : 0; // the 3 s power
+    setHold(now >= 50 ? now : Math.round((settings.ftp * 0.6) / 5) * 5);
+    toast(tr('ERG: holding {w} W', { w: ride.hold }));
+  }
+  updateGear();
+}
+function setHold(w) {
+  ride.hold = Math.max(50, Math.min(1500, w));
+  if (ride.simulated) { const s = $('sim-power'); s.value = ride.hold; s.oninput?.(); }
+}
+
+/** Free ride: a lap by hand (Z on the Zwift Ride, or N): a lap in the FIT/TCX file and a split in the summary. */
+function manualLap() {
+  const F = ride.splitFrom, samples = recorder.samples.slice(F.i);
+  const t = ride.elapsed - F.t, d = ride.dist - F.d;
+  if (t < 5) return;
+  const avg = samples.length ? Math.round(samples.reduce((a, x) => a + (x.power || 0), 0) / samples.length) : 0;
+  ride.splits.push({ time: t, dist: d, power: avg });
+  recorder.markLap();
+  ride.splitFrom = { t: ride.elapsed, d: ride.dist, i: recorder.samples.length };
+  cueBeep(1040, 0.2);
+  toast(tr('Split {n}: {time} · {km} km · {w} W', { n: ride.splits.length, time: fmtTime(t), km: (d / 1000).toFixed(2), w: avg }));
 }
 
 /** Chase → isometric → side view (C, or Y on the Zwift Ride). */
@@ -1902,9 +1940,11 @@ function changeIntensity(delta) {
 }
 
 const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null && !ride.ergOff);
+/** Free ride with the power held in ERG (A on the Zwift Ride, or E). */
+const inHold = () => !!(ride?.hold && !(ride.workout && !ride.workoutDone));
 
 function setGear(gear) {
-  if (!ride || inErgStep()) return;
+  if (!ride || inErgStep() || inHold()) return;
   const g = Math.max(1, Math.min(GEARS, Math.round(gear)));
   if (g !== ride.gear) shift(g - ride.gear);
 }
@@ -1915,6 +1955,10 @@ function shift(dir) {
     // in ERG the shifters move the workout's intensity, 1 % a click (the on-screen − / + do 5 %)
     changeIntensity(Math.sign(dir));
     toast(`${tr('Intensity')} ${settings.intensity}% · ${effectiveTarget()} ${U.W}`);
+  } else if (inHold()) {
+    setHold(ride.hold + Math.sign(dir) * 5);
+    toast(`ERG ${ride.hold} ${U.W}`);
+    updateGear();
   } else {
     const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
     if (next === ride.gear) return;
@@ -1936,7 +1980,8 @@ function steer(dir) {
 }
 
 function skipInterval() {
-  if (!ride?.workout || ride.workoutDone) return;
+  if (!ride) return;
+  if (!ride.workout || ride.workoutDone) { manualLap(); return; }
   const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
   if (!t) return;
   ride.workoutT = Math.max(0, ride.workoutT - 1) + t.remaining;
@@ -1945,10 +1990,10 @@ function skipInterval() {
 
 function updateGear() {
   if (!ride) return;
-  const inErg = inErgStep();
-  $('m-gear-label').textContent = inErg ? 'ERG' : tr('Gear');
-  $('m-gear').textContent = inErg ? settings.intensity : ride.gear; // in ERG: the intensity the shifters move
-  $('m-gear-unit').textContent = inErg ? '%' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
+  const inErg = inErgStep(), hold = inHold();
+  $('m-gear-label').textContent = inErg || hold ? 'ERG' : tr('Gear');
+  $('m-gear').textContent = hold ? ride.hold : inErg ? settings.intensity : ride.gear; // what the shifters move
+  $('m-gear-unit').textContent = hold ? U.W : inErg ? '%' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
 }
 
 // Pause / Finish and the simulator slider stay hidden while riding: they show when the mouse moves (for a few seconds, or as
