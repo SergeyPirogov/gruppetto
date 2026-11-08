@@ -1472,7 +1472,9 @@ function pickLane(r, others, home) {
   const cur = r.laneTarget ?? r.lane;
   // never change course while alongside someone: finish the pass in the lane you chose
   if (others.some((o) => o !== r && Math.abs(o.dist - r.dist) < 3.5 && Math.abs(o.lane - r.lane) >= 0.9 && Math.abs(o.lane - r.lane) < 2)) return cur;
-  if (!near(cur, -0.5, 15, true)) return near(home, -6, 10) ? cur : home; // nobody just ahead: drift back home when it is clear
+  // nobody just ahead: drift back home only when it is clear as far ahead as a pass begins (15 m); with a shorter
+  // check, a rider 10–15 m ahead sent you out and let you back in every quarter second, a twitch across the road
+  if (!near(cur, -0.5, 15, true)) return near(home, -6, 15) ? cur : home;
   const free = LANES.filter((l) => !near(l, -3, 15)).sort((a, b) => Math.abs(a - cur) - Math.abs(b - cur));
   return free.length ? free[0] : cur;
 }
