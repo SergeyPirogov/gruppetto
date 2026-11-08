@@ -2038,12 +2038,12 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}` : r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}` : r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
         const BIKE_COLORS = ['#2a2f3a', '#e8e8e8', '#1f5fd0', '#f0c020', '#2f8f4e'];
-        const bikeColor = r.self ? '#c9302c' : BIKE_COLORS[(String(r.name || i).length + i) % BIKE_COLORS.length];
+        const bikeColor = r.bike || (r.self ? '#c9302c' : BIKE_COLORS[(String(r.name || i).length + i) % BIKE_COLORS.length]);
         // no name tag for you, nor for your ghost (its gap rides over your head)
         R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self || (r.ghost && !r.climb) ? null : r.name, SHOW_RIDER && !this.riderModel, !this.bikeModel, bikeColor);
         this.riders.set(key, R);
@@ -2061,7 +2061,8 @@ export class Scene3D {
           const Model = this.riderModel.dummy ? DummyRider : ModelRider;
           R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
         }
-        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.color }); R.group.add(this._frameDecal()); }
+        // the frame its own colour, or the jersey's
+        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color }); R.group.add(this._frameDecal()); }
         // a ghost (your own earlier ride): see-through, and drawn after the solid scene
         if (r.ghost) {
           R.group.traverse((o) => {
