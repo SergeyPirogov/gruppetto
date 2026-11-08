@@ -12,7 +12,7 @@ import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
 /** Heart rate zones in bpm: from intervals.icu when connected, otherwise from the threshold heart rate (Profile). */
 const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNames, lthr: s.lthr });
 import { parseZwo, toZwo } from './zwo.js';
-import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formBand } from './power.js';
+import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
@@ -1089,6 +1089,7 @@ async function startRide() {
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
     pacer: racing ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
+  if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
   // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
@@ -1458,6 +1459,7 @@ function tick(power, cadence, hr) {
 
   // workout / trainer control
   const grade = route.gradeAt(ride.dist);
+  if (ride.workout?.ramp && !ride.workoutDone) rampWatch(power, cadence);
   if (ride.workout && !ride.workoutDone) {
     const t = targetAt(ride.workout, ride.workoutT, settings.ftp);
     ride.workoutT += 1;
@@ -2221,7 +2223,7 @@ function showSummary(e, { live = false } = {}) {
   const recs = Object.entries(e.bests || {}).filter(([d, w]) => before[d] && w > before[d].w).map(([d, w]) => `<span class="pr-chip">${durLabel(+d)} <b>${w} ${U.W}</b> 🏆</span>`);
   $('sum-prs').hidden = !recs.length;
   $('sum-prs').innerHTML = recs.length ? `<span class="pr-head">${tr('New power records')}</span>${recs.join('')}` : '';
-  renderFtpTip($('sum-ftp'));
+  renderFtpTip($('sum-ftp'), e);
   // race results
   $('sum-race').hidden = !e.race;
   if (e.race) {
@@ -2339,18 +2341,34 @@ function renderIntervals(e) {
 /** "5 s", "1 min", "20 min", "1 h" */
 const durLabel = (d) => (d < 60 ? `${d} ${tr('s')}` : d < 3600 ? `${d / 60} ${U.min}` : `${d / 3600} ${tr('h')}`);
 
-/** "Your rides suggest FTP 226 W" with a button that sets it, in `el` (hidden when there is nothing to suggest). */
-function renderFtpTip(el) {
-  const s = ftpSuggestion(history, settings.ftp);
-  el.hidden = !s;
-  if (!s) return;
-  const from = s.ramp ? tr('75 % of your best minute in a ramp test ({w} W)', { w: s.w }) : tr('95 % of your best 20 minutes ({w} W, {date})', { w: s.w, date: new Date(s.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) });
-  el.innerHTML = `<div><b>${tr('Your rides suggest FTP {w} W', { w: s.ftp })}</b><small>${esc(from)} · ${tr('now {w} W', { w: settings.ftp })}</small></div><button class="primary">${tr('Set FTP to {w} W', { w: s.ftp })}</button>`;
-  el.querySelector('button').onclick = () => {
-    settings.ftp = s.ftp; saveSettings();
-    $('f-ftp').value = s.ftp;
-    toast(tr('FTP set to {w} W', { w: s.ftp }));
-    renderFtpTip(el); renderPowerCurve();
+/**
+ * "Your rides suggest FTP 226 W" with a button that sets it, in `el` (hidden when there is nothing to suggest);
+ * after a ramp test (`e`), its own result even when lower; and W′ from your best 5 and 20 minutes.
+ */
+function renderFtpTip(el, e = null) {
+  const rows = [];
+  const b1 = e?.ramp && (e.bests?.[60] || e.summary?.best1min);
+  if (b1 && rampFtp(b1) !== settings.ftp) {
+    rows.push({ title: tr('Ramp test: your FTP is {w} W', { w: rampFtp(b1) }), why: `${tr('75 % of your best minute in a ramp test ({w} W)', { w: Math.round(b1) })} · ${tr('now {w} W', { w: settings.ftp })}`,
+      button: tr('Set FTP to {w} W', { w: rampFtp(b1) }), set: () => { settings.ftp = rampFtp(b1); $('f-ftp').value = settings.ftp; return tr('FTP set to {w} W', { w: settings.ftp }); } });
+  } else if (!e?.ramp) {
+    const s = ftpSuggestion(history, settings.ftp);
+    if (s) {
+      const from = s.ramp ? tr('75 % of your best minute in a ramp test ({w} W)', { w: s.w }) : tr('95 % of your best 20 minutes ({w} W, {date})', { w: s.w, date: new Date(s.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) });
+      rows.push({ title: tr('Your rides suggest FTP {w} W', { w: s.ftp }), why: `${from} · ${tr('now {w} W', { w: settings.ftp })}`,
+        button: tr('Set FTP to {w} W', { w: s.ftp }), set: () => { settings.ftp = s.ftp; $('f-ftp').value = s.ftp; return tr('FTP set to {w} W', { w: s.ftp }); } });
+    }
+  }
+  const wp = wPrimeSuggestion(history, settings.wPrimeKj || DEFAULT_W_PRIME / 1000);
+  if (wp) {
+    rows.push({ title: tr('Your rides suggest W′ {kj} kJ', { kj: wp.kj }), why: `${tr('from your best 5 and 20 minutes ({a} W, {b} W)', { a: wp.p5, b: wp.p20 })} · ${tr('now {kj} kJ', { kj: settings.wPrimeKj || DEFAULT_W_PRIME / 1000 })}`,
+      button: tr('Set W′ to {kj} kJ', { kj: wp.kj }), set: () => { settings.wPrimeKj = wp.kj; $('f-wprime').value = wp.kj; return tr('W′ set to {kj} kJ', { kj: wp.kj }); } });
+  }
+  el.hidden = !rows.length;
+  el.innerHTML = rows.map((r, i) => `<div class="ftp-row"><div><b>${esc(r.title)}</b><small>${esc(r.why)}</small></div><button class="primary" data-i="${i}">${esc(r.button)}</button></div>`).join('');
+  for (const b of el.querySelectorAll('button')) b.onclick = () => {
+    const msg = rows[+b.dataset.i].set(); saveSettings(); toast(msg);
+    renderFtpTip(el, e); renderPowerCurve();
   };
 }
 
@@ -3065,6 +3083,31 @@ const effectiveTarget = () => (ride.target === null ? null : Math.round(ride.tar
  * "Spiral of death" guard: when cadence (or, without a cadence source, power) collapses in ERG,
  * halve the target so the legs can spin up again, then restore it over ~5 s.
  */
+/**
+ * The ramp test (#ftp-test): its best minute so far, and its end. Past the warm-up, 10 s in a row under 80 % of
+ * the step (or under 50 rpm) is the failure the test rides to: the workout ends there, ERG lets go, and the
+ * result is said aloud and shown.
+ */
+function rampWatch(power, cadence) {
+  const w = (ride.rampWin ||= []);
+  w.push(power); if (w.length > 60) w.shift();
+  if (w.length === 60) ride.rampBest = Math.max(ride.rampBest || 0, w.reduce((a, b) => a + b, 0) / 60);
+  const warm = ride.workout.steps[0].dur;
+  if (ride.workoutT < warm + 60 || !ride.target) { ride.rampLow = 0; return; }
+  const failing = power < ride.target * 0.8 || (cadence > 0 && cadence < 50);
+  ride.rampLow = failing ? (ride.rampLow || 0) + 1 : 0;
+  if (ride.rampLow < 10) return;
+  ride.workoutDone = true;
+  ride.target = null;
+  recorder.markLap();
+  const ftp = ride.rampBest ? rampFtp(ride.rampBest) : null;
+  cueBeep(1040, 0.5);
+  cueSay(ftp ? `Test over. Your F T P is about ${ftp} watts. Spin easy now.` : 'Test over. Spin easy now.');
+  toast(ftp ? tr('Ramp test over: FTP ≈ {w} W. Spin easy to cool down, then finish', { w: ftp }) : tr('Ramp test over. Spin easy to cool down'));
+  updateGear();
+  if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
+}
+
 function updateSpiralGuard(power, cadence) {
   if (!inErgStep() || ride.simulated) { ride.ergFactor = 1; ride.lowFor = 0; return; }
   const eff = effectiveTarget();

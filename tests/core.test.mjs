@@ -7,6 +7,7 @@ import { routes } from '../js/routes.js';
 import { workouts, targetAt, totalDuration } from '../js/workouts.js';
 import { Recorder, normalizedPower, bestAverage } from '../js/recorder.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from '../js/challenge.js';
+import { wPrimeSuggestion, rampFtp } from '../js/power.js';
 import { wbalStep, wbalSeries, timeToEmpty } from '../js/wbal.js';
 
 const dv = (bytes) => new DataView(new Uint8Array(bytes).buffer);
@@ -678,4 +679,17 @@ test('Challenge link: a ride packs into the address and comes back as a ghost', 
   assert.deepEqual(g.chart.pw, pw);
   assert.ok(g.chart.d.every((x, i) => Math.abs(x - d[i]) <= 1), 'distance within a metre');
   assert.equal(await decodeChallenge('not-a-ride'), null);
+});
+
+test('FTP test and W′ from rides: 75 % of the ramp minute; W′ through the best 5 and 20 minutes', () => {
+  assert.equal(rampFtp(320), 240);
+  const now = Date.parse('2026-11-08T12:00:00Z');
+  const ride = (b) => ({ date: '2026-11-01T10:00:00Z', bests: b });
+  // 300 W for 5 min, 250 W for 20: W′ = (300 − 250) · 400 = 20 kJ, CP 233 W
+  const s = wPrimeSuggestion([ride({ 300: 300, 1200: 250 })], 15, { now });
+  assert.deepEqual(s, { kj: 20, cp: 233, p5: 300, p20: 250 });
+  assert.equal(wPrimeSuggestion([ride({ 300: 300, 1200: 250 })], 20, { now }), null, 'the same as now');
+  assert.equal(wPrimeSuggestion([ride({ 300: 260, 1200: 258 })], 20, { now }), null, 'implausibly small');
+  assert.equal(wPrimeSuggestion([ride({ 300: 300 })], 20, { now }), null, 'no 20 minutes');
+  assert.equal(wPrimeSuggestion([{ ...ride({ 300: 300, 1200: 250 }), date: '2026-01-01T10:00:00Z' }], 15, { now }), null, 'too old');
 });

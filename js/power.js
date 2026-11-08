@@ -65,6 +65,23 @@ export function ftpSuggestion(entries, ftp, { days = 90, now = Date.now() } = {}
 }
 
 /**
+ * W′ from your rides: the critical power model through your best 5 and 20 minutes (work = CP·t + W′), over the
+ * last `days`. Suggested when it is plausible (5–60 kJ) and at least 1 kJ off the W′ you have now (kJ).
+ */
+export function wPrimeSuggestion(entries, wPrimeKj, { days = 90, now = Date.now() } = {}) {
+  const c = powerCurve(entries.filter((e) => now - Date.parse(e.date) <= days * 864e5), { now });
+  const p5 = c[300]?.w, p20 = c[1200]?.w;
+  if (!p5 || !p20 || p5 <= p20) return null;
+  const wPrime = ((p5 - p20) * 300 * 1200) / (1200 - 300), cp = (p20 * 1200 - p5 * 300) / (1200 - 300);
+  const kj = Math.round(wPrime / 100) / 10;
+  if (kj < 5 || kj > 60 || Math.abs(kj - wPrimeKj) < 1) return null;
+  return { kj, cp: Math.round(cp), p5, p20 };
+}
+
+/** A ramp test's result: FTP = 75 % of the best minute. */
+export const rampFtp = (best1min) => Math.round(best1min * 0.75);
+
+/**
  * Fitness, fatigue and form (#54), as TrainingPeaks and intervals.icu draw them: daily TSS smoothed over
  * 42 days (fitness, CTL) and over 7 days (fatigue, ATL); form (TSB) = yesterday's fitness − fatigue.
  * Returns one point per day from the first ride (or `days` back) to `now`.

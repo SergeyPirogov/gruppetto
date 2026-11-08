@@ -912,7 +912,10 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .pc-table small { font-size: .68rem; color: #38d6e8; }
 .ftp-tip { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0; padding: 10px 14px; border-radius: 12px; border: 1px solid #2b8f58; background: #12291e; }
 .ftp-tip[hidden] { display: none; }
-.ftp-tip div { display: grid; gap: 2px; }
+.ftp-tip { flex-direction: column; align-items: stretch; }
+.ftp-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ftp-row + .ftp-row { padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, .08); }
+.ftp-row > div { display: grid; gap: 2px; }
 .ftp-tip small { color: var(--muted); }
 .ftp-tip button { width: auto; padding: 8px 14px; }
 .sum-prs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -4px 0 12px; }
