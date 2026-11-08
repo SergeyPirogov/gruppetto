@@ -835,6 +835,9 @@ function openWorkoutDetail(w) {
     const col = s.free || mid === null ? '#64748b' : zoneColor(mid / ftp);
     return `<li><i style="background:${col}"></i><span class="t">${t === null ? '' : fmtTime(t)}</span><span class="d">${fmtDur(s.dur)}</span><span>${stepTarget(s)}${s.cad ? ` <small>· ${Array.isArray(s.cad) ? s.cad.join('–') : s.cad} ${U.rpm}</small>` : ''}${s.text ? ` <small>· ${esc(s.text)}</small>` : ''}</span></li>`;
   };
+  // a plan from intervals.icu spells its steps out in its description: the list would only say it again
+  const spelled = w.source === 'intervals' && !!w.description;
+  $('wkd-steps').hidden = $('wkd-steps-h').hidden = spelled;
   $('wkd-steps').innerHTML = rows.map((r) => (r.reps > 1
     ? `<li class="x"><span></span><span class="t">${fmtTime(r.t)}</span><span>${r.reps} ×</span><span></span></li>${r.steps.map((s) => li(s, null)).join('')}`
     : li(r.steps[0], r.t))).join('');
