@@ -191,6 +191,7 @@ export const UK = {
   'Andriy': 'Андрій', 'Taras': 'Тарас', 'Dmytro': 'Дмитро', 'Bohdan': 'Богдан',
 
   // routes
+  'Alpine Valley': 'Альпійська долина', 'Dead flat, 0 % for 45 km along an alpine valley, the peaks all around. For long workouts in ERG and steady endurance.': 'Абсолютно рівно, 0 % на 45 км альпійською долиною, навколо вершини. Для довгих тренувань в ERG і рівної витривалості.',
   'Riverside': 'Річкова набережна', 'Flat along the river and birch groves. Good for intervals and warm-ups.': 'Рівно вздовж річки й березових гаїв. Добре для інтервалів і розминки.',
   'Polissia Lakes': 'Поліські озера', 'A long, almost flat loop past lakes and pine woods. Steady endurance miles.': 'Довге майже рівне коло повз озера й соснові ліси. Рівні кілометри на витривалість.',
   'Sunflower Steppe': 'Соняшниковий степ', 'Long straights through sunflower fields. Fast and flat, ideal for ERG.': 'Довгі прямі серед соняшникових полів. Швидко й рівно, ідеально для ERG.',

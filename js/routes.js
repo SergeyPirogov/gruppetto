@@ -6,6 +6,16 @@ export const SEG = 5; // metres per segment
 // theme: visual world (see themes.js). Grades stay under ~10 %.
 const ROUTES = [
   {
+    // dead flat, 0 % all the way, through an alpine valley with the peaks around: long workouts in ERG and steady
+    // endurance with something to look at
+    id: 'level', theme: 'alpine',
+    name: 'Alpine Valley',
+    description: 'Dead flat, 0 % for 45 km along an alpine valley, the peaks all around. For long workouts in ERG and steady endurance.',
+    length: 45000,
+    hills: [],
+    curves: [[0.005, 15000, 0.3], [0.004, 4500, 1.1], [0.002, 1500, 2.2]],
+  },
+  {
     id: 'flat', theme: 'river',
     name: 'Riverside',
     description: 'Flat along the river and birch groves. Good for intervals and warm-ups.',

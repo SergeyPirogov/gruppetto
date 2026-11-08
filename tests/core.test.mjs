@@ -167,9 +167,9 @@ test('intervals.icu workout_doc conversion', () => {
 
 import { THEMES } from '../js/themes.js';
 
-test('11 routes, each with an existing theme and distinct name', () => {
-  assert.equal(routes.length, 11);
-  assert.equal(new Set(routes.map((r) => r.name)).size, 11);
+test('12 routes, each with an existing theme and distinct name', () => {
+  assert.equal(routes.length, 12);
+  assert.equal(new Set(routes.map((r) => r.name)).size, 12);
   for (const r of routes) assert.ok(THEMES[r.theme], `${r.id} theme ${r.theme}`);
 });
 
