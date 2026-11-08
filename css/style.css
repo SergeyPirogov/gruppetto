@@ -633,3 +633,4 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .sum-icu { display: inline-flex; margin-top: 12px; }
 .sum-icu small { color: var(--muted); font-variant-numeric: tabular-nums; }
 .sum-icu[hidden] { display: none; }
+.erg-btn.on { box-shadow: inset 0 0 0 1px var(--cyan); color: var(--cyan); }

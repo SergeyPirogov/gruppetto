@@ -69,6 +69,7 @@ export const UK = {
   'Riders in the bunch': 'Райдерів у групі', 'None': 'Нікого',
   'Plan': 'План', 'Today': 'Сьогодні', 'Tomorrow': 'Завтра', 'Nothing planned for today or tomorrow': 'На сьогодні й завтра нічого не заплановано',
   'in {s} s': 'через {s} с',
+  'ERG on/off (E)': 'ERG увімк./вимк. (E)', 'ERG off: the trainer simulates the road, ride to the target by feel': 'ERG вимкнено: тренажер імітує дорогу, тримай ціль сам', 'ERG on: the trainer holds the target power': 'ERG увімкнено: тренажер тримає цільову потужність',
   'Profile & settings': 'Профіль і налаштування', 'Language': 'Мова', 'Name': 'Ім\'я', 'Jersey color': 'Колір джерсі',
   'Accent color (stripe, decals)': 'Колір акценту (смуга, наліпки)', 'Weight, kg': 'Вага, кг', 'Height, cm': 'Зріст, см', 'FTP, W': 'FTP, Вт',
   'Chainring (Zwift Cog 14T)': 'Передня зірка (Zwift Cog 14T)', 'Virtual gears': 'Віртуальні передачі',

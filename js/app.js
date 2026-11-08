@@ -676,6 +676,7 @@ async function startRide() {
   $('workout-panel').hidden = !workout;
   $('wk-intensity').hidden = !workout;
   $('wk-pacer-btn').classList.toggle('on', settings.pacer !== false);
+  $('wk-erg-btn').classList.add('on'); // every workout starts in ERG
   $('paused').hidden = true;
   $('btn-pause').textContent = tr('Pause');
   $('ride').classList.remove('show-controls');
@@ -952,7 +953,7 @@ function tick(power, cadence, hr) {
   }
   updateSpiralGuard(power, cadence);
   if (!ride.simulated && trainer.controllable) {
-    if (ride.target !== null && ride.workout && !ride.workoutDone) {
+    if (inErgStep()) {
       const sendW = effectiveTarget();
       if (sendW !== ride.lastSentTarget) { trainer.setTargetPower(sendW); ride.lastSentTarget = sendW; }
       ride.lastSentGrade = null;
@@ -1679,6 +1680,20 @@ $('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').chec
 $('f-free-wkg').value = settings.freePacerWkg;
 $('f-free-wkg').oninput = () => { const v = Number($('f-free-wkg').value); if (v >= 0.5 && v <= 7) { settings.freePacerWkg = v; saveSettings(); updateSummary(); } };
 $('wk-pacer-btn').onclick = () => togglePacer();
+$('wk-erg-btn').onclick = () => toggleErg();
+/**
+ * ERG on or off during a workout: on, the trainer holds the target power; off, it simulates the road
+ * like a free ride (gears work again) while the targets stay on screen to ride to by feel.
+ */
+function toggleErg() {
+  if (!ride?.workout || ride.workoutDone) return;
+  ride.ergOff = !ride.ergOff;
+  ride.lastSentTarget = null; ride.lastSentGrade = null; ride.lastSentWheel = null;
+  ride.ergFactor = 1; ride.lowFor = 0;
+  $('wk-erg-btn').classList.toggle('on', !ride.ergOff);
+  updateGear();
+  toast(ride.ergOff ? tr('ERG off: the trainer simulates the road, ride to the target by feel') : tr('ERG on: the trainer holds the target power'));
+}
 function togglePacer() {
   // in a workout the workout pacer, on a free ride the free-ride pacer
   const key = ride && !ride.workout ? 'freePacer' : 'pacer';
@@ -1851,7 +1866,7 @@ function changeIntensity(delta) {
   if (ride?.workout) drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
 }
 
-const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null);
+const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null && !ride.ergOff);
 
 function setGear(gear) {
   if (!ride || inErgStep()) return;
@@ -1937,6 +1952,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'ArrowRight') { e.preventDefault(); steer(+1); }
   if (e.code === 'KeyN') skipInterval();
   if (e.code === 'KeyP' && ride.pacer) togglePacer();
+  if (e.code === 'KeyE') toggleErg();
   if (e.code === 'KeyC' && scene?.setCamera) {
     const order = ['chase', 'iso', 'side'];
     settings.camera = order[(order.indexOf(settings.camera) + 1) % order.length];
