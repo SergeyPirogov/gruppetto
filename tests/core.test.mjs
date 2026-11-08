@@ -748,3 +748,12 @@ test('Usage stats: nothing without consent or with Do Not Track; events only as 
   assert.equal(rideMilestone(4), '');
   delete globalThis.window; delete globalThis.document;
 });
+
+test('intervals.icu: the planned workouts already ridden are the events the day\'s activities are paired with', async () => {
+  const { IntervalsClient } = await import('../js/intervals.js');
+  let asked = '';
+  globalThis.fetch = async (url) => { asked = String(url); return new Response(JSON.stringify([{ id: 'i1', paired_event_id: 4242 }, { id: 'i2', paired_event_id: null }, { id: 'i3' }]), { status: 200 }); };
+  const done = await new IntervalsClient({ apiKey: 'k' }).doneEventIds('2026-11-08', '2026-11-08');
+  assert.deepEqual([...done], ['4242']);
+  assert.match(asked, /\/activities\?oldest=2026-11-08&newest=2026-11-08/);
+});

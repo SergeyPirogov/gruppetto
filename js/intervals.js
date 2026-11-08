@@ -85,6 +85,12 @@ export class IntervalsClient {
    * Planned cycling workouts between two local dates (YYYY-MM-DD), converted to Gruppetto workouts.
    * The returned array carries `stats` explaining what was found and skipped.
    */
+  /** The planned workouts already ridden between two local dates: their event ids, from the activities paired with them. */
+  async doneEventIds(oldest, newest) {
+    const acts = (await this.request('/activities', { params: { oldest, newest } })) || [];
+    return new Set((Array.isArray(acts) ? acts : []).map((a) => a?.paired_event_id).filter((x) => x !== null && x !== undefined).map(String));
+  }
+
   async plannedWorkouts(oldest, newest) {
     const events = (await this.request('/events', { params: { oldest, newest, category: 'WORKOUT' } })) || [];
     const stats = { total: events.length, otherSport: 0, unstructured: 0 };

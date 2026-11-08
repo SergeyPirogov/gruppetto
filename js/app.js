@@ -511,23 +511,8 @@ const allWorkouts = () => [...icuWorkouts, ...myWorkouts, ...workouts];
 
 /** Today's and tomorrow's workouts from the intervals.icu calendar, right in the lobby. */
 function renderPlan() {
-  const box = $('plan-box'), list = $('plan-list');
-  if (!box) return;
-  box.hidden = !icuClient;
-  if (!icuClient) return;
-  const planned = icuWorkouts.filter((w) => ['today', 'tomorrow'].includes(dayLabel(w.date)));
-  list.innerHTML = planned.length ? '' : `<p class="muted plan-empty">${tr('Nothing planned for today or tomorrow')}</p>`;
-  for (const w of planned) {
-    const b = document.createElement('button');
-    b.className = 'option';
-    b.dataset.id = w.id;
-    const day = dayLabel(w.date);
-    b.innerHTML = `<span class="tag plan-day ${day}">${tr(day === 'today' ? 'Today' : 'Tomorrow')}</span><b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min}${w.description ? ` · ${esc(w.description)}` : ''}</small><canvas></canvas>`;
-    b.onclick = () => openWorkoutDetail(w);
-    b.classList.toggle('sel', settings.mode === w.id);
-    list.append(b);
-    requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
-  }
+  // today's planned workout is the Workout card among the modes; the rest of the plan is in the Workouts menu
+  if ($('plan-box')) $('plan-box').hidden = true;
 }
 
 /** Mode: free ride, or a workout picked in its own menu. */
@@ -535,7 +520,11 @@ function renderModes() {
   renderPlan();
   const ml = $('mode-list');
   ml.innerHTML = '';
-  const w = allWorkouts().find((x) => x.id === settings.mode)
+  // the workout card: the one picked, else today's from the intervals.icu plan, else the last one ridden
+  // ... and not one already ridden today here (when intervals.icu has not heard of the ride yet)
+  const riddenToday = new Set(history.filter((e) => e.eventId && localDate(new Date(e.date)) === localDate(new Date())).map((e) => String(e.eventId)));
+  const todayPlan = icuWorkouts.find((x) => dayLabel(x.date) === 'today' && !riddenToday.has(String(x.eventId))) || null;
+  const w = allWorkouts().find((x) => x.id === settings.mode) || todayPlan
     || allWorkouts().find((x) => x.id === settings.lastWorkout) || null;
   const free = document.createElement('button');
   free.className = 'option';
@@ -546,7 +535,7 @@ function renderModes() {
   wb.className = 'option wk-pick';
   wb.dataset.id = 'workout';
   wb.innerHTML = w
-    ? `<span class="wk-pick-head"><b>${esc(w.name)}</b><span class="wk-change">${tr('Workouts')} ›</span></span><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`
+    ? `${w.source === 'intervals' && dayLabel(w.date) === 'today' ? `<span class="tag plan-day today">${tr('Today · intervals.icu')}</span>` : ''}<span class="wk-pick-head"><b>${esc(w.name)}</b><span class="wk-change">${tr('Workouts')} ›</span></span><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`
     : `<span class="wk-pick-head"><b>${tr('Workout')}</b><span class="wk-change">${tr('Choose')} ›</span></span><small>${tr('Structured intervals in ERG: the trainer holds the target power.')}</small>`;
   wb.onclick = (ev) => {
     if (w && !ev.target.closest('.wk-change')) { openWorkoutDetail(w); return; }
@@ -2140,6 +2129,13 @@ function saveToHistory(r, samples) {
   // XP, level and badges: what this ride earned shows in its summary
   const got = addRide(progress, e);
   progress = got.progress; saveProgress();
+  // a planned workout just ridden is done: off the list, and the next ride is a free one unless another is picked
+  if (e.eventId) {
+    const stats = icuWorkouts.stats;
+    icuWorkouts = icuWorkouts.filter((w) => String(w.eventId) !== String(e.eventId));
+    icuWorkouts.stats = stats;
+    if (!allWorkouts().some((w) => w.id === settings.mode) && !['free', 'race'].includes(settings.mode)) { settings.mode = 'free'; saveSettings(); }
+  }
   track('ride-finish', minutesBucket(e.summary?.duration || 0));
   if (rideMilestone(progress.rides)) track('ride-count', rideMilestone(progress.rides));
   for (const b of got.badges) track('badge', b.id);
@@ -2819,6 +2815,11 @@ async function connectIntervals({ quiet = false } = {}) {
     const today = new Date();
     const week = new Date(today.getTime() + 6 * 86400000);
     icuWorkouts = await client.plannedWorkouts(localDate(today), localDate(week));
+    // a workout already ridden today (here, in Zwift, on a Garmin: any activity paired with it) is not offered again
+    const done = await client.doneEventIds(localDate(today), localDate(today)).catch(() => new Set());
+    const stats = icuWorkouts.stats;
+    icuWorkouts = icuWorkouts.filter((w) => !done.has(String(w.eventId)));
+    icuWorkouts.stats = stats;
     icuClient = client;
     settings.icuKey = key;
     settings.icuAthlete = $('f-icu-athlete').value.trim();
