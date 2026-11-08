@@ -860,6 +860,12 @@ function showRoute() {
   updateSummary();
 }
 
+// the floating Ride bar: shown while the card's Ride button is off the screen
+$('ride-float-go').onclick = () => $('btn-start').click();
+if ('IntersectionObserver' in window) {
+  new IntersectionObserver(([e]) => { $('ride-float').hidden = e.isIntersecting; }, { threshold: 0.6 }).observe($('btn-start'));
+}
+
 /** "Rolling Hills · Sweet Spot 3×10" above the Ride button. */
 function updateSummary() {
   const el = $('ride-summary');
@@ -872,6 +878,7 @@ function updateSummary() {
   const free = settings.mode === 'free';
   const pacer = free && settings.freePacer ? `🚴 ${settings.pacerName?.trim() || tr('Pacer')} ${settings.freePacerWkg} ${U.wkg}` : null;
   el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? `👻 ${g.friend ? g.name || tr('Friend') : settings.ghost === 'last' ? tr('last ride') : tr('your best')}` : null, pacer].filter(Boolean).join(' · ');
+  $('ride-float-text').textContent = el.textContent;
 }
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */

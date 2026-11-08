@@ -1148,3 +1148,13 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   .rail-btn { padding: 8px; }
   .rail-dot { right: 2px; top: 2px; }
 }
+
+/* the floating Ride bar (desktop): what is picked, and Ride, while the card's button is scrolled away */
+.ride-float { position: fixed; bottom: 22px; left: calc(50% + 38px); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 16px; padding: 8px 8px 8px 22px; border-radius: 999px; background: rgba(18, 26, 40, .92); border: 1px solid rgba(255, 122, 26, .45); box-shadow: 0 14px 40px rgba(0, 0, 0, .45); backdrop-filter: blur(10px); animation: float-in .2s ease; max-width: calc(100vw - 140px); }
+.ride-float[hidden] { display: none; }
+.ride-float span { color: var(--text); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ride-float button { flex: none; padding: 12px 26px; border-radius: 999px; font-size: 1.05rem; }
+@keyframes float-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+@media (max-width: 860px) { .ride-float { display: none !important; } } /* phones keep Ride at the bottom anyway */
+@media (min-width: 861px) { .rail { align-self: start; } } /* sticky in a grid holds only when the item does not stretch */
+.lobby-shell { flex: none; } /* #lobby is a flex column: shrunk to the window, the shell left its content overflowing and the rail nothing to stick to */
