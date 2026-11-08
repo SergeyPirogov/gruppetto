@@ -1,7 +1,7 @@
 import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
-import { stepSpeed, draftFactor, DEFAULTS, riderCdA } from './physics.js';
+import { stepSpeed, draftFactor, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
 import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear',
+  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -341,6 +341,7 @@ function initLobby() {
   bind('f-camera', 'camera', false);
   bind('f-time', 'timeOfDay', false);
   bind('f-weather', 'weather', false);
+  bind('f-wind', 'wind', false);
   bind('f-bots', 'bots');
   // the pixel 3D style squares off the interface too (square corners, hard shadows)
   const pixelUi = () => document.body.classList.toggle('pixel-ui', settings.style === 'pixel');
@@ -944,6 +945,43 @@ async function ensureScene() {
 }
 const recorder = new Recorder();
 
+// ---------- Wind (#50) ----------
+const WIND_SPEED = { off: 0, light: 3, moderate: 6, strong: 9 }; // m/s: 11, 22, 32 km/h
+/** The way the road runs at distance d, as an angle on the map (the minimap's coordinates). */
+function routeHeading(route, d) {
+  const { pts, step } = routeShape(route), L = route.length;
+  const at = (x) => {
+    const dd = route.oneWay ? Math.max(0, Math.min(L, x)) : ((x % L) + L) % L;
+    const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
+    return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t];
+  };
+  const [ax, ay] = at(d + 15), [bx, by] = at(d - 15);
+  return Math.atan2(ay - by, ax - bx);
+}
+/** This moment's wind for you: gusts round the set strength, split into head- and crosswind as the road turns. */
+function updateWind() {
+  const W = ride.wind;
+  if (!W) return;
+  const t = ride.elapsed;
+  W.speed = W.base * (1 + 0.18 * Math.sin(t / 7.3) + 0.08 * Math.sin(t / 2.1 + 1.3));
+  const h = routeHeading(ride.route, ride.dist);
+  const c = windComponents(W.speed, W.toward, h);
+  W.head = c.head; W.cross = c.cross;
+  W.rel = W.toward - h; // where it blows, relative to the way you ride (0 = straight ahead with you)
+}
+/** The wind in the top bar: an arrow the way it blows (up = with you) and its speed. */
+function updateWindHud() {
+  const W = ride.wind, cell = $('wind-cell');
+  cell.hidden = !W?.base;
+  if (cell.hidden) return;
+  $('wind-arrow').style.transform = `rotate(${W.rel}rad)`;
+  $('m-wind').textContent = Math.round(W.speed * 3.6);
+  const kind = W.head > W.speed * 0.5 ? 'head' : W.head < -W.speed * 0.5 ? 'tail' : 'cross';
+  cell.dataset.kind = kind;
+  cell.title = tr({ head: 'Headwind', tail: 'Tailwind', cross: 'Crosswind' }[kind]);
+  scene?.setWind?.(W.speed);
+}
+
 // ---------- Before the start: are the sensors in? ----------
 const DEVICE_LABEL = { trainer: 'Trainer', hr: 'Heart rate', cad: 'Cadence', ctl: 'Controllers', obc: 'OpenBikeControl' };
 /**
@@ -1012,6 +1050,8 @@ async function startRide() {
     pacer: racing ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
+  // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
+  ride.wind = { base: WIND_SPEED[settings.wind] ?? 0, toward: Math.random() * Math.PI * 2, speed: 0, head: 0, cross: 0, rel: 0 };
   if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
   unlockAudio();
   $('wk-int').textContent = `${settings.intensity}%`;
@@ -1091,6 +1131,8 @@ function advance(now = performance.now()) {
     if (ride.race.countdown <= 0) { ride.race.go = true; ride.race.t0 = ride.elapsed; cueBeep(1320, 0.45); }
     left = 0;
   }
+  updateWind();
+  const W = ride.wind || { head: 0, cross: 0 };
   while (left > 1e-6) {
     const dt = Math.min(0.1, left, 1 - ride.secAcc);
     t += dt * 1000;
@@ -1099,11 +1141,11 @@ function advance(now = performance.now()) {
     const grade = route.gradeAt(ride.dist);
     // drafting: the best wheel to sit on among the riders just ahead
     const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
-    ride.draft = Math.max(0, ...pack.map((o) => draftFactor(o.dist - ride.dist, o.lane - ride.lane)));
-    ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft) });
+    ride.draft = Math.max(0, ...pack.map((o) => draftFactor(o.dist - ride.dist, o.lane - ride.lane, W.cross)));
+    ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft), wind: W.head });
     // your speed on your own, out of the wind shadow: faster than the wheel ahead -> you come past it,
     // otherwise you sit in and draft
-    ride.vFree = stepSpeed(ride.vFree ?? ride.v, power, grade, dt, settings.weight, { cda: ride.cda });
+    ride.vFree = stepSpeed(ride.vFree ?? ride.v, power, grade, dt, settings.weight, { cda: ride.cda, wind: W.head });
     // on a wheel: no riding into the back of the rider ahead (the overtake logic swings you out instead)
     for (const o of pack) if (Math.abs(o.lane - ride.lane) < 0.8) ride.v = Math.min(ride.v, wheelCap(o.dist - ride.dist, o.v ?? ride.v));
     const moved = ride.v * dt;
@@ -1134,7 +1176,7 @@ function advance(now = performance.now()) {
       const P = ride.pacer, target = ride.workoutDone || P.free ? null : effectiveTarget();
       const pw = P.free ? Math.round((settings.freePacerWkg || 2.5) * settings.weight)
         : target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
-      P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight, { cda: ride.cda }); // your size, your drag
+      P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight, { cda: ride.cda, wind: W.head }); // your size, your drag
       P.power = pw;
       if (P.free && pacerOn()) pacerRegroup(P, dt);
       P.dist += P.v * dt;
@@ -1169,9 +1211,9 @@ function advance(now = performance.now()) {
       }
       b.power = p;
       const wheels = [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b)];
-      const bd = Math.max(0, ...wheels.map((o) => draftFactor(o.dist - b.dist, o.lane - b.lane)));
-      b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd) });
-      b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, b.weight, { cda: b.cda });
+      const bd = Math.max(0, ...wheels.map((o) => draftFactor(o.dist - b.dist, o.lane - b.lane, W.cross)));
+      b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd), wind: W.head });
+      b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, b.weight, { cda: b.cda, wind: W.head });
       for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
       const before = b.dist;
       b.dist += b.v * dt;
@@ -1394,7 +1436,9 @@ function tick(power, cadence, hr) {
       ride.lastSentTarget = null;
       if (ride.shiftMode === 'wheel') sendVirtualGear();
       const offset = ride.shiftMode === 'wheel' ? 0 : gearGradeOffset(ride.gear);
-      const g = Math.round((grade * 100 * (settings.difficulty / 100) + offset) * 10) / 10;
+      // the wind as extra grade: a headwind is a gentle hill, a tailwind a gentle descent (±5 % at most)
+      const wg = ride.wind?.head ? Math.max(-5, Math.min(5, windGrade(ride.v, ride.wind.head, ride.cda * (1 - (ride.draft || 0)), settings.weight) * 100)) : 0;
+      const g = Math.round(((grade * 100 + wg) * (settings.difficulty / 100) + offset) * 10) / 10;
       // on a wheel the trainer gets less wind, so the shelter is felt in the legs, not only seen
       const cw = Math.round(WIND_CW * (1 - (ride.draft || 0)) * 100) / 100;
       const now = performance.now();
@@ -1434,6 +1478,7 @@ function updateHud(cadence, hr, grade) {
   const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
   $('m-power').textContent = p3;
   $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} ${U.wkg}`;
+  updateWindHud();
   // power zone: the board's bar and a Z1–Z7 tag take the zone's colour (in a workout the number itself
   // shows how close you are to the target, below)
   const zone = powerZone(p3 / Math.max(1, settings.ftp));

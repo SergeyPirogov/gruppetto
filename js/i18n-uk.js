@@ -235,4 +235,6 @@ export const UK = {
   'reconnecting…': 'перепідключення…', 'not connected yet': 'ще не підключено',
   'connected, waiting for a reading…': 'підключено, чекаємо на показ…',
   'connected': 'підключено',
+  'Wind': 'Вітер', 'Calm': 'Штиль', 'Light breeze': 'Легкий вітерець', 'Moderate wind': 'Помірний', 'Strong wind': 'Сильний',
+  'Headwind': 'Зустрічний вітер', 'Tailwind': 'Попутний вітер', 'Crosswind': 'Бічний вітер',
 };

@@ -609,3 +609,19 @@ test('heart rate zones: from intervals.icu in bpm, else from LTHR', async () => 
   assert.equal(l.length, 5);
   assert.deepEqual(timeInZones([100, 150, 165, 175, 185], 1, l).map((z) => z.sec), [1, 0, 1, 2, 1]); // tops 117 / 143 / 161.5 / 180.2 bpm
 });
+
+test('wind: headwind slows you, tailwind speeds you up, the trainer feels it as grade (#50)', async () => {
+  const { steadySpeed, windComponents, windGrade, draftFactor } = await import('../js/physics.js');
+  const still = steadySpeed(200, 0, 75), head = steadySpeed(200, 0, 75, { wind: 6 }), tail = steadySpeed(200, 0, 75, { wind: -6 });
+  assert.ok(head < still - 1.5 && tail > still + 1.5, `${head} ${still} ${tail}`);
+  // blowing the way you ride is a tailwind; from straight ahead a headwind; from the side all cross
+  const w = (toward) => windComponents(5, toward, 0);
+  assert.ok(Math.abs(w(0).head + 5) < 1e-9 && Math.abs(w(Math.PI).head - 5) < 1e-9);
+  assert.ok(Math.abs(w(Math.PI / 2).cross - 5) < 1e-9 && Math.abs(w(Math.PI / 2).head) < 1e-9);
+  // 6 m/s in your face at 30 km/h on 0.32 m²: about +3.3 % of grade (27 N more drag)
+  const g = windGrade(8.33, 6, 0.32, 75);
+  assert.ok(g > 0.028 && g < 0.038, String(g));
+  assert.ok(windGrade(8.33, -6, 0.32, 75) < 0);
+  // crosswind: the shelter moves to the lee side of the wheel
+  assert.ok(draftFactor(1, -0.6, 6) > draftFactor(1, 0, 6));
+});

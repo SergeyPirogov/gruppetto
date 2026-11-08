@@ -79,10 +79,12 @@ function patchShader(mat, key, fn) {
  * Wind: plants sway, more the higher the vertex (displacement ∝ height²), each at its own phase from
  * where it stands. `amp` is metres of sway per metre² of height; `time` a shared uniform.
  */
+const WIND_AMP = { value: 1 }; // how hard the wind blows: scales every sway (setWind)
 function windify(mat, amp, time) {
   return patchShader(mat, `wind${amp}`, (sh) => {
     sh.uniforms.uWindTime = time;
-    sh.vertexShader = `uniform float uWindTime;\n${sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.uniforms.uWindAmp = WIND_AMP;
+    sh.vertexShader = `uniform float uWindTime;\nuniform float uWindAmp;\n${sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       #ifdef USE_INSTANCING
         vec3 wRoot = instanceMatrix[3].xyz;
       #else
@@ -92,7 +94,7 @@ function windify(mat, amp, time) {
       float wS = sin(uWindTime * 1.3 + wRoot.x * 0.21 + wRoot.z * 0.17) * 0.7
         + sin(uWindTime * 2.9 + wRoot.x * 0.53 - wRoot.z * 0.41) * 0.3
         + 0.35; // leaning a little with the wind, swaying around that
-      transformed.xz += vec2(0.8, 0.6) * wS * ${amp.toFixed(4)} * wH * wH;`)}`;
+      transformed.xz += vec2(0.8, 0.6) * wS * uWindAmp * ${amp.toFixed(4)} * wH * wH;`)}`;
   });
 }
 
@@ -785,6 +787,12 @@ export class Scene3D {
     this.camera.updateProjectionMatrix();
     this.csm?.updateFrustums();
     this._isoHeading = undefined;
+  }
+
+  /** The wind, m/s: grass, plants and trees sway harder and faster with it. */
+  setWind(speed = 0) {
+    this.windSpeed = speed;
+    WIND_AMP.value = 0.6 + speed * 0.17;
   }
 
   /** 'cartoon' (default) or 'pixel': low-res render, limited palette with dithering and outlines. */
@@ -1732,7 +1740,7 @@ export class Scene3D {
     const dt = this.lastFrameTime === undefined ? 0 : Math.min(0.1, (now - this.lastFrameTime) / 1000);
     this.lastFrameTime = now;
     this.clock += dt;
-    this.windTime.value = this.clock;
+    this.windTime.value += dt * (0.8 + (this.windSpeed || 0) * 0.06); // a stronger wind sways faster too
     this._adaptQuality(dt);
 
     // riders

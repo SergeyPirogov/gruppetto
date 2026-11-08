@@ -12,12 +12,13 @@ export const DEFAULTS = { cda: 0.32, crr: 0.004, rho: 1.225, bikeMass: 8 };
  * @param {number} riderMass kg
  */
 export function stepSpeed(v, power, grade, dt, riderMass, opts = {}) {
-  const { cda, crr, rho, bikeMass } = { ...DEFAULTS, ...opts };
+  const { cda, crr, rho, bikeMass, wind = 0 } = { ...DEFAULTS, ...opts }; // wind: headwind, m/s (− tailwind)
   const m = riderMass + bikeMass;
   const theta = Math.atan(grade);
   const fGrav = m * G * Math.sin(theta);
   const fRoll = v > 0.05 || power > 0 ? m * G * Math.cos(theta) * crr : 0;
-  const fAir = 0.5 * rho * cda * v * v;
+  const va = v + wind; // the air speed you ride through
+  const fAir = 0.5 * rho * cda * va * Math.abs(va);
   // P = F·v, so the force grows as v → 0; the floor only keeps it finite. It must be low enough that
   // modest power still starts the bike on a climb (with 1.5 m/s, 30 W could not move 83 kg up 3%).
   const fProp = power / Math.max(v, 0.3);
@@ -33,14 +34,36 @@ export function steadySpeed(power, grade, riderMass, opts) {
 }
 
 /**
+ * Wind along the road: the headwind (+) or tailwind (−) and the crosswind (+ from the left, blowing to
+ * the right), in m/s. `speed` m/s blowing toward the angle `toward`; you ride toward `heading` (radians,
+ * both measured the same way, x then y, with y to the right of x).
+ */
+export function windComponents(speed, toward, heading) {
+  const d = toward - heading;
+  return { head: -speed * Math.cos(d), cross: speed * Math.sin(d) };
+}
+
+/**
+ * The wind felt on the trainer, as extra grade (a fraction): the change in air drag it makes at this
+ * speed, as if it were a hill. Headwind adds, tailwind takes away.
+ */
+export function windGrade(v, head, cda, mass, { rho = DEFAULTS.rho, bikeMass = DEFAULTS.bikeMass } = {}) {
+  const va = v + head;
+  const extra = 0.5 * rho * cda * (va * Math.abs(va) - v * v);
+  return extra / ((mass + bikeMass) * G);
+}
+
+/**
  * Drafting: the share of air drag saved riding behind someone, from the gap to the wheel ahead (m) and
  * the sideways offset (m). About a third right on the wheel, fading to nothing by 4 m back or once you
  * are half a bike width out of their line.
  */
-export function draftFactor(gap, sideways) {
+export function draftFactor(gap, sideways, cross = 0) {
   if (gap <= 0.3 || gap >= 4) return 0;
   const along = gap <= 1 ? 1 : 1 - (gap - 1) / 3;
-  const side = Math.max(0, 1 - Math.abs(sideways) / 0.8);
+  // in a crosswind the shelter moves downwind of the wheel ahead: sit half a bike out to the lee side
+  const lee = Math.max(-0.7, Math.min(0.7, cross * 0.1));
+  const side = Math.max(0, 1 - Math.abs(sideways + lee) / 0.8);
   return 0.33 * along * side;
 }
 

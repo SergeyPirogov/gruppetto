@@ -100,7 +100,7 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .grade { font-size: 1.35rem; font-weight: 700; }
 
 .topbar {
-  width: min(460px, calc(100vw - 32px)); display: grid; grid-template-columns: repeat(3, 1fr);
+  width: min(460px, calc(100vw - 32px)); display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; /* 3 cells, 4 with the wind */
   background: var(--pill); border: 1px solid var(--pill-line); border-radius: 14px; color: #fff;
   backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(10, 20, 40, 0.18);
 }
@@ -932,3 +932,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .preflight-list li.wait i { border: 2.5px solid rgba(250, 204, 21, .3); border-top-color: #facc15; animation: pf-spin .9s linear infinite; }
 @keyframes pf-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .preflight-list li.wait i { animation: none; } }
+
+/* ---------- Wind in the top bar (#50) ---------- */
+.wind-cell .wind-ic { width: 22px; height: 22px; }
+.wind-cell #wind-arrow { transform-box: view-box; transform-origin: 12px 12px; transition: transform .8s ease; }
+.wind-cell[data-kind="head"] .wind-ic { color: #ff6b6b; stroke: #ff6b6b; }
+.wind-cell[data-kind="tail"] .wind-ic { color: #4ade80; stroke: #4ade80; }
+.wind-cell[data-kind="cross"] .wind-ic { color: #facc15; stroke: #facc15; }
+.topbar:has(#wind-cell:not([hidden])) { width: min(590px, calc(100vw - 32px)); }
+@media (max-width: 760px) { .topbar:has(#wind-cell:not([hidden])) { width: min(560px, calc(100vw - 16px)); } }
