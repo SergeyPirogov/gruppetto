@@ -172,6 +172,9 @@ export class DummyRider {
     J.shoulders = J.shoulderL.clone().add(J.shoulderR).multiplyScalar(0.5);
 
     const colors = { ...KIT, ...(cfg.colors || {}), jersey: jersey || '#15808a', stripe: stripe || '#ff8a1f' };
+    // gloves in the kit's colours: the jersey colour, the cuff in the accent colour
+    colors.glove = cfg.colors?.glove || colors.jersey;
+    colors.cuff = cfg.colors?.cuff || colors.stripe;
     const mats = {};
     const mat = (name) => (mats[name] ||= new THREE.MeshStandardMaterial({
       color: colors[name] || '#cccccc', flatShading: false, roughness: 0.85, metalness: 0, side: THREE.DoubleSide, // smooth skin and kit
