@@ -17,6 +17,14 @@ const AHEAD = 7, BEHIND = 1;   // chunks kept around the rider
 const ROAD_HALF = 3.6;         // m
 const TURN = 2.5;              // curvature exaggeration relative to the 2D renderer
 const V_EXAG = 1.5;            // vertical exaggeration
+/** Offset along a SEG-long arc whose heading turns from h0 to h1, at fraction t of it. */
+function arc(h0, h1, t) {
+  const dh = h1 - h0;
+  if (Math.abs(dh) < 1e-6) return [Math.cos(h0) * SEG * t, Math.sin(h0) * SEG * t];
+  const k = SEG / dh;
+  return [k * (Math.sin(h0 + dh * t) - Math.sin(h0)), -k * (Math.cos(h0 + dh * t) - Math.cos(h0))];
+}
+const LEAN_SIGN = 1;            // which way rotation.x leans the rider for a positive turn
 const A0 = -400;               // first segment index held in the path cache
 
 // Terrain cross-section offsets (m from the road centre).
@@ -1041,8 +1049,10 @@ export class Scene3D {
       const prev = A0 + i - 1;
       const h = P.h[i - 1] + (this.route.segAt(prev).curve * TURN) / SEG;
       P.h.push(h);
-      P.x.push(P.x[i - 1] + Math.cos(P.h[i - 1]) * SEG);
-      P.z.push(P.z[i - 1] + Math.sin(P.h[i - 1]) * SEG);
+      // each segment is a circular arc with its heading turning evenly from one end to the other
+      const [ox, oz] = arc(P.h[i - 1], h, 1);
+      P.x.push(P.x[i - 1] + ox);
+      P.z.push(P.z[i - 1] + oz);
     }
   }
 
@@ -1054,7 +1064,8 @@ export class Scene3D {
     this._ensurePath(a + 1);
     const P = this.path, i = a - A0;
     const h = P.h[i] + (P.h[i + 1] - P.h[i]) * t;
-    const x = P.x[i] + (P.x[i + 1] - P.x[i]) * t, z = P.z[i] + (P.z[i + 1] - P.z[i]) * t;
+    const [ox, oz] = arc(P.h[i], P.h[i + 1], t); // along the arc, not the chord: bends without corners
+    const x = P.x[i] + ox, z = P.z[i] + oz;
     return { x, z, y: this._roadY(d), h, rx: -Math.sin(h), rz: Math.cos(h) };
   }
 
@@ -1181,12 +1192,15 @@ export class Scene3D {
     group.add(terrain);
 
     // road ribbon + edge lines
+    // the road is drawn every 1.25 m (the land every 5 m), so bends stay round on a wide road
+    const SUB = 4, fine = [];
+    for (let q = 0; q <= CHUNK * SUB; q++) fine.push(q % SUB ? this.frame((a0 + q / SUB) * SEG) : frames[q / SUB]);
     const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false) => {
       const p = [], cs = [], uv = [];
       const cc = color instanceof THREE.Color ? color : col(color);
-      for (let r = 0; r < rows - 1; r++) {
-        if (dashed && ((a0 + r) % 3 + 3) % 3 !== 0) continue;
-        const f1 = frames[r], f2 = frames[r + 1];
+      for (let q = 0; q < fine.length - 1; q++) {
+        if (dashed && ((a0 + Math.floor(q / SUB)) % 3 + 3) % 3 !== 0) continue;
+        const f1 = fine[q], f2 = fine[q + 1];
         const v = (f, o) => [f.x + f.rx * o, f.y + lift, f.z + f.rz * o];
         const A = v(f1, o1), B = v(f1, o2), C = v(f2, o1), D = v(f2, o2);
         p.push(...A, ...B, ...C, ...B, ...D, ...C);
@@ -1608,9 +1622,14 @@ export class Scene3D {
         const ds = (d - R.lastD) / span, dl = (lane - R.lastLane) / span;
         const yaw = Math.abs(ds) < 0.5 || Math.abs(ds) > 40 ? 0 : Math.atan2(dl, Math.max(2, ds));
         R.yaw = (R.yaw || 0) + (yaw - (R.yaw || 0)) * Math.min(1, span * 5);
+        R.speed = Math.abs(ds) > 40 ? 0 : ds; // a jump along the road is not speed
       }
+      // lean into a bend as a real rider does: tan(lean) = v² · curvature / g, eased, at most 20°
+      const curv = (this.frame(d + 3).h - this.frame(d - 3).h) / 6;
+      const leanTo = Math.max(-0.35, Math.min(0.35, Math.atan(((R.speed || 0) ** 2 * curv) / 9.81)));
+      R.lean = (R.lean || 0) + (leanTo - (R.lean || 0)) * Math.min(1, dt * 4);
       if (R.lastD === undefined || d !== R.lastD) { R.lastD = d; R.lastLane = lane; R.lastMoveT = now; }
-      R.group.rotation.set(0, -(head + (R.yaw || 0)), slope, 'YXZ');
+      R.group.rotation.set(LEAN_SIGN * R.lean, -(head + (R.yaw || 0)), slope, 'YXZ');
       R.pose(r.pedal || 0);
       R.roll?.(d);
       R.bike?.pose(r.pedal || 0);
@@ -1621,7 +1640,7 @@ export class Scene3D {
         R.lastT = now; R.lastPedal = r.pedal || 0;
         R.model.pose(r.pedal || 0, dt, cadence);
       }
-      if (r.self) me = { f, lane, R };
+      if (r.self) me = { f, lane, R, head: head + (R.yaw || 0) };
     });
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
@@ -1639,10 +1658,13 @@ export class Scene3D {
       this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
       this.camera.lookAt(tx, ty, tz);
     } else if (me) {
-      const back = this.frame(dist - 4.3);
-      const target = new THREE.Vector3(back.x + back.rx * me.lane * 0.8, back.y + 2.25, back.z + back.rz * me.lane * 0.8);
+      // behind the rider along the way it faces, a little late into a bend (as a following motorbike
+      // would be), so the rider stays in the middle of the picture instead of sliding to the side
+      const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
+      const px = me.f.x + me.f.rx * me.lane, pz = me.f.z + me.f.rz * me.lane;
       const ahead = this.frame(dist + 9);
-      const look = new THREE.Vector3(ahead.x + ahead.rx * me.lane * 0.5, ahead.y + 0.75, ahead.z + ahead.rz * me.lane * 0.5);
+      const target = new THREE.Vector3(px - Math.cos(ch) * 4.3 - me.f.rx * me.lane * 0.2, this._roadY(dist - 4.3) + 2.25, pz - Math.sin(ch) * 4.3 - me.f.rz * me.lane * 0.2);
+      const look = new THREE.Vector3(px + Math.cos(ch) * 9 - me.f.rx * me.lane * 0.5, ahead.y + 0.75, pz + Math.sin(ch) * 9 - me.f.rz * me.lane * 0.5);
       const O = this.orbit;
       if (O.yaw || O.pitch || O.zoom !== 1) {
         // orbit around the rider: the default chase offset turned by yaw/pitch and scaled by zoom
