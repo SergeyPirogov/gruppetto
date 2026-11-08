@@ -330,6 +330,10 @@
         <div class="stat climb"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M2 20 9 8l4 6 3-4 6 10z"/></svg><div class="st-body"><label>Climbed</label><div class="st-val"><b id="m-gain">0</b><span>m</span></div></div></div>
       </div>
       <div class="board minimap" id="minimap-box" title="Bigger map (M)"><canvas id="minimap"></canvas><button id="minimap-size" class="mm-size" aria-label="Bigger map (M)">⤢</button></div>
+      <div id="race-board" class="board race-board" hidden>
+        <div class="race-head"><b id="race-pos">1/6</b><span id="race-info"></span></div>
+        <div id="race-rows"></div>
+      </div>
       <div id="ahead" class="board ahead" hidden>
         <div class="ahead-head">Ahead · within 10 s</div>
         <div id="ahead-rows"></div>
@@ -362,6 +366,7 @@
       </div>
     </div>
     <div id="ghost-tag" class="ghost-mini" hidden></div>
+    <div id="countdown" class="countdown" hidden></div>
     <div id="paused" class="paused" hidden>PAUSED</div>
     <div id="keys-help" class="keys-help" hidden>
       <div class="keys-panel">
@@ -385,6 +390,11 @@
         <canvas id="sum-chart"></canvas>
       </div>
       <div id="sum-stats" class="stats"></div>
+      <div id="sum-race" class="card sum-race" hidden>
+        <div class="sum-chart-head"><h2>Race results</h2><span id="sum-race-place" class="race-place"></span></div>
+        <table><tbody id="sum-race-rows"></tbody></table>
+        <p class="hint">* still riding: the time at their speed</p>
+      </div>
       <div id="sum-intervals" class="card sum-intervals" hidden>
         <div class="sum-chart-head"><h2>Intervals</h2><span id="sum-int-score" class="int-score"></span></div>
         <table>

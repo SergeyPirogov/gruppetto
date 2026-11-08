@@ -205,4 +205,10 @@ export const UK = {
   'Like Zwift': 'Як у Zwift', 'Via grade': 'Через нахил',
   'The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.': 'Передача, у якій стоїть ланцюг (Zwift Cog: 14); кнопки перемикають віртуальні передачі поверх неї. «Через нахил» для тренажерів, що не приймають розмір колеса.',
   'Bigger map': 'Більша мапа', 'Bigger map (M)': 'Більша мапа (M)',
+  // races (#39)
+  'Race': 'Гонка', 'laps': 'кола', '{n} laps': '{n} кола', 'To the finish line against the bunch.': 'До фінішу проти пелотону.',
+  '{km} km against the bunch, from a standing start.': '{km} км проти пелотону, зі старту з місця.', 'You': 'Ви', 'Finished': 'Фініш',
+  'to go': 'до фінішу', '🏆 You win! {time}': '🏆 Перемога! {time}', '🏁 {n} of {m} · {time}': '🏁 {n} з {m} · {time}', 'GO!': 'СТАРТ!',
+  'Get ready': 'Приготуйтесь', 'Race results': 'Результати гонки', '{n} of {m}': '{n} з {m}', '* still riding: the time at their speed': '* ще їдуть: час за їхньою швидкістю',
+  '1 lap': '1 коло',
 };

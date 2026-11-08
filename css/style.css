@@ -831,3 +831,31 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .fields-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .fields-note { grid-column: 1 / -1; font-size: .78rem; margin: -4px 0 0; }
 .fields-3.fields-gears { grid-template-columns: 1.9fr 1fr 1fr; }
+
+/* ---------- Race (#39) ---------- */
+.board.race-board { padding: 6px 0; }
+.board.race-board[hidden] { display: none; }
+.race-head { display: flex; align-items: baseline; gap: 8px; padding: 2px 12px 6px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.race-head b { font-size: 1.5rem; }
+.race-head span { font-size: .72rem; color: #9fb0c6; }
+.race-row { display: grid; grid-template-columns: 18px 10px 1fr auto; gap: 8px; align-items: center; padding: 4px 12px; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.race-row.me { background: rgba(255, 138, 31, .18); }
+.race-row .rp { color: #9fb0c6; font-weight: 700; }
+.race-row i { width: 10px; height: 10px; border-radius: 50%; }
+.race-row b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.race-row .rg { color: var(--cyan); font-weight: 700; }
+.countdown { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); font-size: clamp(3rem, 12vw, 8rem); font-weight: 900; color: #fff; text-shadow: 0 6px 30px rgba(0,0,0,.45); pointer-events: none; z-index: 8; }
+.countdown[hidden] { display: none; }
+.countdown.pop { animation: cd-pop .9s ease-out; }
+@keyframes cd-pop { from { transform: translate(-50%, -50%) scale(1.6); opacity: 0; } 30% { opacity: 1; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+.race-pick .race-laps { display: inline-flex; gap: 4px; align-items: center; font-size: .78rem; color: var(--muted); }
+.race-pick .race-laps i { font-style: normal; min-width: 22px; text-align: center; padding: 1px 6px; border-radius: 6px; border: 1px solid var(--line); color: var(--text); }
+.race-pick .race-laps i.on { background: var(--accent); border-color: var(--accent); color: #1a1205; font-weight: 700; }
+.sum-race table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.sum-race td { padding: 6px; border-top: 1px solid var(--line); }
+.sum-race td:first-child { width: 28px; color: var(--muted); font-weight: 700; }
+.sum-race td i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+.sum-race td:nth-child(n+3) { text-align: right; }
+.sum-race tr.me td { color: var(--accent); font-weight: 700; }
+.race-place { font-weight: 800; font-size: 1.1rem; color: var(--accent); }
+@media (max-width: 760px) { #race-board { display: none !important; } }
