@@ -135,7 +135,7 @@ export const UK = {
   'Time': 'Час', 'Distance': 'Дистанція', 'Avg power': 'Сер. потужність', 'Avg heart rate': 'Сер. пульс', 'Elevation gain': 'Набір висоти',
   'Max power': 'Макс. потужність', 'Max heart rate': 'Макс. пульс', 'Avg cadence': 'Сер. каденс', 'Work': 'Робота', 'Estimated FTP': 'Оцінка FTP',
   'vs {name}': 'проти: {name}', 'ghost': 'привид', 'best': 'рекорд',
-  'Download .FIT': 'Завантажити .FIT', 'Upload to intervals.icu': 'Вивантажити в intervals.icu', 'Delete ride': 'Видалити заїзд',
+  'Download .FIT': 'Завантажити .FIT', 'Upload to intervals.icu': 'Вивантажити в intervals.icu', 'Send to intervals.icu': 'Надіслати в intervals.icu', 'Delete ride': 'Видалити заїзд',
   'Tap again to delete': 'Натисни ще раз, щоб видалити', 'Back to lobby': 'Назад у лобі',
   'You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.': 'Файл .FIT (віртуальний заїзд, як у Zwift) можна завантажити у Strava, Garmin Connect чи intervals.icu.',
   'Uploading to intervals.icu…': 'Вивантажую в intervals.icu…', 'Uploaded to intervals.icu ✓': 'Вивантажено в intervals.icu ✓',

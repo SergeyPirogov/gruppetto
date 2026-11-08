@@ -9,6 +9,7 @@ import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, HR_ZONES } from './analysis.js';
+import { putRide, getRide, deleteRide } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration } from './sound.js';
@@ -1370,6 +1371,7 @@ function finishRide() {
     if (settings.shiftMode === 'wheel') trainer.setWheelCircumference(BASE_WHEEL_MM);
   }
   const entry = sum && sum.duration >= 30 ? saveToHistory(lastRide, recorder.samples) : null;
+  if (entry) putRide({ id: entry.id, start: (recorder.startTime || new Date()).getTime(), samples: recorder.samples, lapStarts: recorder.lapStarts });
   $('ride').hidden = true;
   showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
 }
@@ -1404,7 +1406,7 @@ function historyEntry(r, samples) {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, summary: r.summary,
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
-    maxHr: settings.maxHr || 0,
+    maxHr: settings.maxHr || 0, eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     chart: { every, pw, hr, d, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
     intervals: r.workout ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
       // a ramp shows where it starts and ends
@@ -1511,19 +1513,39 @@ function showSummary(e, { live = false } = {}) {
     const vs = x?.note ? esc(x.note) : x && x.best ? fmtDelta(t - x.best) : '';
     return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>` : vs}</td></tr>`;
   }).join('');
-  // files and intervals.icu only for the ride just finished (older rides keep a summary, not the full record)
-  for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !live; $(id).disabled = !sum; }
-  document.querySelector('#summary .hint:last-of-type').hidden = !live;
-  const canUpload = !!(live && icuClient && sum && sum.duration >= 60);
-  $('btn-icu-upload').hidden = !canUpload;
-  $('btn-icu-upload').disabled = false;
-  $('btn-icu-upload').textContent = tr('Upload to intervals.icu');
-  $('icu-upload-status').hidden = true;
+  // files and intervals.icu: the ride just finished, or an older one whose full record is still kept
+  shown = { entry: e, rec: live ? recorder : null };
+  const files = (on) => {
+    for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !on; $(id).disabled = !sum; }
+    document.querySelector('#summary .hint:last-of-type').hidden = !on;
+  };
+  const uploadUi = (can) => {
+    $('btn-icu-upload').hidden = !can;
+    $('btn-icu-upload').disabled = false;
+    $('btn-icu-upload').textContent = live ? tr('Upload to intervals.icu') : tr('Send to intervals.icu');
+    const st = $('icu-upload-status');
+    st.hidden = !e.uploadedId;
+    if (e.uploadedId) st.innerHTML = e.uploadedId === true ? tr('Uploaded to intervals.icu ✓') : `${tr('Uploaded to intervals.icu ✓')} · <a href="${activityUrl(e.uploadedId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+  };
+  const canUpload = (rec) => !!(rec && icuClient && sum && sum.duration >= 60);
+  files(live);
+  uploadUi(live && canUpload(recorder));
   $('btn-delete-ride').hidden = live;
   $('btn-delete-ride').dataset.id = e.id;
   $('btn-delete-ride').textContent = tr('Delete ride');
-  scheduleUpload(canUpload);
+  if (live) { scheduleUpload(canUpload(recorder)); return; }
+  scheduleUpload(false);
+  getRide(e.id).then((r) => {
+    if (!r || shown.entry !== e) return;
+    const rec = new Recorder();
+    rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0];
+    shown.rec = rec;
+    files(true);
+    uploadUi(canUpload(rec) && !e.uploadedId);
+  });
 }
+/** The ride on the summary screen: its history entry and, when kept, its full record. */
+let shown = { entry: null, rec: null };
 
 /** Time in power zones (and heart rate zones when max heart rate is set), as bars. */
 function renderZones(e) {
@@ -1625,9 +1647,10 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp) {
 }
 
 function download(kind) {
-  const d = recorder.startTime || new Date();
+  const rec = shown.rec || recorder;
+  const d = rec.startTime || new Date();
   const fit = kind === 'fit';
-  const blob = fit ? new Blob([recorder.toFIT()], { type: 'application/vnd.ant.fit' }) : new Blob([recorder.toTCX()], { type: 'application/vnd.garmin.tcx+xml' });
+  const blob = fit ? new Blob([rec.toFIT()], { type: 'application/vnd.ant.fit' }) : new Blob([rec.toTCX()], { type: 'application/vnd.garmin.tcx+xml' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `powerup-${d.toISOString().slice(0, 16).replace(/[:T]/g, '-')}.${fit ? 'fit' : 'tcx'}`;
@@ -1718,7 +1741,7 @@ function scheduleUpload(can) {
     if (left <= 0) { clearInterval(uploadTimer); uploadTimer = null; count.textContent = ''; uploadToIntervals(); return; }
     count.textContent = tr('in {s} s', { s: left }); left--;
   };
-  const start = () => { if (lastRide?.uploadedId || uploadTimer) return; left = 10; uploadTimer = setInterval(tick, 1000); tick(); };
+  const start = () => { if (shown.entry?.uploadedId || lastRide?.uploadedId || uploadTimer) return; left = 10; uploadTimer = setInterval(tick, 1000); tick(); };
   box.onchange = () => {
     settings.icuUpload = box.checked; saveSettings(); $('f-icu-upload').checked = box.checked;
     if (box.checked) start(); else { clearInterval(uploadTimer); uploadTimer = null; count.textContent = ''; }
@@ -1734,21 +1757,24 @@ function flushUpload() {
 
 async function uploadToIntervals() {
   clearInterval(uploadTimer); uploadTimer = null; $('sum-icu-count').textContent = '';
-  if (!icuClient || !lastRide?.summary || lastRide.uploadedId) return;
+  const e = shown.entry, rec = shown.rec;
+  if (!icuClient || !e?.summary || !rec || e.uploadedId) return;
   const status = $('icu-upload-status');
   const btn = $('btn-icu-upload');
   status.hidden = false;
   status.textContent = tr('Uploading to intervals.icu…');
   btn.disabled = true;
-  const { workout, route, summary: sum } = lastRide;
-  const fromIcu = workout?.source === 'intervals';
-  const name = workout ? `Gruppetto: ${workout.name}` : `Gruppetto: ${route.name}`;
-  const description = `${route.name} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`;
+  const sum = e.summary;
+  const fromIcu = !!e.eventId;
+  const name = `Gruppetto: ${e.workoutName || e.routeName}`;
+  const description = `${e.routeName} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`;
   try {
-    const id = await icuClient.uploadActivity(recorder.toFIT(), {
-      name, description, eventId: fromIcu ? workout.eventId : undefined, filename: `powerup-${Date.now()}.fit`,
+    const id = await icuClient.uploadActivity(rec.toFIT(), {
+      name, description, eventId: fromIcu ? e.eventId : undefined, filename: `gruppetto-${rec.startTime ? rec.startTime.getTime() : Date.now()}.fit`,
     });
-    lastRide.uploadedId = id || true;
+    e.uploadedId = id || true;
+    if (lastRide && rec === recorder) lastRide.uploadedId = e.uploadedId;
+    if (history.includes(e)) saveHistory();
     status.innerHTML = id
       ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>`
       : tr('Uploaded to intervals.icu ✓');
@@ -1898,6 +1924,7 @@ $('btn-delete-ride').onclick = () => {
   const b = $('btn-delete-ride');
   if (b.textContent !== tr('Tap again to delete')) { b.textContent = tr('Tap again to delete'); return; }
   history = history.filter((e) => e.id !== b.dataset.id);
+  deleteRide(b.dataset.id);
   saveHistory();
   renderHistory();
   $('summary').hidden = true; $('lobby').hidden = false;

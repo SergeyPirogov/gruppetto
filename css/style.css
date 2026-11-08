@@ -396,7 +396,8 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
 .zp { text-align: right; color: var(--muted); }
 @media (max-width: 560px) { .zb { grid-template-columns: 26px 1fr 48px 34px; } .zt { display: none; } .sum-intervals th:nth-child(6), .sum-intervals td:nth-child(6), .sum-intervals th:nth-child(7), .sum-intervals td:nth-child(7) { display: none; } }
 #sum-chart { width: 100%; height: 160px; display: block; }
-.sum-main .stats { margin: 0 0 16px; }
+.sum-main .stats { margin: 0 0 16px; display: flex; flex-wrap: wrap; }
+.sum-main .stats div { flex: 1 1 120px; min-width: 0; } /* the tiles fill the row: no lone tile on a row of its own */
 .sum-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sum-actions #btn-again { margin-left: auto; }
 
@@ -457,7 +458,7 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
   .sum-title b { font-size: .95rem; }
   .sum-chart-head { flex-direction: column; gap: 2px; }
   #sum-chart { height: 120px; }
-  .sum-main .stats { grid-template-columns: 1fr 1fr; }
+  .sum-main .stats div { flex-basis: 40%; }
   .sum-actions #btn-again { margin-left: 0; }
 }
 
