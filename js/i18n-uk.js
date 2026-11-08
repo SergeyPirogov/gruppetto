@@ -237,4 +237,6 @@ export const UK = {
   'connected': 'підключено',
   'Wind': 'Вітер', 'Calm': 'Штиль', 'Light breeze': 'Легкий вітерець', 'Moderate wind': 'Помірний', 'Strong wind': 'Сильний',
   'Headwind': 'Зустрічний вітер', 'Tailwind': 'Попутний вітер', 'Crosswind': 'Бічний вітер',
+  'Install app': 'Встановити', 'Gruppetto is installed': 'Gruppetto встановлено',
+  'Install Gruppetto as an app: its own window, an icon in the dock, works offline': 'Встановити Gruppetto як застосунок: окреме вікно, іконка в доку, працює без інтернету',
 };

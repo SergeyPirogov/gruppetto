@@ -1478,6 +1478,7 @@ function updateHud(cadence, hr, grade) {
   const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
   $('m-power').textContent = p3;
   $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} ${U.wkg}`;
+  $('m-ftp-pct').textContent = `${Math.round((p3 / settings.ftp) * 100)}% FTP`;
   updateWindHud();
   // power zone: the board's bar and a Z1–Z7 tag take the zone's colour (in a workout the number itself
   // shows how close you are to the target, below)
@@ -3121,3 +3122,19 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && rid
 (window.requestIdleCallback || ((f) => setTimeout(f, 800)))(() => {
   import('./render3d.js').then((m) => m.webglAvailable() && m.preloadModels()).catch(() => {});
 });
+
+// ---------- Install as an app (#30) ----------
+// the service worker keeps the app usable offline; Chrome then offers to install it, and so do we
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* no offline, the app still works */ });
+}
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; $('btn-install').hidden = false; });
+window.addEventListener('appinstalled', () => { installPrompt = null; $('btn-install').hidden = true; toast(tr('Gruppetto is installed')); });
+$('btn-install').onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => null);
+  installPrompt = null;
+  $('btn-install').hidden = true;
+};

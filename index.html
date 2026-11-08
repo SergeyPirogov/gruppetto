@@ -7,6 +7,12 @@
   <meta name="description" content="Gruppetto — indoor cycling in your browser. Don't ride alone.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0d1422">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gruppetto">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -22,6 +28,7 @@
         <button class="dev-chip sim-chip" data-key="sim" data-open="devices"><i></i>Simulator</button>
       </div>
       <div class="top-actions">
+        <button class="ghost install-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, an icon in the dock, works offline">Install app</button>
         <button class="ghost" data-open="profile" id="open-profile">Profile</button>
         <button class="ghost" data-open="icu">intervals.icu</button>
       </div>
@@ -317,7 +324,7 @@
 
     <div class="hud-left">
       <div class="board">
-        <div class="stat power"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><div class="st-body"><label>Power <span id="m-zone" class="zone-tag">Z1</span></label><div class="st-val"><b id="m-power">0</b><span>W</span></div></div><small id="m-wkg">0.0 W/kg</small></div>
+        <div class="stat power"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><div class="st-body"><label>Power <span id="m-zone" class="zone-tag">Z1</span></label><div class="st-val"><b id="m-power">0</b><span>W</span></div></div><small class="pw-side"><span id="m-ftp-pct">0% FTP</span><span id="m-wkg">0.0 W/kg</span></small></div>
         <div class="stat hr"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><div class="st-body"><label>HR <span id="m-hr-zone" class="zone-tag" hidden></span></label><div class="st-val"><b id="m-hr">—</b><span>bpm</span></div></div><small id="m-hr-avg"></small></div>
         <div class="stat cad"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><div class="st-body"><label>Cadence</label><div class="st-val"><b id="m-cad">0</b><span>rpm</span></div></div><small id="m-cad-avg"></small></div>
       </div>
