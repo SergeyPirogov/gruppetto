@@ -1282,3 +1282,11 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .why-actions .pill-btn { padding: 8px 16px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .14); font-weight: 600; }
 .why-actions .pill-btn:hover { background: rgba(255, 122, 26, .16); border-color: rgba(255, 122, 26, .5); }
 .why-actions #why-icu { background: rgba(255, 122, 26, .14); border-color: rgba(255, 122, 26, .45); color: #ffd3a8; }
+
+/* the slipstream tag: in words, with a thin bar of how deep the shelter is */
+.draft-tag { display: grid; grid-template-columns: auto auto; column-gap: 10px; row-gap: 4px; align-items: baseline; padding: 6px 14px 7px; border-radius: 12px; background: rgba(13, 20, 34, .82) !important; border: 1px solid rgba(47, 212, 240, .55); backdrop-filter: blur(6px); }
+.draft-tag[hidden] { display: none; }
+.draft-tag b { color: #7ee8f8; font-size: .85rem; }
+.draft-tag span { color: #fff; font-size: .85rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.draft-tag .dt-bar { grid-column: 1 / -1; display: block; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.draft-tag .dt-bar i { display: block; height: 100%; background: #2fd4f0; transition: width .3s ease; }

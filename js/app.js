@@ -1691,11 +1691,16 @@ function updateHud(cadence, hr, grade) {
   $('m-cad-avg').textContent = A?.cadN ? `${tr('avg')} ${Math.round(A.cad / A.cadN)}` : '';
   $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
   if (ride.race) updateRaceBoard(); else updateAhead();
+  // the slipstream in words: the watts it saves you now (the air's share of your effort at this speed), how deep it
+  // is as a bar (full = right on the wheel), and when you are about to pull out and pass
   const df = ride.draft || 0;
   $('draft-tag').hidden = df < 0.03;
   if (df >= 0.03) {
-    $('draft-tag').textContent = `🌀 ${tr('Drafting · −{n}% drag', { n: Math.round(df * 100) })}`;
-    $('draft-tag').style.setProperty('--d', Math.min(1, df / 0.33));
+    const air = 0.5 * DEFAULTS.rho * ride.cda * Math.max(0, ride.v) ** 3; // W pushing the air at this speed
+    const saved = Math.round((air * df) / 5) * 5;
+    const passing = (ride.heldFor || 0) > PASS_AFTER - 1.5;
+    $('draft-tag').innerHTML = `<b>🌀 ${tr('In the slipstream')}</b><span>${passing ? tr('pulling out to pass…') : saved >= 5 ? tr('saving ~{w} W', { w: saved }) : tr('a little shelter')}</span><i class="dt-bar"><i style="width:${Math.round(Math.min(1, df / 0.33) * 100)}%"></i></i>`;
+    $('draft-tag').title = tr('{n}% less air drag behind the wheel', { n: Math.round(df * 100) });
   }
   if (ride.ghost) {
     const G = ride.ghost, gap = ride.dist - G.dist, tg = ghostTimeAt(G.entry, ride.dist);
