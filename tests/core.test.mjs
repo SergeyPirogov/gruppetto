@@ -268,6 +268,7 @@ test('low power starts the bike from standstill on a climb', () => {
 test('Zwift Ride shifts by side: right unit harder, left unit easier', () => {
   for (const b of ['shiftUpR', 'shiftDownR', 'paddleR']) assert.equal(rideIntent(b), 'harder');
   for (const b of ['shiftUpL', 'shiftDownL', 'paddleL']) assert.equal(rideIntent(b), 'easier');
+  for (const b of ['b', 'powerUpR']) assert.equal(rideIntent(b), 'toggleErg');
 });
 
 import { spokenDuration } from '../js/sound.js';
