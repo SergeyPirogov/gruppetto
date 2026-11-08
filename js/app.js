@@ -27,7 +27,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
-  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase',
+  intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -211,6 +211,7 @@ function applyLive(key) {
   }
   if (key === 'style') scene?.setStyle?.(settings.style);
   if (key === 'camera') scene?.setCamera?.(settings.camera);
+  if (key === 'timeOfDay' || key === 'weather') scene?.setAtmosphere?.(settings.timeOfDay, settings.weather);
 }
 
 /** Remembered device ids per slot (the browser decides whether it still allows them). */
@@ -304,6 +305,8 @@ function initLobby() {
   bind('f-shift', 'shiftMode', false);
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
+  bind('f-time', 'timeOfDay', false);
+  bind('f-weather', 'weather', false);
   bind('f-bots', 'bots');
   // the pixel 3D style squares off the interface too (square corners, hard shadows)
   const pixelUi = () => document.body.classList.toggle('pixel-ui', settings.style === 'pixel');
@@ -771,6 +774,7 @@ async function startRide() {
   $('ride').classList.remove('show-controls');
   await ensureScene();
   scene.setStyle?.(settings.style);
+  scene.setAtmosphere?.(settings.timeOfDay, settings.weather);
   scene.setCamera?.(settings.camera);
   ride.lastSim = performance.now();
   clearInterval(rideTimer);

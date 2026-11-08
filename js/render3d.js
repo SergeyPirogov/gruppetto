@@ -558,6 +558,51 @@ class Rider3D {
   }
 }
 
+// ---------- Time of day and weather (#41) ----------
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const mixRgb = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const mixHex = (a, b, t) => '#' + mixRgb(hexRgb(a), hexRgb(b), t).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
+const TIMES = {
+  // midday is each route's own look; the others recolour the sky, the fog and the sun
+  morning: { sky: ['#78a9de', '#ffd8b0'], fog: '#f0dcc6', fogMix: 0.55, sunY: 0.3, light: '#ffd09a', lightI: 2.4, hemi: 0.75, exposure: 1.02, glow: '#ffc890', disk: '#fff0d0', diskSize: 90, dim: 0.95 },
+  evening: { sky: ['#4a6aa6', '#ffaa6a'], fog: '#eab08a', fogMix: 0.6, sunY: 0.16, light: '#ff9e5a', lightI: 2.6, hemi: 0.55, exposure: 1.0, glow: '#ff9a50', disk: '#ffd27a', diskSize: 130, dim: 0.8 },
+  night: { sky: ['#03050c', '#131c35'], fog: '#0e1526', fogMix: 0.92, sunY: 0.55, light: '#9fb6ff', lightI: 0.7, hemi: 0.2, exposure: 1.25, glow: '#6f86c8', disk: '#e8eefc', diskSize: 34, dim: 0.22, night: true, fogNear: 60, fogFar: 700 },
+};
+/** The hour's look: 'auto' picks it from the local clock. */
+export function timeOfDay(time, date = new Date()) {
+  if (time !== 'auto') return TIMES[time] || time === 'midday' ? time : 'midday';
+  const h = date.getHours() + date.getMinutes() / 60;
+  return h >= 5 && h < 9 ? 'morning' : h >= 9 && h < 17.5 ? 'midday' : h >= 17.5 && h < 21 ? 'evening' : 'night';
+}
+/** A route's theme under the chosen time of day and weather: sky, fog, sun and how dim the distance is. */
+export function atmosphereFor(base, time = 'midday', weather = 'clear') {
+  const T = TIMES[timeOfDay(time)];
+  const t = { ...base, sky: [...base.sky], fog: [...base.fog] };
+  const a = { t, sunY: 0.48, light: base.sun ? '#ffc48f' : '#fff2dc', lightI: base.sun ? 2.3 : 3.0, hemi: 0.8, exposure: 1.05,
+    glow: null, disk: null, diskSize: null, dim: 1, night: false, rain: false, fogNear: LOW ? 120 : 150, fogFar: LOW ? 850 : 1500, showSun: true };
+  if (T) {
+    t.sky = [...T.sky];
+    t.fog = mixRgb(base.fog, hexRgb(T.fog), T.fogMix);
+    Object.assign(a, { sunY: T.sunY, light: T.light, lightI: T.lightI, hemi: T.hemi, exposure: T.exposure, glow: T.glow, disk: T.disk, diskSize: T.diskSize, dim: T.dim, night: !!T.night });
+    if (T.fogNear) { a.fogNear = T.fogNear; a.fogFar = Math.min(a.fogFar, T.fogFar); }
+  }
+  if (weather === 'fog' || weather === 'rain') {
+    const grey = a.night ? '#1a2232' : weather === 'fog' ? '#bcc4cd' : '#8e99a6';
+    t.sky = t.sky.map((c) => mixHex(c, grey, weather === 'fog' ? 0.8 : 0.82));
+    t.fog = mixRgb(t.fog, hexRgb(grey), 0.7);
+    t.clouds = (base.clouds || 3) + (weather === 'rain' ? 8 : 4);
+    a.lightI *= weather === 'fog' ? 0.5 : 0.4;
+    a.exposure *= weather === 'rain' ? 0.88 : 1;
+    a.hemi *= 1.15;
+    a.showSun = false;
+    a.fogNear = weather === 'fog' ? 12 : 40;
+    a.fogFar = weather === 'fog' ? 220 : 520;
+    a.rain = weather === 'rain' && !base.snowfall;
+    a.dim *= weather === 'rain' ? 0.8 : 0.9;
+  }
+  return a;
+}
+
 // ---------- Scene ----------
 
 export class Scene3D {
@@ -849,7 +894,8 @@ export class Scene3D {
     this.routeId = route.id;
     if (!this.warmStart || !this.warming) this.warmStart = performance.now();
     this._showLoader();
-    this.t = themeFor(route.theme);
+    this.tBase = themeFor(route.theme);
+    this.t = atmosphereFor(this.tBase, this.atmTime, this.atmWeather).t;
     this.t3 = T3[route.theme] || T3.meadow;
     // a real road bends and doubles back: gentle side hills, and the land never reaches over another stretch
     if (route.custom) this.t3 = { ...this.t3, amp: 6, far: 0.2, wall: 0, rock: 0, snow: 0, dip: null, beach: false };
@@ -894,11 +940,9 @@ export class Scene3D {
       lightNear: 1, lightFar: 1500, lightMargin: 150, shadowBias: -0.0004,
     });
     this.csm.fade = true;
-    for (const l of this.csm.lights) { l.color.set(this.t.sun ? '#ffc48f' : '#fff2dc'); l.shadow.normalBias = 0.03; l.shadow.autoUpdate = false; }
+    for (const l of this.csm.lights) { l.shadow.normalBias = 0.03; l.shadow.autoUpdate = false; }
 
-    this._sky();
-    this._mountains();
-    this._clouds();
+    this._applyAtmosphere();
     const sea = this.t.layers.find((l) => l.kind === 'sea');
     if (this.t3.dip) {
       const ripples = surfaceTexture(true);
@@ -912,12 +956,52 @@ export class Scene3D {
     this._csmMaterials(this.scene);
   }
 
+  /** Time of day ('auto', 'morning', 'midday', 'evening', 'night') and weather ('clear', 'fog', 'rain'). */
+  setAtmosphere(time = 'midday', weather = 'clear') {
+    this.atmTime = time; this.atmWeather = weather;
+    if (this.tBase) this._applyAtmosphere();
+  }
+
+  /** Sky, fog, lights, sun, distant mountains, clouds and rain for the chosen hour and weather (the land stays). */
+  _applyAtmosphere() {
+    const a = this.atm = atmosphereFor(this.tBase, this.atmTime, this.atmWeather);
+    this.t = a.t;
+    const fogC = rgb(this.t.fog);
+    this.scene.fog.color.copy(fogC); this.scene.fog.near = a.fogNear; this.scene.fog.far = a.fogFar;
+    this.scene.background = col(this.t.sky[1]);
+    this.hemi.color.copy(col(this.t.sky[1])); this.hemi.intensity = a.hemi;
+    this.hemi.groundColor.copy(rgb(this.t.grass[0]).multiplyScalar(0.65 * (a.night ? 0.3 : 1)));
+    for (const l of this.csm.lights) { l.color.set(a.light); l.intensity = a.lightI; }
+    this.renderer.toneMappingExposure = a.exposure;
+    for (const o of [this.sky, this.sunDisk, this.sunGlow, this.cloudGroup, this.rain, ...(this.rings || [])]) if (o) { this.scene.remove(o); o.geometry?.dispose(); }
+    this._sky();
+    this.sunDisk.visible = this.sunGlow.visible = a.showSun;
+    this._mountains();
+    this._clouds();
+    this.rain = null;
+    if (a.rain) this._rainfall();
+  }
+
+  _rainfall() {
+    const n = LOW ? 700 : 1800, pos = new Float32Array(n * 6);
+    for (let i = 0; i < n; i++) {
+      const x = (hash(i) - 0.5) * 80, y = hash(i * 2) * 30, z = (hash(i * 3) - 0.5) * 80;
+      pos.set([x, y, z, x + 0.06, y + 0.55, z], i * 6);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.rain = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#e4ebf3', transparent: true, opacity: 0.7, fog: false }));
+    this.rain.frustumCulled = false;
+    this.scene.add(this.rain);
+  }
+
   _sky() {
     const g = new THREE.SphereGeometry(3500, 48, 32);
     const top = col(this.t.sky[0]), bottom = col(this.t.sky[1]);
     const cs = [];
     const p = g.attributes.position;
-    const glow = col(this.t.sun ? '#ffb36b' : '#fff4dc'), haze = bottom.clone().lerp(col('#ffffff'), 0.35);
+    const A = this.atm || {};
+    const glow = col(A.glow || (this.t.sun ? '#ffb36b' : '#fff4dc')), haze = bottom.clone().lerp(col(A.night ? '#2a3654' : '#ffffff'), 0.35);
     const v = new THREE.Vector3();
     for (let i = 0; i < p.count; i++) {
       const t = Math.max(0, Math.min(1, p.getY(i) / 1600));
@@ -934,12 +1018,12 @@ export class Scene3D {
     this.sky = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false, toneMapped: false }));
     this.sky.renderOrder = -10;
     this.scene.add(this.sky);
-    this.sunDisk = new THREE.Mesh(new THREE.CircleGeometry(this.t.sun ? 110 : 38, 48),
-      new THREE.MeshBasicMaterial({ color: this.t.sun?.color || '#fff5db', fog: false, toneMapped: false, depthWrite: false }));
+    this.sunDisk = new THREE.Mesh(new THREE.CircleGeometry(A.diskSize || (this.t.sun ? 110 : 38), 48),
+      new THREE.MeshBasicMaterial({ color: A.disk || this.t.sun?.color || '#fff5db', fog: false, toneMapped: false, depthWrite: false }));
     this.sunDisk.renderOrder = -8;
     this.sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunGlowTexture(),
       transparent: true, fog: false, depthWrite: false, toneMapped: false }));
-    this.sunGlow.scale.setScalar(this.t.sun ? 1100 : 650);
+    this.sunGlow.scale.setScalar(A.night ? 380 : this.t.sun ? 1100 : 650);
     this.sunGlow.renderOrder = -9;
     this.scene.add(this.sunGlow, this.sunDisk);
   }
@@ -952,8 +1036,10 @@ export class Scene3D {
       const R = li === 0 ? 2600 : 1900, N = 220;
       const amp = L.amp * (li === 0 ? 3900 : 2100);
       const pos = [], cs = [];
-      const base = col(L.base).lerp(fog, li === 0 ? 0.3 : 0.18), top = col(L.top).lerp(fog, li === 0 ? 0.25 : 0.12);
-      const snow = col('#f6f9fc').lerp(fog, 0.12);
+      const dim = (this.atm?.dim ?? 1) ** 2.2; // dusk and night darken the far hills (vertex colours are linear: dim as perceived)
+      const veil = this.atmWeather === 'fog' ? 0.6 : this.atmWeather === 'rain' ? 0.35 : 0; // fog and rain swallow the far hills
+      const base = col(L.base).lerp(fog, (li === 0 ? 0.3 : 0.18) + veil).multiplyScalar(dim), top = col(L.top).lerp(fog, (li === 0 ? 0.25 : 0.12) + veil).multiplyScalar(dim);
+      const snow = col('#f6f9fc').lerp(fog, 0.12).multiplyScalar(dim);
       const hgt = (i) => {
         const u = (i / N) * Math.PI * 2;
         let r = 0.55 + 0.25 * Math.sin(u * L.freq * 2 + li) + 0.15 * Math.sin(u * L.freq * 5.3 + li * 2) + 0.08 * Math.sin(u * 23);
@@ -990,8 +1076,9 @@ export class Scene3D {
 
   _clouds() {
     this.cloudGroup = new THREE.Group();
-    const top = new THREE.MeshBasicMaterial({ color: col('#ffffff').lerp(rgb(this.t.fog), 0.25), fog: false });
-    const under = new THREE.MeshBasicMaterial({ color: col('#c4d3e3').lerp(rgb(this.t.fog), 0.5), fog: false });
+    const dim = (this.atm?.dim ?? 1) ** 2.2, rainy = this.atmWeather === 'rain' || this.atmWeather === 'fog';
+    const top = new THREE.MeshBasicMaterial({ color: col(rainy ? '#d7dde4' : '#ffffff').lerp(rgb(this.t.fog), 0.25).multiplyScalar(dim), fog: false });
+    const under = new THREE.MeshBasicMaterial({ color: col(rainy ? '#9aa4b0' : '#c4d3e3').lerp(rgb(this.t.fog), 0.5).multiplyScalar(dim), fog: false });
     const puff = new THREE.SphereGeometry(1, 12, 8);
     const n = this.t.clouds * 3;
     for (let i = 0; i < n; i++) {
@@ -1743,7 +1830,7 @@ export class Scene3D {
       const ahead = this.frame(dist + 6);
       const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
       const fx = hx / hl, fz = hz / hl; // forward on the ground plane; left is (fz, -fx)
-      this.sunDirection.set(fx * 0.55 + fz * 0.62, 0.48, fz * 0.55 - fx * 0.62).normalize();
+      this.sunDirection.set(fx * 0.55 + fz * 0.62, this.atm?.sunY ?? 0.48, fz * 0.55 - fx * 0.62).normalize();
       this.csm.lightDirection.copy(this.sunDirection).negate();
       this.camera.updateMatrixWorld();
       this.csm.update();
@@ -1766,6 +1853,26 @@ export class Scene3D {
         this.water.material.bumpMap.offset.set(cx / 5000 * 700 + this.clock * 0.012,
           -cz / 5000 * 700 + this.clock * 0.006);
       }
+      if (this.rain) { // streaks falling ~9 m/s, wrapping round the camera
+        this.rain.position.set(cx, cy - 5, cz);
+        const p = this.rain.geometry.attributes.position, fall = dt * 9;
+        for (let i = 0; i < p.count; i += 2) {
+          let y = p.getY(i) - fall;
+          if (y < 0) y += 30;
+          p.setY(i, y); p.setY(i + 1, y + 0.55);
+        }
+        p.needsUpdate = true;
+      }
+      // at night a lamp on your bars lights the road ahead
+      if (this.atm?.night) {
+        if (!this.headlight) {
+          this.headlight = new THREE.SpotLight('#fff1d6', 60, 50, 0.42, 0.55, 1.4);
+          this.headlight.position.set(0.75, 1.0, 0);
+          this.headlight.target.position.set(14, 0, 0);
+          this.headlight.add(new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), new THREE.MeshBasicMaterial({ color: '#fffbe8', toneMapped: false })));
+        }
+        if (this.headlight.parent !== me.R.group) { me.R.group.add(this.headlight, this.headlight.target); }
+      } else if (this.headlight?.parent) { this.headlight.parent.remove(this.headlight, this.headlight.target); }
       if (this.snow) {
         this.snow.position.set(cx, cy - 5, cz);
         const p = this.snow.geometry.attributes.position;

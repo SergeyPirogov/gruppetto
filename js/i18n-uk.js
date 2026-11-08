@@ -196,4 +196,7 @@ export const UK = {
   // unfinished ride
   'Unfinished ride: {route}{workout} · {time} · {when}': 'Незавершений заїзд: {route}{workout} · {time} · {when}', 'Save ride': 'Зберегти заїзд', 'Discard': 'Відкинути', 'Tap again to discard': 'Ще раз, щоб відкинути',
   'Camera: drag to turn, pinch to zoom, double-tap to reset': 'Камера: тягни, щоб покрутити, зведи пальці для масштабу, подвійний дотик, щоб скинути',
+  // time of day and weather (#41)
+  'Time of day': 'Час доби', 'Midday': 'День', 'Morning': 'Ранок', 'Evening (golden hour)': 'Вечір (золота година)', 'Night': 'Ніч', 'By the clock': 'За годинником',
+  'Weather': 'Погода', 'Clear': 'Ясно', 'Fog': 'Туман', 'Rain': 'Дощ',
 };

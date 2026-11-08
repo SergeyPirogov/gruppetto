@@ -149,9 +149,11 @@ export class Route {
 
   elevAt(d) {
     const x = (this.oneWay ? d : this.wrap(d)) / SEG;
-    const i = Math.floor(x);
-    const a = this.segAt(i).elev, b = this.segAt(i + 1).elev;
-    return a + (b - a) * (x - i);
+    const i = Math.floor(x), t = x - i;
+    // a smooth curve through the 5 m points (Catmull-Rom), not straight pieces: the road, its edge lines
+    // and the grade have no kinks at the segment joins
+    const p0 = this.segAt(i - 1).elev, p1 = this.segAt(i).elev, p2 = this.segAt(i + 1).elev, p3 = this.segAt(i + 2).elev;
+    return p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));
   }
 
   /** Grade as a fraction, smoothed over ±10 m. */
