@@ -100,3 +100,31 @@ export function formBand(tsb) {
   if (tsb > -30) return 'optimal';     // productive training load
   return 'overload';
 }
+
+// ---------- W′bal: what is left of your anaerobic work capacity ----------
+// Critical power (CP, here your FTP) is what you can hold for a long time; above it you spend W′, a store of
+// work in joules (about 10–30 kJ), and below it the store refills, faster the further below CP you ride.
+// The differential model of Skiba and Clarke (2015), as intervals.icu and Golden Cheetah draw it:
+//   above CP: W′bal −= (P − CP)·dt;   below CP: W′bal += (W′ − W′bal)·(CP − P)/W′·dt.
+
+export const W_PRIME_DEFAULT = 20000; // J
+
+/** W′bal after `dt` seconds at `power`, from `bal` (J). Never below 0 or above W′. */
+export function wbalStep(bal, power, cp, wPrime, dt = 1) {
+  if (!(cp > 0) || !(wPrime > 0)) return bal;
+  const p = Math.max(0, power || 0);
+  if (p > cp) return Math.max(0, bal - (p - cp) * dt);
+  // the exact solution over dt, so a 5 s step refills the same as five 1 s steps
+  return wPrime - (wPrime - bal) * Math.exp(-((cp - p) / wPrime) * dt);
+}
+
+/** W′bal after each sample of a power series (`every` seconds per sample), starting full. */
+export function wbalSeries(powers, cp, wPrime, every = 1) {
+  let bal = wPrime;
+  return powers.map((p) => (bal = wbalStep(bal, p, cp, wPrime, every)));
+}
+
+/** Seconds until W′ runs out at this power, or null when you are not spending it. */
+export function timeToEmpty(bal, power, cp) {
+  return power > cp ? bal / (power - cp) : null;
+}

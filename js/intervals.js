@@ -51,6 +51,7 @@ export class IntervalsClient {
       weight: a.icu_weight || a.weight || null,
       maxHr: ride?.max_hr || null,
       lthr: ride?.lthr || null,
+      wPrime: ride?.w_prime > 1000 ? ride.w_prime : null, // J
       hrZones: Array.isArray(ride?.hr_zones) && ride.hr_zones.length > 1 ? ride.hr_zones : null, // each zone's top, bpm
       hrZoneNames: Array.isArray(ride?.hr_zone_names) ? ride.hr_zone_names : [],
     };

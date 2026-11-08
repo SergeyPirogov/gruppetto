@@ -644,3 +644,25 @@ test('FIT: a last lap under a minute joins the lap before', () => {
   assert.equal(laps([0, 100]), 2);
   assert.equal(laps([0, 100, 130]), 3); // 70 s: a lap of its own
 });
+
+test('W′bal: spent above CP joule for joule, refilled below it, never out of 0..W′', async () => {
+  const { wbalStep, wbalSeries, timeToEmpty } = await import('../js/power.js');
+  const cp = 250, wp = 20000;
+  // 60 s at 350 W spends 100 W × 60 s = 6 kJ
+  const after = wbalSeries(Array(60).fill(350), cp, wp).at(-1);
+  assert.equal(after, 14000);
+  // at CP nothing changes; far above it the store stops at 0
+  assert.equal(wbalStep(14000, 250, cp, wp), 14000);
+  assert.equal(wbalSeries(Array(600).fill(500), cp, wp).at(-1), 0);
+  // below CP it refills, faster the easier you ride, and never past W′
+  const easy = wbalStep(10000, 100, cp, wp, 60), soft = wbalStep(10000, 200, cp, wp, 60);
+  assert.ok(easy > soft && soft > 10000 && easy < wp);
+  assert.ok(wbalSeries(Array(3600).fill(0), cp, wp).every((x) => x <= wp));
+  // a 5 s step refills the same as five 1 s steps (the chart's 5 s points agree with the ride)
+  let b = 10000;
+  for (let i = 0; i < 5; i++) b = wbalStep(b, 150, cp, wp);
+  assert.ok(Math.abs(b - wbalStep(10000, 150, cp, wp, 5)) < 1e-6);
+  // 14 kJ at 100 W over CP lasts 140 s; below CP it does not run out
+  assert.equal(timeToEmpty(14000, 350, cp), 140);
+  assert.equal(timeToEmpty(14000, 200, cp), null);
+});

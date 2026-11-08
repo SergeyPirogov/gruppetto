@@ -3,6 +3,13 @@ export const UK = {
   // units
   'km': 'км', 'm': 'м', 'W': 'Вт', 'bpm': 'уд/хв', 'rpm': 'об/хв', 'min': 'хв', 'W/kg': 'Вт/кг', 'kJ': 'кДж', 's': 'с',
   'km/h': 'км/год', 'avg': 'сер.',
+  // W′bal
+  'W′ a quarter left — ease off soon': 'W′ лишилась чверть — скоро знизь потужність',
+  'W′ empty — back below FTP to recover': 'W′ вичерпано — опустися нижче FTP, щоб відновитися',
+  'W′bal: {kj} kJ left, empty in {time} at this power': 'W′bal: лишилось {kj} кДж, на цій потужності вистачить на {time}',
+  'W′bal: {kj} kJ of {total} kJ': 'W′bal: {kj} кДж із {total} кДж',
+  'Lowest W′bal': 'Мінімум W′bal', 'W′, kJ': 'W′, кДж',
+  'The work you can do above your FTP before you blow up: 10–30 kJ for most riders. Shown as W′bal during the ride.': 'Робота, яку можна виконати вище FTP, перш ніж «вибухнеш»: у більшості 10–30 кДж. Під час заїзду видно як W′bal.',
 
   // lobby: top bar, routes, modes
   'Trainer': 'Тренажер', 'Heart rate': 'Пульс', 'Cadence': 'Каденс', 'Controllers': 'Контролери', 'Simulator': 'Симулятор',

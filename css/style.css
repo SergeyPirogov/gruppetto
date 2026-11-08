@@ -410,8 +410,9 @@ button.ghost { background: transparent; border: 1px solid var(--line); }
 .lg-hr { background: #ff4d5e; }
 .lg-plan { background: #fff; height: 2px !important; }
 .lg-cad { background: #38d6e8; height: 2px !important; }
-#lg-plan, #lg-cad { display: inline-flex; align-items: center; gap: 6px; }
-#lg-plan[hidden], #lg-cad[hidden] { display: none; }
+.lg-wbal { background: #b48cff; height: 2px !important; }
+#lg-plan, #lg-cad, #lg-wbal { display: inline-flex; align-items: center; gap: 6px; }
+#lg-plan[hidden], #lg-cad[hidden], #lg-wbal[hidden] { display: none; }
 .sum-intervals table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: .92rem; }
 .sum-intervals th { text-align: left; font-weight: 600; color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; padding: 0 6px 6px; }
 .sum-intervals td { padding: 6px; border-top: 1px solid var(--line); }
@@ -972,3 +973,18 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   #ride .hud-right, #ride .hud-left { margin-top: env(titlebar-area-height, 0px); }
 }
 .demo-start { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 100; font-size: 1.4rem; padding: 18px 34px; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+
+/* ---------- W′bal under the power: a slim bar, violet while there is plenty, red when it runs out ---------- */
+.stat .wbal { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin-top: 4px; --f: 1; --wc: #b48cff; }
+.wbal[data-level="mid"] { --wc: #facc15; }
+.wbal[data-level="low"] { --wc: #fb923c; }
+.wbal[data-level="empty"] { --wc: #ff4d5e; }
+.wbal-bar { flex: 1; height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .12); overflow: hidden; }
+.wbal-bar i { display: block; height: 100%; width: calc(var(--f) * 100%); background: var(--wc); transition: width .9s linear, background .4s; }
+.wbal[data-level="empty"] .wbal-bar { animation: wbal-pulse 1s ease-in-out infinite; }
+@keyframes wbal-pulse { 50% { opacity: .45; } }
+#m-wbal-txt { font-size: .62rem; color: #c9d4e3; white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 760px) {
+  #ride .stat .wbal { margin-top: 3px; }
+  #ride #m-wbal-txt { display: none; }
+}
