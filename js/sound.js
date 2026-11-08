@@ -11,6 +11,15 @@ export function unlockAudio() {
   } catch { ctx = null; }
 }
 
+/** Sound can play: the browser lets a page start audio only after a click or a key press on it. */
+export const audioReady = () => !!ctx && ctx.state === 'running';
+// the first click or key anywhere opens the sound (a ride started without one, like the demo, was silent)
+if (typeof window !== 'undefined') {
+  const wake = () => { unlockAudio(); if (audioReady()) { window.removeEventListener('pointerdown', wake, true); window.removeEventListener('keydown', wake, true); } };
+  window.addEventListener('pointerdown', wake, true);
+  window.addEventListener('keydown', wake, true);
+}
+
 export function beep(freq = 880, dur = 0.12, vol = 0.18) {
   if (!ctx) return;
   const t = ctx.currentTime;
@@ -72,7 +81,7 @@ export function crowd(level) {
     crowdBus.connect(soft).connect(ctx.destination);
   }
   // the volume follows you a few times a second, in smooth ramps: re-aiming it every frame crackled
-  const want = Math.min(1, level) * 0.5;
+  const want = Math.min(1, level) * 0.9;
   if (t - busAt > 0.25 && Math.abs(want - busLevel) > 0.01) {
     crowdBus.gain.cancelScheduledValues(t);
     crowdBus.gain.setValueAtTime(crowdBus.gain.value, t);
@@ -81,12 +90,12 @@ export function crowd(level) {
   }
   if (level <= 0.01) return;
   // a shout now and then, more often close to the fans, left or right
-  if (t - lastShout > 1.2 && Math.random() < level * 0.02) {
+  if (t - lastShout > 1.0 && Math.random() < level * 0.03) {
     lastShout = t;
     const src = ctx.createBufferSource(), g = ctx.createGain(), pan = ctx.createStereoPanner();
     src.buffer = crowdBufs.shouts[Math.floor(Math.random() * crowdBufs.shouts.length)];
     src.playbackRate.value = 0.92 + Math.random() * 0.16;
-    g.gain.value = (0.35 + Math.random() * 0.4) * level;
+    g.gain.value = (0.6 + Math.random() * 0.5) * Math.max(0.4, level);
     pan.pan.value = Math.random() * 1.6 - 0.8;
     src.connect(g).connect(pan).connect(crowdBus);
     src.start(t);

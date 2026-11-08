@@ -16,7 +16,7 @@ import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formB
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
-import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff } from './sound.js';
+import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
@@ -3176,5 +3176,6 @@ if (new URLSearchParams(location.search).has('demo')) {
     ride.dist = Math.max(0, top - 400);
     const s = $('sim-power');
     s.value = 260; s.oninput?.();
+    if (settings.sound && !audioReady()) toast(tr('Click anywhere to hear the fans'));
   }, 600);
 }
