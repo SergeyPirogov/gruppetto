@@ -564,6 +564,33 @@ function renderModes() {
   updateSummary();
 }
 
+/** The zone a workout spends most of its work in (past Z1, when it has more than recovery). */
+function mainZone(w) {
+  const t = new Map();
+  for (const st of w.steps) {
+    const p = stepWatts(st, 0.5, settings.ftp);
+    if (p === null) continue;
+    const z = powerZone(p / settings.ftp);
+    t.set(z, (t.get(z) || 0) + st.dur);
+  }
+  // what the workout is for: the hardest zone it spends at least 15 % of its time in (a 40/20 is VO2max, not the
+  // endurance of its warm-up); failing that, where most of the time goes
+  const total = [...t.values()].reduce((a, b) => a + b, 0) || 1;
+  const hard = [...t.entries()].filter(([z, d]) => z.z > 1 && d / total >= 0.15).sort((a, b) => b[0].z - a[0].z)[0]?.[0];
+  return hard || [...t.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || powerZone(0.6);
+}
+
+/** A workout's card: where it comes from, its name, its numbers (time, TSS, IF, main zone), a line of description, its shape. */
+function workoutCardHTML(w, tag) {
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null, z = mainZone(w);
+  const chip = (t, cls = '') => `<span class="wk-chip ${cls}">${t}</span>`;
+  // a ramp test runs to failure: its full length (and so its TSS) is never ridden
+  const chips = w.ramp ? [chip(tr('to failure')), chip(tr('sets your FTP'), 'wk-zone')].join('')
+    : [chip(`⏱ ${Math.round(totalDuration(w) / 60)} ${U.min}`), st?.tss ? chip(`TSS ${st.tss}`) : '', st?.if ? chip(`IF ${st.if.toFixed(2)}`) : '', chip(`Z${z.z} ${tr(z.name)}`, 'wk-zone')].join('');
+  const from = tag ? `<span class="tag${tag === 'mine' ? ' mine' : ''}">${tag === 'mine' ? tr('Mine') : `intervals.icu · ${esc(tag)}`}</span>` : '';
+  return `${from}<b class="wk-name">${esc(w.name)}</b><span class="wk-chips">${chips}</span>${w.description ? `<small class="wk-desc">${esc(w.description)}</small>` : ''}<canvas class="wk-chart"></canvas>`;
+}
+
 /** The workout menu: planned intervals.icu workouts first, then the built-in ones. */
 function openWorkoutMenu() {
   const menu = $('wk-menu'), list = $('wk-menu-list');
@@ -577,7 +604,9 @@ function openWorkoutMenu() {
     const b = document.createElement('button');
     b.className = 'option';
     b.dataset.id = w.id;
-    b.innerHTML = `${tag ? `<span class="tag${tag === 'mine' ? ' mine' : ''}">${tag === 'mine' ? tr('Mine') : `intervals.icu · ${esc(tag)}`}</span>` : ''}<b>${esc(w.name)}</b><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`;
+    b.classList.add('wk-card');
+    b.innerHTML = workoutCardHTML(w, tag);
+    b.style.setProperty('--zc', mainZone(w).color);
     b.onclick = () => openWorkoutDetail(w);
     b.classList.toggle('sel', w.id === settings.mode);
     list.append(b);

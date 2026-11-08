@@ -1255,3 +1255,14 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .wk-menu-list .option .tag, .lobby-modes .mode-list .option .tag { align-self: flex-start; }
 .wk-menu-list .option small { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .wk-menu-list .option canvas, .lobby-modes .mode-list .option canvas { margin-top: auto; padding-top: 8px; box-sizing: content-box; }
+
+/* workout cards: richer, the main zone's colour as a glow, its numbers as chips, a tall chart */
+.wk-menu-list .option.wk-card { --zc: #3b82f6; gap: 8px; padding: 14px 14px 12px; background: radial-gradient(260px 120px at 0% 0%, color-mix(in srgb, var(--zc) 16%, transparent), transparent 70%), #121a28; border-color: color-mix(in srgb, var(--zc) 28%, var(--line)); transition: transform .15s ease, border-color .15s ease; }
+.wk-menu-list .option.wk-card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--zc) 60%, var(--line)); background: radial-gradient(260px 120px at 0% 0%, color-mix(in srgb, var(--zc) 22%, transparent), transparent 70%), #151f30; }
+.wk-card .wk-name { font-size: 1.02rem; line-height: 1.25; margin: 0; }
+.wk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.wk-chip { font-size: .72rem; font-weight: 600; color: #cdd6e4; padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, .06); border: 1px solid rgba(255, 255, 255, .08); white-space: nowrap; }
+.wk-chip.wk-zone { color: #fff; background: color-mix(in srgb, var(--zc) 30%, transparent); border-color: color-mix(in srgb, var(--zc) 55%, transparent); }
+.wk-menu-list .option.wk-card small.wk-desc { -webkit-line-clamp: 2; font-size: .8rem; line-height: 1.35; }
+.wk-menu-list .option.wk-card canvas.wk-chart { height: 58px; padding-top: 4px; border-radius: 6px; }
+.wk-menu-list .option.wk-card .tag { margin-bottom: 0; }
