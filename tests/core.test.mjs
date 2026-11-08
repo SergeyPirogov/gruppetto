@@ -727,3 +727,24 @@ test('intervals.icu history: the power curve at our durations, all time and 42 d
   assert.deepEqual(await c.fitness('2026-08-09', '2026-11-07'), [{ date: '2026-11-06', ctl: 52, atl: 58 }, { date: '2026-11-07', ctl: 52.4, atl: 60.1 }]);
   assert.match(calls[1], /\/wellness\?oldest=2026-08-09&newest=2026-11-07/);
 });
+
+test('Usage stats: nothing without consent or with Do Not Track; events only as a name and a coarse bucket', async () => {
+  const added = [], sent = [];
+  globalThis.window = {}; globalThis.document = { querySelector: () => null, createElement: () => ({ dataset: {} }), head: { appendChild: (s) => added.push(s) } };
+  Object.defineProperty(globalThis, 'navigator', { value: { doNotTrack: '0' }, configurable: true });
+  const { initStats, track, minutesBucket, rideMilestone, stopStats } = await import('../js/stats.js');
+  initStats(false); track('ride-finish');
+  assert.equal(added.length, 0, 'off: no script');
+  navigator.doNotTrack = '1'; initStats(true);
+  assert.equal(added.length, 0, 'Do Not Track: no script');
+  navigator.doNotTrack = '0'; initStats(true);
+  assert.equal(added[0].dataset.goatcounter, 'https://serhii.goatcounter.com/count');
+  track('ride-finish', minutesBucket(2700)); // queued until the script is in
+  window.goatcounter = { count: (e) => sent.push(e) }; added[0].onload();
+  track('ride-count', rideMilestone(3));
+  assert.deepEqual(sent.map((e) => e.path), ['ride-finish/30-60 min', 'ride-count/3']);
+  assert.ok(sent.every((e) => e.event === true));
+  stopStats(); track('x'); assert.equal(sent.length, 2, 'stopped');
+  assert.equal(rideMilestone(4), '');
+  delete globalThis.window; delete globalThis.document;
+});

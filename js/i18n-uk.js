@@ -167,6 +167,7 @@ export const UK = {
   'Ride now ▶': 'Їхати ▶', 'Dismiss': 'Відхилити', '{name} challenges you on {route}': '{name} кидає тобі виклик на «{route}»',
   'To beat: {km} km in {time}': 'Побий: {km} км за {time}', 'Their ghost rides beside you exactly as they rode. Be ahead of it at the end, and the summary says by how much.': 'Привид їде поруч точно так, як їхав друг. Будь попереду на фініші, і в підсумку буде видно, на скільки.',
   'Set your name in Profile, so friends see who challenges them': 'Впиши своє ім’я в профілі, щоб друзі бачили, хто кидає виклик',
+  'Privacy': 'Приватність', 'Send anonymous usage stats: which features are used, never your name, data or place': 'Надсилати анонімну статистику: які функції використовують, без імені, даних чи місця',
   'Lowest W′bal': 'Мін. W′bal', '~{s} s to empty': 'до відмови ~{s} с', 'W′ (anaerobic reserve), kJ': 'W′ (анаеробний запас), кДж',
   'W′bal: the anaerobic reserve above FTP': 'W′bal: анаеробний запас понад FTP',
   'Max power': 'Макс. потужність', 'Max heart rate': 'Макс. пульс', 'Avg cadence': 'Сер. каденс', 'Work': 'Робота', 'Estimated FTP': 'Оцінка FTP',

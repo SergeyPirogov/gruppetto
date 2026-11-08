@@ -15,6 +15,7 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
+import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
@@ -31,13 +32,16 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true,
+  icuKey: '', icuAthlete: '', icuUpload: true, stats: true,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
+initStats(settings.stats);
+// what breaks in riders' browsers: the message only (no stack, no address)
+window.addEventListener('error', (ev) => track('error', String(ev.message || 'unknown').replace(/https?:\/\/\S+/g, '').slice(0, 80)));
 // the workout pacer used to start switched on: once, switch it off (P or the Pacer button brings him back)
 if (!settings.pacerOffByDefault) {
   settings.pacer = false; settings.pacerOffByDefault = true;
@@ -134,7 +138,7 @@ let lastObcLabel = '';
 const reconnecting = new Map(); // key -> attempt number
 
 for (const d of DEVICES) {
-  d.dev.addEventListener('disconnect', () => { updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
+  d.dev.addEventListener('disconnect', () => { track('device-drop', d.key); updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
   d.dev.addEventListener('reconnecting', ({ detail: n }) => { reconnecting.set(d.key, n); updateDeviceUI(); });
   d.dev.addEventListener('reconnected', () => {
     reconnecting.delete(d.key);
@@ -143,6 +147,7 @@ for (const d of DEVICES) {
     toast(tr('{name}: connection restored ✓', { name: d.dev.name }));
   });
   d.dev.addEventListener('reconnect-failed', () => {
+    track('device-lost', d.key);
     reconnecting.delete(d.key);
     updateDeviceUI();
     toast(tr('{name}: could not reconnect — press “Connect” in Devices', { name: d.dev.name }));
@@ -301,6 +306,7 @@ async function toggleDevice(d, { add = false } = {}) {
     if (d.dev === trainer) trainer.sendsCadence = false;
     if (add || !(await reopenRemembered(d))) await d.dev.connect(); // a second Zwift Ride unit always goes through the chooser
     if (!add) rememberDevice(d);
+    track('device-connect', d.key);
     if (ride) ride.devs?.add(d.key); // connected mid-ride: kept connected through it too
     if (d.dev === trainer) $('sim').checked = false;
   } catch (e) {
@@ -608,6 +614,7 @@ $('wk-import-file').onchange = async (e) => {
   if (!n) return;
   saveMyWorkouts();
   toast(n === 1 ? tr('Workout imported: {name}', { name: last.name }) : tr('{n} workouts imported', { n }));
+  track('zwo-import');
   openWorkoutMenu();
   if (n === 1) openWorkoutDetail(last);
 };
@@ -620,8 +627,9 @@ function renderWhy() {
   try { closed = !!localStorage.getItem(WHY_KEY); } catch { /* private mode */ }
   $('why-box').hidden = closed || history.length > 0;
 }
-$('why-close').onclick = () => { try { localStorage.setItem(WHY_KEY, '1'); } catch { /* private mode */ } renderWhy(); };
-$('why-zwo').onclick = () => $('wk-import-file').click();
+$('why-close').onclick = () => { track('why', 'close'); try { localStorage.setItem(WHY_KEY, '1'); } catch { /* private mode */ } renderWhy(); };
+$('why-zwo').onclick = () => { track('why', 'zwo'); $('wk-import-file').click(); };
+$('why-icu').addEventListener('click', () => track('why', 'icu'));
 
 // ---------- Workout builder (#36) ----------
 // Blocks you can stack; each turns into steps. Percentages are of FTP, durations in minutes (intervals in seconds).
@@ -1091,6 +1099,7 @@ async function startRide() {
     pacer: racing ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
   if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
+  track('ride-start', [racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
   // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
@@ -2128,6 +2137,9 @@ function saveToHistory(r, samples) {
   // XP, level and badges: what this ride earned shows in its summary
   const got = addRide(progress, e);
   progress = got.progress; saveProgress();
+  track('ride-finish', minutesBucket(e.summary?.duration || 0));
+  if (rideMilestone(progress.rides)) track('ride-count', rideMilestone(progress.rides));
+  for (const b of got.badges) track('badge', b.id);
   e.earned = { xp: got.progress.xp, badges: got.badges.map((b) => b.id), levelUp: got.levelUp ? levelOf(got.progress.xp).level : 0 };
   history.unshift(e);
   history = history.slice(0, 100);
@@ -2188,6 +2200,7 @@ async function challengeFriend(e) {
   if (!named) toast(tr('Set your name in Profile, so friends see who challenges them'));
   const url = `${location.origin}${location.pathname}#challenge=${await encodeChallenge(e, named ? settings.name.trim() : '')}`;
   const text = tr('Race my ghost on {route} in Gruppetto: {km} km in {time}', { route: route?.name || '', km: (e.summary.distance / 1000).toFixed(1), time: fmtTime(e.summary.duration) });
+  track('challenge-send');
   if (navigator.share) { try { await navigator.share({ title: 'Gruppetto', text, url }); return; } catch (err) { if (err.name === 'AbortError') return; } }
   try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(tr('Link copied: send it to a friend')); } catch { prompt(tr('Copy the link'), url); }
 }
@@ -2201,6 +2214,7 @@ async function openChallenge() {
   const route = c && routes.find((r) => r.id === c.routeId && !r.custom);
   if (!route) { alertBox(tr('This challenge link is broken or from a newer Gruppetto: ask for a new one.')); return; }
   challenge = c; saveChallenge();
+  track('challenge-open');
   settings.routeId = route.id;
   if (settings.ghost === 'off') settings.ghost = 'best';
   saveSettings(); markRoute(); showRoute(); updateSummary(); renderChallenge();
@@ -2218,7 +2232,7 @@ function renderChallenge() {
   $('ch-how').textContent = tr('Their ghost rides beside you exactly as they rode. Be ahead of it at the end, and the summary says by how much.');
 }
 $('ch-ride').onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); updateSummary(); startRide(); };
-$('ch-drop').onclick = () => { challenge = null; saveChallenge(); renderChallenge(); updateSummary(); };
+$('ch-drop').onclick = () => { track('challenge-dismiss'); challenge = null; saveChallenge(); renderChallenge(); updateSummary(); };
 
 // ---------- Shadow ride (#24) ----------
 // Race a ghost of an earlier ride on the same route: it rides where you were at the same moment.
@@ -2708,7 +2722,7 @@ async function openRideCard() {
   const b = await blob(), file = new File([b], name, { type: 'image/png' });
   const canShare = !!navigator.canShare?.({ files: [file] });
   $('card-share').hidden = !canShare;
-  $('card-share').onclick = () => navigator.share({ files: [file], title: 'Gruppetto' }).catch(() => {});
+  $('card-share').onclick = () => { track('card-share', format); navigator.share({ files: [file], title: 'Gruppetto' }).catch(() => {}); };
 }
 $('btn-card').onclick = openRideCard;
 $('card-view').addEventListener('click', (ev) => { if (ev.target.closest('[data-card-close]')) $('card-view').hidden = true; });
@@ -2770,6 +2784,7 @@ async function connectIntervals({ quiet = false } = {}) {
     if (athlete.wPrime) { settings.wPrimeKj = Math.round(athlete.wPrime / 100) / 10; $('f-wprime').value = settings.wPrimeKj; }
     if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
     saveSettings();
+    if (!quiet) track('icu-connect');
     loadIcuHistory(client); // your power curve and form there, Zwift's rides included: not waited for
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};
     const notes = [];
@@ -3024,6 +3039,11 @@ function pacerRegroup(P, dt) {
     }
   }
 }
+$('f-stats').checked = settings.stats !== false;
+$('f-stats').onchange = () => {
+  settings.stats = $('f-stats').checked; saveSettings();
+  if (settings.stats) initStats(true); else stopStats();
+};
 $('f-sound').checked = !!settings.sound;
 $('f-sound').onchange = () => {
   settings.sound = settings.voice = $('f-sound').checked;
@@ -3218,6 +3238,7 @@ function rampWatch(power, cadence) {
   ride.target = null;
   recorder.markLap();
   const ftp = ride.rampBest ? rampFtp(ride.rampBest) : null;
+  track('ramp-done');
   cueBeep(1040, 0.5);
   cueSay(ftp ? `Test over. Your F T P is about ${ftp} watts. Spin easy now.` : 'Test over. Spin easy now.');
   toast(ftp ? tr('Ramp test over: FTP ≈ {w} W. Spin easy to cool down, then finish', { w: ftp }) : tr('Ramp test over. Spin easy to cool down'));
@@ -3449,7 +3470,7 @@ if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.
 }
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; $('btn-install').hidden = false; });
-window.addEventListener('appinstalled', () => { installPrompt = null; $('btn-install').hidden = true; toast(tr('Gruppetto is installed')); });
+window.addEventListener('appinstalled', () => { track('install'); installPrompt = null; $('btn-install').hidden = true; toast(tr('Gruppetto is installed')); });
 $('btn-install').onclick = async () => {
   if (!installPrompt) return;
   installPrompt.prompt();
