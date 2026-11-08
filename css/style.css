@@ -228,11 +228,11 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
   .hud-bottom { left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); flex-direction: column; align-items: stretch; gap: 4px; }
   .progress { width: auto; order: -1; align-items: flex-end; } /* the lap line over the power strip, both full width */
   .progress-label { font-size: .7rem; padding: 2px 8px; }
-  .bottom-row { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); min-height: 0; } /* the buttons float up on a tap, taking no room */
+  .bottom-row { position: fixed; left: 8px; right: 8px; top: calc(max(8px, env(safe-area-inset-top, 0px)) + 112px); bottom: auto; min-height: 0; align-items: center; } /* on a tap: under the boards, over the sky, clear of every number */
   #ride.show-controls .hud-bottom { z-index: 20; } /* over the workout panel while they are out */
   #profile { display: none; }
   .trace { height: 38px; border-radius: 8px; }
-  #ride #sim-ctl { position: static; transform: none; margin-left: auto; width: 150px; padding: 6px 10px; } /* beside the buttons, not over them */
+
   #ride.show-controls #sim-ctl { transform: none; }
   /* boards: the main number only (averages, W/kg and the grade ahead are for bigger screens) */
   .stat small, #ride .hud-right .stat .grade-next { display: none; }
@@ -809,5 +809,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   #ride #wk-chart { height: 22px; }
   #ride .topbar .tb-cell { padding: 2px 4px; }
   #ride .topbar .tb-cell b { font-size: .95rem; }
+  /* on a tap: Pause · Finish · Settings in a row under the boards, the simulator slider on its own line below */
+  #ride .bottom-row { flex-wrap: wrap; gap: 6px; }
+  #ride #sim-ctl, #ride.show-controls #sim-ctl { position: static; transform: none; margin: 0; width: auto; flex: 1 1 100%; padding: 6px 10px; }
+  #ride #btn-keys { display: none; } /* no keyboard on a phone */
 }
 .wk-head > div[hidden] { display: none; }
