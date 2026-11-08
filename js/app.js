@@ -777,7 +777,8 @@ async function startRide() {
   rideTimer = setInterval(() => advance(), 250);
   keepAwake(true);
   if (simulated) toast(tr('Simulator mode: set power with the slider or ↑/↓'));
-  if (scene.orbit) setTimeout(() => toast(tr('Camera: drag to orbit, scroll to zoom, double-click to reset')), simulated ? 3500 : 0);
+  const touch = matchMedia('(pointer: coarse)').matches;
+  if (scene.orbit) setTimeout(() => toast(touch ? tr('Camera: drag to turn, pinch to zoom, double-tap to reset') : tr('Camera: drag to orbit, scroll to zoom, double-click to reset')), simulated ? 3500 : 0);
   requestAnimationFrame(frame);
 }
 

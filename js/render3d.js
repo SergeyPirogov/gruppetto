@@ -1572,7 +1572,8 @@ export class Scene3D {
       if (!R) {
         const BIKE_COLORS = ['#2a2f3a', '#e8e8e8', '#1f5fd0', '#f0c020', '#2f8f4e'];
         const bikeColor = r.self ? '#c9302c' : BIKE_COLORS[(String(r.name || i).length + i) % BIKE_COLORS.length];
-        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self ? null : r.name, SHOW_RIDER && !this.riderModel, !this.bikeModel, bikeColor);
+        // no name tag for you, nor for your ghost (its gap rides over your head)
+        R = new Rider3D(r.color, r.stripe || '#ff8a1f', r.self || (r.ghost && !r.climb) ? null : r.name, SHOW_RIDER && !this.riderModel, !this.bikeModel, bikeColor);
         this.riders.set(key, R);
         // contact shadow: a soft dark patch on the road under the bike, darkest under the tyres, so
         // the wheels sit on the asphalt instead of seeming to hover over it (the sun's shadow falls aside)

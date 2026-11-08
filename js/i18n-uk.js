@@ -195,4 +195,5 @@ export const UK = {
   'top speed': 'макс. швидкість', 'max': 'макс.', 'SPRINT': 'СПРИНТ', 'LINE': 'ФІНІШ', '{name}: {time} 🏁': '{name}: {time} 🏁',
   // unfinished ride
   'Unfinished ride: {route}{workout} · {time} · {when}': 'Незавершений заїзд: {route}{workout} · {time} · {when}', 'Save ride': 'Зберегти заїзд', 'Discard': 'Відкинути', 'Tap again to discard': 'Ще раз, щоб відкинути',
+  'Camera: drag to turn, pinch to zoom, double-tap to reset': 'Камера: тягни, щоб покрутити, зведи пальці для масштабу, подвійний дотик, щоб скинути',
 };

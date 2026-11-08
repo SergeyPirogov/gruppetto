@@ -211,9 +211,11 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
   .stat.power .st-val b { font-size: 1.35rem; }
   .st-val span { font-size: .66rem; }
   .board.intensity { padding: 4px 6px; font-size: .75rem; }
-  .wk-steps { display: none; } /* phones: the top panel is enough */
+  #wk-steps, #ahead { display: none !important; } /* phones: the workout panel and the road say enough */
+  .int-label { display: none; } /* "− 100% +": the word does not fit beside the buttons */
+  .board.intensity .int-toggles .pill-btn { padding: 2px 6px; }
   .board.intensity .pill-btn { padding: 2px 9px; }
-  .hud-center { top: auto; bottom: max(64px, calc(env(safe-area-inset-bottom, 0px) + 56px)); gap: 6px; }
+  .hud-center { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 74px); gap: 6px; }
   .topbar { width: min(460px, calc(100vw - 16px)); }
   .tb-cell { padding: 4px 4px; gap: 4px; }
   .tb-cell b { font-size: 1.05rem; min-width: 0; }
@@ -223,11 +225,20 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
   .wk-title b { font-size: .8rem; }
   .wk-head b { font-size: 1.05rem; }
   #wk-chart { height: 32px; }
-  .hud-bottom { left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); }
-  .progress { width: auto; }
+  .hud-bottom { left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom, 0px)); flex-direction: column; align-items: stretch; gap: 4px; }
+  .progress { width: auto; order: -1; align-items: flex-end; } /* the lap line over the power strip, both full width */
+  .progress-label { font-size: .7rem; padding: 2px 8px; }
+  .bottom-row { position: absolute; left: 0; right: 0; bottom: calc(100% + 6px); min-height: 0; } /* the buttons float up on a tap, taking no room */
+  #ride.show-controls .hud-bottom { z-index: 20; } /* over the workout panel while they are out */
   #profile { display: none; }
   .trace { height: 38px; border-radius: 8px; }
-  #ride #sim-ctl { width: 170px; }
+  #ride #sim-ctl { position: static; transform: none; margin-left: auto; width: 150px; padding: 6px 10px; } /* beside the buttons, not over them */
+  #ride.show-controls #sim-ctl { transform: none; }
+  /* boards: the main number only (averages, W/kg and the grade ahead are for bigger screens) */
+  .stat small, #ride .hud-right .stat .grade-next { display: none; }
+  .toast { bottom: auto; top: 50%; font-size: .75rem; } /* mid-screen, over the road, not over the panels */
+  .stat { padding: 3px 8px 3px 6px; }
+  .st-body label { font-size: .5rem; }
 }
 
 /* ---------- Summary ---------- */
@@ -576,9 +587,8 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
   font-size: .82rem; font-weight: 700; white-space: nowrap; pointer-events: none;
 }
 .ghost-mini[hidden] { display: none; }
-#ride .ghost-mini.over-me { bottom: auto; transform: translate(-50%, -100%); font-size: .74rem; padding: 2px 9px; }
-@media (max-width: 760px) { .ghost-mini { bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 96px); font-size: .75rem; } }
-@media (max-width: 720px) { #ride #ghost-tag { bottom: 70px; font-size: .78rem; } }
+#ride #ghost-tag.over-me { bottom: auto; transform: translate(-50%, -100%); font-size: .74rem; padding: 2px 9px; }
+@media (max-width: 760px) { .ghost-mini { bottom: auto; top: 50%; font-size: .75rem; } } /* phones without 3D: mid-screen, clear of the panels */
 
 /* ---------- Route groups and GPX import (#25) ---------- */
 .route-group + .route-group { margin-top: 16px; }
@@ -629,7 +639,7 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .wkd-ride { width: auto; padding: 12px 22px; }
 
 /* grade ahead (#29): next 200 m and 1 km under the current grade */
-.stat .grade-next { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; color: #9fb0c6; font-size: .66rem; white-space: nowrap; line-height: 1.2; }
+#ride .stat .grade-next { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; color: #9fb0c6; font-size: .66rem; white-space: nowrap; line-height: 1.2; }
 .grade-next b { font-weight: 700; font-size: .74rem; }
 .lobby-msg.info { background: rgba(47, 212, 240, .1); border-color: rgba(47, 212, 240, .45); }
 .osm-attr { display: block; margin-top: 6px; font-size: .72rem; opacity: .75; }
@@ -737,3 +747,33 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .draft-box[hidden] { display: none; }
 .draft-actions { display: flex; gap: 8px; }
 .draft-actions button { padding: 7px 14px; }
+
+.int-label { font-style: normal; }
+
+/* phone on its side (and any short window): only the numbers that matter, the road in between */
+@media (max-height: 520px) and (min-width: 761px) {
+  #wk-steps, #ahead, #minimap-box { display: none !important; }
+  .hud-left, .hud-right { top: max(8px, env(safe-area-inset-top, 0px)); gap: 6px; }
+  .hud-left { left: max(8px, env(safe-area-inset-left, 0px)); }
+  .hud-right { right: max(8px, env(safe-area-inset-right, 0px)); }
+  .board { min-width: 150px; }
+  .stat { padding: 3px 8px 3px 6px; }
+  .stat small, #ride .hud-right .stat .grade-next { display: none; }
+  .st-body label { font-size: .52rem; }
+  .st-val b { font-size: 1.15rem; }
+  .stat.power .st-val b { font-size: 1.35rem; }
+  .board.intensity { padding: 4px 6px; font-size: .75rem; }
+  .board.intensity .pill-btn { padding: 2px 9px; }
+  .hud-center { top: max(8px, env(safe-area-inset-top, 0px)); gap: 6px; width: min(440px, calc(100vw - 2 * 170px - 32px)); }
+  .topbar, .workout { width: 100%; }
+  .tb-cell { padding: 3px 4px; }
+  .tb-cell b { font-size: 1.05rem; }
+  .workout { padding: 6px 10px; }
+  .wk-head b { font-size: 1.05rem; }
+  #wk-chart { display: none; }
+  .hud-bottom { bottom: max(8px, env(safe-area-inset-bottom, 0px)); left: max(8px, env(safe-area-inset-left, 0px)); right: max(8px, env(safe-area-inset-right, 0px)); }
+  .trace, #profile { height: 34px; border-radius: 8px; }
+  .progress { width: min(280px, 32vw); }
+  .progress-label { font-size: .7rem; padding: 2px 8px; }
+  .toast { bottom: auto; top: 55%; font-size: .75rem; }
+}
