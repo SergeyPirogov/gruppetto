@@ -2165,8 +2165,10 @@ function historyEntry(r, samples) {
   for (let i = 0; i < samples.length; i += every) {
     const chunk = samples.slice(i, i + every);
     wb.push(Math.round(wbal[Math.min(samples.length, i + every) - 1]));
-    const avg = (k) => { const v = chunk.map((x) => x[k] || 0).filter((x) => x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
-    pw.push(avg('power')); hr.push(avg('heartRate')); tg.push(avg('target')); cd.push(avg('cadence'));
+    // power and cadence: a plain mean, pauses (zeros) included, so a stop shows as one; heart rate and the target
+    // leave their zeros out (a strap that lost contact, a step without a target)
+    const avg = (k, zeros = false) => { const v = chunk.map((x) => x[k] || 0).filter((x) => zeros || x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
+    pw.push(avg('power', true)); hr.push(avg('heartRate')); tg.push(avg('target')); cd.push(avg('cadence', true));
     d.push(Math.round((chunk[chunk.length - 1].distance || 0) * 10) / 10); // distance at the end of each 5 s, for ghosts
   }
   return {
@@ -2679,16 +2681,17 @@ function hoverSummaryChart(samples, every, wPrime) {
   const hide = () => { line.hidden = tip.hidden = true; };
   hide();
   c.onpointerleave = hide;
+  const hasCad = samples.some((x) => x.cadence > 0); // a ride with cadence shows 0 in a pause, one without shows none
   c.onpointermove = (ev) => {
     if (!samples.length) return;
     const r = c.getBoundingClientRect(), x = Math.max(0, Math.min(r.width, ev.clientX - r.left));
     const i = Math.round((x / r.width) * (samples.length - 1)), s = samples[i];
-    const row = (dot, label, v) => (v ? `<span><i style="background:${dot}"></i>${label}<b>${v}</b></span>` : '');
+    const row = (dot, label, v) => (v !== '' ? `<span><i style="background:${dot}"></i>${label}<b>${v}</b></span>` : '');
     tip.innerHTML = `<b class="tip-time">${fmtTime(i * every)}${s.power > 0 ? '' : ` · ${tr('paused')}`}</b>`
-      + row('#ffc21a', tr('Power'), s.power ? `${Math.round(s.power)} ${U.W}` : '')
+      + row('#ffc21a', tr('Power'), `${Math.round(s.power || 0)} ${U.W}`)
       + row('#ffffff', tr('Plan'), s.target ? `${Math.round(s.target)} ${U.W}` : '')
       + row('#ff4d5e', tr('Heart rate'), s.heartRate ? `${Math.round(s.heartRate)} ${U.bpm}` : '')
-      + row('#38d6e8', tr('Cadence'), s.cadence ? `${Math.round(s.cadence)} ${U.rpm}` : '')
+      + row('#38d6e8', tr('Cadence'), hasCad ? `${Math.round(s.cadence || 0)} ${U.rpm}` : '')
       + row('#a78bfa', 'W′bal', s.wbal !== undefined && s.wbal < wPrime ? `${(s.wbal / 1000).toFixed(1)} ${tr('kJ')}` : '');
     line.hidden = tip.hidden = false;
     line.style.left = `${x}px`;
@@ -2707,12 +2710,13 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp, wPr
   g.scale(dpr, dpr);
   g.clearRect(0, 0, w, h);
   if (!samples.length) return;
-  const smooth = (k, n) => samples.map((_, i) => {
+  // power and cadence keep their zeros (a pause drops to 0); heart rate skips them (a strap's dropout)
+  const smooth = (k, n, zeros = false) => samples.map((_, i) => {
     let a = 0, c = 0;
-    for (let j = Math.max(0, i - n + 1); j <= i; j++) { const v = samples[j][k] || 0; if (v > 0) { a += v; c++; } }
+    for (let j = Math.max(0, i - n + 1); j <= i; j++) { const v = samples[j][k] || 0; if (zeros || v > 0) { a += v; c++; } }
     return c ? a / c : 0;
   });
-  const pw = smooth('power', smoothN), hr = smooth('heartRate', Math.max(1, Math.round(smoothN / 2)));
+  const pw = smooth('power', smoothN, true), hr = smooth('heartRate', Math.max(1, Math.round(smoothN / 2)));
   const pMax = Math.max(ftp * 1.3, ...pw), hMax = Math.max(190, ...hr);
   const x = (i) => (i / Math.max(1, samples.length - 1)) * w;
   // FTP reference line
@@ -2725,11 +2729,11 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp, wPr
   grad.addColorStop(0, 'rgba(255,194,26,.85)'); grad.addColorStop(1, 'rgba(255,194,26,.15)');
   g.fillStyle = grad; g.fill();
   // cadence: thin, on its own scale (0–150 rpm)
-  const cad = smooth('cadence', Math.max(1, Math.round(smoothN / 2)));
+  const cad = smooth('cadence', Math.max(1, Math.round(smoothN / 2)), true);
   if (cad.some((v) => v > 0)) {
     g.strokeStyle = 'rgba(56,214,232,.55)'; g.lineWidth = 1; g.beginPath();
     let started = false;
-    cad.forEach((v, i) => { if (!v) { started = false; return; } const y = h - (v / 150) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
+    cad.forEach((v, i) => { const y = h - (v / 150) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
     g.stroke();
   }
   // the plan: the workout's target as a white step line
