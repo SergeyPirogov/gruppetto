@@ -937,6 +937,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 
 /* ---------- Ride card (#52) ---------- */
 .card-panel { width: min(520px, calc(100vw - 24px)); display: grid; gap: 10px; }
+.card-formats { display: flex; gap: 8px; justify-content: center; margin-bottom: 10px; }
+.card-formats .sel { border-color: #ff7a1a; color: #ffb21a; }
+#card-canvas { max-height: calc(100vh - 220px) !important; } 
 #card-canvas { width: auto; max-width: 100%; max-height: calc(100vh - 170px); margin: 0 auto; height: auto; border-radius: 12px; display: block; }
 
 /* ---------- Before the start: a checklist of your sensors ---------- */

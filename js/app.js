@@ -2561,7 +2561,10 @@ function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp, wPr
 
 // ---------- A ride card to share (#52) ----------
 /** Draws the ride on a 1080×1350 canvas: title, route shape, big numbers, the power trace, records. */
-async function drawRideCard(e, c) {
+async function drawRideCard(e, c, format = 'story') {
+  // story: 9:16 with Instagram's top bar and reply field left clear; post: 4:5 for a feed
+  const story = format === 'story';
+  c.width = 1080; c.height = story ? 1920 : 1350;
   const g = c.getContext('2d'), W = c.width, H = c.height, P = 72;
   const sum = e.summary || {}, route = routes.find((r) => r.id === e.routeId);
   const accent = '#ff7a1a';
@@ -2569,41 +2572,59 @@ async function drawRideCard(e, c) {
   const bg = g.createLinearGradient(0, 0, W, H);
   bg.addColorStop(0, '#0d1626'); bg.addColorStop(1, '#1a1f33');
   g.fillStyle = bg; g.fillRect(0, 0, W, H);
-  const glow = g.createRadialGradient(W * 0.85, H * 0.12, 20, W * 0.85, H * 0.12, 700);
+  const glow = g.createRadialGradient(W * 0.85, H * 0.12, 20, W * 0.85, H * 0.12, 800);
   glow.addColorStop(0, 'rgba(255,122,26,.28)'); glow.addColorStop(1, 'rgba(255,122,26,0)');
   g.fillStyle = glow; g.fillRect(0, 0, W, H);
   const font = (w, s) => `${w} ${s}px system-ui, -apple-system, "Segoe UI", sans-serif`;
-  // brand
+  const maxW = W - P * 2;
+  /** Words of text in lines no wider than maxW, at most n; the last one ends in … when cut. */
+  const wrap = (text, n) => {
+    const lines = [];
+    let line = '';
+    for (const w of String(text).split(/\s+/)) {
+      const t = line ? `${line} ${w}` : w;
+      if (g.measureText(t).width <= maxW || !line) line = t; else { lines.push(line); line = w; }
+    }
+    if (line) lines.push(line);
+    if (lines.length > n) { lines.length = n; lines[n - 1] += '…'; }
+    return lines.map((l) => { while (g.measureText(l).width > maxW && l.length > 2) l = `${l.slice(0, -2)}…`; return l; });
+  };
+  let y = story ? 250 : P; // the top of the content
+  // brand, and the date under it (on the left: Instagram's buttons sit at the top right)
   try {
     const img = new Image(); img.src = 'logo.svg'; await img.decode();
-    g.drawImage(img, P, P - 6, 64, 56);
+    g.drawImage(img, P, y - 6, 64, 56);
   } catch { /* no logo */ }
-  g.fillStyle = '#fff'; g.font = font(800, 44); g.fillText('Gruppetto', P + 92, P + 38);
+  g.fillStyle = '#fff'; g.font = font(800, 44); g.fillText('Gruppetto', P + 92, y + 38);
   g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(500, 30);
-  g.textAlign = 'right';
-  g.fillText(new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }), W - P, P + 36);
-  g.textAlign = 'left';
-  // title: route and what it was
+  g.fillText(new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }), P, y + 100);
+  y += 100;
+  // title: route and what it was, the size fitted to the width and the rest wrapped, never cut at the edge
   const kind = e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${tr('{n} of {m}', { n: e.race.findIndex((x) => x.me) + 1, m: e.race.length })}` : ''}` : e.workoutName || tr('Free ride');
-  g.fillStyle = '#fff'; g.font = font(800, 76);
-  g.fillText(e.routeName || '', P, 250, W - P * 2);
+  let size = 84;
+  g.font = font(800, size);
+  while (size > 56 && g.measureText(e.routeName || '').width > maxW) g.font = font(800, (size -= 4));
+  g.fillStyle = '#fff';
+  for (const l of wrap(e.routeName || '', 2)) { y += size * 1.15; g.fillText(l, P, y); }
   g.fillStyle = accent; g.font = font(700, 40);
-  g.fillText(kind, P, 312, W - P * 2);
-  // route shape, heading-free: the whole route fitted into a box
+  y += 12;
+  for (const l of wrap(kind, 2)) { y += 52; g.fillText(l, P, y); }
+  // the numbers, the trace and the records from the bottom up; the route's shape fills what is between
+  const bottom = story ? H - 330 : H - 50;
+  const statsY = bottom - 520;
   if (route) {
     const { pts } = routeShape(route);
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-    const bx = P, by = 370, bw = W - P * 2, bh = 380, k = Math.min(bw / Math.max(1, x1 - x0), bh / Math.max(1, y1 - y0)) * 0.9;
+    for (const [x, yy] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, yy); x1 = Math.max(x1, x); y1 = Math.max(y1, yy); }
+    const bx = P, by = y + 50, bw = maxW, bh = Math.max(200, statsY - 90 - by), k = Math.min(bw / Math.max(1, x1 - x0), bh / Math.max(1, y1 - y0)) * 0.9;
     const ox = bx + (bw - (x1 - x0) * k) / 2 - x0 * k, oy = by + (bh - (y1 - y0) * k) / 2 - y0 * k;
     g.lineCap = 'round'; g.lineJoin = 'round';
     for (const [w, col] of [[22, 'rgba(255,122,26,.18)'], [8, accent]]) {
-      g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(ox + x * k, oy + y * k) : g.moveTo(ox + x * k, oy + y * k)));
+      g.beginPath(); pts.forEach(([x, yy], i) => (i ? g.lineTo(ox + x * k, oy + yy * k) : g.moveTo(ox + x * k, oy + yy * k)));
       g.strokeStyle = col; g.lineWidth = w; g.stroke();
     }
     g.fillStyle = '#fff'; g.beginPath(); g.arc(ox + pts[0][0] * k, oy + pts[0][1] * k, 12, 0, Math.PI * 2); g.fill();
   }
-  // the numbers
   const stats = [
     [tr('Time'), fmtTime(sum.duration || 0)],
     [tr('Distance'), `${((sum.distance || 0) / 1000).toFixed(1)} ${U.km}`],
@@ -2612,26 +2633,26 @@ async function drawRideCard(e, c) {
     [tr('Elevation gain'), `${Math.round(sum.elevationGain || 0)} ${U.m}`],
     ['TSS', `${e.tss || 0}`],
   ];
-  const cw = (W - P * 2) / 3;
+  const cw = maxW / 3;
   stats.forEach(([label, v], i) => {
-    const x = P + (i % 3) * cw, y = 830 + Math.floor(i / 3) * 150;
-    g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(600, 26); g.fillText(label.toUpperCase(), x, y);
-    g.fillStyle = '#fff'; g.font = font(800, 62); g.fillText(v, x, y + 66, cw - 16);
+    const x = P + (i % 3) * cw, sy = statsY + Math.floor(i / 3) * 150;
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(600, 26); g.fillText(label.toUpperCase(), x, sy, cw - 16);
+    g.fillStyle = '#fff'; g.font = font(800, 62); g.fillText(v, x, sy + 66, cw - 16);
   });
-  // power trace along the bottom, coloured by zone
+  // power trace, coloured by zone
   const pw = e.chart?.pw || [], ftp = e.ftp || settings.ftp;
   if (pw.length) {
-    const ty = 1150, th = 110, n = Math.min(pw.length, 270), per = pw.length / n, bwid = (W - P * 2) / n;
+    const ty = bottom - 190, th = 110, n = Math.min(pw.length, 270), per = pw.length / n, bwid = maxW / n;
     const max = Math.max(ftp * 1.5, ...pw);
     for (let i = 0; i < n; i++) {
-      let s = 0, c2 = 0;
-      for (let j = Math.floor(i * per); j < Math.floor((i + 1) * per); j++) { s += pw[j] || 0; c2++; }
-      const p = c2 ? s / c2 : 0, h = (p / max) * th;
+      let s2 = 0, c2 = 0;
+      for (let j = Math.floor(i * per); j < Math.floor((i + 1) * per); j++) { s2 += pw[j] || 0; c2++; }
+      const p = c2 ? s2 / c2 : 0, h = (p / max) * th;
       g.fillStyle = zoneColor(p / ftp);
       g.fillRect(P + i * bwid, ty + th - h, Math.max(1, bwid - 1), h);
     }
   }
-  // records
+  // records, or the address
   const before = powerCurve(history.filter((x) => x !== e && Date.parse(x.date) < Date.parse(e.date)));
   const recs = Object.entries(e.bests || {}).filter(([d, w]) => before[d] && w > before[d].w).slice(0, 3);
   g.font = font(700, 28);
@@ -2639,17 +2660,23 @@ async function drawRideCard(e, c) {
   for (const [d, w] of recs) {
     const t = `🏆 ${durLabel(+d)} ${w} ${U.W}`, tw = g.measureText(t).width + 36;
     g.fillStyle = 'rgba(255,122,26,.18)'; g.strokeStyle = accent; g.lineWidth = 2;
-    g.beginPath(); g.roundRect(rx, 1290, tw, 44, 22); g.fill(); g.stroke();
-    g.fillStyle = '#fff'; g.fillText(t, rx + 18, 1322);
+    g.beginPath(); g.roundRect(rx, bottom - 42, tw, 44, 22); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.fillText(t, rx + 18, bottom - 10);
     rx += tw + 12;
   }
-  if (!recs.length) { g.fillStyle = 'rgba(255,255,255,.4)'; g.font = font(500, 26); g.fillText('automation-remarks.com/gruppetto', P, 1322); }
+  if (!recs.length) { g.fillStyle = 'rgba(255,255,255,.4)'; g.font = font(500, 26); g.fillText('automation-remarks.com/gruppetto', P, bottom - 10); }
 }
 async function openRideCard() {
   const e = shown.entry;
   if (!e) return;
   const c = $('card-canvas');
-  await drawRideCard(e, c);
+  let format = 'story';
+  try { format = localStorage.getItem('gruppetto-card-format') || 'story'; } catch { /* private mode */ }
+  for (const b of document.querySelectorAll('[data-card-format]')) {
+    b.classList.toggle('sel', b.dataset.cardFormat === format);
+    b.onclick = () => { try { localStorage.setItem('gruppetto-card-format', b.dataset.cardFormat); } catch { /* private mode */ } openRideCard(); };
+  }
+  await drawRideCard(e, c, format);
   $('card-view').hidden = false;
   const blob = () => new Promise((res) => c.toBlob(res, 'image/png'));
   const name = `gruppetto-${(e.date || '').slice(0, 10)}.png`;
