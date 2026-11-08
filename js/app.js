@@ -864,6 +864,9 @@ function updateSummary() {
 
 /** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
 function openDrawer(panel) {
+  // intervals.icu lives on the Profile page now: asked for, the page opens at it
+  const atIcu = panel === 'icu';
+  if (atIcu) panel = 'profile';
   const drawer = $('drawer');
   drawer.hidden = false;
   drawer.classList.toggle('in-ride', !!ride);
@@ -874,6 +877,7 @@ function openDrawer(panel) {
   if (panel === 'progress') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
   for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
   markRail(panel);
+  if (atIcu) requestAnimationFrame(() => $('icu-card').scrollIntoView({ block: 'start' }));
 }
 /** The rail lights the section open in the drawer, and Ride again once it closes. */
 function markRail(panel) {
