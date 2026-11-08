@@ -944,7 +944,41 @@ async function ensureScene() {
 }
 const recorder = new Recorder();
 
+// ---------- Before the start: are the sensors in? ----------
+const DEVICE_LABEL = { trainer: 'Trainer', hr: 'Heart rate', cad: 'Cadence', ctl: 'Controllers', obc: 'OpenBikeControl' };
+/** What is not ready: a remembered sensor not connected yet, a heart rate strap with no reading yet, no trainer. */
+function preflightIssues() {
+  const out = [];
+  if (!$('sim').checked && !trainer.connected) out.push([tr('Trainer'), tr('not connected: the ride would be simulated')]);
+  for (const d of DEVICES) {
+    if (d.key === 'trainer' && !$('sim').checked) continue; // said above
+    if (settings.devices?.[d.key] && !d.dev.connected) out.push([tr(DEVICE_LABEL[d.key]), reconnecting.has(d.key) ? tr('reconnecting…') : tr('not connected yet')]);
+  }
+  if (hrm.connected && !fresh(live.hr, live.hrAt)) out.push([tr('Heart rate'), tr('connected, waiting for a reading…')]);
+  return out;
+}
+/** Resolves true to ride (all in, or "Ride anyway"), false to stay in the lobby. */
+function preflight() {
+  if (!preflightIssues().length) return Promise.resolve(true);
+  if (bluetoothAvailable()) autoConnectRemembered({ quiet: true }).catch(() => {});
+  return new Promise((resolve) => {
+    const box = $('preflight');
+    const done = (go) => { clearInterval(timer); box.hidden = true; resolve(go); };
+    const draw = () => {
+      const issues = preflightIssues();
+      if (!issues.length) { toast(tr('All sensors ready')); done(true); return; }
+      $('preflight-list').innerHTML = issues.map(([what, why]) => `<li><b>${esc(what)}</b><span>${esc(why)}</span></li>`).join('');
+    };
+    const timer = setInterval(draw, 500);
+    draw();
+    box.hidden = false;
+    $('preflight-go').onclick = () => done(true);
+    $('preflight-cancel').onclick = () => { done(false); openDrawer('devices'); };
+  });
+}
+
 async function startRide() {
+  if (!(await preflight())) return;
   const route = routes.find((r) => r.id === settings.routeId) || routes[0];
   const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;

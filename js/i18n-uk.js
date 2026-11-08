@@ -230,4 +230,8 @@ export const UK = {
   'Form': 'Форма', 'Fitness': 'Тренованість', 'Fatigue': 'Втома', 'very fresh: losing fitness': 'дуже свіжі: тренованість падає', 'fresh: ready to race': 'свіжі: готові до гонки',
   'neutral': 'нейтрально', 'productive load': 'продуктивне навантаження', 'overreaching: rest': 'перевантаження: відпочиньте',
   'Share card': 'Картка заїзду', 'Share your ride': 'Поділіться заїздом', 'Download PNG': 'Завантажити PNG', 'Share…': 'Поділитися…',
+  'Not everything is ready': 'Не все готово', 'Waiting for your sensors. The ride starts by itself once they are all in.': 'Чекаємо на датчики. Заїзд почнеться сам, щойно всі підключаться.',
+  'Back': 'Назад', 'Ride anyway': 'Їхати так', 'All sensors ready': 'Усі датчики готові',
+  'not connected: the ride would be simulated': 'не підключено: заїзд буде симуляцією', 'reconnecting…': 'перепідключення…', 'not connected yet': 'ще не підключено',
+  'connected, waiting for a reading…': 'підключено, чекаємо на показ…',
 };

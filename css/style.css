@@ -917,3 +917,11 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 /* ---------- Ride card (#52) ---------- */
 .card-panel { width: min(520px, calc(100vw - 24px)); display: grid; gap: 10px; }
 #card-canvas { width: auto; max-width: 100%; max-height: calc(100vh - 170px); margin: 0 auto; height: auto; border-radius: 12px; display: block; }
+
+/* ---------- Before the start: sensors not ready ---------- */
+.preflight-panel { width: min(440px, calc(100vw - 24px)); display: grid; gap: 12px; }
+.preflight-panel p { margin: 0; }
+.preflight-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.preflight-list li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-radius: 10px; background: rgba(250, 204, 21, .08); border: 1px solid rgba(250, 204, 21, .3); }
+.preflight-list li span { color: #fbd38d; text-align: right; }
+.preflight-list li::before { content: ''; }

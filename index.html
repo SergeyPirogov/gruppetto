@@ -456,7 +456,18 @@
     </main>
   </section>
 
-      <!-- a picture of the ride to share (#52) -->
+      <!-- before the start: sensors that are not ready yet -->
+    <div id="preflight" class="wk-menu" hidden>
+      <div class="drawer-bg"></div>
+      <div class="wk-menu-panel preflight-panel">
+        <div class="wk-menu-head"><h2>Not everything is ready</h2></div>
+        <p class="muted">Waiting for your sensors. The ride starts by itself once they are all in.</p>
+        <ul id="preflight-list" class="preflight-list"></ul>
+        <div class="wkd-actions"><button id="preflight-cancel" class="pill-btn">Back</button><button id="preflight-go" class="primary wkd-ride">Ride anyway</button></div>
+      </div>
+    </div>
+
+    <!-- a picture of the ride to share (#52) -->
     <div id="card-view" class="wk-menu" hidden>
       <div class="drawer-bg" data-card-close></div>
       <div class="wk-menu-panel card-panel">
