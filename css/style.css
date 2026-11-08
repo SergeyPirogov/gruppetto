@@ -879,3 +879,22 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .wb-move button { width: 28px; height: 28px; padding: 0; border-radius: 8px; font-size: .85rem; }
 .wb-add { display: flex; flex-wrap: wrap; gap: 6px; }
 @media (max-width: 600px) { .wb-meta { grid-template-columns: 1fr; } .wb-blocks li { grid-template-columns: 1fr auto; } .wb-blocks li .wb-fields { grid-column: 1 / -1; grid-row: 2; } .wk-menu-tools .pill-btn { padding: 4px 8px; font-size: .78rem; } }
+
+/* ---------- Power curve and FTP suggestion (#34, #35) ---------- */
+.power-curve { margin-bottom: 18px; }
+#pc-chart { width: 100%; height: 160px; display: block; }
+.pc-table { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.pc-table div { background: #121a28; border-radius: 8px; padding: 6px 8px; display: grid; }
+.pc-table label { font-size: .7rem; color: var(--muted); }
+.pc-table b { font-size: 1rem; }
+.pc-table small { font-size: .68rem; color: #38d6e8; }
+.ftp-tip { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 10px 0; padding: 10px 14px; border-radius: 12px; border: 1px solid #2b8f58; background: #12291e; }
+.ftp-tip[hidden] { display: none; }
+.ftp-tip div { display: grid; gap: 2px; }
+.ftp-tip small { color: var(--muted); }
+.ftp-tip button { width: auto; padding: 8px 14px; }
+.sum-prs { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -4px 0 12px; }
+.sum-prs[hidden] { display: none; }
+.pr-head { font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 4px; }
+.pr-chip { padding: 4px 10px; border-radius: 999px; background: #2a1d12; border: 1px solid var(--accent); font-size: .85rem; }
+@media (max-width: 520px) { .pc-table { grid-template-columns: repeat(3, 1fr); } }

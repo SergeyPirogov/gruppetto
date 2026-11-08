@@ -10,6 +10,7 @@ import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, HR_ZONES } from './analysis.js';
 import { parseZwo, toZwo } from './zwo.js';
+import { DURS, bestsFromSamples, powerCurve, ftpSuggestion } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { Sampler } from './sampler.js';
@@ -825,6 +826,7 @@ function openDrawer(panel) {
   drawer.hidden = false;
   drawer.classList.toggle('in-ride', !!ride);
   for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
+  if (panel === 'history') renderPowerCurve(); // its chart needs the panel on screen to size itself
   for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
 }
 
@@ -1897,6 +1899,7 @@ function historyEntry(r, samples) {
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
     race: r.race || null, raceLaps: r.raceLaps || null,
     maxHr: settings.maxHr || 0, eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
+    bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
     chart: { every, pw, hr, d, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
     intervals: r.workout?.steps ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
       // a ramp shows where it starts and ends
@@ -1967,6 +1970,12 @@ function showSummary(e, { live = false } = {}) {
   $('summary').hidden = false;
   $('sum-kicker').textContent = live ? tr('Ride complete') : new Date(e.date).toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   $('sum-name').textContent = [e.routeName, e.race ? `🏁 ${tr('Race')}` : e.workoutName || tr('Free ride')].filter(Boolean).join(' · ');
+  // new power records: this ride against every ride before it
+  const before = powerCurve(history.filter((x) => x !== e && Date.parse(x.date) < Date.parse(e.date)));
+  const recs = Object.entries(e.bests || {}).filter(([d, w]) => before[d] && w > before[d].w).map(([d, w]) => `<span class="pr-chip">${durLabel(+d)} <b>${w} ${U.W}</b> 🏆</span>`);
+  $('sum-prs').hidden = !recs.length;
+  $('sum-prs').innerHTML = recs.length ? `<span class="pr-head">${tr('New power records')}</span>${recs.join('')}` : '';
+  renderFtpTip($('sum-ftp'));
   // race results
   $('sum-race').hidden = !e.race;
   if (e.race) {
@@ -2077,11 +2086,63 @@ function renderIntervals(e) {
 }
 
 /** Recent rides in the lobby (latest five) and the full list in the drawer. */
+/** "5 s", "1 min", "20 min", "1 h" */
+const durLabel = (d) => (d < 60 ? `${d} ${tr('s')}` : d < 3600 ? `${d / 60} ${U.min}` : `${d / 3600} ${tr('h')}`);
+
+/** "Your rides suggest FTP 226 W" with a button that sets it, in `el` (hidden when there is nothing to suggest). */
+function renderFtpTip(el) {
+  const s = ftpSuggestion(history, settings.ftp);
+  el.hidden = !s;
+  if (!s) return;
+  const from = s.ramp ? tr('75 % of your best minute in a ramp test ({w} W)', { w: s.w }) : tr('95 % of your best 20 minutes ({w} W, {date})', { w: s.w, date: new Date(s.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) });
+  el.innerHTML = `<div><b>${tr('Your rides suggest FTP {w} W', { w: s.ftp })}</b><small>${esc(from)} · ${tr('now {w} W', { w: settings.ftp })}</small></div><button class="primary">${tr('Set FTP to {w} W', { w: s.ftp })}</button>`;
+  el.querySelector('button').onclick = () => {
+    settings.ftp = s.ftp; saveSettings();
+    $('f-ftp').value = s.ftp;
+    toast(tr('FTP set to {w} W', { w: s.ftp }));
+    renderFtpTip(el); renderPowerCurve();
+  };
+}
+
+/** Power curve in History: best power for each duration, all time and the last 6 weeks. */
+function renderPowerCurve() {
+  const all = powerCurve(history), recent = powerCurve(history, { days: 42 });
+  const box = $('power-curve-box');
+  box.hidden = !Object.keys(all).length;
+  if (box.hidden) return;
+  renderFtpTip($('pc-ftp'));
+  $('pc-table').innerHTML = DURS.filter((d) => all[d]).map((d) => `<div><label>${durLabel(d)}</label><b>${all[d].w}</b><small>${recent[d] ? `${recent[d].w} · 6 ${tr('wk')}` : '—'}</small></div>`).join('');
+  requestAnimationFrame(() => {
+    const c = $('pc-chart'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = c.clientWidth, H = c.clientHeight;
+    if (!W) return;
+    c.width = W * dpr; c.height = H * dpr;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ds = DURS.filter((d) => all[d]), max = Math.max(...ds.map((d) => all[d].w)) * 1.08, padL = 34, padB = 18;
+    const x = (d) => padL + (Math.log(d / 5) / Math.log(3600 / 5)) * (W - padL - 8), y = (w) => (H - padB) - (w / max) * (H - padB - 6);
+    g.font = '11px system-ui'; g.fillStyle = 'rgba(255,255,255,.45)'; g.strokeStyle = 'rgba(255,255,255,.08)';
+    for (const d of [5, 60, 300, 1200, 3600]) { g.beginPath(); g.moveTo(x(d), 4); g.lineTo(x(d), H - padB); g.stroke(); g.fillText(durLabel(d), x(d) - 10, H - 4); }
+    for (const w of [Math.round(max / 3), Math.round(max * 2 / 3)]) { g.fillText(w, 2, y(w) + 4); g.beginPath(); g.moveTo(padL, y(w)); g.lineTo(W - 8, y(w)); g.stroke(); }
+    g.setLineDash([4, 4]); g.strokeStyle = 'rgba(255,255,255,.3)'; g.beginPath(); g.moveTo(padL, y(settings.ftp)); g.lineTo(W - 8, y(settings.ftp)); g.stroke(); g.setLineDash([]);
+    g.fillText(`FTP ${settings.ftp}`, W - 62, y(settings.ftp) - 4);
+    const line = (curve, color, width) => {
+      const pts = ds.filter((d) => curve[d]);
+      if (!pts.length) return;
+      g.beginPath(); pts.forEach((d, i) => (i ? g.lineTo(x(d), y(curve[d].w)) : g.moveTo(x(d), y(curve[d].w))));
+      g.strokeStyle = color; g.lineWidth = width; g.stroke();
+      for (const d of pts) { g.beginPath(); g.arc(x(d), y(curve[d].w), 2.5, 0, Math.PI * 2); g.fillStyle = color; g.fill(); }
+    };
+    line(all, 'rgba(255,194,26,.95)', 2.5);
+    line(recent, 'rgba(56,214,232,.9)', 1.6);
+  });
+}
+
 function renderHistory() {
+  renderPowerCurve();
   const row = (e) => {
     const s = e.summary || {};
     const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
-    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
+    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
   };
   $('history-recent').innerHTML = history.slice(0, 5).map(row).join('');
   $('history-box').hidden = !history.length;

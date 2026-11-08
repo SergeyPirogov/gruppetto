@@ -553,3 +553,28 @@ test('.zwo workouts: read Zwift files and write them back (#28)', async () => {
   assert.match(toZwo(w), /<IntervalsT Repeat="3" OnDuration="60" OffDuration="120" OnPower="1.2" OffPower="0.55"/);
   assert.throws(() => parseZwo('<html></html>'), /Not a Zwift workout/);
 });
+
+test('power curve and FTP suggestion (#34, #35)', async () => {
+  const { bestsFromSamples, bestsFromChart, powerCurve, ftpSuggestion } = await import('../js/power.js');
+  // 30 min: 200 W with 5 min at 300 W and a 10 s burst at 600 W
+  const p = Array(1800).fill(200);
+  for (let i = 600; i < 900; i++) p[i] = 300;
+  for (let i = 100; i < 110; i++) p[i] = 600;
+  const b = bestsFromSamples(p);
+  assert.equal(b[5], 600);
+  assert.equal(b[300], 300);
+  assert.equal(b[1200], Math.round((300 * 300 + 600 * 10 + 200 * 890) / 1200)); // 20 min from 0:01:40: the burst and the 5 min
+  assert.equal(b[3600], undefined);
+  const chart = []; for (let i = 0; i < p.length; i += 5) chart.push(p.slice(i, i + 5).reduce((a, x) => a + x, 0) / 5);
+  assert.equal(bestsFromChart(chart, 5)[300], 300);
+  const now = Date.parse('2026-11-08T12:00:00Z');
+  const rides = [
+    { id: 'a', date: '2026-11-01T10:00:00Z', bests: b },
+    { id: 'b', date: '2026-05-01T10:00:00Z', bests: { 1200: 260 } }, // half a year ago
+  ];
+  assert.equal(powerCurve(rides, { now })[1200].w, 260);
+  assert.equal(powerCurve(rides, { days: 42, now })[1200].w, b[1200]);
+  const s = ftpSuggestion(rides, 200, { now });
+  assert.equal(s.ftp, Math.round(b[1200] * 0.95)); // only the recent ride counts
+  assert.equal(ftpSuggestion(rides, 230, { now }), null); // already above
+});

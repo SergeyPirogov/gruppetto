@@ -283,6 +283,12 @@
       </div>
     </div>
       <div class="card" data-panel="history">
+        <div id="power-curve-box" class="power-curve" hidden>
+          <div class="sum-chart-head"><h2>Power curve</h2><span class="legend"><i class="lg-power"></i>All time <i class="lg-cad"></i>Last 6 weeks</span></div>
+          <canvas id="pc-chart"></canvas>
+          <div id="pc-table" class="pc-table"></div>
+          <div id="pc-ftp" class="ftp-tip" hidden></div>
+        </div>
         <h2>Ride history</h2>
         <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
         <div id="history-all" class="hist-list"></div>
@@ -407,6 +413,8 @@
         <canvas id="sum-chart"></canvas>
       </div>
       <div id="sum-stats" class="stats"></div>
+      <div id="sum-prs" class="sum-prs" hidden></div>
+      <div id="sum-ftp" class="ftp-tip" hidden></div>
       <div id="sum-race" class="card sum-race" hidden>
         <div class="sum-chart-head"><h2>Race results</h2><span id="sum-race-place" class="race-place"></span></div>
         <table><tbody id="sum-race-rows"></tbody></table>

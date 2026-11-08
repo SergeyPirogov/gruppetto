@@ -218,4 +218,9 @@ export const UK = {
   'Workout builder': 'Конструктор тренування', 'Name': 'Назва', 'Notes': 'Нотатки', 'What it is for, how to ride it': 'Для чого воно і як його їхати',
   'Cancel': 'Скасувати', 'Save workout': 'Зберегти тренування', 'My workout': 'Моє тренування', 'Saved: {name}': 'Збережено: {name}',
   'Warm-up': 'Розминка', 'Steady': 'Рівно', 'Intervals': 'Інтервали', 'Ramp': 'Рампа', 'Cool-down': 'Заминка', 'on': 'роб.', 'off': 'відп.',
+  // power curve, FTP (#34, #35)
+  'Power curve': 'Крива потужності', 'All time': 'За весь час', 'Last 6 weeks': 'Останні 6 тижнів', 'wk': 'тиж', 'h': 'год',
+  'New power records': 'Нові рекорди потужності', 'Your rides suggest FTP {w} W': 'Ваші заїзди кажуть: FTP {w} Вт',
+  '95 % of your best 20 minutes ({w} W, {date})': '95 % найкращих 20 хвилин ({w} Вт, {date})', '75 % of your best minute in a ramp test ({w} W)': '75 % найкращої хвилини рамп-тесту ({w} Вт)',
+  'now {w} W': 'зараз {w} Вт', 'Set FTP to {w} W': 'Встановити FTP {w} Вт', 'FTP set to {w} W': 'FTP встановлено: {w} Вт',
 };
