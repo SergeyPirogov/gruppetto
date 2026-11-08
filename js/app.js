@@ -2806,6 +2806,14 @@ $('f-sound').onchange = () => {
 };
 $('btn-download-tcx').onclick = () => download('tcx');
 $('btn-again').onclick = () => { flushUpload(); $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
+// The Gruppetto mark goes home: from the summary to the lobby (as «Ride again»), on the lobby it closes what is open
+// over it and scrolls up. No reload: an upload in flight and the state stay.
+for (const a of document.querySelectorAll('[data-home]')) a.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (!$('summary').hidden) $('btn-again').onclick();
+  for (const id of ['drawer', 'wk-menu', 'wk-detail', 'wk-builder']) if ($(id)) $(id).hidden = true;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
 $('btn-delete-ride').onclick = () => {
   const b = $('btn-delete-ride');
   if (b.textContent !== tr('Tap again to delete')) { b.textContent = tr('Tap again to delete'); return; }
