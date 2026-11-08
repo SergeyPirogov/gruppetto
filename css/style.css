@@ -1041,3 +1041,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
    map (the progress label stays); the iframe takes no clicks, so nothing of YouTube's comes up over the road */
 #ride.video-mode #trace, #ride.video-mode #profile, #ride.video-mode .progress-track { display: none; }
 #ride.video-mode .video-layer iframe { pointer-events: none; }
+.vid-tags { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.tag.gps { background: rgba(74, 222, 128, .15); border-color: rgba(74, 222, 128, .5); color: #bbf7d0; }
+.tag.vid-add-gpx { cursor: pointer; background: rgba(255, 122, 26, .15); border-color: rgba(255, 122, 26, .5); color: #ffd3a8; }
+.tag.flat { background: rgba(148, 163, 184, .12); border-color: rgba(148, 163, 184, .4); color: #cbd5e1; }

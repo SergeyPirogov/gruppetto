@@ -532,9 +532,9 @@ function renderPlan() {
 const VIDEOS_KEY = 'gruppetto-videos';
 let myVideos = (() => { try { return JSON.parse(localStorage.getItem(VIDEOS_KEY) || '[]'); } catch { return []; } })();
 function saveVideos() { try { localStorage.setItem(VIDEOS_KEY, JSON.stringify(myVideos)); return true; } catch { return false; } }
-/** Videos to ride from the first day, nothing to look for: picked by hand (first-person, steady camera, long). */
+/** Videos to ride from the first day, nothing to look for: picked by hand (first-person, steady camera, long), and
+ *  only with their GPS track: without it the road is flat and the ride is not real. */
 const FEATURED_VIDEOS = [
-  { id: 'f-zugspitze', yt: 'fXaFHAGK6cA', name: 'Zugspitze valley, Alps', start: 120, kmh: 25, featured: true },
   { id: 'f-south-tyrol', yt: 'JOWN4WmuItM', name: 'South Tyrol: Reschen to the Vinschgau, Alps', start: 0, kmh: 25, gpxUrl: 'assets/videos/JOWN4WmuItM.gpx', featured: true },
 ];
 const currentVideo = () => [...myVideos, ...FEATURED_VIDEOS].find((x) => x.id === settings.videoId) || null;
@@ -554,11 +554,15 @@ function openVideoMenu() {
   $('vid-msg').hidden = true;
   const list = $('vid-list');
   list.innerHTML = '';
-  for (const x of [...myVideos, ...FEATURED_VIDEOS]) {
+  // those with a GPS track first: they ride best (the real climbs, the video where you are)
+  const all = [...myVideos, ...FEATURED_VIDEOS];
+  const hasTrack = (x) => !!(x.gpx || x.gpxUrl);
+  for (const x of [...all.filter(hasTrack), ...all.filter((y) => !hasTrack(y))]) {
     const b = document.createElement('button');
     b.className = `option vid-item${x.id === settings.videoId ? ' sel' : ''}`;
-    b.innerHTML = `<b>${esc(x.name)}</b><small>${x.gpx || x.gpxUrl ? tr('From {start}, with its GPS track: real climbs, the video where you are', { start: fmtTime(x.start || 0) }) : tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy">${x.featured ? `<span class="tag">${tr('Featured')}</span>` : `<span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`}`;
+    b.innerHTML = `<b>${esc(x.name)}</b><small>${x.gpx || x.gpxUrl ? tr('From {start}, with its GPS track: real climbs, the video where you are', { start: fmtTime(x.start || 0) }) : tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy"><span class="vid-tags">${hasTrack(x) ? `<span class="tag gps">GPS ✓</span>` : x.featured ? '' : `<span class="tag flat">${tr('Flat road')}</span><span class="tag vid-add-gpx" role="button" title="${tr("Add the filmed ride's GPX: the real climbs, and the video where you are")}">+ GPX</span>`}${x.featured ? `<span class="tag">${tr('Featured')}</span>` : ''}</span>${x.featured ? '' : `<span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`}`;
     b.onclick = (ev) => {
+      if (ev.target.closest('.vid-add-gpx')) { addGpxTo(x); return; }
       if (ev.target.closest('.vid-del')) {
         myVideos = myVideos.filter((y) => y !== x); saveVideos();
         if (settings.videoId === x.id) { settings.videoId = null; if (settings.mode === 'video') settings.mode = 'free'; saveSettings(); }
@@ -569,6 +573,21 @@ function openVideoMenu() {
     };
     list.append(b);
   }
+}
+/** A GPX for a video already in the list: picked, turned into its road, kept with it. */
+function addGpxTo(x) {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = '.gpx,application/gpx+xml';
+  inp.onchange = async () => {
+    const file = inp.files?.[0];
+    if (!file) return;
+    const msg = $('vid-msg');
+    try { x.gpx = routeFromTrack(parseGpx(await file.text()), file.name); } catch (err) { msg.hidden = false; msg.textContent = `${file.name}: ${tr(err.message)}`; return; }
+    if (!saveVideos()) { delete x.gpx; msg.hidden = false; msg.textContent = tr('Not enough browser storage for this route'); return; }
+    track('video-gpx');
+    renderModes(); openVideoMenu();
+  };
+  inp.click();
 }
 $('vid-url').addEventListener('input', () => { const t = startInLink($('vid-url').value); if (t && !$('vid-start').value) $('vid-start').value = fmtTime(t); });
 $('vid-save').onclick = async () => {
@@ -581,13 +600,16 @@ $('vid-save').onclick = async () => {
   if (file) {
     try { v.gpx = routeFromTrack(parseGpx(await file.text()), file.name); } catch (err) { msg.hidden = false; msg.textContent = `${file.name}: ${tr(err.message)}`; return; }
   }
+  if (!v.gpx) { msg.hidden = false; msg.textContent = tr('Added without a GPS track: the road under it is flat. Its GPX (often linked in the video description, or the ride on Strava) gives the real climbs: «+ GPX» on the video.'); }
   myVideos.unshift(v);
   if (!saveVideos()) { myVideos.shift(); msg.hidden = false; msg.textContent = tr('Not enough browser storage for this route'); return; }
   $('vid-gpx').value = '';
   settings.videoId = v.id; settings.mode = 'video'; saveSettings();
   for (const id of ['vid-url', 'vid-name', 'vid-start']) $(id).value = '';
-  track('video-add');
+  track('video-add', v.gpx ? 'gpx' : 'flat');
+  const note = !$('vid-msg').hidden && $('vid-msg').textContent;
   renderModes(); openVideoMenu();
+  if (note) { $('vid-msg').hidden = false; $('vid-msg').textContent = note; }
 };
 $('vid-menu').addEventListener('click', (e) => { if (e.target.closest('[data-vid-close]')) $('vid-menu').hidden = true; });
 
