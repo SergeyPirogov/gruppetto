@@ -980,17 +980,28 @@ export class Scene3D {
     this._clouds();
     this.rain = null;
     if (a.rain) this._rainfall();
+    // a wet road: darker and glossy, the sky shining in it
+    if (this.roadMat) { this.roadMat.roughness = a.rain ? 0.62 : 0.96; this.roadMat.metalness = 0; this.roadMat.color.setScalar(a.rain ? 0.7 : 1); }
   }
 
+  /** Rain: thin streaks of mixed length and speed, densest near the camera, slanting back as you ride
+   *  through them and fading into the fog; the road turns dark and glossy. */
   _rainfall() {
-    const n = LOW ? 700 : 1800, pos = new Float32Array(n * 6);
+    const n = LOW ? 1100 : 3000, pos = new Float32Array(n * 6), cols = new Float32Array(n * 6);
+    const drops = this.rainDrops = { speed: new Float32Array(n), len: new Float32Array(n), x: new Float32Array(n), y: new Float32Array(n), z: new Float32Array(n) };
     for (let i = 0; i < n; i++) {
-      const x = (hash(i) - 0.5) * 80, y = hash(i * 2) * 30, z = (hash(i * 3) - 0.5) * 80;
-      pos.set([x, y, z, x + 0.06, y + 0.55, z], i * 6);
+      const r = 2 + Math.pow(hash(i * 1.7), 1.6) * 34, a = hash(i * 2.3) * Math.PI * 2; // more drops close by
+      drops.x[i] = Math.cos(a) * r; drops.z[i] = Math.sin(a) * r; drops.y[i] = hash(i * 3.1) * 18;
+      drops.speed[i] = 7.5 + hash(i * 4.3) * 4;
+      drops.len[i] = 0.25 + hash(i * 5.9) * 0.55;
+      // the top of each streak fades out: a falling drop is a soft line, not a stick
+      const b = 0.75 + hash(i * 6.7) * 0.25;
+      cols.set([b, b, b, 0, 0, 0], i * 6);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    this.rain = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#e4ebf3', transparent: true, opacity: 0.7, fog: false }));
+    g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    this.rain = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: '#c5d0dc', vertexColors: true, transparent: true, opacity: 0.38, blending: THREE.AdditiveBlending, depthWrite: false, fog: true }));
     this.rain.frustumCulled = false;
     this.scene.add(this.rain);
   }
@@ -1853,15 +1864,20 @@ export class Scene3D {
         this.water.material.bumpMap.offset.set(cx / 5000 * 700 + this.clock * 0.012,
           -cz / 5000 * 700 + this.clock * 0.006);
       }
-      if (this.rain) { // streaks falling ~9 m/s, wrapping round the camera
-        this.rain.position.set(cx, cy - 5, cz);
-        const p = this.rain.geometry.attributes.position, fall = dt * 9;
-        for (let i = 0; i < p.count; i += 2) {
-          let y = p.getY(i) - fall;
-          if (y < 0) y += 30;
-          p.setY(i, y); p.setY(i + 1, y + 0.55);
+      if (this.rain) {
+        this.rain.position.set(cx, cy - 4, cz);
+        const D = this.rainDrops, p = this.rain.geometry.attributes.position.array;
+        // riding forward the rain seems to come at you: each streak leans back along the way you go
+        const ride = Math.min(1.2, (dtDist && dt ? dtDist / dt : 0) / 9);
+        for (let i = 0; i < D.y.length; i++) {
+          let y = D.y[i] - D.speed[i] * dt;
+          if (y < 0) y += 18;
+          D.y[i] = y;
+          const L = D.len[i], k = i * 6;
+          p[k] = D.x[i]; p[k + 1] = y; p[k + 2] = D.z[i];
+          p[k + 3] = D.x[i] + fx * L * ride; p[k + 4] = y + L; p[k + 5] = D.z[i] + fz * L * ride;
         }
-        p.needsUpdate = true;
+        this.rain.geometry.attributes.position.needsUpdate = true;
       }
       // at night a lamp on your bars lights the road ahead
       if (this.atm?.night) {
