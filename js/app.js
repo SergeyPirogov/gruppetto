@@ -949,9 +949,9 @@ const DEVICE_LABEL = { trainer: 'Trainer', hr: 'Heart rate', cad: 'Cadence', ctl
 /** What is not ready: a remembered sensor not connected yet, a heart rate strap with no reading yet, no trainer. */
 function preflightIssues() {
   const out = [];
-  if (!$('sim').checked && !trainer.connected) out.push([tr('Trainer'), tr('not connected: the ride would be simulated')]);
+  // only sensors you use (remembered from an earlier connection): no trainer at all just means a simulated ride
   for (const d of DEVICES) {
-    if (d.key === 'trainer' && !$('sim').checked) continue; // said above
+    if (d.key === 'trainer' && $('sim').checked) continue; // riding the simulator on purpose
     if (settings.devices?.[d.key] && !d.dev.connected) out.push([tr(DEVICE_LABEL[d.key]), reconnecting.has(d.key) ? tr('reconnecting…') : tr('not connected yet')]);
   }
   if (hrm.connected && !fresh(live.hr, live.hrAt)) out.push([tr('Heart rate'), tr('connected, waiting for a reading…')]);

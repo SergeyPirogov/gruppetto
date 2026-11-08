@@ -232,6 +232,6 @@ export const UK = {
   'Share card': 'Картка заїзду', 'Share your ride': 'Поділіться заїздом', 'Download PNG': 'Завантажити PNG', 'Share…': 'Поділитися…',
   'Not everything is ready': 'Не все готово', 'Waiting for your sensors. The ride starts by itself once they are all in.': 'Чекаємо на датчики. Заїзд почнеться сам, щойно всі підключаться.',
   'Back': 'Назад', 'Ride anyway': 'Їхати так', 'All sensors ready': 'Усі датчики готові',
-  'not connected: the ride would be simulated': 'не підключено: заїзд буде симуляцією', 'reconnecting…': 'перепідключення…', 'not connected yet': 'ще не підключено',
+  'reconnecting…': 'перепідключення…', 'not connected yet': 'ще не підключено',
   'connected, waiting for a reading…': 'підключено, чекаємо на показ…',
 };
