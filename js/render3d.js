@@ -1588,7 +1588,9 @@ export class Scene3D {
       }
       const d = r.dist;
       const visible = Math.abs(d - dist) < CHUNK * SEG * AHEAD;
-      R.group.visible = visible && this.modelsReady;
+      // a ghost just behind you rides through the chase camera: hidden there (its gap is shown over your head)
+      const inCamera = r.ghost && d < dist - 0.8 && d > dist - 7;
+      R.group.visible = visible && this.modelsReady && !inCamera;
       // name tags only for riders near you: far up the road they pile up into an unreadable stack
       if (R.labelSprite) R.labelSprite.visible = Math.abs(d - dist) < LABEL_RANGE;
       if (!visible) return;
@@ -1619,7 +1621,7 @@ export class Scene3D {
         R.lastT = now; R.lastPedal = r.pedal || 0;
         R.model.pose(r.pedal || 0, dt, cadence);
       }
-      if (r.self) me = { f, lane };
+      if (r.self) me = { f, lane, R };
     });
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
@@ -1714,9 +1716,17 @@ export class Scene3D {
     } else {
       this.renderer.render(this.scene, this.camera);
     }
+    // where your rider's head is on screen (CSS px), for a tag over it: you have no name tag of your own
+    if (me?.R) {
+      const p = _headPt.set(0.45, 1.85, 0);
+      me.R.group.localToWorld(p).project(this.camera);
+      const el = this.renderer.domElement;
+      this.selfScreen = { x: (p.x + 1) / 2 * el.clientWidth, y: (1 - p.y) / 2 * el.clientHeight, on: p.z < 1 && me.R.group.visible };
+    } else this.selfScreen = null;
     if (this.warming) this._checkWarm(dist, me);
   }
 }
+const _headPt = new THREE.Vector3();
 
 export function webglAvailable() {
   try {

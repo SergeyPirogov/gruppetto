@@ -570,7 +570,14 @@ body.pixel-ui .ghost-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 }
 body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
 /* ghost tag: bottom centre, where the simulator slider sits; lifts above the slider while it is shown */
-#ride #ghost-tag { align-self: flex-end; white-space: nowrap; } /* with the route progress, above the profile */
+.ghost-mini { /* the ghost, in a small window under your rider, clear of the strip and the simulator slider */
+  position: absolute; left: 50%; bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 150px); transform: translateX(-50%);
+  padding: 3px 11px; border-radius: 999px; background: var(--pill); border: 1px solid var(--pill-line); backdrop-filter: blur(6px);
+  font-size: .82rem; font-weight: 700; white-space: nowrap; pointer-events: none;
+}
+.ghost-mini[hidden] { display: none; }
+#ride .ghost-mini.over-me { bottom: auto; transform: translate(-50%, -100%); font-size: .74rem; padding: 2px 9px; }
+@media (max-width: 760px) { .ghost-mini { bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 96px); font-size: .75rem; } }
 @media (max-width: 720px) { #ride #ghost-tag { bottom: 70px; font-size: .78rem; } }
 
 /* ---------- Route groups and GPX import (#25) ---------- */

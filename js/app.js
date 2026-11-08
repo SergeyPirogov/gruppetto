@@ -40,7 +40,11 @@ if (new URLSearchParams(location.search).has('debug')) {
 
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
 const records = (() => { try { return JSON.parse(localStorage.getItem('gruppetto.records') || '{}'); } catch { return {}; } })();
-records.lap ||= {}; records.seg ||= {}; records.segTrace ||= {}; // segTrace: seconds at every 10 m of the record climb
+records.lap ||= {}; records.seg ||= {}; records.segTrace ||= {};
+/** A lap or finish time is real only below 90 km/h on average (a debug jump or a broken import is not a record). */
+const plausibleLap = (t, length) => t > 0 && t >= length / 25;
+/** This route's best lap / finish time, ignoring an impossible one. */
+const bestLap = (r) => { const t = records.lap[r.id]; return t && plausibleLap(t, r.length) ? t : undefined; }; // segTrace: seconds at every 10 m of the record climb
 // routes imported from GPX (#25), kept on this device as plain data
 const ROUTES_KEY = 'gruppetto.routes';
 const customDefs = (() => { try { return JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch { return []; } })();
@@ -588,7 +592,7 @@ function showRoute() {
   renderGhostPicker();
   // the timed climbs, with this device's record on each
   $('rh-climbs').innerHTML = r.climbs.map((c) => `<li><b>⛰ ${esc(c.name)}</b> ${(c.length / 1000).toFixed(1)} ${U.km} · ${(c.grade * 100).toFixed(1)}%${records.seg[c.id] ? ` · <span class="pb">🏆 ${fmtTime(records.seg[c.id])}</span>` : ''}</li>`).join('')
-    + (records.lap[r.id] ? `<li><b>⏱ ${r.oneWay ? tr('Best time') : tr('Best lap')}</b> <span class="pb">${fmtTime(records.lap[r.id])}</span></li>` : '');
+    + (bestLap(r) ? `<li><b>⏱ ${r.oneWay ? tr('Best time') : tr('Best lap')}</b> <span class="pb">${fmtTime(bestLap(r))}</span></li>` : '');
   requestAnimationFrame(() => drawProfile($('rh-profile'), r, [], `${themeFor(r.theme).accent}cc`));
   updateSummary();
 }
@@ -908,6 +912,9 @@ function frame(now) {
   ];
   scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
+  // the ghost's gap rides over your head, where the bots carry their names
+  const tag = $('ghost-tag'), at = scene.selfScreen;
+  if (at?.on) { tag.style.left = `${at.x}px`; tag.style.top = `${at.y}px`; tag.classList.add('over-me'); } else tag.classList.remove('over-me');
   requestAnimationFrame(frame);
 }
 
@@ -983,9 +990,9 @@ function tick(power, cadence, hr) {
     // point to point: the finish line ends the ride, with the time against this route's best
     if (ride.dist >= route.length && !ride.finished) {
       ride.finished = true;
-      const t = ride.elapsed, best = records.lap[route.id];
+      const t = ride.elapsed, best = bestLap(route);
       ride.lapTimes.push(t);
-      if (!best || t < best) { records.lap[route.id] = t; saveRecords(); }
+      if ((!best || t < best) && plausibleLap(t, route.length)) { records.lap[route.id] = t; saveRecords(); }
       toast(!best ? tr('Finish! {time} 🏁', { time: fmtTime(t) }) : t < best ? tr('Finish! {time} — new record! ({delta}) 🏆', { time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('Finish! {time} ({delta} vs best)', { time: fmtTime(t), delta: fmtDelta(t - best) }));
       cueBeep(1180, 0.3);
       setTimeout(() => { if (ride?.finished) finishRide(); }, 2500);
@@ -994,10 +1001,10 @@ function tick(power, cadence, hr) {
     const laps = Math.floor(ride.dist / route.length);
     ride.laps = laps;
     // lap time against this route's best on this device
-    const t = ride.elapsed - ride.lapStartT, best = records.lap[route.id];
+    const t = ride.elapsed - ride.lapStartT, best = bestLap(route);
     ride.lapStartT = ride.elapsed;
     ride.lapTimes.push(t);
-    if (!best || t < best) {
+    if ((!best || t < best) && plausibleLap(t, route.length)) {
       records.lap[route.id] = t; saveRecords();
       toast(best ? tr('Lap {n}: {time} — new best lap! ({delta}) 🏆', { n: laps, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('Lap {n}: {time} — first lap on this route 🎉', { n: laps, time: fmtTime(t) }));
     } else toast(tr('Lap {n}: {time} ({delta} vs best)', { n: laps, time: fmtTime(t), delta: fmtDelta(t - best) }));
@@ -1110,8 +1117,9 @@ function updateHud(cadence, hr, grade) {
     const G = ride.ghost, gap = ride.dist - G.dist, tg = ghostTimeAt(G.entry, ride.dist);
     const secs = tg === null ? null : Math.round(tg - ride.elapsed); // + = you got here sooner
     $('ghost-tag').hidden = false;
-    $('ghost-tag').className = `ghost-tag ${gap >= 0 ? 'c-ok' : 'c-bad'}`;
-    $('ghost-tag').textContent = `👻 ${G.name}: ${Math.abs(gap) < 2 ? tr('level') : (gap > 0 ? tr('{n} m ahead', { n: Math.round(Math.abs(gap)) }) : tr('{n} m behind', { n: Math.round(Math.abs(gap)) }))}${secs !== null && Math.abs(gap) >= 2 ? ` · ${secs >= 0 ? '−' : '+'}${fmtTime(Math.abs(secs))}` : ''}`;
+    $('ghost-tag').className = `ghost-mini ${gap >= 0 ? 'c-ok' : 'c-bad'}`;
+    $('ghost-tag').title = G.name;
+    $('ghost-tag').textContent = `👻 ${G.name} ${Math.abs(gap) < 2 ? tr('level') : `${gap > 0 ? '+' : '−'}${Math.round(Math.abs(gap))} ${U.m}`}${secs !== null && Math.abs(gap) >= 2 ? ` · ${secs >= 0 ? '−' : '+'}${fmtTime(Math.abs(secs))}` : ''}`;
   } else $('ghost-tag').hidden = true;
   $('m-dist').textContent = (ride.dist / 1000).toFixed(2);
   $('m-time').textContent = fmtTime(ride.elapsed);
@@ -1305,7 +1313,7 @@ function updateProgress() {
   // the bottom-right bar always tracks the lap; the workout's name and progress head its own panel
   const L = ride.route.length, frac = ride.route.oneWay ? Math.min(1, ride.dist / L) : (ride.dist % L) / L;
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
-  const best = records.lap[ride.route.id];
+  const best = bestLap(ride.route);
   if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} ${U.km} · ${fmtTime(ride.elapsed)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   if (ride.workout) {
@@ -1607,7 +1615,8 @@ function showSummary(e, { live = false } = {}) {
   ];
   $('sum-segments').hidden = !rows.length;
   $('sum-seg-rows').innerHTML = rows.map(([name, t, x]) => {
-    const pb = x ? x.pb : t <= (records.lap[e.routeId] ?? Infinity);
+    const lapRoute = routes.find((r) => r.id === e.routeId);
+    const pb = x ? x.pb : t <= ((lapRoute && bestLap(lapRoute)) ?? Infinity);
     const vs = x?.note ? esc(x.note) : x && x.best ? fmtDelta(t - x.best) : '';
     return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>` : vs}</td></tr>`;
   }).join('');
