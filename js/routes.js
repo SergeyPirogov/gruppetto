@@ -14,6 +14,7 @@ const ROUTES = [
     length: 45000,
     hills: [],
     curves: [[0.005, 15000, 0.3], [0.004, 4500, 1.1], [0.002, 1500, 2.2]],
+    water: { side: 1, from: 14, to: 26, depth: 14 }, // a lake on the right, close by the road, under the valley's slopes
   },
   {
     id: 'flat', theme: 'river',

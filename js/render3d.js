@@ -915,6 +915,8 @@ export class Scene3D {
     this.t3 = T3[route.theme] || T3.meadow;
     // a real road bends and doubles back: gentle side hills, and the land never reaches over another stretch
     if (route.custom) this.t3 = { ...this.t3, amp: 6, far: 0.2, wall: 0, rock: 0, snow: 0, dip: null, beach: false };
+    // a route may bring its own water: a lake or a river beside the road (Alpine Valley's lake under the slopes)
+    else if (route.water) this.t3 = { ...this.t3, dip: route.water };
     this.reach = null;
     this.archList = null; this.bannerCache = null; this.lineTexCache = null; // arches are per route
     // imported routes with OpenStreetMap data: woods, water and buildings where they really are
@@ -962,11 +964,14 @@ export class Scene3D {
     for (const l of this.csm.lights) { l.shadow.normalBias = 0.03; l.shadow.autoUpdate = false; }
 
     this._applyAtmosphere();
+    this._tintWater?.();
     const sea = this.t.layers.find((l) => l.kind === 'sea');
     if (this.t3.dip) {
       const ripples = surfaceTexture(true);
       ripples.repeat.set(700, 700);
-      this.water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshPhongMaterial({ color: sea ? sea.color : '#3a8fc4', shininess: 100, specular: '#bfe8ff', bumpMap: ripples, bumpScale: 0.1, transparent: true, opacity: 0.96 }));
+      this.waterBase = sea ? sea.color : '#3a8fc4';
+      this.water = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshPhongMaterial({ color: this.waterBase, shininess: 140, specular: '#fff4e0', bumpMap: ripples, bumpScale: 0.12, transparent: true, opacity: 0.94 }));
+      this._tintWater();
       this.water.rotation.x = -Math.PI / 2;
       this.water.receiveShadow = true;
       this.scene.add(this.water);
@@ -975,10 +980,22 @@ export class Scene3D {
     this._csmMaterials(this.scene);
   }
 
+  /**
+   * Water takes the sky: its own colour mixed with the horizon's (peach at the golden hour, deep blue at night), and
+   * the sun's glint in the light's colour.
+   */
+  _tintWater() {
+    if (!this.water || !this.t) return;
+    const m = this.water.material, sky = col(this.t.sky[1]), deep = col(this.t.sky[0]);
+    m.color.copy(col(this.waterBase)).lerp(deep, 0.25).lerp(sky, 0.28).multiplyScalar(this.atm?.night ? 0.45 : 1);
+    m.specular.set(this.atm?.light || '#fff4e0');
+    m.needsUpdate = true;
+  }
+
   /** Time of day ('auto', 'morning', 'midday', 'evening', 'night') and weather ('clear', 'fog', 'rain'). */
   setAtmosphere(time = 'midday', weather = 'clear') {
     this.atmTime = time; this.atmWeather = weather;
-    if (this.tBase) this._applyAtmosphere();
+    if (this.tBase) { this._applyAtmosphere(); this._tintWater(); }
   }
 
   /** Sky, fog, lights, sun, distant mountains, clouds and rain for the chosen hour and weather (the land stays). */
