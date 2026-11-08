@@ -796,6 +796,7 @@ async function startRide() {
   $('workout-panel').hidden = !workout;
   $('wk-intensity').hidden = !workout;
   $('wk-steps').hidden = !workout;
+  $('minimap-box').classList.toggle('big', !!settings.bigMap); $('minimap-size').textContent = settings.bigMap ? '⤡' : '⤢'; // as you left it
   ride.stepStats = [];
   $('wk-pacer-btn').classList.toggle('on', settings.pacer !== false);
   $('wk-erg-btn').classList.add('on'); // every workout starts in ERG
@@ -1244,9 +1245,18 @@ function routeShape(route) {
   return shape;
 }
 
+/** The minimap grows into a big map and back (click it, or M). */
+function toggleMinimap(big = !$('minimap-box').classList.contains('big')) {
+  $('minimap-box').classList.toggle('big', big);
+  $('minimap-size').textContent = big ? '⤡' : '⤢';
+  settings.bigMap = big; saveSettings();
+  if (ride) drawMinimap();
+}
+$('minimap-box').addEventListener('click', () => toggleMinimap());
+
 function drawMinimap() {
   const canvas = $('minimap');
-  if (!canvas || !ride || $('minimap-box').offsetParent === null) return;
+  if (!canvas || !ride || !$('minimap-box').offsetWidth) return; // hidden (phones); offsetParent is null when it is fixed (big)
   const dpr = Math.min(window.devicePixelRatio || 1, 2), W = canvas.clientWidth, H = canvas.clientHeight;
   if (canvas.width !== Math.round(W * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
   const g = canvas.getContext('2d'), route = ride.route, { pts, step } = routeShape(route);
@@ -1254,9 +1264,22 @@ function drawMinimap() {
   g.clearRect(0, 0, W, H);
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
-  const pad = 12, k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
-  const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+  const big = $('minimap-box').classList.contains('big');
   const L = route.length;
+  // big: the whole route; small: about 1.2 km round you, as in Zwift (a whole long route in a little box is a scribble)
+  const pad = big ? 24 : 12;
+  let k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
+  let ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+  if (!big) {
+    const SPAN = 1200; // metres across the shorter side
+    const kLocal = Math.min(W, H) / SPAN;
+    if (kLocal > k) { // only when the route is bigger than that
+      const dd = route.oneWay ? Math.max(0, Math.min(L, ride.dist)) : ((ride.dist % L) + L) % L;
+      const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
+      const mx = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, my = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t;
+      k = kLocal; ox = W / 2 - mx * k; oy = H / 2 - my * k;
+    }
+  }
   const at = (d, wrap = true) => { // map point at distance d along the route (riders wrap round a loop)
     const dd = route.oneWay || !wrap ? Math.max(0, Math.min(L, d)) : ((d % L) + L) % L;
     const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
@@ -1268,8 +1291,8 @@ function drawMinimap() {
     const [ex, ey] = at(to, false); g.lineTo(ex, ey);
     g.strokeStyle = color; g.lineWidth = width; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
   };
-  line(0, L, 'rgba(255,255,255,.18)', 6);
-  line(0, L, 'rgba(232,237,245,.75)', 2.2);
+  line(0, L, 'rgba(255,255,255,.18)', big ? 9 : 6);
+  line(0, L, 'rgba(232,237,245,.75)', big ? 3.2 : 2.2);
   for (const c of route.climbs) {
     if (c.start + c.length <= L) line(c.start, c.start + c.length, '#f97316', 3);
     else { line(c.start, L, '#f97316', 3); line(0, c.start + c.length - L, '#f97316', 3); } // over the start line
@@ -2413,6 +2436,7 @@ const KEYS = [
   [['C'], 'Camera'],
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
+  [['M'], 'Bigger map'],
   [['+', '−'], 'Simulator: power ±10 W'],
   [['Esc'], 'Menu: Finish and Settings'],
   [['?'], 'This list'],
@@ -2458,6 +2482,7 @@ window.addEventListener('keydown', (e) => {
   else if (c === 'KeyC') nextCamera();
   else if (c === 'KeyH') runIntent('hud');
   else if (c === 'KeyF') toggleFullscreen();
+  else if (c === 'KeyM') toggleMinimap();
   else if (ride.simulated && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(c)) {
     const s = $('sim-power');
     s.value = Number(s.value) + (c === 'Equal' || c === 'NumpadAdd' ? 10 : -10);

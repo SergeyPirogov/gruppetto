@@ -706,7 +706,11 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 
 /* ---------- Minimap ---------- */
 /* as wide as the boards above it; the canvas is laid over the box so it never sets the column's width */
-.board.minimap { position: relative; align-self: stretch; height: 140px; padding: 0; }
+.board.minimap { position: relative; align-self: stretch; height: 140px; padding: 0; cursor: zoom-in; }
+/* the bigger map: wide and tall, over the boards below it */
+.board.minimap.big { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 96px; width: min(480px, 40vw); height: min(420px, 56vh); z-index: 6; cursor: zoom-out; }
+.mm-size { position: absolute; top: 6px; right: 6px; z-index: 2; width: 26px; height: 26px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; background: rgba(15, 22, 34, .7); border: 1px solid var(--pill-line); color: #fff; }
+.board.minimap.big .mm-size { font-size: 13px; }
 #minimap { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); display: block; }
 @media (max-width: 760px) { .board.minimap { display: none; } }
 
