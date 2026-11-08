@@ -1165,8 +1165,16 @@ async function startRide() {
     ride.bots = []; ride.ghost = null; ride.pacer = null;
     $('ride').classList.add('video-mode');
     $('video-layer').hidden = false;
-    ride.videoRide = new VideoRide($('video-layer'), video, { onEnd: () => toast(tr('The video is over: Finish when you like')) });
-    ride.videoRide.start().catch(() => toast(tr('YouTube could not be reached: riding on the 3D road')));
+    // a video that cannot play: why, and the 3D road (the ride goes on)
+    const toRoad = (why) => {
+      if (!ride?.videoRide) return;
+      track('video-error', String(why.code || 'load'));
+      ride.videoRide.destroy(); ride.videoRide = null;
+      $('video-layer').hidden = true; $('ride').classList.remove('video-mode');
+      toast(`${tr(why.message)} ${tr('Riding on the 3D road.')}`);
+    };
+    ride.videoRide = new VideoRide($('video-layer'), video, { onEnd: () => toast(tr('The video is over: Finish when you like')), onError: toRoad });
+    ride.videoRide.start().catch((err) => toRoad(err.code ? err : { message: 'YouTube could not be reached.' }));
     track('video-ride');
   }
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride

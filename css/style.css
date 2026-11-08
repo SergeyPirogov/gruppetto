@@ -1036,3 +1036,4 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .vid-item { position: relative; text-align: left; }
 .vid-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; margin-top: 6px; display: block; }
 .vid-del { position: absolute; top: 6px; right: 8px; color: var(--muted); cursor: pointer; }
+#ride.video-mode .ride-loader { display: none !important; } /* the 3D road is not built under a video: its loading screen would stay */

@@ -43,6 +43,18 @@ function loadApi() {
   });
 }
 
+/** What a YouTube player error means, for the rider. */
+export function videoError(code) {
+  return {
+    2: 'The link has no valid video id.',
+    5: 'The browser cannot play this video.',
+    100: 'The video is gone or private.',
+    101: 'The author does not allow this video to play outside YouTube.',
+    150: 'The author does not allow this video to play outside YouTube.',
+    153: 'YouTube refused the player (configuration): reload the page.',
+  }[code] || `YouTube could not play the video (error ${code}).`;
+}
+
 /** Subtitles off: the captions module unloaded (not in the documented API, but what the player honours). */
 function noCaptions(p) {
   try { p.unloadModule?.('captions'); p.unloadModule?.('cc'); p.setOption?.('captions', 'track', {}); } catch { /* not there */ }
@@ -50,24 +62,33 @@ function noCaptions(p) {
 
 /** A video playing in el (a container), kept in step with your speed by follow(). */
 export class VideoRide {
-  constructor(el, video, { onEnd = () => {} } = {}) {
-    this.el = el; this.video = video; this.onEnd = onEnd; this.rate = 0; this.player = null; this.ended = false;
+  constructor(el, video, { onEnd = () => {}, onError = () => {} } = {}) {
+    this.el = el; this.video = video; this.onEnd = onEnd; this.onError = onError; this.rate = 0; this.player = null; this.ended = false;
   }
 
   async start() {
     const YT = await loadApi();
-    this.el.innerHTML = '<div></div>';
-    await new Promise((resolve) => {
-      this.player = new YT.Player(this.el.firstChild, {
-        videoId: this.video.yt,
-        playerVars: { start: Math.floor(this.video.start || 0), autoplay: 1, mute: 1, controls: 1, disablekb: 1, rel: 0, playsinline: 1, iv_load_policy: 3, cc_load_policy: 0, modestbranding: 1 },
+    // the iframe made here, not by the API: with the page's origin and a referrer policy that sends it, as YouTube
+    // now requires (without them: «Error 153, video player configuration error»)
+    const q = new URLSearchParams({ enablejsapi: '1', origin: location.origin, start: String(Math.floor(this.video.start || 0)), autoplay: '1', mute: '1',
+      controls: '1', disablekb: '1', rel: '0', playsinline: '1', iv_load_policy: '3', cc_load_policy: '0', modestbranding: '1' });
+    const f = document.createElement('iframe');
+    f.src = `https://www.youtube.com/embed/${encodeURIComponent(this.video.yt)}?${q}`;
+    f.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
+    f.referrerPolicy = 'strict-origin-when-cross-origin';
+    f.title = this.video.name || 'YouTube';
+    this.el.innerHTML = '';
+    this.el.appendChild(f);
+    await new Promise((resolve, reject) => {
+      this.player = new YT.Player(f, {
         events: {
-          onReady: (e) => { e.target.mute(); noCaptions(e.target); resolve(); },
+          onReady: (e) => { e.target.mute(); noCaptions(e.target); e.target.playVideo(); resolve(); },
           onStateChange: (e) => {
             if (e.data === 1) noCaptions(e.target);
             if (e.data === 0 && !this.ended) { this.ended = true; this.onEnd(); }
           },
           onApiChange: (e) => noCaptions(e.target),
+          onError: (e) => { const err = new Error(videoError(e.data)); err.code = e.data; this.failed = true; this.onError(err); reject(err); },
         },
       });
     });
@@ -76,7 +97,7 @@ export class VideoRide {
   /** Your speed (km/h) and whether the ride is paused: the video's rate, play or pause. */
   follow(kmh, paused) {
     const p = this.player;
-    if (!p?.getPlayerState || this.ended) return;
+    if (!p?.getPlayerState || this.ended || this.failed) return;
     const rate = paused ? 0 : videoRate(kmh, this.video.kmh);
     const state = p.getPlayerState();
     if (!rate) { if (state === 1) p.pauseVideo(); this.rate = 0; return; }
