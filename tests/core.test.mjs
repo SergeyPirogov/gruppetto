@@ -748,15 +748,3 @@ test('Usage stats: nothing without consent or with Do Not Track; events only as 
   assert.equal(rideMilestone(4), '');
   delete globalThis.window; delete globalThis.document;
 });
-
-test('Video rides: a YouTube id from any link, the start from t=, the rate from your speed against the filmed one', async () => {
-  const { youtubeId, secondsOf, startInLink, videoRate, videoTimeAt } = await import('../js/video.js');
-  // with a track: as far into the ride's part of the video as you are along the track
-  assert.deepEqual([videoTimeAt(0, 33600, 120, 2820), videoTimeAt(16800, 33600, 120, 2820), videoTimeAt(40000, 33600, 120, 2820)], [120, 1470, 2820]);
-  for (const u of ['https://www.youtube.com/watch?v=fXaFHAGK6cA', 'https://youtu.be/fXaFHAGK6cA?t=120', 'https://www.youtube.com/shorts/fXaFHAGK6cA', 'fXaFHAGK6cA']) assert.equal(youtubeId(u), 'fXaFHAGK6cA', u);
-  assert.equal(youtubeId('https://example.com/x'), '');
-  assert.deepEqual(['2:00', '120', '2m', '1h2m3s', '1:02:03', ''].map(secondsOf), [120, 120, 120, 3723, 3723, 0]);
-  assert.equal(startInLink('https://youtu.be/fXaFHAGK6cA?t=120'), 120);
-  assert.equal(startInLink('https://www.youtube.com/watch?v=fXaFHAGK6cA&t=2m'), 120);
-  assert.deepEqual([videoRate(25, 25), videoRate(31.4, 25), videoRate(80, 25), videoRate(4, 25), videoRate(2, 25), videoRate(1, 25)], [1, 1.25, 2, 0.25, 0.25, 0]);
-});

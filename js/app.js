@@ -15,7 +15,6 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
-import { VideoRide, youtubeId, secondsOf, startInLink } from './video.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
@@ -528,91 +527,6 @@ function renderPlan() {
   }
 }
 
-// ---------- Video rides (#video) ----------
-const VIDEOS_KEY = 'gruppetto-videos';
-let myVideos = (() => { try { return JSON.parse(localStorage.getItem(VIDEOS_KEY) || '[]'); } catch { return []; } })();
-function saveVideos() { try { localStorage.setItem(VIDEOS_KEY, JSON.stringify(myVideos)); return true; } catch { return false; } }
-/** Videos to ride from the first day, nothing to look for: picked by hand (first-person, steady camera, long), and
- *  only with their GPS track: without it the road is flat and the ride is not real. */
-const FEATURED_VIDEOS = [
-  { id: 'f-south-tyrol', yt: 'JOWN4WmuItM', name: 'South Tyrol: Reschen to the Vinschgau, Alps', start: 0, kmh: 25, gpxUrl: 'assets/videos/JOWN4WmuItM.gpx', featured: true },
-];
-const currentVideo = () => [...myVideos, ...FEATURED_VIDEOS].find((x) => x.id === settings.videoId) || null;
-
-/** The road under a video: its GPX track (kept with the video, or a featured one's file), else a flat road. */
-async function videoRoute(v) {
-  try {
-    let def = v.gpx;
-    if (!def && v.gpxUrl) def = routeFromTrack(parseGpx(await (await fetch(v.gpxUrl)).text()), v.gpxUrl);
-    if (def) return new Route({ ...def, id: `video:${v.yt}`, name: v.name, custom: false });
-  } catch (err) { console.info('Video track unusable, a flat road', err); }
-  return new Route({ id: `video:${v.yt}`, name: v.name, description: '', length: 200000, hills: [], curves: [], theme: 'meadow' });
-}
-
-function openVideoMenu() {
-  $('vid-menu').hidden = false;
-  $('vid-msg').hidden = true;
-  const list = $('vid-list');
-  list.innerHTML = '';
-  // those with a GPS track first: they ride best (the real climbs, the video where you are)
-  const all = [...myVideos, ...FEATURED_VIDEOS];
-  const hasTrack = (x) => !!(x.gpx || x.gpxUrl);
-  for (const x of [...all.filter(hasTrack), ...all.filter((y) => !hasTrack(y))]) {
-    const b = document.createElement('button');
-    b.className = `option vid-item${x.id === settings.videoId ? ' sel' : ''}`;
-    b.innerHTML = `<b>${esc(x.name)}</b><small>${x.gpx || x.gpxUrl ? tr('From {start}, with its GPS track: real climbs, the video where you are', { start: fmtTime(x.start || 0) }) : tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy"><span class="vid-tags">${hasTrack(x) ? `<span class="tag gps">GPS ✓</span>` : x.featured ? '' : `<span class="tag flat">${tr('Flat road')}</span><span class="tag vid-add-gpx" role="button" title="${tr("Add the filmed ride's GPX: the real climbs, and the video where you are")}">+ GPX</span>`}${x.featured ? `<span class="tag">${tr('Featured')}</span>` : ''}</span>${x.featured ? '' : `<span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`}`;
-    b.onclick = (ev) => {
-      if (ev.target.closest('.vid-add-gpx')) { addGpxTo(x); return; }
-      if (ev.target.closest('.vid-del')) {
-        myVideos = myVideos.filter((y) => y !== x); saveVideos();
-        if (settings.videoId === x.id) { settings.videoId = null; if (settings.mode === 'video') settings.mode = 'free'; saveSettings(); }
-        renderModes(); openVideoMenu(); return;
-      }
-      settings.videoId = x.id; settings.mode = 'video'; saveSettings(); renderModes();
-      $('vid-menu').hidden = true;
-    };
-    list.append(b);
-  }
-}
-/** A GPX for a video already in the list: picked, turned into its road, kept with it. */
-function addGpxTo(x) {
-  const inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.gpx,application/gpx+xml';
-  inp.onchange = async () => {
-    const file = inp.files?.[0];
-    if (!file) return;
-    const msg = $('vid-msg');
-    try { x.gpx = routeFromTrack(parseGpx(await file.text()), file.name); } catch (err) { msg.hidden = false; msg.textContent = `${file.name}: ${tr(err.message)}`; return; }
-    if (!saveVideos()) { delete x.gpx; msg.hidden = false; msg.textContent = tr('Not enough browser storage for this route'); return; }
-    track('video-gpx');
-    renderModes(); openVideoMenu();
-  };
-  inp.click();
-}
-$('vid-url').addEventListener('input', () => { const t = startInLink($('vid-url').value); if (t && !$('vid-start').value) $('vid-start').value = fmtTime(t); });
-$('vid-save').onclick = async () => {
-  const yt = youtubeId($('vid-url').value);
-  const msg = $('vid-msg');
-  if (!yt) { msg.hidden = false; msg.textContent = tr('That is not a YouTube link: copy it from the address bar or Share.'); return; }
-  const v = { id: `v${Date.now()}`, yt, name: $('vid-name').value.trim() || tr('YouTube ride'), start: secondsOf($('vid-start').value) || startInLink($('vid-url').value), kmh: Math.min(60, Math.max(5, Number($('vid-kmh').value) || 25)) };
-  // its GPS track, when given: the road with the filmed climbs, and the video kept where you are
-  const file = $('vid-gpx').files?.[0];
-  if (file) {
-    try { v.gpx = routeFromTrack(parseGpx(await file.text()), file.name); } catch (err) { msg.hidden = false; msg.textContent = `${file.name}: ${tr(err.message)}`; return; }
-  }
-  if (!v.gpx) { msg.hidden = false; msg.textContent = tr('Added without a GPS track: the road under it is flat. Its GPX (often linked in the video description, or the ride on Strava) gives the real climbs: «+ GPX» on the video.'); }
-  myVideos.unshift(v);
-  if (!saveVideos()) { myVideos.shift(); msg.hidden = false; msg.textContent = tr('Not enough browser storage for this route'); return; }
-  $('vid-gpx').value = '';
-  settings.videoId = v.id; settings.mode = 'video'; saveSettings();
-  for (const id of ['vid-url', 'vid-name', 'vid-start']) $(id).value = '';
-  track('video-add', v.gpx ? 'gpx' : 'flat');
-  const note = !$('vid-msg').hidden && $('vid-msg').textContent;
-  renderModes(); openVideoMenu();
-  if (note) { $('vid-msg').hidden = false; $('vid-msg').textContent = note; }
-};
-$('vid-menu').addEventListener('click', (e) => { if (e.target.closest('[data-vid-close]')) $('vid-menu').hidden = true; });
-
 /** Mode: free ride, or a workout picked in its own menu. */
 function renderModes() {
   renderPlan();
@@ -647,21 +561,10 @@ function renderModes() {
     if (l) settings.raceLaps = Number(l.dataset.laps);
     settings.mode = 'race'; saveSettings(); renderModes();
   };
-  // a video ride (#video): a YouTube ride instead of the 3D road
-  const v = currentVideo();
-  const vb = document.createElement('button');
-  vb.className = 'option wk-pick';
-  vb.dataset.id = 'video';
-  vb.innerHTML = `<span class="wk-pick-head"><b>📺 ${v ? esc(v.name) : tr('Video ride')}</b><span class="wk-change">${v ? tr('Videos') : tr('Choose')} ›</span></span><small>${v ? tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(v.start || 0), kmh: v.kmh }) : tr('A first-person ride from YouTube at your speed, instead of the 3D road.')}</small>`;
-  vb.onclick = (ev) => {
-    if (v && !ev.target.closest('.wk-change')) { settings.mode = 'video'; saveSettings(); renderModes(); return; }
-    openVideoMenu();
-  };
-  ml.append(free, wb, race, vb);
+  ml.append(free, wb, race);
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
-  vb.classList.toggle('sel', settings.mode === 'video' && !!v);
-  wb.classList.toggle('sel', !['free', 'race', 'video'].includes(settings.mode) && !!w && w.id === settings.mode);
+  wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
   if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
   updateSummary();
 }
@@ -1168,9 +1071,7 @@ async function startRide() {
   const wentFull = installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
   if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); return; }
   if (await wentFull) rideFullscreen = true;
-  const video = settings.mode === 'video' ? currentVideo() : null;
-  // a video ride: its filmed track when it has one (the real climbs), a flat road otherwise
-  const route = video ? (await videoRoute(video)) : routes.find((r) => r.id === settings.routeId) || routes[0];
+  const route = routes.find((r) => r.id === settings.routeId) || routes[0];
   const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   const racing = settings.mode === 'race';
@@ -1199,22 +1100,6 @@ async function startRide() {
   };
   if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
   track('ride-start', [racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
-  if (video) {
-    ride.bots = []; ride.ghost = null; ride.pacer = null;
-    $('ride').classList.add('video-mode');
-    $('video-layer').hidden = false;
-    // a video that cannot play: why, and the 3D road (the ride goes on)
-    const toRoad = (why) => {
-      if (!ride?.videoRide) return;
-      track('video-error', String(why.code || 'load'));
-      ride.videoRide.destroy(); ride.videoRide = null;
-      $('video-layer').hidden = true; $('ride').classList.remove('video-mode');
-      toast(`${tr(why.message)} ${tr('Riding on the 3D road.')}`);
-    };
-    ride.videoRide = new VideoRide($('video-layer'), video, { onEnd: () => toast(tr('The video is over: Finish when you like')), onError: toRoad, trackLength: video.gpx || video.gpxUrl ? route.length : 0 });
-    ride.videoRide.start().catch((err) => toRoad(err.code ? err : { message: 'YouTube could not be reached.' }));
-    track('video-ride');
-  }
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
   // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
@@ -1438,9 +1323,7 @@ function frame(now) {
     ...(ride.ghost ? [ride.ghost] : []),
     ...(ride.climbGhost ? [ride.climbGhost] : []),
   ];
-  if (ride.videoRide) {
-    if (now - (ride.videoAt || 0) > 250) { ride.videoAt = now; ride.videoRide.follow(ride.v * 3.6, ride.paused, ride.dist); }
-  } else scene.render(ride.route, ride.dist, riders, ride.moved);
+  scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
   // the ghost's gap rides over your head, where the bots carry their names
   const tag = $('ghost-tag'), at = scene.selfScreen;
@@ -2183,7 +2066,6 @@ async function offerDraft() {
 let rideFullscreen = false; // full screen was ours (installed app): leave it with the ride
 function finishRide() {
   if (!ride) return;
-  if (ride.videoRide) { ride.videoRide.destroy(); $('video-layer').hidden = true; $('ride').classList.remove('video-mode'); }
   if (rideFullscreen && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   rideFullscreen = false;
   advance();
@@ -3095,7 +2977,7 @@ $('btn-challenge').onclick = () => challengeFriend(shown.entry);
 $('btn-dev-lost').onclick = () => openDrawer('devices');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
 $('f-free-pacer').checked = !!settings.freePacer;
-$('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride?.pacer && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
+$('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
 $('f-free-wkg').value = settings.freePacerWkg;
 $('f-free-wkg').oninput = () => { const v = Number($('f-free-wkg').value); if (v >= 0.5 && v <= 7) { settings.freePacerWkg = v; saveSettings(); updateSummary(); } };
 $('wk-pacer-btn').onclick = () => togglePacer();

@@ -115,25 +115,6 @@
       </div>
     </div>
 
-    <!-- video rides (#video): YouTube links, where each starts and how fast it was filmed -->
-    <div id="vid-menu" class="wk-menu" hidden>
-      <div class="drawer-bg" data-vid-close></div>
-      <div class="wk-menu-panel">
-        <div class="wk-menu-head"><h2>Video rides</h2><button class="drawer-close" data-vid-close aria-label="Close">✕</button></div>
-        <p class="hint">A first-person ride from YouTube (a camera on the bars) plays instead of the 3D road, at your speed: faster pedalling, faster video; stop, and it pauses. With the ride's GPS track (GPX) it is real: the trainer gives its climbs and the video stays where you are on it. Without one, the road is flat.</p>
-        <div class="vid-add">
-          <label class="vid-link">YouTube link <input id="vid-url" placeholder="https://www.youtube.com/watch?v=…"></label>
-          <label>Name <input id="vid-name" maxlength="60" placeholder="Zugspitze valley"></label>
-          <label>Start at <input id="vid-start" placeholder="2:00" title="Skip the intro: where the ride begins"></label>
-          <label>Filmed at, km/h <input id="vid-kmh" type="number" min="5" max="60" value="25" title="The rider's speed in the video: it sets the video's pace for yours"></label>
-          <label>GPS track <input id="vid-gpx" type="file" accept=".gpx,application/gpx+xml" title="The filmed ride's GPX: its climbs on the trainer, and the video kept where you are"></label>
-          <button id="vid-save" class="primary">Add</button>
-        </div>
-        <p id="vid-msg" class="hint" hidden></p>
-        <div id="vid-list" class="options wk-menu-list"></div>
-      </div>
-    </div>
-
     <!-- the workout builder (#36): blocks stacked into a workout -->
     <div id="wk-builder" class="wk-menu wk-detail" hidden>
       <div class="drawer-bg" data-wb-close></div>
@@ -377,7 +358,6 @@
   <!-- ===== Ride ===== -->
   <section id="ride" class="screen" hidden>
     <canvas id="scene"></canvas>
-    <div id="video-layer" class="video-layer" hidden></div>
 
     <div class="hud-left">
       <div class="board">
