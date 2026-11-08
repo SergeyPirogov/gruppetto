@@ -15,6 +15,7 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
+import { VideoRide, youtubeId, secondsOf, startInLink } from './video.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
@@ -527,6 +528,47 @@ function renderPlan() {
   }
 }
 
+// ---------- Video rides (#video) ----------
+const VIDEOS_KEY = 'gruppetto-videos';
+let myVideos = (() => { try { return JSON.parse(localStorage.getItem(VIDEOS_KEY) || '[]'); } catch { return []; } })();
+function saveVideos() { try { localStorage.setItem(VIDEOS_KEY, JSON.stringify(myVideos)); } catch { /* private mode */ } }
+const currentVideo = () => myVideos.find((x) => x.id === settings.videoId) || null;
+
+function openVideoMenu() {
+  $('vid-menu').hidden = false;
+  $('vid-msg').hidden = true;
+  const list = $('vid-list');
+  list.innerHTML = myVideos.length ? '' : `<p class="muted">${tr('No videos yet: paste a YouTube link above.')}</p>`;
+  for (const x of myVideos) {
+    const b = document.createElement('button');
+    b.className = `option vid-item${x.id === settings.videoId ? ' sel' : ''}`;
+    b.innerHTML = `<b>${esc(x.name)}</b><small>${tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(x.start || 0), kmh: x.kmh })}</small><img src="https://i.ytimg.com/vi/${x.yt}/mqdefault.jpg" alt="" loading="lazy"><span class="vid-del" role="button" title="${tr('Delete')}">✕</span>`;
+    b.onclick = (ev) => {
+      if (ev.target.closest('.vid-del')) {
+        myVideos = myVideos.filter((y) => y !== x); saveVideos();
+        if (settings.videoId === x.id) { settings.videoId = null; if (settings.mode === 'video') settings.mode = 'free'; saveSettings(); }
+        renderModes(); openVideoMenu(); return;
+      }
+      settings.videoId = x.id; settings.mode = 'video'; saveSettings(); renderModes();
+      $('vid-menu').hidden = true;
+    };
+    list.append(b);
+  }
+}
+$('vid-url').addEventListener('input', () => { const t = startInLink($('vid-url').value); if (t && !$('vid-start').value) $('vid-start').value = fmtTime(t); });
+$('vid-save').onclick = () => {
+  const yt = youtubeId($('vid-url').value);
+  const msg = $('vid-msg');
+  if (!yt) { msg.hidden = false; msg.textContent = tr('That is not a YouTube link: copy it from the address bar or Share.'); return; }
+  const v = { id: `v${Date.now()}`, yt, name: $('vid-name').value.trim() || tr('YouTube ride'), start: secondsOf($('vid-start').value) || startInLink($('vid-url').value), kmh: Math.min(60, Math.max(5, Number($('vid-kmh').value) || 25)) };
+  myVideos.unshift(v); saveVideos();
+  settings.videoId = v.id; settings.mode = 'video'; saveSettings();
+  for (const id of ['vid-url', 'vid-name', 'vid-start']) $(id).value = '';
+  track('video-add');
+  renderModes(); openVideoMenu();
+};
+$('vid-menu').addEventListener('click', (e) => { if (e.target.closest('[data-vid-close]')) $('vid-menu').hidden = true; });
+
 /** Mode: free ride, or a workout picked in its own menu. */
 function renderModes() {
   renderPlan();
@@ -561,10 +603,21 @@ function renderModes() {
     if (l) settings.raceLaps = Number(l.dataset.laps);
     settings.mode = 'race'; saveSettings(); renderModes();
   };
-  ml.append(free, wb, race);
+  // a video ride (#video): a YouTube ride instead of the 3D road
+  const v = currentVideo();
+  const vb = document.createElement('button');
+  vb.className = 'option wk-pick';
+  vb.dataset.id = 'video';
+  vb.innerHTML = `<span class="wk-pick-head"><b>📺 ${v ? esc(v.name) : tr('Video ride')}</b><span class="wk-change">${v ? tr('Videos') : tr('Choose')} ›</span></span><small>${v ? tr('From {start}, filmed at {kmh} km/h', { start: fmtTime(v.start || 0), kmh: v.kmh }) : tr('A first-person ride from YouTube at your speed, instead of the 3D road.')}</small>`;
+  vb.onclick = (ev) => {
+    if (v && !ev.target.closest('.wk-change')) { settings.mode = 'video'; saveSettings(); renderModes(); return; }
+    openVideoMenu();
+  };
+  ml.append(free, wb, race, vb);
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
-  wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
+  vb.classList.toggle('sel', settings.mode === 'video' && !!v);
+  wb.classList.toggle('sel', !['free', 'race', 'video'].includes(settings.mode) && !!w && w.id === settings.mode);
   if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
   updateSummary();
 }
@@ -1071,7 +1124,10 @@ async function startRide() {
   const wentFull = installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
   if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); return; }
   if (await wentFull) rideFullscreen = true;
-  const route = routes.find((r) => r.id === settings.routeId) || routes[0];
+  const video = settings.mode === 'video' ? currentVideo() : null;
+  // a video ride: a flat road under the picture (its climbs are only in the video)
+  const route = video ? new Route({ id: `video:${video.yt}`, name: video.name, description: '', length: 200000, hills: [], curves: [], theme: 'meadow' })
+    : routes.find((r) => r.id === settings.routeId) || routes[0];
   const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   const racing = settings.mode === 'race';
@@ -1100,6 +1156,14 @@ async function startRide() {
   };
   if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
   track('ride-start', [racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
+  if (video) {
+    ride.bots = []; ride.ghost = null; ride.pacer = null;
+    $('ride').classList.add('video-mode');
+    $('video-layer').hidden = false;
+    ride.videoRide = new VideoRide($('video-layer'), video, { onEnd: () => toast(tr('The video is over: Finish when you like')) });
+    ride.videoRide.start().catch(() => toast(tr('YouTube could not be reached: riding on the 3D road')));
+    track('video-ride');
+  }
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
   // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
@@ -1323,7 +1387,9 @@ function frame(now) {
     ...(ride.ghost ? [ride.ghost] : []),
     ...(ride.climbGhost ? [ride.climbGhost] : []),
   ];
-  scene.render(ride.route, ride.dist, riders, ride.moved);
+  if (ride.videoRide) {
+    if (now - (ride.videoAt || 0) > 250) { ride.videoAt = now; ride.videoRide.follow(ride.v * 3.6, ride.paused); }
+  } else scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
   // the ghost's gap rides over your head, where the bots carry their names
   const tag = $('ghost-tag'), at = scene.selfScreen;
@@ -2066,6 +2132,7 @@ async function offerDraft() {
 let rideFullscreen = false; // full screen was ours (installed app): leave it with the ride
 function finishRide() {
   if (!ride) return;
+  if (ride.videoRide) { ride.videoRide.destroy(); $('video-layer').hidden = true; $('ride').classList.remove('video-mode'); }
   if (rideFullscreen && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   rideFullscreen = false;
   advance();
@@ -2977,7 +3044,7 @@ $('btn-challenge').onclick = () => challengeFriend(shown.entry);
 $('btn-dev-lost').onclick = () => openDrawer('devices');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
 $('f-free-pacer').checked = !!settings.freePacer;
-$('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
+$('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride?.pacer && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
 $('f-free-wkg').value = settings.freePacerWkg;
 $('f-free-wkg').oninput = () => { const v = Number($('f-free-wkg').value); if (v >= 0.5 && v <= 7) { settings.freePacerWkg = v; saveSettings(); updateSummary(); } };
 $('wk-pacer-btn').onclick = () => togglePacer();

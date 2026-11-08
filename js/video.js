@@ -1,0 +1,92 @@
+// Video rides (#video): a first-person ride from YouTube instead of the 3D road. The video runs at your speed
+// divided by the speed it was filmed at (0.25–2×, YouTube's range), pauses when you stop, and starts where the
+// ride begins (past an intro). The road under it is flat: without the filmed ride's track, its climbs would not
+// match the picture. YouTube picks the picture's quality from the player's size and the connection; its own
+// controls (the gear for quality) show when the mouse is over the video.
+
+/** The video id in a YouTube link (watch?v=, youtu.be/, shorts/, embed/) or a bare id, '' when none. */
+export function youtubeId(u) {
+  const s = String(u || '').trim();
+  return (/(?:v=|youtu\.be\/|shorts\/|embed\/|live\/)([\w-]{11})/.exec(s) || [])[1] || (/^[\w-]{11}$/.test(s) ? s : '');
+}
+
+/** Seconds from "2:00", "1:02:03", "120", "2m", "1h2m3s"; 0 when it is none of these. */
+export function secondsOf(x) {
+  const s = String(x ?? '').trim();
+  if (!s) return 0;
+  if (/^\d+(:\d{1,2}){1,2}$/.test(s)) return s.split(':').reduce((a, b) => a * 60 + Number(b), 0);
+  const m = /^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/.exec(s);
+  return m ? Number(m[1] || 0) * 3600 + Number(m[2] || 0) * 60 + Number(m[3] || 0) : 0;
+}
+
+/** The start in a link's t= or start=, seconds. */
+export const startInLink = (u) => secondsOf((/[?&#](?:t|start)=([\dhms:]+)/.exec(String(u || '')) || [])[1]);
+
+/** The playback rate for your speed against the filmed one, in YouTube's range, in 0.05 steps; 0 = pause. */
+export function videoRate(kmh, filmedKmh) {
+  const want = kmh / Math.max(1, filmedKmh || 25);
+  if (want < 0.2) return 0;
+  return Math.min(2, Math.max(0.25, Math.round(want * 20) / 20));
+}
+
+let api = null;
+/** YouTube's IFrame API, loaded once. */
+function loadApi() {
+  return api ||= new Promise((resolve, reject) => {
+    if (window.YT?.Player) { resolve(window.YT); return; }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { prev?.(); resolve(window.YT); };
+    const s = document.createElement('script');
+    s.src = 'https://www.youtube.com/iframe_api';
+    s.onerror = () => { api = null; reject(new Error('YouTube could not be reached')); };
+    document.head.appendChild(s);
+  });
+}
+
+/** Subtitles off: the captions module unloaded (not in the documented API, but what the player honours). */
+function noCaptions(p) {
+  try { p.unloadModule?.('captions'); p.unloadModule?.('cc'); p.setOption?.('captions', 'track', {}); } catch { /* not there */ }
+}
+
+/** A video playing in el (a container), kept in step with your speed by follow(). */
+export class VideoRide {
+  constructor(el, video, { onEnd = () => {} } = {}) {
+    this.el = el; this.video = video; this.onEnd = onEnd; this.rate = 0; this.player = null; this.ended = false;
+  }
+
+  async start() {
+    const YT = await loadApi();
+    this.el.innerHTML = '<div></div>';
+    await new Promise((resolve) => {
+      this.player = new YT.Player(this.el.firstChild, {
+        videoId: this.video.yt,
+        playerVars: { start: Math.floor(this.video.start || 0), autoplay: 1, mute: 1, controls: 1, disablekb: 1, rel: 0, playsinline: 1, iv_load_policy: 3, cc_load_policy: 0, modestbranding: 1 },
+        events: {
+          onReady: (e) => { e.target.mute(); noCaptions(e.target); resolve(); },
+          onStateChange: (e) => {
+            if (e.data === 1) noCaptions(e.target);
+            if (e.data === 0 && !this.ended) { this.ended = true; this.onEnd(); }
+          },
+          onApiChange: (e) => noCaptions(e.target),
+        },
+      });
+    });
+  }
+
+  /** Your speed (km/h) and whether the ride is paused: the video's rate, play or pause. */
+  follow(kmh, paused) {
+    const p = this.player;
+    if (!p?.getPlayerState || this.ended) return;
+    const rate = paused ? 0 : videoRate(kmh, this.video.kmh);
+    const state = p.getPlayerState();
+    if (!rate) { if (state === 1) p.pauseVideo(); this.rate = 0; return; }
+    if (state !== 1 && state !== 3) p.playVideo();
+    if (Math.abs(rate - this.rate) >= 0.05) { p.setPlaybackRate(rate); this.rate = rate; }
+  }
+
+  destroy() {
+    try { this.player?.destroy(); } catch { /* gone */ }
+    this.player = null;
+    this.el.innerHTML = '';
+  }
+}

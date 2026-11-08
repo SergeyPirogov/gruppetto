@@ -1023,3 +1023,16 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 640px) { .challenge-box { grid-template-columns: auto 1fr; } .ch-actions { grid-column: 1 / -1; } }
 .sum-chart-head h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; color: var(--muted); }
+
+/* ---------- Video rides ---------- */
+.video-layer { position: absolute; inset: 0; background: #000; }
+.video-layer[hidden] { display: none; }
+.video-layer iframe, .video-layer > div { width: 100%; height: 100%; border: 0; display: block; }
+#ride.video-mode #scene { visibility: hidden; }
+.vid-add { display: grid; grid-template-columns: 2fr 1.2fr .6fr .7fr auto; gap: 8px; align-items: end; margin: 10px 0; }
+.vid-add label { display: grid; gap: 4px; font-size: .78rem; color: var(--muted); }
+.vid-add input { width: 100%; box-sizing: border-box; }
+@media (max-width: 760px) { .vid-add { grid-template-columns: 1fr 1fr; } .vid-add .vid-link { grid-column: 1 / -1; } }
+.vid-item { position: relative; text-align: left; }
+.vid-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; margin-top: 6px; display: block; }
+.vid-del { position: absolute; top: 6px; right: 8px; color: var(--muted); cursor: pointer; }
