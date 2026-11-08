@@ -879,6 +879,31 @@ export class Scene3D {
     pass(P.final, null);
   }
 
+  /**
+   * The feeling of speed: the view widens as you go faster (up to +9° at 55 km/h, like a camera that can't keep up),
+   * and the camera trembles a little with the road's surface, more the faster you ride; standing still, nothing.
+   * The orbit view and the isometric one are left still.
+   */
+  _speedFeel(dt, dist) {
+    if (!dt || this.camMode === 'iso') return;
+    // the speed from the distance and the real time between frames (the frame's dt is capped, the distance is not)
+    const now = performance.now(), last = this._feelAt;
+    this._feelAt = { t: now, d: dist };
+    if (!last || now <= last.t) return;
+    const v = Math.max(0, Math.min(30, (dist - last.d) / ((now - last.t) / 1000))); // m/s
+    this.vSmooth = (this.vSmooth ?? v) + (v - (this.vSmooth ?? v)) * Math.min(1, dt * 1.5);
+    const k = Math.min(1, Math.max(0, (this.vSmooth - 4) / 11)); // from 15 to 55 km/h
+    const base = { chase: 62, eyes: 72, side: 58, front: 48 }[this.camMode] ?? 62;
+    const fov = base + k * k * 9;
+    if (Math.abs(this.camera.fov - fov) > 0.02) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
+    const O = this.orbit;
+    if (O && (O.yaw || O.pitch || O.zoom !== 1)) return;
+    // the road's grain: a few centimetres of tremble, faster and larger with speed (none in the rider's eyes view)
+    const amp = (this.camMode === 'eyes' ? 0.006 : 0.012) * k, t = this.clock;
+    this.camera.position.y += (Math.sin(t * 37) * 0.6 + Math.sin(t * 53 + 1.3) * 0.4) * amp;
+    this.camera.position.x += Math.sin(t * 29 + 0.7) * amp * 0.5;
+  }
+
   /** 'cartoon' (default) or 'pixel': low-res render, limited palette with dithering and outlines. */
   setStyle(style) {
     const want = style === 'pixel';
@@ -2264,6 +2289,7 @@ export class Scene3D {
       this.camera.position.copy(this.camPos);
       this.camera.lookAt(look);
     }
+    if (me) this._speedFeel(dt, dist);
     if (me) {
 
       this.crowdNear?.value.set(me.f.x, me.f.y, me.f.z); // the fans go wild as you come by
