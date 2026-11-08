@@ -165,7 +165,14 @@ export class DummyRider {
     // that keeps their thickness: a point d along the fingers and h above the knuckle line goes to
     // angle d / R round the cylinder, radius R + h. dummy.json "fist": [wrap radians, knuckle x, y].
     const [curl, kx, ky] = cfg.fist || [2.3, 0.06, -0.07]; // radius stays above the fingers' depth: no fold-over
+    // The thumb (the inner edge of the hand, toward the stem) keeps its modelled shape along the inside
+    // of the hood: curled with the fingers it hooked out sideways. "thumbZ": where it starts across
+    // the hand (metres from the wrist, inward), blended over 2 cm so the skin does not tear.
+    const thumbZ = cfg.thumbZ ?? -0.045;
+    // ... and turns down round the hand's length, so it wraps the inside of the hood ("thumbDown", degrees)
+    const thumbDown = THREE.MathUtils.degToRad(cfg.thumbDown ?? 85), ty0 = cfg.thumbPivotY ?? -0.035, tu0 = cfg.thumbPivotU ?? -0.02;
     for (const s of 'LR') {
+      const inward = s === 'R' ? 1 : -1; // the right hand's inner edge is at -z, the left hand's at +z
       this.parts[`hand${s}`].traverse((o) => {
         if (!o.isMesh || !curl) return;
         const pos = o.geometry.attributes.position;
@@ -173,10 +180,21 @@ export class DummyRider {
         for (let i = 0; i < pos.count; i++) tip = Math.max(tip, pos.getX(i));
         const R = (tip - kx) / curl; // the finger length goes exactly round `curl` radians
         for (let i = 0; i < pos.count; i++) {
-          const d = pos.getX(i) - kx;
-          if (d <= 0) continue;
-          const t = d / R, r = R + (pos.getY(i) - ky);
-          pos.setXY(i, kx + r * Math.sin(t), ky - R + r * Math.cos(t));
+          const u = inward * pos.getZ(i); // across the hand, negative toward the thumb side
+          const keep = THREE.MathUtils.smoothstep(-u, -(thumbZ + 0.01), -(thumbZ - 0.01)); // 1 on the thumb
+          let x0 = pos.getX(i), y0 = pos.getY(i), z0 = pos.getZ(i);
+          if (keep > 0 && x0 > 0) { // the thumb turns down round an axis along the hand at its root
+            const th = thumbDown * keep, du = u - tu0, dv = y0 - ty0;
+            const u2 = du * Math.cos(th) - dv * Math.sin(th), v2 = du * Math.sin(th) + dv * Math.cos(th);
+            z0 = inward * (tu0 + u2); y0 = ty0 + v2;
+          }
+          const d = x0 - kx;
+          if (d > 0 && keep < 1) { // the fingers wrap round the hood
+            const t = d / R, r = R + (y0 - ky);
+            const x = kx + r * Math.sin(t), y = ky - R + r * Math.cos(t);
+            x0 = x + (x0 - x) * keep; y0 = y + (y0 - y) * keep;
+          }
+          pos.setXYZ(i, x0, y0, z0);
         }
         o.geometry.computeVertexNormals();
       });
@@ -410,7 +428,8 @@ export class DummyRider {
       // hand), and is placed so its middle sits on top of the hood; the wrist follows from that.
       // The hood comes from the bike's fit: its wrist point is ~8 cm behind the hood's middle.
       const H = F?.hand || HAND0;
-      const [gx, gy, gz] = cfg.grip || [-0.03, -0.055, -0.015];
+      // the palm on the hood (not hovering in front of it), the thumb against its inner side
+      const [gx, gy, gz] = cfg.grip || [-0.075, -0.07, 0.01];
       const grip = this._local(H.x + 0.08 + gx, H.y + 0.015 + gy, side * (H.z - 0.01 + gz));
       const [tx, ty, tz] = (cfg.handTurn || [0, 0, 0]).map((d) => THREE.MathUtils.degToRad(d));
       const hand = P[`hand${s}`];
