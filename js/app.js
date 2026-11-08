@@ -1186,6 +1186,9 @@ function advance(now = performance.now()) {
       P.power = pw;
       if (P.free && pacerOn()) pacerRegroup(P, dt);
       P.dist += P.v * dt;
+      // workout pacer: on target you are riding his ride, so a gap opened by ERG lag at step changes,
+      // a pause or a dropout of the power reading closes again (about 20 s) instead of only growing
+      if (!P.free && target && Math.abs(power - target) <= target * 0.05) P.dist += (ride.dist - P.dist) * Math.min(1, dt / 20);
       const pc = liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5);
       P.pedal = pc < 5 ? levelPedals(P.pedal, dt) : P.pedal + (pc / 60) * Math.PI * 2 * dt;
       // rides beside you, on the side with more room; switches sides only well past the centre line
@@ -1569,7 +1572,8 @@ function updateHud(cadence, hr, grade) {
     if (pacerOn()) {
       const gap = Math.round(ride.dist - P.dist);
       $('wk-pacer').textContent = Math.abs(gap) < 3 ? tr('With {name}', { name: P.name }) : gap > 0 ? `${P.name} ${tr('{n} m behind', { n: gap })}` : `${P.name} ${tr('{n} m ahead', { n: -gap })}`;
-      $('wk-pacer').className = `pacer-tag ${gap >= -3 ? 'c-ok' : gap >= -25 ? 'c-warn' : 'c-bad'}`;
+      const behindS = -gap / Math.max(ride.v, 3); // seconds behind him: 25 m is 2 s at 45 km/h but 5 s at 18
+      $('wk-pacer').className = `pacer-tag ${behindS <= 3 ? 'c-ok' : behindS <= 10 ? 'c-warn' : 'c-bad'}`;
     }
     $('wk-diff').textContent = target ? `${p3 - target >= 0 ? '+' : '−'}${Math.abs(Math.round(p3 - target))}` : '';
     $('wk-diff').className = cls;
