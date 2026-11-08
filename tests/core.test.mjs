@@ -596,3 +596,16 @@ test('fitness, fatigue and form (#54)', async () => {
   assert.equal(formBand(10), 'fresh');
   assert.deepEqual(fitnessSeries([], { now }), []);
 });
+
+test('heart rate zones: from intervals.icu in bpm, else from LTHR', async () => {
+  const { hrZonesBpm, timeInZones } = await import('../js/analysis.js');
+  assert.equal(hrZonesBpm({}), null);
+  const icu = hrZonesBpm({ bpm: [137, 151, 158, 169, 174, 179, 186], names: ['Recovery'] });
+  assert.equal(icu.length, 7);
+  assert.equal(icu[0].name, 'Recovery');
+  assert.equal(icu[6].upTo, Infinity);
+  assert.deepEqual(timeInZones([130, 150, 160, 190], 1, icu).map((z) => z.sec), [1, 1, 0, 1, 0, 0, 1]);
+  const l = hrZonesBpm({ lthr: 170 });
+  assert.equal(l.length, 5);
+  assert.deepEqual(timeInZones([100, 150, 165, 175, 185], 1, l).map((z) => z.sec), [1, 0, 1, 2, 1]); // tops 117 / 143 / 161.5 / 180.2 bpm
+});

@@ -320,8 +320,11 @@ body.pixel-ui .stat.power .st-val b { font-size: 1.85rem; }
 body.pixel-ui .topbar { background: rgba(22, 30, 46, 0.92); border-color: rgba(255, 255, 255, 0.22); }
 body.pixel-ui .tb-cell + .tb-cell { border-left: 2px dashed rgba(255, 255, 255, 0.14); }
 /* simulator slider: centred on the screen, whatever the widths beside it */
-#ride #sim-ctl { position: absolute; left: 50%; bottom: 0; transform: translate(-50%, 8px); }
-#ride.show-controls #sim-ctl { transform: translate(-50%, 0); }
+/* the simulator: one compact row right after Pause · Finish, out of the middle of the road */
+#ride #sim-ctl { position: static; flex-direction: row; align-items: center; gap: 8px; width: auto; padding: 5px 12px; border-radius: 12px; }
+#ride #sim-ctl label { font-size: .78rem; color: var(--muted, #9aa6bd); white-space: nowrap; }
+#ride #sim-ctl label b { font-size: .95rem; color: #fff; display: inline-block; min-width: 2.2em; text-align: right; font-variant-numeric: tabular-nums; }
+#ride #sim-ctl input { width: 120px; }
 
 /* ---------- Lobby: game-style layout ---------- */
 #lobby { min-height: 100%; display: flex; flex-direction: column; }
@@ -816,6 +819,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   /* on a tap: Pause · Finish · Settings in a row under the boards, the simulator slider on its own line below */
   #ride .bottom-row { flex-wrap: wrap; gap: 6px; }
   #ride #sim-ctl, #ride.show-controls #sim-ctl { position: static; transform: none; margin: 0; width: auto; flex: 1 1 100%; padding: 6px 10px; }
+  #ride #sim-ctl input { flex: 1; width: auto; }
   #ride #btn-keys { display: none; } /* no keyboard on a phone */
 }
 .wk-head > div[hidden] { display: none; }

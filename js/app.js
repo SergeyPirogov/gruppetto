@@ -8,7 +8,9 @@ import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
-import { rideIntervals, timeInZones, HR_ZONES } from './analysis.js';
+import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
+/** Heart rate zones in bpm: from intervals.icu when connected, otherwise from the threshold heart rate (Profile). */
+const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNames, lthr: s.lthr });
 import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, powerCurve, ftpSuggestion, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
@@ -25,7 +27,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
-  name: 'Me', weight: 75, height: 178, ftp: 200, maxHr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
+  name: 'Me', weight: 75, height: 178, ftp: 200, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
@@ -330,7 +332,7 @@ function initLobby() {
   bind('f-weight', 'weight');
   bind('f-height', 'height');
   bind('f-ftp', 'ftp');
-  bind('f-maxhr', 'maxHr');
+  bind('f-lthr', 'lthr');
   bind('f-diff', 'difficulty');
   bind('f-chainring', 'chainring');
   bind('f-cog', 'cog');
@@ -1401,11 +1403,11 @@ function updateHud(cadence, hr, grade) {
   $('m-zone').textContent = `Z${zone.z}`;
   $('m-zone').style.background = zone.color;
   $('m-zone').title = tr(zone.name);
-  // heart rate zone, from your max heart rate (Profile); no max set → no tag
-  const hrz = $('m-hr-zone'), hrNow = Math.round(hr || 0);
-  hrz.hidden = !(settings.maxHr > 0 && hrNow > 0);
+  // heart rate zone, from intervals.icu or your threshold heart rate (Profile); neither → no tag
+  const hrz = $('m-hr-zone'), hrNow = Math.round(hr || 0), zs = hrZones();
+  hrz.hidden = !(zs && hrNow > 0);
   if (!hrz.hidden) {
-    const f = hrNow / settings.maxHr, z = HR_ZONES.find((x) => f < x.upTo) || HR_ZONES[HR_ZONES.length - 1];
+    const z = zs.find((x) => hrNow < x.upTo) || zs[zs.length - 1];
     hrz.textContent = `Z${z.z}`; hrz.style.background = z.color; hrz.title = tr(z.name);
     document.querySelector('.stat.hr').style.setProperty('--c', z.color);
   }
@@ -1926,7 +1928,7 @@ function historyEntry(r, samples) {
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, summary: r.summary,
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
     race: r.race || null, raceLaps: r.raceLaps || null,
-    maxHr: settings.maxHr || 0, eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
+    maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
     chart: { every, pw, hr, d, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
     intervals: r.workout?.steps ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
@@ -2082,7 +2084,7 @@ function showSummary(e, { live = false } = {}) {
 /** The ride on the summary screen: its history entry and, when kept, its full record. */
 let shown = { entry: null, rec: null };
 
-/** Time in power zones (and heart rate zones when max heart rate is set), as bars. */
+/** Time in power zones (and heart rate zones when there are any), as bars. */
 function renderZones(e) {
   const ftp = e.ftp || settings.ftp, every = e.chart.every;
   const total = e.chart.pw.length * every;
@@ -2091,10 +2093,10 @@ function renderZones(e) {
     return `<div class="zb"><span class="zn">Z${z.z}</span><span class="zt">${esc(tr(z.name))}</span><span class="zbar"><i style="width:${pct.toFixed(1)}%;background:${z.color}"></i></span><span class="zs">${z.sec ? fmtTime(z.sec) : '—'}</span><span class="zp">${pct >= 0.5 ? Math.round(pct) : 0}%</span></div>`;
   }).join('');
   $('sum-zones-power').innerHTML = bars(timeInZones(e.chart.pw, ftp, POWER_ZONES, every));
-  const maxHr = e.maxHr || settings.maxHr;
+  const hz = (e.hrZones || e.lthr ? hrZones(e) : null) || hrZones(); // the zones as they were on the day, else today's
   const hasHr = e.chart.hr.some((x) => x > 0);
   $('sum-zones-hr-box').hidden = !hasHr;
-  $('sum-zones-hr').innerHTML = maxHr ? bars(timeInZones(e.chart.hr, maxHr, HR_ZONES, every, { skipZero: true })) : `<p class="muted">${tr('Set your max heart rate in Profile to see heart rate zones.')}</p>`;
+  $('sum-zones-hr').innerHTML = hz ? bars(timeInZones(e.chart.hr, 1, hz, every, { skipZero: true })) : `<p class="muted">${tr('Set your threshold heart rate (LTHR) in Profile, or connect intervals.icu, to see heart rate zones.')}</p>`;
   $('sum-zones').hidden = !total;
 }
 
@@ -2424,6 +2426,11 @@ async function connectIntervals({ quiet = false } = {}) {
     settings.icuAthlete = $('f-icu-athlete').value.trim();
     if (athlete.ftp) { settings.ftp = athlete.ftp; $('f-ftp').value = athlete.ftp; }
     if (athlete.weight) { settings.weight = Math.round(athlete.weight); $('f-weight').value = settings.weight; }
+    // heart rate zones and max HR as set in intervals.icu
+    if (athlete.hrZones) { settings.hrZones = athlete.hrZones; settings.hrZoneNames = athlete.hrZoneNames; }
+    const maxHr = athlete.maxHr || athlete.hrZones?.at(-1);
+    if (maxHr) settings.maxHr = maxHr;
+    if (athlete.lthr) { settings.lthr = athlete.lthr; $('f-lthr').value = athlete.lthr; }
     if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
     saveSettings();
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};

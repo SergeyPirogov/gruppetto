@@ -10,6 +10,33 @@ export const HR_ZONES = [
   { z: 5, name: 'Maximum', upTo: Infinity, color: '#ef4444' },
 ];
 
+const HR_COLORS = {
+  5: ['#8a94a6', '#3b82f6', '#22c55e', '#f97316', '#ef4444'],
+  6: ['#8a94a6', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444'],
+  7: ['#8a94a6', '#3b82f6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#a855f7'],
+};
+/** Coggan's heart rate zones as fractions of the threshold heart rate (LTHR). */
+export const LTHR_ZONES = [
+  { name: 'Active recovery', upTo: 0.69 },
+  { name: 'Endurance', upTo: 0.84 },
+  { name: 'Tempo', upTo: 0.95 },
+  { name: 'Threshold', upTo: 1.06 },
+  { name: 'VO2 max', upTo: Infinity },
+];
+/**
+ * Heart rate zones in beats per minute (`upTo` is each zone's top in bpm, so use them with ref 1).
+ * From intervals.icu when it gave them (`bpm`: each zone's top, the last one is max HR),
+ * otherwise from the threshold heart rate. Null when there is neither.
+ */
+export function hrZonesBpm({ bpm, names = [], lthr = 0 } = {}) {
+  if (Array.isArray(bpm) && bpm.length > 1) {
+    const colors = HR_COLORS[bpm.length] || HR_COLORS[7];
+    return bpm.map((top, i) => ({ z: i + 1, name: names[i] || `Zone ${i + 1}`, upTo: i === bpm.length - 1 ? Infinity : top, color: colors[Math.min(i, colors.length - 1)] }));
+  }
+  if (lthr > 0) return LTHR_ZONES.map((z, i) => ({ z: i + 1, name: z.name, upTo: z.upTo * lthr, color: HR_COLORS[5][i] }));
+  return null;
+}
+
 /**
  * The workout's intervals as ridden: samples carry `step` (the interval index, null off the plan)
  * and `target` (watts). One row per run of the same step: duration, mean target, mean power,
