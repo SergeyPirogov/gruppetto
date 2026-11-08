@@ -946,28 +946,33 @@ const recorder = new Recorder();
 
 // ---------- Before the start: are the sensors in? ----------
 const DEVICE_LABEL = { trainer: 'Trainer', hr: 'Heart rate', cad: 'Cadence', ctl: 'Controllers', obc: 'OpenBikeControl' };
-/** What is not ready: a remembered sensor not connected yet, a heart rate strap with no reading yet, no trainer. */
-function preflightIssues() {
+/**
+ * The sensors you use (connected now, or remembered from an earlier ride), each ready or not:
+ * [{ name, ok, note }]. A trainer you are not using (simulator ticked) is left out.
+ */
+function preflightChecklist() {
   const out = [];
-  // only sensors you use (remembered from an earlier connection): no trainer at all just means a simulated ride
   for (const d of DEVICES) {
-    if (d.key === 'trainer' && $('sim').checked) continue; // riding the simulator on purpose
-    if (settings.devices?.[d.key] && !d.dev.connected) out.push([tr(DEVICE_LABEL[d.key]), reconnecting.has(d.key) ? tr('reconnecting…') : tr('not connected yet')]);
+    if (d.key === 'trainer' && $('sim').checked) continue;
+    if (!d.dev.connected && !settings.devices?.[d.key]) continue;
+    const name = tr(DEVICE_LABEL[d.key]);
+    if (!d.dev.connected) { out.push({ name, ok: false, note: reconnecting.has(d.key) ? tr('reconnecting…') : tr('not connected yet') }); continue; }
+    if (d.dev === hrm && !fresh(live.hr, live.hrAt)) { out.push({ name, ok: false, note: tr('connected, waiting for a reading…') }); continue; }
+    out.push({ name, ok: true, note: d.dev === hrm ? `❤ ${fresh(live.hr, live.hrAt)} ${U.bpm}` : d.dev === trainer ? `${Math.round(fresh(live.power, live.powerAt))} ${U.W}` : tr('connected') });
   }
-  if (hrm.connected && !fresh(live.hr, live.hrAt)) out.push([tr('Heart rate'), tr('connected, waiting for a reading…')]);
   return out;
 }
-/** Resolves true to ride (all in, or "Ride anyway"), false to stay in the lobby. */
+/** Resolves true to ride (all ready, or "Ride anyway"), false to stay in the lobby. */
 function preflight() {
-  if (!preflightIssues().length) return Promise.resolve(true);
+  if (preflightChecklist().every((c) => c.ok)) return Promise.resolve(true);
   if (bluetoothAvailable()) autoConnectRemembered({ quiet: true }).catch(() => {});
   return new Promise((resolve) => {
     const box = $('preflight');
     const done = (go) => { clearInterval(timer); box.hidden = true; resolve(go); };
     const draw = () => {
-      const issues = preflightIssues();
-      if (!issues.length) { toast(tr('All sensors ready')); done(true); return; }
-      $('preflight-list').innerHTML = issues.map(([what, why]) => `<li><b>${esc(what)}</b><span>${esc(why)}</span></li>`).join('');
+      const list = preflightChecklist();
+      $('preflight-list').innerHTML = list.map((c) => `<li class="${c.ok ? 'ok' : 'wait'}"><i></i><b>${esc(c.name)}</b><span>${esc(c.note)}</span></li>`).join('');
+      if (list.every((c) => c.ok)) { clearInterval(timer); setTimeout(() => { toast(tr('All sensors ready')); done(true); }, 700); } // a moment to see the last tick
     };
     const timer = setInterval(draw, 500);
     draw();

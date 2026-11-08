@@ -918,10 +918,17 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .card-panel { width: min(520px, calc(100vw - 24px)); display: grid; gap: 10px; }
 #card-canvas { width: auto; max-width: 100%; max-height: calc(100vh - 170px); margin: 0 auto; height: auto; border-radius: 12px; display: block; }
 
-/* ---------- Before the start: sensors not ready ---------- */
+/* ---------- Before the start: a checklist of your sensors ---------- */
 .preflight-panel { width: min(440px, calc(100vw - 24px)); display: grid; gap: 12px; }
 .preflight-panel p { margin: 0; }
 .preflight-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.preflight-list li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; border-radius: 10px; background: rgba(250, 204, 21, .08); border: 1px solid rgba(250, 204, 21, .3); }
-.preflight-list li span { color: #fbd38d; text-align: right; }
-.preflight-list li::before { content: ''; }
+.preflight-list li { display: grid; grid-template-columns: 22px auto 1fr; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .08); transition: background .3s, border-color .3s; }
+.preflight-list li span { color: #9aa6bd; text-align: right; font-size: .9rem; }
+.preflight-list li i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 12px; font-weight: 800; }
+.preflight-list li.ok { background: rgba(34, 197, 94, .08); border-color: rgba(34, 197, 94, .35); }
+.preflight-list li.ok i { background: #22c55e; color: #052e14; }
+.preflight-list li.ok i::before { content: '✓'; }
+.preflight-list li.wait span { color: #fbd38d; }
+.preflight-list li.wait i { border: 2.5px solid rgba(250, 204, 21, .3); border-top-color: #facc15; animation: pf-spin .9s linear infinite; }
+@keyframes pf-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .preflight-list li.wait i { animation: none; } }
