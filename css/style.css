@@ -823,3 +823,6 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 
 .dev-chip .chip-val { font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
 .dev-chip .chip-val:empty { display: none; }
+
+.fields-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fields-note { font-size: .78rem; margin: -2px 0 6px; }

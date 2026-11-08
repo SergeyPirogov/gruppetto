@@ -25,7 +25,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, maxHr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true,
-  chainring: 34, shiftMode: 'wheel', graphics: '3d',
+  chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f',
   intensity: 100, sound: true, voice: true, pacer: true, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'best', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear',
 };
@@ -215,7 +215,7 @@ function applyLive(key) {
     ride.lastSentTarget = null;
   }
   if (key === 'difficulty') ride.lastSentGrade = null;
-  if (key === 'shiftMode' || key === 'chainring') {
+  if (key === 'shiftMode' || key === 'chainring' || key === 'cog') {
     ride.shiftMode = settings.shiftMode;
     ride.lastSentGrade = null; ride.lastSentWheel = null;
     updateGear();
@@ -331,6 +331,7 @@ function initLobby() {
   bind('f-maxhr', 'maxHr');
   bind('f-diff', 'difficulty');
   bind('f-chainring', 'chainring');
+  bind('f-cog', 'cog');
   bind('f-shift', 'shiftMode', false);
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
@@ -2250,7 +2251,7 @@ function sendVirtualGear() {
   if (ride.gear === ride.lastSentWheel || ride.wheelPending) return;
   const gear = ride.gear;
   ride.wheelPending = true;
-  trainer.setWheelCircumference(virtualWheelMm(gear, settings.chainring)).then((ok) => {
+  trainer.setWheelCircumference(virtualWheelMm(gear, settings.chainring, settings.cog || 14)).then((ok) => {
     if (!ride) return;
     ride.wheelPending = false;
     if (ok) { ride.lastSentWheel = gear; return; }
