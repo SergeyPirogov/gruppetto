@@ -1878,6 +1878,7 @@ function changeIntensity(delta) {
   }
   $('wk-int').textContent = `${settings.intensity}%`;
   if (ride?.workout) drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
+  updateGear();
 }
 
 const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null && !ride.ergOff);
@@ -1891,10 +1892,9 @@ function setGear(gear) {
 function shift(dir) {
   if (!ride || ride.paused) return;
   if (inErgStep()) {
-    ride.ergBias += Math.sign(dir) * 5;
-    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
-    if (t && t.watts !== null) ride.target = ergTarget(t);
-    toast(`ERG ${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias} ${U.W}`);
+    // in ERG the shifters move the workout's intensity, 1 % a click (the on-screen − / + do 5 %)
+    changeIntensity(Math.sign(dir));
+    toast(`${tr('Intensity')} ${settings.intensity}% · ${effectiveTarget()} ${U.W}`);
   } else {
     const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
     if (next === ride.gear) return;
@@ -1927,8 +1927,8 @@ function updateGear() {
   if (!ride) return;
   const inErg = inErgStep();
   $('m-gear-label').textContent = inErg ? 'ERG' : tr('Gear');
-  $('m-gear').textContent = inErg ? `${ride.ergBias >= 0 ? '+' : ''}${ride.ergBias}` : ride.gear;
-  $('m-gear-unit').textContent = inErg ? U.W : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
+  $('m-gear').textContent = inErg ? settings.intensity : ride.gear; // in ERG: the intensity the shifters move
+  $('m-gear-unit').textContent = inErg ? '%' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
 }
 
 // Pause / Finish and the simulator slider stay hidden while riding: they show when the mouse moves (for a few seconds, or as
