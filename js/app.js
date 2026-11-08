@@ -400,7 +400,7 @@ function renderRouteList() {
         + (r.custom ? `<span class="rc-del" title="${tr('Delete this route')}" role="button">✕</span>` : '');
       b.onclick = (ev) => {
         if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
-        settings.routeId = r.id; saveSettings(); markRoute(); showRoute();
+        settings.routeId = r.id; saveSettings(); markRoute(); showRoute(); renderChallenge();
       };
       box.append(b);
       requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`, cardScale));
@@ -2183,7 +2183,10 @@ const ghostLabel = (g) => (g.friend ? g.name || tr('Friend') : settings.ghost ==
 /** The link to race this ride's ghost: shared where the device can, copied otherwise. */
 async function challengeFriend(e) {
   const route = routes.find((r) => r.id === e.routeId);
-  const url = `${location.origin}${location.pathname}#challenge=${await encodeChallenge(e, settings.name)}`;
+  // the default name says nothing to a friend: «A friend» then, and a hint to set yours
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  if (!named) toast(tr('Set your name in Profile, so friends see who challenges them'));
+  const url = `${location.origin}${location.pathname}#challenge=${await encodeChallenge(e, named ? settings.name.trim() : '')}`;
   const text = tr('Race my ghost on {route} in Gruppetto: {km} km in {time}', { route: route?.name || '', km: (e.summary.distance / 1000).toFixed(1), time: fmtTime(e.summary.duration) });
   if (navigator.share) { try { await navigator.share({ title: 'Gruppetto', text, url }); return; } catch (err) { if (err.name === 'AbortError') return; } }
   try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(tr('Link copied: send it to a friend')); } catch { prompt(tr('Copy the link'), url); }
@@ -2200,9 +2203,22 @@ async function openChallenge() {
   challenge = c; saveChallenge();
   settings.routeId = route.id;
   if (settings.ghost === 'off') settings.ghost = 'best';
-  saveSettings(); markRoute(); showRoute(); updateSummary();
-  infoBox(tr('{name} challenges you: {km} km of {route} in {time}. Ride it and race their ghost 👻', { name: c.name || tr('A friend'), km: (c.summary.distance / 1000).toFixed(1), route: route.name, time: fmtTime(c.summary.duration) }));
+  saveSettings(); markRoute(); showRoute(); updateSummary(); renderChallenge();
+  $('challenge-box').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+/** The challenge card in the lobby, while the route picked is the challenge's. */
+function renderChallenge() {
+  const route = challenge && routes.find((r) => r.id === challenge.routeId);
+  $('challenge-box').hidden = !route || settings.routeId !== route.id || settings.ghost === 'off';
+  if ($('challenge-box').hidden) return;
+  const who = challenge.name && challenge.name !== DEFAULT_SETTINGS.name ? challenge.name : tr('A friend'); // links made before names were checked say «Me»
+  $('ch-title').textContent = tr('{name} challenges you on {route}', { name: who, route: route.name });
+  $('ch-goal').textContent = tr('To beat: {km} km in {time}', { km: (challenge.summary.distance / 1000).toFixed(1), time: fmtTime(challenge.summary.duration) });
+  $('ch-how').textContent = tr('Their ghost rides beside you exactly as they rode. Be ahead of it at the end, and the summary says by how much.');
+}
+$('ch-ride').onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); updateSummary(); startRide(); };
+$('ch-drop').onclick = () => { challenge = null; saveChallenge(); renderChallenge(); updateSummary(); };
 
 // ---------- Shadow ride (#24) ----------
 // Race a ghost of an earlier ride on the same route: it rides where you were at the same moment.
@@ -2244,7 +2260,7 @@ function renderGhostPicker() {
   $('ghost-last').textContent = desc(last);
   for (const b of document.querySelectorAll('#ghost-box [data-ghost]')) {
     b.classList.toggle('sel', b.dataset.ghost === settings.ghost);
-    b.onclick = () => { settings.ghost = b.dataset.ghost; saveSettings(); renderGhostPicker(); updateSummary(); };
+    b.onclick = () => { settings.ghost = b.dataset.ghost; saveSettings(); renderGhostPicker(); updateSummary(); renderChallenge(); };
   }
 }
 
@@ -2483,6 +2499,7 @@ function renderFitness() {
 function renderHistory() {
   renderWhy();
   renderProgress();
+  renderChallenge();
   renderPowerCurve();
   renderFitness();
   const row = (e) => {
