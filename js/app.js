@@ -1264,6 +1264,8 @@ function advance(now = performance.now()) {
     }
     ride.dist += moved;
     ride.moved += moved;
+    // never into the back of a wheel in your line: at most up to it (a bike's length), at its speed
+    ride.dist = behindWheels(ride, ride.dist, pack);
     // Pedal animation only: trainers like the KICKR CORE derive cadence from the flywheel and report
     // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
@@ -1330,6 +1332,7 @@ function advance(now = performance.now()) {
       b.heldFor = heldBy(b, wheels.map((o, k) => (k === 0 ? { ...o, v: ride.v } : o)), dt);
       const before = b.dist;
       b.dist += b.v * dt;
+      b.dist = behindWheels(b, b.dist, wheels.map((o, k) => (k === 0 ? { ...o, v: ride.v } : o)));
       if (ride.race && before < ride.race.distance && b.dist >= ride.race.distance && !ride.race.finish.has(b)) {
         ride.race.finish.set(b, ride.elapsed - ride.race.t0 + dt * (ride.race.distance - before) / Math.max(1e-6, b.dist - before));
       }
@@ -1481,6 +1484,19 @@ function keepApart(r, lane, others) {
     if (next < floor) { const side = Math.sign(r.lane - o.lane) || 1; lane = o.lane + side * floor; r.lv = 0; }
   }
   return Math.max(-2.6, Math.min(2.6, lane));
+}
+/**
+ * No overlapping wheels: a rider in the line of someone ahead (less than a shoulder's width aside) stays at least a
+ * bike's length behind it, whatever the speeds did this frame (the wheel ahead may have eased off); held there it
+ * takes that rider's speed.
+ */
+function behindWheels(r, dist, others) {
+  for (const o of others) {
+    if (!o || o === r || Math.abs(o.lane - r.lane) >= SIDE_GAP) continue;
+    const gap = o.dist - dist;
+    if (gap > 0 && gap < BIKE_LEN) { dist = o.dist - BIKE_LEN; r.v = Math.min(r.v, o.v ?? r.v); }
+  }
+  return dist;
 }
 /**
  * Top speed behind a wheel `gap` m ahead (centre to centre): coming up on it, a rider eases off at no more than
