@@ -6,6 +6,7 @@
 // the torso tilted, the hands brought to the hoods and the feet kept on the turning pedals.
 import * as THREE from 'three';
 import { gltfLoader } from './gltf.js';
+import { mergeVertices } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { buildModernHelmet } from './helmet.js';
 
 const URL = 'assets/rider/dummy.gltf';
@@ -75,7 +76,7 @@ export class DummyRider {
     const colors = { ...KIT, ...(cfg.colors || {}), jersey: jersey || '#15808a', stripe: stripe || '#ff8a1f' };
     const mats = {};
     const mat = (name) => (mats[name] ||= new THREE.MeshStandardMaterial({
-      color: colors[name] || '#cccccc', flatShading: true, roughness: 0.85, metalness: 0, side: THREE.DoubleSide,
+      color: colors[name] || '#cccccc', flatShading: false, roughness: 0.85, metalness: 0, side: THREE.DoubleSide, // smooth skin and kit
     }));
     this.mats = mats;
 
@@ -97,6 +98,10 @@ export class DummyRider {
         if (!o.isMesh) return;
         const m = o.clone();
         m.geometry = o.geometry.clone().applyMatrix4(o.matrixWorld).translate(-joint.x, -joint.y, -joint.z);
+        // shared corners, so the normals average across faces: a smooth body instead of facets
+        m.geometry.deleteAttribute('normal');
+        m.geometry = mergeVertices(m.geometry, 1e-4);
+        m.geometry.computeVertexNormals();
         m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1);
         m.material = mat(o.material.name);
         m.castShadow = true;
