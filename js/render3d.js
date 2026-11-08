@@ -775,10 +775,13 @@ export class Scene3D {
     if (Math.abs(next - q) > 1e-3) { this.quality = next; this.resize(); }
   }
 
-  /** 'chase' (behind the rider, default), 'iso' (high, behind and to the side) or 'side' (high, from the side). */
+  /**
+   * 'chase' (behind the rider, default), 'eyes' (the rider's own view), 'iso' (high, behind and to the side),
+   * 'side' (high, from the side) or 'front' (ahead of the rider, looking back, like a TV motorbike).
+   */
   setCamera(mode) {
-    this.camMode = ['iso', 'side'].includes(mode) ? mode : 'chase';
-    this.camera.fov = this.camMode === 'chase' ? 62 : this.camMode === 'side' ? 34 : 30;
+    this.camMode = ['eyes', 'iso', 'side', 'front'].includes(mode) ? mode : 'chase';
+    this.camera.fov = { chase: 62, eyes: 72, iso: 30, side: 34, front: 48 }[this.camMode];
     this.camera.updateProjectionMatrix();
     this.csm?.updateFrustums();
     this._isoHeading = undefined;
@@ -1776,7 +1779,7 @@ export class Scene3D {
       // phones draw riders within 150 m only: further up the road they are a few pixels, and each is ~110k triangles
       const visible = Math.abs(d - dist) < (LOW && !r.self ? 150 : CHUNK * SEG * AHEAD);
       // a ghost just behind you rides through the chase camera: hidden there (its gap is shown over your head)
-      const inCamera = r.ghost && d < dist - 0.8 && d > dist - 7;
+      const inCamera = (r.ghost && this.camMode === 'chase' && d < dist - 0.8 && d > dist - 7) || (r.self && this.camMode === 'eyes'); // your own eyes: no you
       R.group.visible = visible && this.modelsReady && !inCamera;
       // name tags only for riders near you: far up the road they pile up into an unreadable stack
       if (R.labelSprite) R.labelSprite.visible = Math.abs(d - dist) < LABEL_RANGE;
@@ -1830,6 +1833,21 @@ export class Scene3D {
       const tx = target.x + target.rx * me.lane, tz = target.z + target.rz * me.lane, ty = target.y + 0.8;
       this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
       this.camera.lookAt(tx, ty, tz);
+    } else if (me && (this.camMode === 'eyes' || this.camMode === 'front')) {
+      const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
+      const px = me.f.x + me.f.rx * me.lane, pz = me.f.z + me.f.rz * me.lane, cx = Math.cos(ch), cz = Math.sin(ch);
+      if (this.camMode === 'eyes') {
+        // the rider's own eyes: just above the bars, looking down the road
+        const ahead = this.frame(dist + 25);
+        this.camera.position.set(px + cx * 0.25, me.f.y + 1.62, pz + cz * 0.25);
+        this.camera.lookAt(px + cx * 25, ahead.y + 1.2, pz + cz * 25);
+      } else {
+        // a camera bike 6 m ahead, a little to the side, looking back at the rider
+        const AHEAD = 6.5, front = this.frame(dist + AHEAD);
+        this.camera.position.set(px + cx * AHEAD - me.f.rx * 1.2, front.y + 1.5, pz + cz * AHEAD - me.f.rz * 1.2);
+        this.camera.lookAt(px, me.f.y + 1.0, pz);
+      }
+      this.camPos = this.camera.position.clone();
     } else if (me) {
       // behind the rider along the way it faces, a little late into a bend (as a following motorbike
       // would be), so the rider stays in the middle of the picture instead of sliding to the side

@@ -1176,7 +1176,7 @@ function frame(now) {
   ride.moved = 0;
   // the ghost's gap rides over your head, where the bots carry their names
   const tag = $('ghost-tag'), at = scene.selfScreen;
-  if (at?.on) { tag.style.left = `${at.x}px`; tag.style.top = `${at.y}px`; tag.classList.add('over-me'); } else tag.classList.remove('over-me');
+  if (at?.on) { tag.style.left = `${at.x}px`; tag.style.top = `${at.y}px`; tag.classList.add('over-me'); } else { tag.classList.remove('over-me'); tag.style.left = tag.style.top = ''; } // not in the picture (own eyes): back to its own place
   requestAnimationFrame(frame);
 }
 
@@ -2751,15 +2751,20 @@ function manualLap() {
   toast(tr('Split {n}: {time} · {km} km · {w} W', { n: ride.splits.length, time: fmtTime(t), km: (d / 1000).toFixed(2), w: avg }));
 }
 
-/** Chase → isometric → side view (C, or Y on the Zwift Ride). */
-function nextCamera() {
-  if (!scene?.setCamera) return;
-  const order = ['chase', 'iso', 'side'];
-  settings.camera = order[(order.indexOf(settings.camera) + 1) % order.length];
+/** The camera views, in the order of keys 1–5. */
+const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front'];
+const CAMERA_NAMES = { chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: side view', front: 'Camera: from the front' };
+function setCameraView(mode) {
+  if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
+  settings.camera = mode;
   saveSettings();
-  scene.setCamera(settings.camera);
-  $('f-camera').value = settings.camera;
-  toast(tr({ chase: 'Camera: chase', iso: 'Camera: isometric', side: 'Camera: side view' }[settings.camera]));
+  scene.setCamera(mode);
+  $('f-camera').value = mode;
+  toast(`${CAMERAS.indexOf(mode) + 1} · ${tr(CAMERA_NAMES[mode])}`);
+}
+/** The next camera view (C, or Y on the Zwift Ride). */
+function nextCamera() {
+  setCameraView(CAMERAS[(CAMERAS.indexOf(settings.camera) + 1) % CAMERAS.length]);
 }
 
 function runIntent(intent, value) {
@@ -2949,7 +2954,8 @@ const KEYS = [
   [['E'], 'ERG on / off (free ride: hold this power)'],
   [['N'], 'Skip the interval (free ride: new lap)'],
   [['P'], 'Pacer on / off'],
-  [['C'], 'Camera'],
+  [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · side · front'],
+  [['C'], 'Next camera'],
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
   [['M'], 'Bigger map'],
@@ -2996,6 +3002,7 @@ window.addEventListener('keydown', (e) => {
   else if (c === 'KeyP') { if (ride.pacer) togglePacer(); }
   else if (c === 'KeyE') toggleErg();
   else if (c === 'KeyC') nextCamera();
+  else if (/^(Digit|Numpad)[1-5]$/.test(c)) setCameraView(CAMERAS[Number(c.slice(-1)) - 1]);
   else if (c === 'KeyH') runIntent('hud');
   else if (c === 'KeyF') toggleFullscreen();
   else if (c === 'KeyM') toggleMinimap();
