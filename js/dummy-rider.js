@@ -60,6 +60,104 @@ function middleJoint(a, t, l1, l2, pole) {
   return a.clone().addScaledVector(u, x).addScaledVector(p, h);
 }
 
+/**
+ * The downloaded mannequin has small holes (a missing triangle shows the inside of the limb as a pale
+ * sliver) and doubled faces (dark slits): drop the duplicates and patch every hole of up to 6 edges,
+ * facing the same way as the skin around it. The big openings where parts meet stay open.
+ */
+function repairMesh(g) {
+  const idx = Array.from(g.index.array), tris = [], seen = new Set();
+  for (let t = 0; t < idx.length; t += 3) {
+    const tri = [idx[t], idx[t + 1], idx[t + 2]];
+    if (tri[0] === tri[1] || tri[1] === tri[2] || tri[0] === tri[2]) continue; // collapsed by the merge
+    const key = [...tri].sort((a, b) => a - b).join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tris.push(tri);
+  }
+  // one winding for all: flip any triangle that runs a shared edge the same way as its neighbour
+  // (a flipped face lights up from inside: the pale slivers), then turn each piece to face outward
+  const key = (a, b) => (a < b ? `${a},${b}` : `${b},${a}`);
+  const byEdge = new Map();
+  tris.forEach(([a, b, c], f) => { for (const [u, v] of [[a, b], [b, c], [c, a]]) (byEdge.get(key(u, v)) || byEdge.set(key(u, v), []).get(key(u, v))).push(f); });
+  const runs = (f, u, v) => { const t = tris[f]; return (t[0] === u && t[1] === v) || (t[1] === u && t[2] === v) || (t[2] === u && t[0] === v); };
+  const done = new Uint8Array(tris.length), P = g.attributes.position, pieces = [];
+  for (let f0 = 0; f0 < tris.length; f0++) {
+    if (done[f0]) continue;
+    const piece = [f0]; done[f0] = 1;
+    for (let q = 0; q < piece.length; q++) {
+      const f = piece[q], [a, b, c] = tris[f];
+      for (const [u, v] of [[a, b], [b, c], [c, a]]) {
+        const fs = byEdge.get(key(u, v));
+        if (fs.length !== 2) continue; // only clean two-face edges say how a neighbour should run
+        const n = fs[0] === f ? fs[1] : fs[0];
+        if (done[n]) continue;
+        if (runs(n, u, v)) { const t = tris[n]; [t[1], t[2]] = [t[2], t[1]]; } // same way as us: flip it
+        done[n] = 1; piece.push(n);
+      }
+    }
+    pieces.push(piece);
+  }
+  const A = new THREE.Vector3(), B = new THREE.Vector3(), C = new THREE.Vector3(), N = new THREE.Vector3();
+  const faceNormal = (f, out) => { const [a, b, c] = tris[f]; A.fromBufferAttribute(P, a); B.fromBufferAttribute(P, b).sub(A); C.fromBufferAttribute(P, c).sub(A); return out.crossVectors(B, C); };
+  const flip = (piece) => { for (const f of piece) { const t = tris[f]; [t[1], t[2]] = [t[2], t[1]]; } };
+  // the main surface faces outward: positive volume about its centre
+  pieces.sort((x, y) => y.length - x.length);
+  const main = pieces[0], o = new THREE.Vector3();
+  let nv = 0;
+  for (const f of main) for (const i of tris[f]) { o.add(A.fromBufferAttribute(P, i)); nv++; }
+  o.divideScalar(nv);
+  let vol = 0;
+  for (const f of main) { const [a, b, c] = tris[f]; A.fromBufferAttribute(P, a).sub(o); B.fromBufferAttribute(P, b).sub(o); C.fromBufferAttribute(P, c).sub(o); vol += A.dot(B.cross(C)); }
+  if (vol < 0) flip(main);
+  // scraps cut off by the fins face the same way as the main surface where they touch it
+  const vn = Array.from({ length: P.count }, () => new THREE.Vector3());
+  for (const f of main) { faceNormal(f, N); for (const i of tris[f]) vn[i].add(N); }
+  for (const piece of pieces.slice(1)) {
+    let agree = 0;
+    for (const f of piece) { faceNormal(f, N); for (const i of tris[f]) agree += N.dot(vn[i]); }
+    if (agree < 0) flip(piece);
+  }
+  // folds: a triangle lying across the skin but facing into the limb (it fights the faces under it
+  // and lights up from inside: the pale triangles). Dropped; the faces under it cover the spot.
+  {
+    const area = tris.map((t, f) => faceNormal(f, new THREE.Vector3()));
+    const around = Array.from({ length: P.count }, () => new THREE.Vector3());
+    tris.forEach((t, f) => { for (const i of t) around[i].add(area[f]); });
+    const keep = [];
+    tris.forEach((t, f) => {
+      const n = area[f].clone().normalize(), m = new THREE.Vector3();
+      for (const i of t) m.add(around[i]).sub(area[f]); // the surface round its corners, without itself
+      if (m.lengthSq() > 0 && n.dot(m.normalize()) < -0.2) return;
+      keep.push(t);
+    });
+    tris.length = 0; tris.push(...keep);
+  }
+  // holes: loops of edges with one face only; each up to 6 edges gets a fan, facing like the skin around it
+  const count = new Map(), nbr = new Map();
+  for (const [a, b, c] of tris) for (const [u, v] of [[a, b], [b, c], [c, a]]) count.set(key(u, v), (count.get(key(u, v)) || 0) + 1);
+  for (const [k, n] of count) if (n === 1) { const [u, v] = k.split(',').map(Number); (nbr.get(u) || nbr.set(u, []).get(u)).push(v); (nbr.get(v) || nbr.set(v, []).get(v)).push(u); }
+  const vnAll = Array.from({ length: P.count }, () => new THREE.Vector3());
+  tris.forEach((t, f) => { faceNormal(f, N); for (const i of t) vnAll[i].add(N); });
+  const used = new Set();
+  for (const start of nbr.keys()) {
+    if (used.has(start) || nbr.get(start).length !== 2) continue;
+    const loop = [start];
+    let prev = start, v = nbr.get(start)[0];
+    while (v !== start && loop.length <= 7 && nbr.get(v)?.length === 2) { loop.push(v); const [p, q] = nbr.get(v); [prev, v] = [v, p === prev ? q : p]; }
+    if (v !== start || loop.length < 3 || loop.length > 6) continue; // an open end of the part, or tangled
+    for (const x of loop) used.add(x);
+    const fan = [];
+    for (let i = 1; i < loop.length - 1; i++) fan.push([loop[0], loop[i], loop[i + 1]]);
+    // face the way the surrounding skin does
+    let agree = 0;
+    for (const t of fan) { A.fromBufferAttribute(P, t[0]); B.fromBufferAttribute(P, t[1]).sub(A); C.fromBufferAttribute(P, t[2]).sub(A); N.crossVectors(B, C); for (const i of t) agree += N.dot(vnAll[i]); }
+    for (const t of fan) { if (agree < 0) [t[1], t[2]] = [t[2], t[1]]; tris.push(t); }
+  }
+  g.setIndex(tris.flat());
+  return g;
+}
+
 export class DummyRider {
   /** `group` is the rider group (forward = +x, up = +y, right = +z, road at y = 0). */
   constructor(model, group, { jersey, stripe } = {}) {
@@ -100,7 +198,7 @@ export class DummyRider {
         m.geometry = o.geometry.clone().applyMatrix4(o.matrixWorld).translate(-joint.x, -joint.y, -joint.z);
         // shared corners, so the normals average across faces: a smooth body instead of facets
         m.geometry.deleteAttribute('normal');
-        m.geometry = mergeVertices(m.geometry, 1e-4);
+        m.geometry = repairMesh(mergeVertices(m.geometry, 1e-4));
         m.geometry.computeVertexNormals();
         m.position.set(0, 0, 0); m.quaternion.identity(); m.scale.set(1, 1, 1);
         m.material = mat(o.material.name);
@@ -181,8 +279,15 @@ export class DummyRider {
       this.parts[`hand${s}`].traverse((o) => {
         if (!o.isMesh || !curl) return;
         const pos = o.geometry.attributes.position;
+        // shorter fingers ("fingerLength" of the modelled length): tucked under the hood, not sticking out
+        const len = cfg.fingerLength ?? 0.35;
         let tip = kx;
-        for (let i = 0; i < pos.count; i++) tip = Math.max(tip, pos.getX(i));
+        for (let i = 0; i < pos.count; i++) {
+          const dx = pos.getX(i) - kx, u = inward * pos.getZ(i);
+          const onThumb = THREE.MathUtils.smoothstep(-u, -(thumbZ + 0.01), -(thumbZ - 0.01));
+          if (dx > 0) pos.setX(i, kx + dx * (len + (1 - len) * onThumb)); // the thumb keeps its length
+          tip = Math.max(tip, pos.getX(i));
+        }
         const R = (tip - kx) / curl; // the finger length goes exactly round `curl` radians
         for (let i = 0; i < pos.count; i++) {
           const u = inward * pos.getZ(i); // across the hand, negative toward the thumb side
@@ -438,13 +543,20 @@ export class DummyRider {
       const grip = this._local(H.x + 0.08 + gx, H.y + 0.015 + gy, side * (H.z - 0.01 + gz));
       const [tx, ty, tz] = (cfg.handTurn || [0, 0, 0]).map((d) => THREE.MathUtils.degToRad(d));
       const hand = P[`hand${s}`];
-      hand.quaternion.setFromEuler(new THREE.Euler(side * tx, side * ty, tz, 'XYZ'));
+      // the hand turns with the forearm (as modelled: a straight wrist, no seam), then by "handTurn"
+      const qTurn = this._qTurn ||= new THREE.Quaternion();
+      qTurn.setFromEuler(new THREE.Euler(side * tx, side * ty, tz, 'XYZ'));
+      const follow = cfg.wristFollow ?? 0; // 1: the wrist straight as modelled; 0: the hand keeps its modelled grip angle
+      const qa = this._qa ||= new THREE.Quaternion();
+      const handRot = () => { qa.copy(P[`lowerArm${s}`].quaternion).multiply(qTurn); hand.quaternion.copy(qTurn).slerp(qa, follow); };
+      handRot(); // from the forearm's last pose: it moves little from one frame to the next
       hand.scale.setScalar(cfg.handScale ?? 0.85);
       const wrist = grip.sub(this.handMid[s].clone().multiplyScalar(cfg.handScale ?? 0.85).applyQuaternion(hand.quaternion));
       const sh = onTorso(J[`shoulder${s}`]);
       const elbow = middleJoint(sh, wrist, R.arm.l1, R.arm.l2,
         new THREE.Vector3(-0.5, -(cfg.elbowDown ?? 0.7), side * (cfg.elbowOut ?? 0.25)));
       this._limb(P[`upperArm${s}`], P[`lowerArm${s}`], sh, elbow, wrist, R.arm);
+      handRot();
       hand.position.copy(wrist);
     }
   }
