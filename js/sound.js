@@ -50,36 +50,36 @@ export function spokenDuration(sec) {
 
 
 // ---------- The fans at the top of a climb (#45) ----------
-// Recorded, not made up (BigSoundBank, CC0): a crowd of 600 applauding, looped with cross-fades, and
-// shouts of "Yeah!" now and then from either side. `level` 0…1: how close the crowd is.
-let crowdBufs = null, crowdLoading = false, crowdBus = null, bedUntil = 0, lastShout = 0;
+// Recorded, not made up (BigSoundBank, CC0): shouts of "Yeah!" now and then from either side (the
+// applause bed went: it sounded like creaking). `level` 0…1: how close the crowd is.
+let crowdBufs = null, crowdLoading = false, crowdBus = null, bedUntil = 0, lastShout = 0, busLevel = -1, busAt = 0;
 async function loadCrowd() {
   crowdLoading = true;
   const get = async (f) => ctx.decodeAudioData(await (await fetch(`assets/sounds/${f}`)).arrayBuffer());
   try {
-    const [bed, y1, y2] = await Promise.all(['crowd-applause.mp3', 'crowd-yeah-1.mp3', 'crowd-yeah-2.mp3'].map(get));
-    crowdBufs = { bed, shouts: [y1, y2] };
+    const [y1, y2] = await Promise.all(['crowd-yeah-1.mp3', 'crowd-yeah-2.mp3'].map(get));
+    crowdBufs = { shouts: [y1, y2] };
   } catch { crowdBufs = null; }
 }
 export function crowd(level) {
   if (!ctx) return;
   if (!crowdBufs) { if (level > 0 && !crowdLoading) loadCrowd(); return; }
   const t = ctx.currentTime;
-  if (!crowdBus) { crowdBus = ctx.createGain(); crowdBus.gain.value = 0; crowdBus.connect(ctx.destination); }
-  crowdBus.gain.setTargetAtTime(Math.min(1, level) * 0.55, t, 0.8);
-  if (level <= 0.01) return;
-  // the applause bed: 20 s pieces from the steady middle of the recording, each fading into the next
-  if (t > bedUntil - 2.5) {
-    const start = Math.max(t, bedUntil - 2), len = 20, src = ctx.createBufferSource(), g = ctx.createGain();
-    src.buffer = crowdBufs.bed;
-    g.gain.setValueAtTime(0.0001, start);
-    g.gain.linearRampToValueAtTime(1, start + 2);
-    g.gain.setValueAtTime(1, start + len - 2);
-    g.gain.linearRampToValueAtTime(0.0001, start + len);
-    src.connect(g).connect(crowdBus);
-    src.start(start, 4 + Math.random() * 2, len);
-    bedUntil = start + len;
+  if (!crowdBus) {
+    // a gentle low-pass takes the hiss off the top of the recording
+    const soft = ctx.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 5500; soft.Q.value = 0.5;
+    crowdBus = ctx.createGain(); crowdBus.gain.value = 0;
+    crowdBus.connect(soft).connect(ctx.destination);
   }
+  // the volume follows you a few times a second, in smooth ramps: re-aiming it every frame crackled
+  const want = Math.min(1, level) * 0.5;
+  if (t - busAt > 0.25 && Math.abs(want - busLevel) > 0.01) {
+    crowdBus.gain.cancelScheduledValues(t);
+    crowdBus.gain.setValueAtTime(crowdBus.gain.value, t);
+    crowdBus.gain.linearRampToValueAtTime(want, t + 0.4);
+    busLevel = want; busAt = t;
+  }
+  if (level <= 0.01) return;
   // a shout now and then, more often close to the fans, left or right
   if (t - lastShout > 1.2 && Math.random() < level * 0.02) {
     lastShout = t;
@@ -95,6 +95,12 @@ export function crowd(level) {
 
 /** The crowd goes quiet (end of the ride). */
 export function crowdOff() {
-  if (crowdBus && ctx) crowdBus.gain.setTargetAtTime(0, ctx.currentTime, 0.3);
+  if (crowdBus && ctx && busLevel !== 0) {
+    const t = ctx.currentTime;
+    crowdBus.gain.cancelScheduledValues(t);
+    crowdBus.gain.setValueAtTime(crowdBus.gain.value, t);
+    crowdBus.gain.linearRampToValueAtTime(0, t + 0.4);
+    busLevel = 0;
+  }
   bedUntil = 0;
 }
