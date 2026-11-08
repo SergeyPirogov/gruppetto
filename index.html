@@ -301,6 +301,8 @@
     </div>
 
     <div class="hud-bottom">
+      <div class="bottom-main">
+      <div class="bottom-row">
       <div class="bottom-left">
         <div class="controls">
           <button id="btn-pause" class="pill-btn">Pause</button>
@@ -314,6 +316,10 @@
         <input id="sim-power" type="range" min="0" max="600" step="5" value="150">
       </div>
       <div id="ghost-tag" class="ghost-tag" hidden></div>
+      </div>
+      <!-- the ride so far, like Zwift: power as bars coloured by zone, heart rate as a line -->
+      <canvas id="trace" class="trace"></canvas>
+      </div>
       <div class="progress">
         <div id="progress-label" class="progress-label">Lap 1</div>
         <canvas id="profile"></canvas>

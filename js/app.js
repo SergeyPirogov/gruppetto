@@ -1069,6 +1069,7 @@ function tick(power, cadence, hr) {
   if (hr > 0) { A.hr += hr; A.hrN++; }
   if (cadence > 0) { A.cad += cadence; A.cadN++; }
   updateHud(cadence, hr, grade);
+  drawTrace();
 }
 
 function updateHud(cadence, hr, grade) {
@@ -1305,6 +1306,50 @@ function updateProgress() {
     $('wk-name').textContent = ride.workout.name;
     $('wk-pct').textContent = ride.workoutDone ? tr('done') : `${Math.round(done * 100)}%`;
   }
+}
+
+/**
+ * The strip along the bottom of the ride (as in Zwift): the ride so far, power as bars coloured by zone
+ * and heart rate as a line. At least ten minutes wide, squeezed as the ride gets longer.
+ */
+function drawTrace() {
+  const c = $('trace');
+  if (!c || !c.clientWidth) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const s = recorder.samples, n = s.length;
+  if (!n) return;
+  const ftp = settings.ftp, BAR = 3;
+  const cols = Math.floor((w - 8) / BAR);
+  const span = Math.max(600, n);              // seconds across the strip
+  const per = span / cols;                     // seconds per bar
+  const pMax = Math.max(ftp * 1.6, 1), top = 5, base = h - 3, H = base - top;
+  const hrLo = 60, hrHi = Math.max(190, settings.maxHr || 0);
+  const hrPts = [];
+  for (let i = 0; i * per < n; i++) {
+    const a = Math.floor(i * per), b = Math.min(n, Math.max(a + 1, Math.floor((i + 1) * per)));
+    let p = 0, hr = 0, hn = 0;
+    for (let k = a; k < b; k++) { p += s[k].power || 0; if (s[k].heartRate > 0) { hr += s[k].heartRate; hn++; } }
+    p /= b - a;
+    const x = 4 + i * BAR;
+    const bh = Math.max(1, Math.min(1, p / pMax) * H);
+    g.fillStyle = zoneColor(p / ftp);
+    g.fillRect(x, base - bh, BAR - 1, bh);
+    if (hn) hrPts.push([x + BAR / 2, base - Math.min(1, Math.max(0, (hr / hn - hrLo) / (hrHi - hrLo))) * H]);
+    else hrPts.push(null);
+  }
+  // FTP line
+  const yF = base - (ftp / pMax) * H;
+  g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.setLineDash([3, 4]);
+  g.beginPath(); g.moveTo(4, yF); g.lineTo(w - 4, yF); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#ff4d5e'; g.lineWidth = 1.6; g.beginPath();
+  let on = false;
+  for (const p of hrPts) { if (!p) { on = false; continue; } on ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); on = true; }
+  g.stroke();
 }
 
 function drawWorkoutChart(canvas, w, t) {
