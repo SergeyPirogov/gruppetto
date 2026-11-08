@@ -290,6 +290,8 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .stat.wbal { --c: #a78bfa; --fill: 100%; transition: border-color .4s, background .4s; } /* violet, as its line on the ride chart */
 .wbal-bar { display: block; height: 3px; margin-top: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--c) var(--fill), rgba(255, 255, 255, .12) var(--fill)); }
 .stat.wbal.warn { --c: #f59e0b; background: rgba(245, 158, 11, .2); } /* amber: not the red of heart rate */
+.pill-btn.dev-lost { display: block; margin: 8px auto 0; pointer-events: auto;  background: rgba(245, 158, 11, .22); border-color: #f59e0b; color: #fde68a; animation: dev-lost 1.6s ease-in-out infinite; }
+@keyframes dev-lost { 50% { background: rgba(245, 158, 11, .4); } }
 .stat.wbal.warn small { color: #fde68a; font-weight: 700; }
 .st-body label { display: block; font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; color: #9fb0c6; }
 .st-val { display: flex; align-items: baseline; gap: 5px; line-height: 1; margin-top: 2px; }

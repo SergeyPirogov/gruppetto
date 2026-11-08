@@ -143,7 +143,7 @@ for (const d of DEVICES) {
   d.dev.addEventListener('reconnect-failed', () => {
     reconnecting.delete(d.key);
     updateDeviceUI();
-    toast(tr('{name}: could not reconnect — press “Connect” in the lobby', { name: d.dev.name }));
+    toast(tr('{name}: could not reconnect — press “Connect” in Devices', { name: d.dev.name }));
   });
 }
 
@@ -185,6 +185,11 @@ function deviceStatus(d) {
 const fresh = (v, at) => (performance.now() - at < 3000 ? v : 0);
 
 function updateDeviceUI() {
+  // mid-ride: a device the ride started with that dropped shows a button to its panel, so it can be reconnected without stopping
+  const lost = ride ? DEVICES.filter((d) => ride.devs?.has(d.key) && !d.dev.connected) : [];
+  const alert = $('btn-dev-lost');
+  alert.hidden = !lost.length;
+  if (lost.length) alert.textContent = `⚠ ${lost.map((d) => d.lost).join(' · ')}`;
   for (const d of DEVICES) {
     const btn = $(`btn-${d.key}`);
     $(`${d.key}-status`).textContent = deviceStatus(d);
@@ -256,17 +261,17 @@ async function reopenRemembered(d) {
 
 /** On page load: quietly reconnect every remembered device that is in range. A device that is off or asleep
  *  then is picked up as soon as it wakes: its advertisements are watched where Chrome allows it, and every
- *  15 s it is tried again while you are in the lobby. */
+ *  15 s it is tried again, in the lobby and mid-ride (after the trainer's own retries gave up). */
 let autoBusy = false;
 async function autoConnectRemembered({ quiet = false } = {}) {
   if (autoBusy) return;
   autoBusy = true;
   try {
     for (const d of DEVICES) {
-      if (d.dev.connected || reconnecting.has(d.key) || !settings.devices?.[d.key]) continue;
+      if (d.dev.connected || reconnecting.has(d.key) || !settings.devices?.[d.key] || (ride && !ride.devs?.has(d.key))) continue; // mid-ride: only what it started with
       if (!quiet) $(`${d.key}-status`).textContent = tr('connecting remembered device…');
       const ok = await reopenRemembered(d);
-      if (ok && d.dev === trainer) $('sim').checked = false;
+      if (ok && d.dev === trainer) { if (ride) resyncTrainer(); else $('sim').checked = false; } // mid-ride: the target and grade again
       if (!ok) watchRemembered(d);
       updateDeviceUI();
     }
@@ -278,10 +283,10 @@ async function watchRemembered(d) {
   const known = id && (await knownDevices()).find((k) => k.id === id);
   if (!known?.watchAdvertisements || watching.has(id)) return;
   watching.add(id);
-  known.addEventListener('advertisementreceived', () => { if (!d.dev.connected && !ride) autoConnectRemembered({ quiet: true }); });
+  known.addEventListener('advertisementreceived', () => { if (!d.dev.connected) autoConnectRemembered({ quiet: true }); });
   try { await known.watchAdvertisements(); } catch { watching.delete(id); }
 }
-setInterval(() => { if (!ride && bluetoothAvailable() && DEVICES.some((d) => !d.dev.connected && settings.devices?.[d.key])) autoConnectRemembered({ quiet: true }); }, 15000);
+setInterval(() => { if (bluetoothAvailable() && DEVICES.some((d) => !d.dev.connected && settings.devices?.[d.key] && (!ride || ride.devs?.has(d.key)))) autoConnectRemembered({ quiet: true }); }, 15000);
 
 async function toggleDevice(d, { add = false } = {}) {
   const btn = add ? $('btn-ctl-add') : $(`btn-${d.key}`);
@@ -294,6 +299,7 @@ async function toggleDevice(d, { add = false } = {}) {
     if (d.dev === trainer) trainer.sendsCadence = false;
     if (add || !(await reopenRemembered(d))) await d.dev.connect(); // a second Zwift Ride unit always goes through the chooser
     if (!add) rememberDevice(d);
+    if (ride) ride.devs?.add(d.key); // connected mid-ride: kept connected through it too
     if (d.dev === trainer) $('sim').checked = false;
   } catch (e) {
     if (!(e.name === 'NotFoundError' && /cancel/i.test(e.message))) error = e; // ignore only a cancelled chooser
@@ -1072,6 +1078,7 @@ async function startRide() {
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
     pacer: racing ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
+  ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; }
   // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little
   // not in a workout: there the power is set, so the wind would only drag the speed down (and in ERG
@@ -2767,6 +2774,7 @@ $('f-pacer-name').oninput = () => {
   if (ride?.pacer) ride.pacer.name = settings.pacerName.trim() || tr('Pacer');
 };
 $('btn-settings').onclick = () => openDrawer('profile');
+$('btn-dev-lost').onclick = () => openDrawer('devices');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
 $('f-free-pacer').checked = !!settings.freePacer;
 $('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
