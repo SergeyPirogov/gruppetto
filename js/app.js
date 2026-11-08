@@ -1576,7 +1576,13 @@ function drawMinimap() {
   for (const b of ride.bots) dot(b.dist, b.color, 3);
   if (pacerOn()) dot(ride.pacer.dist, ride.pacer.color, 3);
   if (ride.ghost) dot(ride.ghost.dist, 'rgba(255,255,255,.55)', 3);
-  dot(ride.dist, settings.jersey, 5, '#fff');
+  // you: an arrow pointing the way you ride
+  const [px, py] = at(ride.dist), [qx, qy] = at(ride.dist + 25), [rx, ry] = at(ride.dist - 10);
+  const ang = Math.atan2(qy - ry, qx - rx), sz = big ? 11 : 9;
+  g.save(); g.translate(px, py); g.rotate(ang);
+  g.beginPath(); g.moveTo(sz, 0); g.lineTo(-sz * 0.75, sz * 0.7); g.lineTo(-sz * 0.35, 0); g.lineTo(-sz * 0.75, -sz * 0.7); g.closePath();
+  g.fillStyle = settings.jersey; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.lineJoin = 'round'; g.stroke();
+  g.restore();
 }
 
 /** Climb segments: start the timer at the foot, stop it at the top, compare with the best. */
