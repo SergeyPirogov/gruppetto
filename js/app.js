@@ -863,7 +863,7 @@ function openDrawer(panel) {
   drawer.hidden = false;
   drawer.classList.toggle('in-ride', !!ride);
   for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
-  if (panel === 'history') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
+  if (panel === 'progress') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
   for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
 }
 
@@ -2162,6 +2162,7 @@ function renderProgress() {
   renderAvatar();
   const box = $('progress-box');
   box.hidden = !progress.rides;
+  $('progress-empty').hidden = !!progress.rides;
   if (box.hidden) return;
   const n = Object.keys(progress.badges).length;
   box.innerHTML = `<div class="sum-chart-head"><h2>${tr('Level {n}', { n: L.level })}</h2><span class="muted">${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</span></div>
@@ -2552,7 +2553,10 @@ function renderWeek() {
     tile(tr('This week'), `${week.length} · ${fmtTime(sum((e) => e.summary?.duration))}`, `${Math.round(sum((e) => e.summary?.distance) / 1000)} ${U.km} · TSS ${sum((e) => e.tss)}`),
     tile(tr('Level {n}', { n: L.level }), `${L.xp} XP`, tr('{left} to level {n}', { left: L.to - L.xp, n: L.level + 1 }), `<span class="lvl-bar"><i style="width:${Math.round(L.frac * 100)}%"></i></span>`),
   ].join('');
+  box.lastElementChild?.classList.add('wb-level');
 }
+// the tiles: the level opens Progress, the form and the week too (the form is there); History is only the rides
+$('week-box').addEventListener('click', () => openDrawer('progress'));
 
 /** Under «Time of day» with «By the sun»: when each look begins today here. */
 function renderTimeHint() {

@@ -84,7 +84,7 @@
 
 
       <!-- the rider at a glance: form, this week, level -->
-      <button id="week-box" class="week-box" data-open="history" hidden></button>
+      <button id="week-box" class="week-box" hidden></button>
 
       <section class="lobby-modes" id="sec-modes">
         <div id="plan-box" class="plan-box" hidden>
@@ -176,6 +176,7 @@
         <button data-open="profile">Profile</button>
         <button data-open="icu">intervals.icu</button>
         <button data-open="history">History</button>
+        <button data-open="progress">Progress</button>
         <button class="drawer-close" data-close aria-label="Close">✕</button>
       </div>
       <div class="card" data-panel="devices">
@@ -350,7 +351,14 @@
       </div>
     </div>
       <div class="card" data-panel="history">
+        <h2>Ride history</h2>
+        <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
+        <div id="history-all" class="hist-list"></div>
+      </div>
+      <!-- level, badges, form and the power curve: their own tab; History keeps to the list of rides -->
+      <div class="card" data-panel="progress" hidden>
         <div id="progress-box" class="progress-box" hidden></div>
+        <p id="progress-empty" class="muted">No rides yet. Your level and badges start with your first ride.</p>
         <div id="fitness-box" class="fitness" hidden>
           <div class="sum-chart-head"><h2>Form <small id="fit-src" hidden>intervals.icu</small></h2><span class="legend"><i class="lg-fit"></i>Fitness <i class="lg-fat"></i>Fatigue <i class="lg-form"></i>Form</span></div>
           <div id="fit-nums" class="fit-nums"></div>
@@ -362,9 +370,6 @@
           <div id="pc-table" class="pc-table"></div>
           <div id="pc-ftp" class="ftp-tip" hidden></div>
         </div>
-        <h2>Ride history</h2>
-        <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
-        <div id="history-all" class="hist-list"></div>
       </div>
     </div>
   </div>
