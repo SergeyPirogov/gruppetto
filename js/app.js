@@ -3162,20 +3162,25 @@ $('btn-install').onclick = async () => {
   $('btn-install').hidden = true;
 };
 
-// ---------- ?demo: straight into a ride, a little below the first climb's crowd ----------
+// ---------- ?demo: a ride a little below the first climb's crowd, started with a click ----------
+// (the click lets the browser play sound: a ride started on its own stayed silent)
 if (new URLSearchParams(location.search).has('demo')) {
-  setTimeout(async () => {
+  const go = document.createElement('button');
+  go.className = 'demo-start primary';
+  go.textContent = tr('▶ Start the demo');
+  document.body.appendChild(go);
+  go.onclick = async () => {
+    go.remove();
+    unlockAudio();
     const route = routes.find((r) => r.climbs?.length) || routes[0];
     settings.routeId = route.id;
     settings.mode = 'free';
-    settings.camera = 'chase'; // the demo is seen from behind the rider
+    settings.camera = 'chase'; // seen from behind the rider
     $('sim').checked = true;
     await startRide();
     if (!ride) return;
-    const top = route.climbs[0]?.end ?? 0;
-    ride.dist = Math.max(0, top - 400);
+    ride.dist = Math.max(0, (route.climbs[0]?.end ?? 0) - 230);
     const s = $('sim-power');
     s.value = 260; s.oninput?.();
-    if (settings.sound && !audioReady()) toast(tr('Click anywhere to hear the fans'));
-  }, 600);
+  };
 }
