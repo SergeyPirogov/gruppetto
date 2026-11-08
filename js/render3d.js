@@ -1646,17 +1646,31 @@ export class Scene3D {
         #endif`)
         .replace('#include <begin_vertex>', `#include <begin_vertex>
         vec3 cRoot = instanceMatrix[3].xyz;
-        float cPh = fract(sin(dot(cRoot.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831;
-        float cEx = 1.0 - smoothstep(12.0, 45.0, distance(cRoot.xz, uCrowdNear.xz));
-        float cSpd = mix(2.0, 6.5, cEx);
+        float cH = fract(sin(dot(cRoot.xz, vec2(12.9898, 78.233))) * 43758.5453);
+        float cPh = cH * 6.2831;
+        float cType = floor(fract(cH * 7.13) * 4.0); // 0 waves in turn, 1 pumps both arms, 2 sways, 3 jumps
+        float cEx = 1.0 - smoothstep(12.0, 45.0, distance(cRoot.xz, uCrowdNear.xz)); // wilder as you come by
+        float cSpd = mix(1.8, 6.0, cEx) * (0.85 + fract(cH * 3.7) * 0.3);
         if (abs(aArm) > 0.001) {
           float sd = sign(aArm);
           vec2 sh0 = vec2(${S.y.toFixed(3)}, ${S.z.toFixed(3)} * sd);
-          float ang = aArm * mix(0.10, 0.42, cEx) * sin(uCrowdTime * cSpd + cPh + sd);
+          float wv = cType < 0.5 ? sin(uCrowdTime * cSpd + cPh + sd * 1.6)
+                   : cType < 1.5 ? sin(uCrowdTime * cSpd * 1.6 + cPh)
+                   : sin(uCrowdTime * cSpd * 0.6 + cPh + sd);
+          float ang = aArm * mix(0.08, 0.42, cEx) * wv;
           vec2 p = transformed.yz - sh0;
           transformed.yz = sh0 + vec2(p.x * cos(ang) - p.y * sin(ang), p.x * sin(ang) + p.y * cos(ang));
         }
-        transformed.y += pow(max(0.0, sin(uCrowdTime * cSpd * 0.9 + cPh)), 3.0) * mix(0.0, 0.16, cEx);`)}`;
+        if (cType > 1.5 && cType < 2.5) { // leaning side to side from the feet
+          float sw = sin(uCrowdTime * cSpd * 0.5 + cPh) * mix(0.03, 0.1, cEx);
+          transformed.yz = vec2(transformed.y * cos(sw) - transformed.z * sin(sw), transformed.y * sin(sw) + transformed.z * cos(sw));
+        }
+        transformed.y += pow(max(0.0, sin(uCrowdTime * cSpd * 0.9 + cPh)), 3.0) * (cType > 2.5 ? mix(0.02, 0.26, cEx) : mix(0.0, 0.05, cEx));
+        // turning to watch you go by
+        vec3 toYou = inverse(mat3(instanceMatrix)) * (uCrowdNear - cRoot);
+        float look = clamp(atan(toYou.z, toYou.x), -1.1, 1.1) * cEx;
+        float cl = cos(look), sl = sin(look);
+        transformed.xz = vec2(transformed.x * cl - transformed.z * sl, transformed.x * sl + transformed.z * cl);`)}`;
     });
     this.fanMat = mat;
     return mat;
@@ -1710,6 +1724,7 @@ export class Scene3D {
         if (!list.length) return;
         const src = V[vi], geo = new THREE.BufferGeometry();
         for (const [k, attr] of Object.entries(src.attributes)) geo.setAttribute(k, attr);
+        geo.setIndex(src.index);
         geo.boundingSphere = src.boundingSphere;
         geo.userData.borrowed = true;
         const skin = new Float32Array(list.length * 3), hair = new Float32Array(list.length * 3);
