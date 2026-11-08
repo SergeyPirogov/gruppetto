@@ -2272,6 +2272,9 @@ function renderGhostPicker() {
   const desc = (e) => `${new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · ${(e.summary.distance / 1000).toFixed(1)} km in ${fmtTime(e.summary.duration)}`;
   $('ghost-best').textContent = desc(best);
   $('ghost-last').textContent = desc(last);
+  // in the bottom bar the times are the buttons' hover text
+  document.querySelector('#ghost-box [data-ghost="best"]').title = desc(best);
+  document.querySelector('#ghost-box [data-ghost="last"]').title = desc(last);
   for (const b of document.querySelectorAll('#ghost-box [data-ghost]')) {
     b.classList.toggle('sel', b.dataset.ghost === settings.ghost);
     b.onclick = () => { settings.ghost = b.dataset.ghost; saveSettings(); renderGhostPicker(); updateSummary(); renderChallenge(); };
@@ -2524,7 +2527,7 @@ function renderHistory() {
     const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
     return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
   };
-  $('history-recent').innerHTML = history.slice(0, 3).map(row).join('');
+  $('history-recent').innerHTML = history.slice(0, 8).map(row).join('');
   renderWeek();
   $('history-box').hidden = !history.length;
   $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;

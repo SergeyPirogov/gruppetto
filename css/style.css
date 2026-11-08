@@ -1188,3 +1188,31 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   .lobby-body .ride-box { justify-content: space-between; padding-left: max(32px, calc((100vw - 76px - 1240px) / 2 + 32px)); padding-right: max(32px, calc((100vw - 76px - 1240px) / 2 + 32px)); }
   .lobby-body .ride-summary { text-align: left; }
 }
+
+/* the latest rides on the right, like a menu: in view while the routes scroll */
+.lobby-cols { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 32px; box-sizing: border-box; }
+.lobby-cols .lobby-main { max-width: none; padding-left: 0; padding-right: 0; }
+.lobby-recent { position: sticky; top: 16px; align-self: start; max-height: calc(100vh - 110px); overflow-y: auto; padding-top: 14px; scrollbar-width: thin; }
+.lobby-recent .history-box { margin: 0; }
+.lobby-recent #history-week { display: none; }
+.lobby-recent .hist-head { margin-bottom: 10px; }
+.lobby-recent .hist-row { grid-template-columns: 42px 1fr auto; padding: 9px 11px; }
+.lobby-recent .hist-row .hist-nums:last-child { display: none; }
+@media (max-width: 1100px) { .lobby-cols { grid-template-columns: minmax(0, 1fr) 250px; } }
+@media (max-width: 860px) { .lobby-cols { grid-template-columns: minmax(0, 1fr); padding: 0 16px; } .lobby-recent { position: static; max-height: none; padding: 0 0 110px; } .lobby-cols .lobby-main { padding-bottom: 14px; } }
+.lobby-recent h2 { font-size: .8rem; margin: 0; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+.lobby-recent .hist-head { align-items: center; }
+
+/* the ghost picker in the bottom bar: three segments; what each ghost rode shows on hover */
+.ghost-bar { display: flex; align-items: center; gap: 10px; margin: 0 0 0 auto; }
+.ghost-bar[hidden] { display: none; }
+.gb-label { color: var(--muted); font-size: .85rem; white-space: nowrap; }
+.ghost-bar .ghost-opts { display: flex; gap: 0; padding: 3px; border-radius: 999px; background: #121a28; border: 1px solid var(--line); }
+.ghost-bar .ghost-opts button { padding: 6px 14px; border: 0; border-radius: 999px; background: transparent; font-size: .85rem; }
+.ghost-bar .ghost-opts button:hover { background: rgba(255, 255, 255, .06); }
+.ghost-bar .ghost-opts button.sel { background: rgba(255, 122, 26, .2); color: #ffb21a; }
+.ghost-bar .ghost-opts small { display: none; }
+.ghost-bar .ghost-opts b { font-weight: 600; }
+.lobby-body .ride-box { gap: 24px; }
+@media (max-width: 860px) { .ghost-bar .gb-label { display: none; } .ghost-bar .ghost-opts button { padding: 6px 9px; font-size: .78rem; } }
+@media (max-width: 520px) { .ghost-bar { display: none !important; } } /* no room beside Ride on a narrow phone */
