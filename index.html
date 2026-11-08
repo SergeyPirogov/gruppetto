@@ -492,7 +492,12 @@
       <div id="sum-hero" class="sum-hero"></div>
       <div class="sum-chart card">
         <div class="sum-chart-head"><h2>Power &amp; heart rate</h2><span class="legend"><i class="lg-power"></i>Power <span id="lg-plan" hidden><i class="lg-plan"></i>Plan</span> <i class="lg-hr"></i>Heart rate <i class="lg-wbal"></i>W′bal <span id="lg-cad" hidden><i class="lg-cad"></i>Cadence</span></span></div>
-        <canvas id="sum-chart"></canvas>
+        <div class="chart-wrap">
+          <canvas id="sum-chart"></canvas>
+          <!-- the values under the pointer: a line and a card -->
+          <i id="sum-hover-line" class="hover-line" hidden></i>
+          <div id="sum-hover" class="chart-tip" hidden></div>
+        </div>
       </div>
       <div id="sum-stats" class="stats"></div>
       <div id="sum-prs" class="sum-prs" hidden></div>

@@ -2332,6 +2332,9 @@ function renderGhostPicker() {
 
 /** The ride summary screen, for the ride just finished (live: downloads available) or one from history. */
 function showSummary(e, { live = false } = {}) {
+  // a lobby page (Devices, Profile…) belongs to the lobby, not over the summary
+  if (!$('drawer').classList.contains('in-ride')) $('drawer').hidden = true;
+  $('wk-menu').hidden = true;
   const sum = e.summary;
   $('lobby').hidden = true;
   $('summary').hidden = false;
@@ -2364,6 +2367,7 @@ function showSummary(e, { live = false } = {}) {
   renderZones(e);
   renderIntervals(e);
   requestAnimationFrame(() => drawSummaryChart($('sum-chart'), chartSamples, 2, e.ftp || settings.ftp, wPrime));
+  hoverSummaryChart(chartSamples, e.chart.every, wPrime);
   const stats = sum ? [
     [tr('Elevation gain'), `${Math.round(sum.elevationGain)} ${U.m}`],
     ['NP', sum.normalizedPower ? `${sum.normalizedPower} ${U.W}` : '—'],
@@ -2652,6 +2656,35 @@ function renderRailDots() {
 }
 
 /** Power (filled, smoothed over 10 s) and heart rate (line) over the whole ride. */
+/**
+ * The ride chart under the pointer (or a finger): a line at that moment and a card with the time, power, the
+ * plan, heart rate, cadence and W′bal there (each value the 5 s it was kept as).
+ */
+function hoverSummaryChart(samples, every, wPrime) {
+  const c = $('sum-chart'), line = $('sum-hover-line'), tip = $('sum-hover');
+  const hide = () => { line.hidden = tip.hidden = true; };
+  hide();
+  c.onpointerleave = hide;
+  c.onpointermove = (ev) => {
+    if (!samples.length) return;
+    const r = c.getBoundingClientRect(), x = Math.max(0, Math.min(r.width, ev.clientX - r.left));
+    const i = Math.round((x / r.width) * (samples.length - 1)), s = samples[i];
+    const row = (dot, label, v) => (v ? `<span><i style="background:${dot}"></i>${label}<b>${v}</b></span>` : '');
+    tip.innerHTML = `<b class="tip-time">${fmtTime(i * every)}</b>`
+      + row('#ffc21a', tr('Power'), s.power ? `${Math.round(s.power)} ${U.W}` : '')
+      + row('#ffffff', tr('Plan'), s.target ? `${Math.round(s.target)} ${U.W}` : '')
+      + row('#ff4d5e', tr('Heart rate'), s.heartRate ? `${Math.round(s.heartRate)} ${U.bpm}` : '')
+      + row('#38d6e8', tr('Cadence'), s.cadence ? `${Math.round(s.cadence)} ${U.rpm}` : '')
+      + row('#a78bfa', 'W′bal', s.wbal !== undefined && s.wbal < wPrime ? `${(s.wbal / 1000).toFixed(1)} ${tr('kJ')}` : '');
+    line.hidden = tip.hidden = false;
+    line.style.left = `${x}px`;
+    // the card on the side away from the edge
+    const right = x > r.width / 2;
+    tip.style.left = right ? '' : `${x + 12}px`;
+    tip.style.right = right ? `${r.width - x + 12}px` : '';
+  };
+}
+
 function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp, wPrime = wPrimeJ()) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const w = canvas.clientWidth, h = canvas.clientHeight;

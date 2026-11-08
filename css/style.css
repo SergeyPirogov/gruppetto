@@ -1266,3 +1266,14 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .wk-menu-list .option.wk-card small.wk-desc { -webkit-line-clamp: 2; font-size: .8rem; line-height: 1.35; }
 .wk-menu-list .option.wk-card canvas.wk-chart { height: 58px; padding-top: 4px; border-radius: 6px; }
 .wk-menu-list .option.wk-card .tag { margin-bottom: 0; }
+
+/* the ride chart's hover: a line and a card with the values at that moment */
+.chart-wrap { position: relative; }
+.chart-wrap canvas { cursor: crosshair; touch-action: pan-y; }
+.hover-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255, 255, 255, .55); pointer-events: none; }
+.hover-line[hidden], .chart-tip[hidden] { display: none; }
+.chart-tip { position: absolute; top: 6px; display: grid; gap: 3px; min-width: 150px; padding: 8px 10px; border-radius: 10px; background: rgba(13, 20, 34, .94); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(0, 0, 0, .4); pointer-events: none; font-size: .8rem; z-index: 2; }
+.chart-tip .tip-time { font-size: .85rem; margin-bottom: 2px; }
+.chart-tip span { display: flex; align-items: center; gap: 7px; color: var(--muted); }
+.chart-tip span i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.chart-tip span b { margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; }
