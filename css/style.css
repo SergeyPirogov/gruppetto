@@ -119,7 +119,7 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .wk-head { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .wk-head label { display: block; font-size: .68rem; color: #c9d4e3; text-transform: uppercase; letter-spacing: .05em; }
 .wk-head b { font-size: 1.35rem; }
-#wk-chart { width: 100%; height: 48px; display: block; }
+#wk-chart { width: 100%; height: 36px; display: block; }
 #wk-target { font-size: 2rem; transition: color .3s; }
 #wk-diff { font-size: .85rem; font-weight: 700; margin-left: 4px; }
 .c-ok { color: #4ade80 !important; }
@@ -706,7 +706,7 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 
 /* ---------- Minimap ---------- */
 /* as wide as the boards above it; the canvas is laid over the box so it never sets the column's width */
-.board.minimap { position: relative; align-self: stretch; height: 190px; padding: 0; }
+.board.minimap { position: relative; align-self: stretch; height: 140px; padding: 0; }
 #minimap { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); display: block; }
 @media (max-width: 760px) { .board.minimap { display: none; } }
 
@@ -777,3 +777,37 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   .progress-label { font-size: .7rem; padding: 2px 8px; }
   .toast { bottom: auto; top: 55%; font-size: .75rem; }
 }
+
+/* ---------- Phone, portrait: a cyclocomputer strip on top, the road, the workout below ----------
+   (at the end of the file so it wins over the base board and stat rules) */
+@media (max-width: 760px) {
+  #ride .hud-left { width: calc(60% - 10px); gap: 4px; }
+  #ride .hud-right { width: calc(40% - 10px); gap: 4px; }
+  /* the two boards become one row each: label over number, no icons */
+  #ride .hud-left > .board:first-child, #ride .hud-right > .board:first-child { flex-direction: row; border-radius: 10px; }
+  #ride .board .stat { flex: 1 1 0; min-width: 0; display: block; padding: 4px 6px 5px; border-left: 0; border-top: 3px solid var(--c); }
+  #ride .board .stat + .stat { border-left: 1px solid rgba(255, 255, 255, .08); }
+  #ride .board .stat .ic, #ride .board .stat small, #ride .stat.climb { display: none; }
+  #ride .st-body label { font-size: .5rem; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  #ride .st-body label .zone-tag { display: none; }
+  #ride .st-val b { font-size: 1.05rem; }
+  #ride .stat.power .st-val b { font-size: 1.25rem; }
+  #ride .st-val span { font-size: .6rem; }
+  /* intensity: one thin line, − 100% + ERG Pacer */
+  #ride .board.intensity { display: flex; flex-direction: row; align-items: center; gap: 4px; padding: 3px 4px; border-radius: 10px; font-size: .72rem; }
+  #ride .board.intensity > span { flex: 1; text-align: center; }
+  #ride .board.intensity .pill-btn { padding: 1px 7px; font-size: .72rem; }
+  #ride .board.intensity .int-toggles { display: flex; gap: 3px; }
+  #ride .board.intensity .int-toggles .pill-btn { padding: 1px 5px; font-size: .64rem; }
+  /* the workout panel: the numbers in one tight row, a slim chart */
+  #ride .workout { padding: 5px 9px 6px; }
+  #ride .wk-title { margin-bottom: 3px; padding-bottom: 3px; }
+  #ride .wk-head { margin-bottom: 3px; }
+  #ride .wk-head label { font-size: .5rem; }
+  #ride .wk-head b { font-size: .95rem; }
+  #ride .wk-head #wk-target { font-size: 1.35rem; }
+  #ride #wk-chart { height: 22px; }
+  #ride .topbar .tb-cell { padding: 2px 4px; }
+  #ride .topbar .tb-cell b { font-size: .95rem; }
+}
+.wk-head > div[hidden] { display: none; }

@@ -928,7 +928,7 @@ function updateAhead() {
     .map((r) => ({ r, gap: r.dist - ride.dist }))
     .filter(({ gap }) => gap > 0.5 && gap / v <= 10)
     .sort((a, b) => a.gap - b.gap)
-    .slice(0, 4);
+    .slice(0, 3);
   $('ahead').hidden = !ahead.length;
   $('ahead-rows').innerHTML = ahead.map(({ r, gap }) => {
     const wkg = r.wkg ?? (r.power ? r.power / settings.weight : 0);
@@ -1167,6 +1167,7 @@ function updateHud(cadence, hr, grade) {
     cadEl.textContent = cad ? `${cad[0]}–${cad[1]}` : '—';
     cadEl.className = cad && cadence > 0 ? (cadence >= cad[0] - 2 && cadence <= cad[1] + 2 ? 'c-ok' : 'c-warn') : '';
     $('m-cad').className = cadEl.className;
+    cadEl.parentElement.hidden = !cad && !ride.workout.steps.some((s) => s.cad); // no cadence targets in this workout: no column
     const next = t && ride.workout.steps[t.index + 1];
     const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
     $('wk-next').textContent = next ? (nextW === null ? tr('free') : `${nextW} ${U.W}`) : '—';
@@ -1362,7 +1363,7 @@ function renderStepList() {
   $('ws-finish').innerHTML = ride.workoutDone ? `<b>${tr('Workout complete')}</b>` : `${tr('Finish in')} <b>${fmtTime(Math.max(0, total - ride.workoutT))}</b>`;
   const stars = steps.slice(0, cur).filter((s, i) => stepOnTarget(s, ride.stepStats[i])).length;
   $('ws-stars').textContent = `★ ${stars}/${steps.length}`;
-  const from = Math.max(0, cur - 2), to = Math.min(steps.length, from + 8);
+  const from = Math.max(0, cur - 1), to = Math.min(steps.length, from + 6); // one done, the current one, what's next
   let start = 0;
   for (let i = 0; i < cur && i < steps.length; i++) start += steps[i].dur;
   const html = [];
