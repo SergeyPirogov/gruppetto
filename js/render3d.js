@@ -1528,6 +1528,7 @@ export class Scene3D {
       posts.castShadow = rails.castShadow = true;
       group.add(posts, rails);
     }
+    this._crowd(group, a0, rows, frames, heightAt);
     // arches over the road: start / finish, and the foot and the top of every climb
     for (const A of this._arches()) {
       const n = this.route.oneWay ? 0 : Math.floor((a0 * SEG - A.d) / this.route.length);
@@ -1539,6 +1540,185 @@ export class Scene3D {
     }
     this.scene.add(group);
     return group;
+  }
+
+  // ----- fans at the tops of climbs (#45) -----
+
+  /**
+   * The crowd's three meshes, built once: the body (shirt takes the instance colour; legs, head and
+   * hands their own colours), and a flag on a pole (Ukrainian, or the instance colour). Arms are up,
+   * marked with aArm so the shader waves them; the cloth is marked with aCloth so it flutters.
+   */
+  _crowdModels() {
+    if (this.crowdModels) return this.crowdModels;
+    const parts = (list) => {
+      const pos = [], colr = [], arm = [], cloth = [];
+      for (const { g, c, a = 0, k = null } of list) {
+        const ng = g.index ? g.toNonIndexed() : g;
+        const P = ng.attributes.position;
+        const cc = col(c);
+        for (let i = 0; i < P.count; i++) {
+          pos.push(P.getX(i), P.getY(i), P.getZ(i));
+          colr.push(cc.r, cc.g, cc.b);
+          arm.push(a);
+          cloth.push(k ? Math.max(0, (P.getZ(i) - k) / 0.9) : 0);
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
+      geo.setAttribute('aArm', new THREE.Float32BufferAttribute(arm, 1));
+      geo.setAttribute('aCloth', new THREE.Float32BufferAttribute(cloth, 1));
+      geo.computeVertexNormals();
+      return geo;
+    };
+    const at = (g, x, y, z, rx = 0, rz = 0) => { g.rotateX(rx); g.rotateZ(rz); g.translate(x, y, z); return g; };
+    // facing +x (the road), about 1.7 m tall
+    const shirt = (geo) => ({ g: geo, c: '#ffffff' });
+    const cap = (r, len, sx = 1, sz = 1) => new THREE.CapsuleGeometry(r, len, 3, 10).scale(sx, 1, sz);
+    const body = parts([
+      { g: at(cap(0.075, 0.68), 0, 0.42, -0.09), c: '#2b3445' },                          // legs
+      { g: at(cap(0.075, 0.68), 0, 0.42, 0.09), c: '#2b3445' },
+      shirt(at(cap(0.19, 0.36, 0.72, 1.12), 0, 1.13, 0)),                                // torso
+      { g: at(new THREE.SphereGeometry(0.125, 12, 9), 0, 1.6, 0), c: '#e0ae8a' },       // head
+      { g: at(new THREE.SphereGeometry(0.13, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.5), -0.01, 1.62, 0), c: '#4a3426' }, // hair
+      // arms raised in a V (waved by the shader round the shoulders)
+      { g: at(cap(0.052, 0.5), 0, 1.66, -0.37, -0.5), c: '#ffffff', a: -1 },
+      { g: at(cap(0.052, 0.5), 0, 1.66, 0.37, 0.5), c: '#ffffff', a: 1 },
+      { g: at(new THREE.SphereGeometry(0.06, 8, 6), 0, 1.93, -0.52), c: '#e0ae8a', a: -1 },
+      { g: at(new THREE.SphereGeometry(0.06, 8, 6), 0, 1.93, 0.52), c: '#e0ae8a', a: 1 },
+    ]);
+    // a flag on a pole, held up beside the fan; the cloth flutters from the pole outward (+z)
+    const cloth = (y0, h, c) => ({ g: at(new THREE.PlaneGeometry(0.9, h, 6, 1).rotateY(Math.PI / 2), 0, y0, 0.47), c, k: 0.02 });
+    const flagUA = parts([
+      { g: at(new THREE.CylinderGeometry(0.018, 0.018, 1.9, 5), 0.05, 1.55, 0), c: '#d9d4c7' },
+      cloth(2.34, 0.3, '#0057b7'), cloth(2.04, 0.3, '#ffd700'),
+    ]);
+    const flagTeam = parts([
+      { g: at(new THREE.CylinderGeometry(0.018, 0.018, 1.9, 5), 0.05, 1.55, 0), c: '#d9d4c7' },
+      cloth(2.19, 0.6, '#ffffff'),
+    ]);
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    this.crowdTime = { value: 0 };
+    this.crowdNear = { value: new THREE.Vector3(1e9, 0, 1e9) };
+    patchShader(mat, 'crowd', (sh) => {
+      sh.uniforms.uCrowdTime = this.crowdTime;
+      sh.uniforms.uCrowdNear = this.crowdNear;
+      sh.vertexShader = `uniform float uCrowdTime;\nuniform vec3 uCrowdNear;\nattribute float aArm;\nattribute float aCloth;\n${sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+        vec3 cRoot = instanceMatrix[3].xyz;
+        float cPh = fract(sin(dot(cRoot.xz, vec2(12.9898, 78.233))) * 43758.5453) * 6.2831;
+        // wilder when you come by: jumping, waving fast; calm further off
+        float cEx = 1.0 - smoothstep(12.0, 45.0, distance(cRoot.xz, uCrowdNear.xz));
+        float cSpd = mix(2.2, 7.5, cEx);
+        // arms: round the shoulder, in the plane across the road
+        if (aArm != 0.0) {
+          vec2 sh0 = vec2(1.38, 0.2 * aArm);
+          float ang = aArm * (0.15 + mix(0.12, 0.5, cEx) * sin(uCrowdTime * cSpd + cPh));
+          vec2 p = transformed.yz - sh0;
+          transformed.yz = sh0 + vec2(p.x * cos(ang) - p.y * sin(ang), p.x * sin(ang) + p.y * cos(ang));
+        }
+        // the flag: a wave running out along the cloth
+        transformed.x += aCloth * sin(uCrowdTime * 8.0 - aCloth * 5.0 + cPh) * 0.1;
+        // jumps
+        transformed.y += pow(max(0.0, sin(uCrowdTime * cSpd * 0.9 + cPh)), 3.0) * mix(0.02, 0.22, cEx);`)}`;
+    });
+    this.crowdModels = { body, flagUA, flagTeam, mat };
+    return this.crowdModels;
+  }
+
+  /** Fans along both sides of the road over the last ~180 m of each climb, and cheers painted on the road. */
+  _crowd(group, a0, rows, frames, heightAt) {
+    const R = this.route, L = R.length, tops = [];
+    for (const c of R.climbs || []) {
+      if (R.oneWay) tops.push(c.end);
+      else { const n = Math.floor((a0 * SEG - c.end) / L); tops.push(c.end + n * L, c.end + (n + 1) * L); }
+    }
+    if (!tops.length) return;
+    const SHIRTS = ['#e11d48', '#2563eb', '#f59e0b', '#16a34a', '#f97316', '#7c3aed', '#facc15', '#0ea5e9', '#ffffff', '#111827', '#dc2626'];
+    const SKIN = ['#f1c9a5', '#e0ae8a', '#c68c63', '#8d5a3b'];
+    const fans = [], flagsUA = [], flagsTeam = [];
+    const D0 = a0 * SEG, D1 = (a0 + rows - 1) * SEG;
+    for (let r = 0; r < rows - 1; r++) {
+      const d = (a0 + r) * SEG, f = frames[r];
+      let p = 0;
+      for (const top of tops) {
+        const x = top - d; // metres before the top
+        if (x > -20 && x < 190) p = Math.max(p, x < 0 ? 0.55 + x / 45 : 1 - x / 210);
+      }
+      if (p <= 0) continue;
+      for (const side of [-1, 1]) {
+        const seed = (a0 + r) * 7.13 + side * 3.1;
+        const count = Math.floor(p * (LOW ? 2 : 4) + hash(seed));
+        for (let i = 0; i < count; i++) {
+          const along = hash(seed + i * 1.7) * SEG;
+          const row = hash(seed + i * 2.9) < 0.6 ? 0 : 1; // in front of the fence, or behind it
+          const o = side * (row ? ROAD_HALF * 1.18 + 0.5 + hash(seed + i * 4.1) * 1.4 : ROAD_HALF + 0.35 + hash(seed + i * 4.1) * 0.25);
+          const x = f.x + Math.cos(f.h) * along + f.rx * o, z = f.z + Math.sin(f.h) * along + f.rz * o;
+          const y = heightAt(r, o) - 0.02;
+          const face = Math.atan2(side * f.rz, -side * f.rx) + (hash(seed + i * 6.3) - 0.5) * 0.7; // toward the road
+          const s = 0.92 + hash(seed + i * 5.3) * 0.16;
+          const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), face), new THREE.Vector3(s, s, s));
+          fans.push([m, SHIRTS[Math.floor(hash(seed + i * 7.7) * SHIRTS.length)]]);
+          const fl = hash(seed + i * 8.9);
+          if (fl < 0.16) flagsUA.push(m); else if (fl < 0.24) flagsTeam.push([m, SHIRTS[Math.floor(hash(seed + i * 9.1) * SHIRTS.length)]]);
+        }
+      }
+    }
+    const M = this._crowdModels();
+    if (fans.length) {
+      const im = new THREE.InstancedMesh(M.body, M.mat, fans.length);
+      fans.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
+      im.castShadow = true; im.frustumCulled = false;
+      group.add(im);
+    }
+    if (flagsUA.length) {
+      const im = new THREE.InstancedMesh(M.flagUA, M.mat, flagsUA.length);
+      flagsUA.forEach((m, i) => { im.setMatrixAt(i, m); im.setColorAt(i, col('#ffffff')); });
+      im.frustumCulled = false;
+      group.add(im);
+    }
+    if (flagsTeam.length) {
+      const im = new THREE.InstancedMesh(M.flagTeam, M.mat, flagsTeam.length);
+      flagsTeam.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
+      im.frustumCulled = false;
+      group.add(im);
+    }
+    // cheers painted on the asphalt on the way up
+    const WORDS = ['ДАВАЙ!', 'ALLEZ!', 'GO GO GO', 'ВПЕРЕД!', 'HUP HUP', 'ТИСНИ!', 'ALLEZ ALLEZ'];
+    for (const top of tops) {
+      for (const [k, back] of [[0, 25], [1, 60], [2, 100], [3, 145]].values()) {
+        const d = top - back;
+        if (d < D0 || d >= D1) continue;
+        const word = WORDS[Math.floor(hash(top * 0.37 + k * 5.1) * WORDS.length)];
+        group.add(this._roadWord(word, d, (k % 2 ? -1 : 1) * 1.7));
+      }
+    }
+  }
+
+  /** A word painted on the road at distance d, `lane` metres right of the centre, read as you ride up to it. */
+  _roadWord(word, d, lane) {
+    this.wordTex ||= new Map();
+    let tex = this.wordTex.get(word);
+    if (!tex) {
+      const c = document.createElement('canvas'); c.width = 512; c.height = 160;
+      const g = c.getContext('2d');
+      g.fillStyle = 'rgba(255,255,255,0.92)';
+      g.font = '900 118px system-ui, -apple-system, "Segoe UI", sans-serif';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(word, 256, 86, 490);
+      tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      this.wordTex.set(word, tex);
+    }
+    // letters stretched along the road, as road paint is, so they read in perspective
+    const geo = new THREE.PlaneGeometry(2.6, 2.2).rotateX(-Math.PI / 2).rotateY(-Math.PI / 2);
+    const mesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: tex, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    const f = this.frame(d);
+    mesh.position.set(f.x + f.rx * lane, this._roadY(d) + 0.055, f.z + f.rz * lane);
+    mesh.rotation.y = -f.h;
+    mesh.receiveShadow = true;
+    return mesh;
   }
 
   /** Where the arches stand on this route, with their text and colour. */
@@ -1741,6 +1921,7 @@ export class Scene3D {
     this.lastFrameTime = now;
     this.clock += dt;
     this.windTime.value += dt * (0.8 + (this.windSpeed || 0) * 0.06); // a stronger wind sways faster too
+    if (this.crowdTime) this.crowdTime.value = this.clock;
     this._adaptQuality(dt);
 
     // riders
@@ -1895,6 +2076,7 @@ export class Scene3D {
     }
     if (me) {
 
+      this.crowdNear?.value.set(me.f.x, me.f.y, me.f.z); // the fans go wild as you come by
       const cx = this.camera.position.x, cz = this.camera.position.z, cy = me.f.y;
       this.sky.position.set(cx, cy, cz);
       for (const ring of this.rings) ring.position.set(cx, cy - 40, cz);
