@@ -231,16 +231,34 @@ async function reopenRemembered(d) {
   } catch { return false; }
 }
 
-/** On page load: quietly reconnect every remembered device that is in range. */
-async function autoConnectRemembered() {
-  for (const d of DEVICES) {
-    if (d.dev.connected || !settings.devices?.[d.key]) continue;
-    $(`${d.key}-status`).textContent = tr('connecting remembered device…');
-    const ok = await reopenRemembered(d);
-    if (ok && d.dev === trainer) $('sim').checked = false;
-    updateDeviceUI();
-  }
+/** On page load: quietly reconnect every remembered device that is in range. A device that is off or asleep
+ *  then is picked up as soon as it wakes: its advertisements are watched where Chrome allows it, and every
+ *  15 s it is tried again while you are in the lobby. */
+let autoBusy = false;
+async function autoConnectRemembered({ quiet = false } = {}) {
+  if (autoBusy) return;
+  autoBusy = true;
+  try {
+    for (const d of DEVICES) {
+      if (d.dev.connected || reconnecting.has(d.key) || !settings.devices?.[d.key]) continue;
+      if (!quiet) $(`${d.key}-status`).textContent = tr('connecting remembered device…');
+      const ok = await reopenRemembered(d);
+      if (ok && d.dev === trainer) $('sim').checked = false;
+      if (!ok) watchRemembered(d);
+      updateDeviceUI();
+    }
+  } finally { autoBusy = false; }
 }
+const watching = new Set();
+async function watchRemembered(d) {
+  const id = settings.devices?.[d.key];
+  const known = id && (await knownDevices()).find((k) => k.id === id);
+  if (!known?.watchAdvertisements || watching.has(id)) return;
+  watching.add(id);
+  known.addEventListener('advertisementreceived', () => { if (!d.dev.connected && !ride) autoConnectRemembered({ quiet: true }); });
+  try { await known.watchAdvertisements(); } catch { watching.delete(id); }
+}
+setInterval(() => { if (!ride && bluetoothAvailable() && DEVICES.some((d) => !d.dev.connected && settings.devices?.[d.key])) autoConnectRemembered({ quiet: true }); }, 15000);
 
 async function toggleDevice(d, { add = false } = {}) {
   const btn = add ? $('btn-ctl-add') : $(`btn-${d.key}`);
