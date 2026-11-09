@@ -490,7 +490,7 @@ extension App {
     func updateLiveItem() { liveItem?.title = model.live ? "Riding: showing the numbers" : "Waiting for a ride in Gruppetto…" }
 }
 
-@MainActor func snapshot(to path: String, workout: Bool, hide: Set<String> = [], scale: Double = 1) {
+@MainActor func snapshot(to path: String, workout: Bool, hide: Set<String> = [], scale: Double = 1, clear: Bool = false, uk: Bool = false) {
     let m = Model()
     m.hidden = hide
     m.scale = scale
@@ -500,8 +500,15 @@ extension App {
     st.hr = "128"; st.hrAvg = "avg 104"; st.cad = "88"; st.cadAvg = "avg 90"
     st.workout = workout; st.target = "235"; st.left = "1:48"; st.next = "160 W"; st.stepF = 0.6; st.stepLeft = 40
     st.time = "24:37"; st.speed = "31.4"; st.dist = "12.80"; st.wbalF = 0.72; st.wbalKj = "14.4"
+    if uk { // as the page sends it in Ukrainian
+        st.labels = ["power": "Потужність", "hr": "Пульс", "cad": "Каденс", "W": "Вт", "kmh": "км/год", "km": "км", "kj": "кДж",
+                     "time": "Час", "speed": "Швидкість", "distance": "Дистанція", "target": "Ціль", "interval": "Інтервал", "next": "Далі"]
+        st.wkg = workout ? "3.1 Вт/кг · 95% FTP" : "2.0 Вт/кг · 62% FTP"; st.hrAvg = "сер. 104"; st.cadAvg = "сер. 90"; st.next = "160 Вт"
+    }
     m.state = st
-    let r = ImageRenderer(content: ZStack { LinearGradient(colors: [Color(hex: "#3a7d3a"), Color(hex: "#1f4d2a")], startPoint: .top, endPoint: .bottom); Panel(m: m) })
+    // clear: the panel alone on a transparent background (for a web page); otherwise over a green field
+    let r = clear ? ImageRenderer(content: AnyView(Panel(m: m)))
+        : ImageRenderer(content: AnyView(ZStack { LinearGradient(colors: [Color(hex: "#3a7d3a"), Color(hex: "#1f4d2a")], startPoint: .top, endPoint: .bottom); Panel(m: m) }))
     r.scale = 2
     if let img = r.nsImage, let tiff = img.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff), let png = rep.representation(using: .png, properties: [:]) {
         try? png.write(to: URL(fileURLWithPath: path))
@@ -512,12 +519,12 @@ extension App {
 enum Main {
     static let delegate = App()
     static func main() {
-        // --snapshot <file.png> [workout] [hide=cad,stats,wbal] [scale=0.8]: the panel with sample numbers drawn to a PNG (to check the look)
+        // --snapshot <file.png> [workout] [hide=cad,stats,wbal] [scale=0.8] [clear] [uk]: the panel with sample numbers drawn to a PNG (to check the look)
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
             let hide = Set(args.first { $0.hasPrefix("hide=") }?.dropFirst(5).split(separator: ",").map(String.init) ?? [])
             let scale = Double(args.first { $0.hasPrefix("scale=") }?.dropFirst(6) ?? "1") ?? 1
-            MainActor.assumeIsolated { snapshot(to: args[i + 1], workout: args.contains("workout"), hide: hide, scale: scale) }
+            MainActor.assumeIsolated { snapshot(to: args[i + 1], workout: args.contains("workout"), hide: hide, scale: scale, clear: args.contains("clear"), uk: args.contains("uk")) }
             return
         }
         let app = NSApplication.shared
