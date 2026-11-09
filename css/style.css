@@ -1296,6 +1296,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .race-row { column-gap: 6px; padding: 4px 10px; }
 .race-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #btn-pip.on { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
-.pip-rest { position: absolute; inset: 0; z-index: 1; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; background: radial-gradient(circle at 50% 40%, #1b2740, #0c111b); color: var(--text); }
+.pip-rest { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; text-align: center; background: radial-gradient(circle at 50% 40%, #1b2740, #0c111b); color: var(--text); }
 .pip-rest[hidden] { display: none; }
 .pip-rest b { font-size: 1.4rem; } .pip-rest small { color: var(--muted); max-width: 320px; }
+.watch-sw { width: 34px; height: 20px; border-radius: 99px; background: rgba(255,255,255,.15); position: relative; flex: none; transition: background .2s; }
+.watch-sw i { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .2s; }
+.watch-sw.on { background: #ff7a1a; } .watch-sw.on i { left: 17px; }

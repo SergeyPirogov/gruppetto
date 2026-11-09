@@ -563,7 +563,14 @@ function renderModes() {
     if (l) settings.raceLaps = Number(l.dataset.laps);
     settings.mode = 'race'; saveSettings(); renderModes();
   };
-  ml.append(free, wb, race);
+  // Watch & ride: a switch on top of the mode — the ride in a mini window over a film or the match, no 3D world
+  const wr = document.createElement('button');
+  wr.className = `option watch-pick${settings.watchRide ? ' sel' : ''}`;
+  wr.dataset.id = 'watch';
+  wr.hidden = !pipSupport();
+  wr.innerHTML = `<span class="wk-pick-head"><b>📺 ${tr('Watch & ride')}</b><span class="watch-sw${settings.watchRide ? ' on' : ''}"><i></i></span></span><small>${tr('In a mini window over a film or the match; the 3D road is not loaded. Works with a workout too.')}</small>`;
+  wr.onclick = () => { settings.watchRide = !settings.watchRide; saveSettings(); renderModes(); };
+  ml.append(free, wb, race, wr);
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
   wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
@@ -1012,6 +1019,12 @@ let scene = null;
 let sceneKind = null;
 
 /** Creates the 3D or 2D renderer (a canvas can hold only one kind of context). */
+function applySceneSettings() {
+  scene.setStyle?.(settings.style);
+  scene.setQuality?.(settings.quality);
+  scene.setAtmosphere?.(settings.timeOfDay, settings.weather);
+  scene.setCamera?.(settings.camera);
+}
 async function ensureScene() {
   let want = '3d'; // 2D only as a fallback when the browser has no WebGL
   if (want === sceneKind) { scene.resize(); scene.restart?.(); return; }
@@ -1123,9 +1136,12 @@ function preflight() {
 const installedApp = () => matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: fullscreen)').matches;
 
 async function startRide() {
+  // Watch & ride (#watch): the mini window opens now, while the click counts, and the 3D world is not even loaded
+  const watching = settings.watchRide && pipSupport();
+  const pipAsk = watching && !pipOpen() ? openMini() : null;
   // the installed app rides full screen: no title bar over the road (asked now, while the click counts)
-  const wentFull = installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
-  if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); return; }
+  const wentFull = watching ? false : installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
+  if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); if (pipAsk) closePip(); return; }
   if (await wentFull) rideFullscreen = true;
   const route = routes.find((r) => r.id === settings.routeId) || routes[0];
   const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
@@ -1184,11 +1200,13 @@ async function startRide() {
   $('paused').hidden = true;
   $('btn-pause').textContent = tr('Pause');
   $('ride').classList.remove('show-controls');
-  await ensureScene();
-  scene.setStyle?.(settings.style);
-  scene.setQuality?.(settings.quality);
-  scene.setAtmosphere?.(settings.timeOfDay, settings.weather);
-  scene.setCamera?.(settings.camera);
+  if (watching && (await pipAsk) !== false) {
+    ride.noScene = true; // the road is not built; «Show the road» builds it
+    track('watch-ride');
+  } else {
+    await ensureScene();
+    applySceneSettings();
+  }
   ride.lastSim = performance.now();
   clearInterval(rideTimer);
   rideTimer = setInterval(() => advance(), 250);
@@ -1196,7 +1214,7 @@ async function startRide() {
   keepAwake(true);
   if (simulated) toast(tr('Simulator mode: set power with the slider or ↑/↓'));
   const touch = matchMedia('(pointer: coarse)').matches;
-  if (scene.orbit) setTimeout(() => toast(touch ? tr('Camera: drag to turn, pinch to zoom, double-tap to reset') : tr('Camera: drag to orbit, scroll to zoom, double-click to reset')), simulated ? 3500 : 0);
+  if (scene?.orbit && !ride.noScene) setTimeout(() => toast(touch ? tr('Camera: drag to turn, pinch to zoom, double-tap to reset') : tr('Camera: drag to orbit, scroll to zoom, double-click to reset')), simulated ? 3500 : 0);
   requestAnimationFrame(frame);
 }
 
@@ -1388,7 +1406,7 @@ function frame(now) {
   ];
   // the mini window is open: the 3D road is not drawn (nobody looks at it, and the video you watch keeps the
   // graphics card); the ride goes on, and the road comes back the moment the mini window closes
-  const inPip = pipOpen() && !ride.showRoadInPip;
+  const inPip = ride.noScene || (pipOpen() && !ride.showRoadInPip);
   $('pip-rest').hidden = !inPip;
   if (inPip) { ride.moved = 0; requestAnimationFrame(frame); return; }
   scene.render(ride.route, ride.dist, riders, ride.moved);
@@ -1833,6 +1851,11 @@ function pipState(p3, zone, hrNow, zs) {
 async function togglePip() {
   if (!ride) return;
   if (pipOpen()) { closePip(); return; }
+  if (!(await openMini())) { toast(tr('This browser cannot show a mini window over other apps')); return; }
+  if (ride.lastHud) updateHud(...ride.lastHud); // straight away, not in a second
+}
+/** Opens the mini window (a click or key press must lead here): true when it is open. */
+async function openMini() {
   const ok = await openPip({
     clean: !!settings.pipClean,
     onKey: onRideKey,
@@ -1840,13 +1863,17 @@ async function togglePip() {
     heartbeat: () => { if (ride) advance(); }, // the hidden tab's timers slow down, the mini window's do not
     onClose: () => { $('btn-pip')?.classList.remove('on'); $('pip-rest').hidden = true; if (ride) ride.showRoadInPip = false; },
   });
-  if (!ok) { toast(tr('This browser cannot show a mini window over other apps')); return; }
-  $('btn-pip').classList.add('on');
-  if (ride.lastHud) updateHud(...ride.lastHud); // straight away, not in a second
+  if (ok) $('btn-pip').classList.add('on');
+  return ok;
 }
 $('btn-pip').hidden = !pipSupport();
 $('btn-pip').onclick = () => togglePip();
-$('pip-show-road').onclick = () => { if (ride) ride.showRoadInPip = true; $('pip-rest').hidden = true; };
+$('pip-show-road').onclick = async () => {
+  if (!ride) return;
+  // Watch & ride starts without the 3D world: it is built now
+  if (!scene || ride.noScene) { await ensureScene(); applySceneSettings(); ride.noScene = false; }
+  ride.showRoadInPip = true; $('pip-rest').hidden = true;
+};
 
 // ---------- Minimap ----------
 const MAP_TURN = 2.5; // the 3D renderer's curvature factor: the map has the same bends as the road you see
@@ -3466,7 +3493,7 @@ function setCameraView(mode) {
   if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
   settings.camera = mode;
   saveSettings();
-  scene.setCamera(mode);
+  scene?.setCamera?.(mode);
   $('f-camera').value = mode;
   toast(`${CAMERAS.indexOf(mode) + 1} · ${tr(CAMERA_NAMES[mode])}`);
 }
