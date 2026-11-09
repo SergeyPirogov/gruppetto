@@ -1825,7 +1825,7 @@ export class Scene3D {
           const y = heightAt(r, o);
           if (this.water && y < f.y - (T3c.dip?.depth || 0) * 0.3) continue;
           const tt = treeTypes[Math.floor(hq(3) * treeTypes.length)].type;
-          put(`${tt}@far`, mtx(f.x + f.rx * o, y, f.z + f.rz * o, hq(4) * 6.28, 0.9 + hq(4) * 0.7));
+          put(Math.abs(o) < 70 ? `${tt}@mid` : `${tt}@far`, mtx(f.x + f.rx * o, y, f.z + f.rz * o, hq(4) * 6.28, 0.9 + hq(4) * 0.7)); // mid: detailed, no shadow; far: LOD
         }
       }
     }
@@ -1932,7 +1932,10 @@ export class Scene3D {
       const [type, far] = key.split('@');
       if (!list.length) continue;
       const castShadow = !far && !['tuft', 'sunflowers', 'lupine', 'tallgrass', 'plant', 'flowers3'].includes(type);
-      if (this.nature?.types[type]) { this._addNature(group, type, list, castShadow); continue; }
+      // LOD: a far tree (70 m and out) is the simple built-in model, a few hundred triangles instead of thousands:
+      // at that distance it reads the same, and the woods can be thick
+      const lod = far === 'far' && TREE_TYPES.includes(type) && this.models[type];
+      if (this.nature?.types[type] && !lod) { this._addNature(group, type, list, castShadow); continue; }
       const geom = this.models[type];
       if (!geom) continue;
       const mat = ['oak', 'pine', 'birch', 'palm'].includes(type) ? this.matTree
