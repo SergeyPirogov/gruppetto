@@ -1191,6 +1191,7 @@ async function startRide(opts) {
   recorder.reset();
   updateGear();
   $('lobby').hidden = true;
+  if ($('drawer').classList.contains('as-page')) $('drawer').hidden = true; // a lobby page (Devices…) stays in the lobby
   $('summary').hidden = true;
   $('ride').hidden = false;
   $('sim-ctl').hidden = !simulated;
