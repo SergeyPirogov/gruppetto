@@ -34,7 +34,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto',
+  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto', pipClean: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
@@ -371,6 +371,8 @@ function initLobby() {
   bind('f-camera', 'camera', false);
   bind('f-time', 'timeOfDay', false);
   bind('f-quality', 'quality', false);
+  $('f-pip').value = settings.pipClean ? 'clean' : 'sharp';
+  $('f-pip').onchange = () => { settings.pipClean = $('f-pip').value === 'clean'; saveSettings(); };
   $('f-quality').addEventListener('change', () => scene?.setQuality?.(settings.quality));
   $('f-time').addEventListener('change', renderTimeHint);
   renderTimeHint();
@@ -1827,6 +1829,7 @@ async function togglePip() {
   if (!ride) return;
   if (pipOpen()) { closePip(); return; }
   const ok = await openPip({
+    clean: !!settings.pipClean,
     onKey: onRideKey,
     onPause: () => togglePause(),
     heartbeat: () => { if (ride) advance(); }, // the hidden tab's timers slow down, the mini window's do not

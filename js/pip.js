@@ -24,6 +24,12 @@ export function pipSupport() {
 }
 
 export const pipOpen = () => mode !== null;
+/** Video picture-in-picture is there (a canvas shown as a video): Safari, Chrome, Edge, Android. */
+function videoPipOk() {
+  const v = document.createElement('video');
+  return !!HTMLCanvasElement.prototype.captureStream && (!!(document.pictureInPictureEnabled && v.requestPictureInPicture)
+    || (typeof v.webkitSupportsPresentationMode === 'function' && v.webkitSupportsPresentationMode('picture-in-picture')));
+}
 
 /**
  * Open the mini window (needs a click or a key press). `opts`: { onClose, onKey(e), onPause, heartbeat }
@@ -33,6 +39,8 @@ export async function openPip(opts = {}) {
   if (mode) return true;
   onClosed = opts.onClose || null;
   const how = pipSupport();
+  // «clean»: the board as a video, which Chrome floats without its address strip (where video PiP is there)
+  if (opts.clean && videoPipOk()) return openVideo(opts);
   if (how === 'document') {
     try {
       win = await window.documentPictureInPicture.requestWindow({ width: 340, height: 196 });
@@ -44,7 +52,7 @@ export async function openPip(opts = {}) {
       return true;
     }
   }
-  if (how) return openVideo();
+  if (how) return openVideo(opts);
   return false;
 }
 
@@ -60,6 +68,7 @@ export function closePip() {
 function closed() {
   if (!mode) return;
   mode = null; win = null; els = null;
+  beat?.terminate(); beat = null;
   if (video) { video.srcObject?.getTracks().forEach((t) => t.stop()); video.remove(); video = null; canvas = null; }
   const cb = onClosed; onClosed = null;
   cb?.();
@@ -172,15 +181,30 @@ const WBAL = { ok: '#4ade80', mid: '#fbbf24', low: '#fb923c', empty: '#f87171' }
 const CLS = { 'c-ok': '#4ade80', 'c-warn': '#fbbf24', 'c-bad': '#f87171' };
 
 // ---------- Video PiP ----------
-async function openVideo() {
+let beat = null; // the heartbeat worker while the board is a video
+/**
+ * A hidden tab's timers slow down to once a minute; a worker's do not: it keeps the ride going (and the board
+ * drawn) while you watch something in another tab.
+ */
+function startBeat(fn) {
+  if (!fn || typeof Worker === 'undefined') return;
+  try {
+    const url = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 250);'], { type: 'text/javascript' }));
+    beat = new Worker(url);
+    beat.onmessage = () => fn();
+    URL.revokeObjectURL(url);
+  } catch { beat = null; }
+}
+async function openVideo(opts = {}) {
   canvas = document.createElement('canvas');
-  canvas.width = 640; canvas.height = 360;
+  canvas.width = 1280; canvas.height = 720; // drawn big: the system scales it down, the text stays sharp
   video = document.createElement('video');
   video.muted = true; video.playsInline = true; video.autoplay = true;
   // in the page but out of sight: Safari will not float a video that is not in the document
   video.style.cssText = 'position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:0;pointer-events:none';
   document.body.append(video);
   video.srcObject = canvas.captureStream();
+  startBeat(opts.heartbeat);
   drawCanvas(last); // a stream has no frame until the canvas is drawn after it was made
   video.addEventListener('leavepictureinpicture', closed, { once: true });
   video.addEventListener('webkitpresentationmodechanged', () => { if (video && video.webkitPresentationMode !== 'picture-in-picture') closed(); });
@@ -199,63 +223,74 @@ async function openVideo() {
 
 function drawCanvas(s) {
   if (!canvas) return;
-  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
-  g.fillStyle = '#0f1420'; g.fillRect(0, 0, W, H);
+  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, k = W / 640; // drawn at 640×360, scaled up
+  g.setTransform(k, 0, 0, k, 0, 0);
+  const w = 640, h = 360, zc = s && s.power > 0 ? s.zoneColor : '#8a94a6';
+  // the panel, as the sharp window: dark, the zone's glow from the bottom corner
+  const bg = g.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#161b26'); bg.addColorStop(1, '#0c111b');
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  const glow = g.createRadialGradient(0, h, 10, 0, h, 520); glow.addColorStop(0, hexA(zc, 0.32)); glow.addColorStop(1, hexA(zc, 0));
+  g.fillStyle = glow; g.fillRect(0, 0, w, h);
   if (!s) return;
-  const font = (px, w = 800) => `${w} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
-  const label = (txt, x, y) => { g.font = font(20, 600); g.fillStyle = '#8d98ab'; g.fillText(txt.toUpperCase(), x, y); };
+  const font = (px, wt = 800) => `${wt} ${px}px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`;
+  const muted = '#9fb0c6';
   const tag = (txt, color, x, y) => {
-    g.font = font(18); const w = g.measureText(txt).width + 12;
-    g.fillStyle = color; g.beginPath(); g.roundRect?.(x, y - 18, w, 24, 5); g.fill();
+    g.font = font(17); const tw = g.measureText(txt).width + 12;
+    g.fillStyle = color; g.beginPath(); g.roundRect?.(x, y - 17, tw, 23, 5); g.fill();
     g.fillStyle = '#0f1420'; g.fillText(txt, x + 6, y);
-    return w;
   };
   const L = s.labels || {};
-  g.textBaseline = 'alphabetic';
-  // power
-  label(L.power || 'Power', 24, 40);
-  tag(s.zone, s.zoneColor, 24 + g.measureText((L.power || 'Power').toUpperCase()).width + 10, 40);
-  g.font = font(s.workout ? 110 : 140); g.fillStyle = CLS[s.powerCls] || s.powerColor || '#e8edf5';
-  const pw = String(s.power);
-  g.fillText(pw, 20, s.workout ? 150 : 175);
-  const pwW = g.measureText(pw).width;
-  g.font = font(30, 600); g.fillStyle = '#8d98ab'; g.fillText(L.W || 'W', 28 + pwW, s.workout ? 150 : 175);
-  g.font = font(20, 600); g.fillText(s.wkg, 24, s.workout ? 180 : 208);
-  // heart rate and cadence
-  const col = (x, name, val, sub, color, z, zc) => {
-    label(name, x, 40);
-    if (z) tag(z, zc, x + g.measureText(name.toUpperCase()).width + 10, 40);
-    g.font = font(s.workout ? 72 : 88); g.fillStyle = color || '#e8edf5'; g.fillText(val, x, s.workout ? 125 : 150);
-    if (sub) { g.font = font(20, 600); g.fillStyle = '#8d98ab'; g.fillText(sub, x, s.workout ? 155 : 182); }
+  const wk = !!s.workout;
+  // three columns, each with its colour bar, as on the ride board
+  const top = 26, vy = wk ? 128 : 160, subY = vy + 28;
+  const col = (x, bar, name, val, unit, sub, color, z, zc2, big) => {
+    g.fillStyle = bar; g.fillRect(x, top, 5, subY - top + 6);
+    g.font = font(17, 600); g.fillStyle = muted; g.fillText(name.toUpperCase(), x + 16, top + 18);
+    if (z) tag(z, zc2, x + 22 + g.measureText(name.toUpperCase()).width, top + 18);
+    g.font = font(big ? (wk ? 100 : 124) : (wk ? 58 : 66)); g.fillStyle = color || '#e8edf5';
+    g.fillText(val, x + 14, vy);
+    if (unit) { const vw = g.measureText(val).width; g.font = font(28, 600); g.fillStyle = muted; g.fillText(unit, x + 20 + vw, vy); }
+    if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x + 16, subY); }
   };
-  col(330, L.hr || 'HR', s.hr, s.hrAvg, null, s.hrZone, s.hrZoneColor);
-  col(490, L.cad || 'Cadence', s.cad, s.cadTarget || s.cadAvg, CLS[s.cadCls]);
-  // the interval
-  if (s.workout) {
-    g.fillStyle = '#182030'; g.beginPath(); g.roundRect?.(16, 200, W - 32, 62, 10); g.fill();
+  col(18, zc, L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', s.zone, s.zoneColor, true);
+  col(352, '#ff4d5e', L.hr || 'HR', s.hr, '', s.hrAvg, null, s.hrZone, s.hrZoneColor);
+  col(512, '#2fd4f0', L.cad || 'Cadence', s.cad, '', s.cadTarget || s.cadAvg, CLS[s.cadCls]);
+  // the interval: target, time left, next, over a bar of how far into it you are
+  let y = subY + 22;
+  if (wk) {
+    const soon = (s.stepLeft ?? 99) <= 10 && Math.floor(Date.now() / 500) % 2 === 0;
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect?.(16, y, w - 32, 64, 10); g.fill();
+    g.strokeStyle = soon ? '#fbbf24' : 'rgba(255,255,255,.1)'; g.lineWidth = 2; g.stroke();
     const cells = [[L.target, s.target, CLS[s.powerCls]], [L.interval, s.left], [L.next, s.next]];
-    cells.forEach(([k, v, c], i) => {
-      const x = 32 + i * ((W - 64) / 3);
-      g.font = font(16, 600); g.fillStyle = '#8d98ab'; g.fillText(String(k || '').toUpperCase(), x, 224);
-      g.font = font(30); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), x, 254);
+    cells.forEach(([lab, v, c], i) => {
+      const x = 32 + i * ((w - 64) / 3);
+      g.font = font(15, 600); g.fillStyle = muted; g.fillText(String(lab || '').toUpperCase(), x, y + 24);
+      g.font = font(28); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), x, y + 54);
     });
+    g.fillStyle = zc; g.fillRect(16, y + 60, (w - 32) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
+    y += 80;
   }
-  // time, speed, distance, grade
-  const y = s.workout ? 308 : 290;
-  g.font = font(34);
+  // time, speed, distance, grade, under a thin line
+  g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(18, y, w - 36, 1);
+  y += 40;
   const bits = [[s.time, ''], [s.speed, L.kmh], [s.dist, L.km], [s.grade, '', s.gradeColor]];
   bits.forEach(([v, u, c], i) => {
-    const x = 24 + i * 152;
-    g.font = font(34); g.fillStyle = c || '#e8edf5'; g.fillText(v, x, y);
-    if (u) { const w = g.measureText(v).width; g.font = font(18, 600); g.fillStyle = '#8d98ab'; g.fillText(u, x + w + 5, y); }
+    const x = 22 + i * 152;
+    g.font = font(32); g.fillStyle = c || '#e8edf5'; g.fillText(v, x, y);
+    if (u) { const vw = g.measureText(v).width; g.font = font(17, 600); g.fillStyle = muted; g.fillText(u, x + vw + 5, y); }
   });
-  // W′bal
-  g.fillStyle = '#2a3448'; g.fillRect(24, H - 30, W - 48, 10);
-  g.fillStyle = WBAL[s.wbalLevel] || WBAL.ok; g.fillRect(24, H - 30, (W - 48) * s.wbalF, 10);
+  // W′bal: violet, amber to red as it runs low
+  g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect?.(22, h - 24, w - 44, 9, 5); g.fill();
+  g.fillStyle = s.wbalLevel === 'ok' ? '#a78bfa' : WBAL[s.wbalLevel]; g.beginPath(); g.roundRect?.(22, h - 24, (w - 44) * s.wbalF, 9, 5); g.fill();
   if (s.paused) {
-    g.fillStyle = 'rgba(15,20,32,.75)'; g.fillRect(0, 0, W, H);
-    g.font = font(64); g.fillStyle = '#e8edf5'; g.textAlign = 'center'; g.fillText(L.paused || 'PAUSED', W / 2, H / 2 + 22); g.textAlign = 'left';
+    g.fillStyle = 'rgba(12,17,27,.75)'; g.fillRect(0, 0, w, h);
+    g.font = font(64); g.fillStyle = '#e8edf5'; g.textAlign = 'center'; g.fillText(L.paused || 'PAUSED', w / 2, h / 2 + 22); g.textAlign = 'left';
   }
+}
+/** A colour (#rrggbb) with an alpha, for gradients. */
+function hexA(hex, a) {
+  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex || '');
+  return m ? `rgba(${parseInt(m[1], 16)},${parseInt(m[2], 16)},${parseInt(m[3], 16)},${a})` : `rgba(138,148,166,${a})`;
 }
 
 /** The numbers, once a second (and on pause). */
