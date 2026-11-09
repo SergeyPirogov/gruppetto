@@ -2840,7 +2840,7 @@ function renderTimeHint() {
 setInterval(() => {
   if (!ride || settings.timeOfDay !== 'auto' || !scene) return;
   const look = phaseOf(sunAt(new Date(), placeFromZone()));
-  if (ride.look && look !== ride.look) scene.setAtmosphere?.('auto', settings.weather);
+  if (ride.look && look !== ride.look) scene.setAtmosphere?.('auto', settings.weather, { smooth: true }); // over 40 s, not in a jump
   ride.look = look;
 }, 60000);
 

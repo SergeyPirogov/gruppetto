@@ -859,3 +859,17 @@ test('tunnels: only in the mountains, 100–200 m, clear of climbs, sprints, vil
   }
   assert.ok(total >= 2);
 });
+
+test('blendAtmosphere: colours and numbers part way, switches flip at the middle', async () => {
+  const { blendAtmosphere } = await import('../js/atmo-blend.js');
+  const day = { t: { sky: ['#000000', '#ffffff'], fog: [0, 0, 0] }, light: '#000000', lightI: 2, hemi: 1, exposure: 1, dim: 1, fogNear: 100, fogFar: 1000, night: false, showSun: true, glow: null };
+  const night = { t: { sky: ['#ffffff', '#000000'], fog: [200, 100, 0] }, light: '#ffffff', lightI: 0, hemi: 0, exposure: 2, dim: 0, fogNear: 50, fogFar: 500, night: true, showSun: true, glow: '#ff0000' };
+  const a = blendAtmosphere(day, night, 0.25);
+  assert.deepEqual(a.t.sky, ['#404040', '#bfbfbf']);
+  assert.deepEqual(a.t.fog, [50, 25, 0]);
+  assert.equal(a.lightI, 1.5); assert.equal(a.fogFar, 875); assert.equal(a.night, false); assert.equal(a.glow, null);
+  const b = blendAtmosphere(day, night, 0.75);
+  assert.equal(b.night, true); assert.equal(b.glow, '#ff0000'); assert.equal(b.light, '#bfbfbf');
+  assert.deepEqual(blendAtmosphere(day, night, 1).t.sky, night.t.sky);
+  assert.equal(blendAtmosphere(day, night, 0).exposure, 1);
+});

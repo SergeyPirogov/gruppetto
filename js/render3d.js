@@ -12,6 +12,7 @@ import { loadBikeModel, ModelBike } from './bike-model.js';
 import { t, lang } from './i18n.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
 import { villages, crossings, tunnels } from './villages.js';
+import { hexRgb, mixRgb, mixHex, blendAtmosphere } from './atmo-blend.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 import { loadFanModels } from './fans.js';
 
@@ -610,9 +611,6 @@ class Rider3D {
 }
 
 // ---------- Time of day and weather (#41) ----------
-const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const mixRgb = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
-const mixHex = (a, b, t) => '#' + mixRgb(hexRgb(a), hexRgb(b), t).map((v) => Math.round(v).toString(16).padStart(2, '0')).join('');
 const TIMES = {
   // midday is each route's own look; the others recolour the sky, the fog and the sun
   morning: { sky: ['#78a9de', '#ffd8b0'], fog: '#f0dcc6', fogMix: 0.55, sunY: 0.3, light: '#ffd09a', lightI: 2.4, hemi: 0.75, exposure: 1.02, glow: '#ffc890', disk: '#fff0d0', diskSize: 90, dim: 0.95 },
@@ -1026,6 +1024,7 @@ export class Scene3D {
   // ----- world setup per route -----
 
   _setup(route) {
+    this.atmFade = null; // a new route starts in the look it was asked for
     for (const c of this.chunks.values()) this._dispose(c);
     this.chunks.clear();
     for (const r of this.riders.values()) this.scene.remove(r.group);
@@ -1148,14 +1147,34 @@ export class Scene3D {
   }
 
   /** Time of day ('auto', 'morning', 'midday', 'evening', 'night') and weather ('clear', 'fog', 'rain'). */
-  setAtmosphere(time = 'midday', weather = 'clear') {
+  setAtmosphere(time = 'midday', weather = 'clear', { smooth = false } = {}) {
     this.atmTime = time; this.atmWeather = weather;
-    if (this.tBase) { this._applyAtmosphere(); this._tintWater(); }
+    if (!this.tBase) return;
+    // during a ride the look changes over 40 s: the light and the fog every frame, the sky and the hills now and then
+    if (smooth && this.atm) { this.atmFade = { from: this.atm, to: atmosphereFor(this.tBase, time, weather), k: 0, rebuiltAt: 0 }; return; }
+    this.atmFade = null;
+    this._applyAtmosphere(); this._tintWater();
+  }
+
+  _fadeAtmosphere(dt) {
+    const F = this.atmFade;
+    F.k = Math.min(1, F.k + dt / 40);
+    const e = F.k * F.k * (3 - 2 * F.k); // eased in and out
+    const a = this.atm = blendAtmosphere(F.from, F.to, e);
+    this.t = a.t;
+    this.scene.fog.color.copy(rgb(this.t.fog)); this.scene.fog.near = a.fogNear; this.scene.fog.far = a.fogFar;
+    this.scene.background = col(this.t.sky[1]);
+    this.hemi.color.copy(col(a.hemiColor)); this.hemi.intensity = a.hemi;
+    for (const l of this.csm.lights) { l.color.set(a.light); l.intensity = a.lightI; }
+    this.renderer.toneMappingExposure = a.exposure;
+    this._nightLights();
+    if (F.k >= 1 || F.k - F.rebuiltAt >= 1 / 16) { F.rebuiltAt = F.k; this._applyAtmosphere(a); this._tintWater(); }
+    if (F.k >= 1) this.atmFade = null;
   }
 
   /** Sky, fog, lights, sun, distant mountains, clouds and rain for the chosen hour and weather (the land stays). */
-  _applyAtmosphere() {
-    const a = this.atm = atmosphereFor(this.tBase, this.atmTime, this.atmWeather);
+  _applyAtmosphere(given = null) {
+    const a = this.atm = given || atmosphereFor(this.tBase, this.atmTime, this.atmWeather);
     this.t = a.t;
     const fogC = rgb(this.t.fog);
     this.scene.fog.color.copy(fogC); this.scene.fog.near = a.fogNear; this.scene.fog.far = a.fogFar;
@@ -2507,6 +2526,7 @@ export class Scene3D {
     this.windTime.value += dt * (0.8 + (this.windSpeed || 0) * 0.06); // a stronger wind sways faster too
     if (this.crowdTime) this.crowdTime.value = this.clock;
     this._adaptQuality(dt);
+    if (this.atmFade) this._fadeAtmosphere(dt);
 
     // riders
     const seen = new Set();
