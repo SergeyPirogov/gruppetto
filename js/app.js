@@ -3746,6 +3746,7 @@ function onRideKey(e) {
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const c = e.code;
   if (c === 'Escape') {
+    if ($('ride').classList.contains('hud-hidden')) { $('ride').classList.remove('hud-hidden'); return; } // H's clean view: back to the board
     if (!$('keys-help').hidden) toggleKeysHelp(false);
     else if ($('ride').classList.contains('show-controls')) hideControls();
     else { showControls(0); $('btn-pause').focus(); }
