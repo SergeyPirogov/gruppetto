@@ -86,10 +86,10 @@ body { display: flex; flex-direction: column; justify-content: space-evenly; pad
      the panel; the zone's glow from the bottom corner, away from it */
   background: radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--zc) 28%, transparent), transparent 65%), linear-gradient(180deg, #202124 0%, #161b26 38%, #0c111b 100%);
   transition: background .6s; }
-.top { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 3vw; align-items: stretch; }
-.cell { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; padding-left: 2.4vw; border-left: max(3px, .9vw) solid var(--c, #8a94a6); }
+.top { display: grid; grid-template-columns: 1.7fr 1fr 1fr; gap: 5vw; align-items: end; }
+.cell { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
 .cell.power { --c: var(--zc); } .cell.hr { --c: #ff4d5e; } .cell.cad { --c: #2fd4f0; }
-.cell label { font-size: clamp(9px, min(5.4vh, 4.4vw), 15px); color: #9fb0c6; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; display: flex; gap: .4em; align-items: center; }
+.cell label { font-size: clamp(9px, min(5.4vh, 4.4vw), 15px); color: var(--c, #9fb0c6); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; display: flex; gap: .4em; align-items: center; }
 .cell b { font-variant-numeric: tabular-nums; line-height: 1; font-weight: 800; font-size: clamp(18px, min(20vh, 11vw), 120px); }
 .cell.power b { font-size: clamp(26px, min(30vh, 17vw), 180px); }
 .cell small { font-size: clamp(9px, min(5vh, 4vw), 14px); color: #9fb0c6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -247,10 +247,11 @@ function drawCanvas(s) {
   // the whole height used: without a workout the numbers are bigger and the bottom row lower (it left a third empty)
   const top = 24, vy = wk ? 124 : 186, subY = vy + 30;
   const col = (x, bar, name, val, unit, sub, color, z, zc2, big) => {
-    g.fillStyle = bar; g.fillRect(x, top, 5, subY - top + 6);
-    g.font = font(17, 600); g.fillStyle = muted; g.fillText(name.toUpperCase(), x + 16, top + 18);
-    if (z) tag(z, zc2, x + 22 + g.measureText(name.toUpperCase()).width, top + 18);
-    g.font = font(big ? (wk ? 96 : 150) : (wk ? 58 : 70)); g.fillStyle = color || '#e8edf5';
+    // the number's colour in its name (no bar beside it), the name just over its number
+    const px = big ? (wk ? 96 : 150) : (wk ? 58 : 70), ly = big ? top + 18 : vy - px * 0.78 - 10;
+    g.font = font(17, 700); g.fillStyle = bar; g.fillText(name.toUpperCase(), x + 16, ly);
+    if (z) tag(z, zc2, x + 22 + g.measureText(name.toUpperCase()).width, ly);
+    g.font = font(px); g.fillStyle = color || '#e8edf5';
     g.fillText(val, x + 14, vy);
     if (unit) { const vw = g.measureText(val).width; g.font = font(28, 600); g.fillStyle = muted; g.fillText(unit, x + 20 + vw, vy); }
     if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x + 16, subY); }
