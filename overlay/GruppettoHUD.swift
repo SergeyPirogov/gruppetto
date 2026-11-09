@@ -90,6 +90,8 @@ final class Model: ObservableObject {
     /// the blocks switched off in the menu: power, hr, cad, workout, stats (time, speed, distance), wbal
     @Published var hidden: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "hiddenBlocks") ?? [])
     func shows(_ b: String) -> Bool { b == "power" ? true : !hidden.contains(b) }
+    /// the panel's size, text and all: 0.8 small … 1.5 extra large
+    @Published var scale: Double = UserDefaults.standard.object(forKey: "scale") as? Double ?? 1
     var lastAt = Date.distantPast
 }
 
@@ -121,7 +123,13 @@ func classColor(_ cls: String?) -> Color? {
 
 // MARK: - The panel
 
+private struct HUDScale: EnvironmentKey { static let defaultValue: CGFloat = 1 }
+extension EnvironmentValues {
+    var hudScale: CGFloat { get { self[HUDScale.self] } set { self[HUDScale.self] = newValue } }
+}
+
 struct Number: View {
+    @Environment(\.hudScale) var k
     let name: String
     let nameColor: Color
     let value: String
@@ -133,32 +141,33 @@ struct Number: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 5) {
-                Text(name.uppercased()).font(.system(size: 11, weight: .bold)).tracking(0.6).foregroundColor(nameColor)
+                Text(name.uppercased()).font(.system(size: k * 11, weight: .bold)).tracking(0.6).foregroundColor(nameColor)
                 if let t = tag, !t.0.isEmpty {
-                    Text(t.0).font(.system(size: 10, weight: .heavy)).foregroundColor(Color(hex: "#0f1420"))
+                    Text(t.0).font(.system(size: k * 10, weight: .heavy)).foregroundColor(Color(hex: "#0f1420"))
                         .padding(.horizontal, 4).background(RoundedRectangle(cornerRadius: 3).fill(t.1))
                 }
             }
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value).font(.system(size: size, weight: .heavy, design: .rounded)).monospacedDigit().foregroundColor(valueColor)
+                Text(value).font(.system(size: k * size, weight: .heavy, design: .rounded)).monospacedDigit().foregroundColor(valueColor)
                     .lineLimit(1).minimumScaleFactor(0.5)
-                if !unit.isEmpty { Text(unit).font(.system(size: size * 0.3, weight: .bold)).foregroundColor(muted) }
+                if !unit.isEmpty { Text(unit).font(.system(size: k * size * 0.3, weight: .bold)).foregroundColor(muted) }
             }
-            Text(sub).font(.system(size: 11, weight: .medium)).foregroundColor(muted).lineLimit(1)
+            Text(sub).font(.system(size: k * 11, weight: .medium)).foregroundColor(muted).lineLimit(1)
         }
     }
 }
 
 struct Cell: View {
+    @Environment(\.hudScale) var k
     let name: String
     let value: String
     var unit: String = ""
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(name.uppercased()).font(.system(size: 9.5, weight: .semibold)).tracking(0.5).foregroundColor(muted)
+            Text(name.uppercased()).font(.system(size: k * 9.5, weight: .semibold)).tracking(0.5).foregroundColor(muted)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
-                Text(value).font(.system(size: 19, weight: .heavy, design: .rounded)).monospacedDigit().foregroundColor(.white)
-                if !unit.isEmpty { Text(unit).font(.system(size: 10, weight: .semibold)).foregroundColor(muted) }
+                Text(value).font(.system(size: k * 19, weight: .heavy, design: .rounded)).monospacedDigit().foregroundColor(.white)
+                if !unit.isEmpty { Text(unit).font(.system(size: k * 10, weight: .semibold)).foregroundColor(muted) }
             }
             .fixedSize() // a number never wraps: the panel grows to fit it
         }
@@ -169,12 +178,12 @@ struct Cell: View {
 struct Panel: View {
     @ObservedObject var m: Model
     var body: some View {
-        let s = m.state
+        let s = m.state, k = CGFloat(m.scale)
         let zc = s.power > 0 ? Color(hex: s.zoneColor) : Color(hex: "#8a94a6")
         let pc = classColor(s.powerCls) ?? (s.powerColor.map { Color(hex: $0) } ?? .white)
         let wbalC: Color = s.wbalLevel == "ok" ? Color(hex: "#a78bfa") : s.wbalLevel == "mid" ? Color(hex: "#fbbf24") : s.wbalLevel == "low" ? Color(hex: "#fb923c") : Color(hex: "#f87171")
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .bottom, spacing: 22) {
+        VStack(alignment: .leading, spacing: 10 * k) {
+            HStack(alignment: .bottom, spacing: 22 * k) {
                 Number(name: s.label("power", "Power"), nameColor: zc, value: String(s.power), unit: s.label("W", "W"), sub: s.wkg, valueColor: pc, tag: (s.zone, Color(hex: s.zoneColor)), size: 64)
                 if m.shows("hr") { Number(name: s.label("hr", "HR"), nameColor: Color(hex: "#ff6b78"), value: s.hr, sub: s.hrAvg, size: 40) }
                 if m.shows("cad") { Number(name: s.label("cad", "Cadence"), nameColor: Color(hex: "#4fdcf2"), value: s.cad, sub: s.cadTarget.isEmpty ? s.cadAvg : s.cadTarget, valueColor: classColor(s.cadCls) ?? .white, size: 40) }
@@ -183,16 +192,16 @@ struct Panel: View {
                 VStack(spacing: 0) {
                     HStack(spacing: 18) {
                         HStack(alignment: .firstTextBaseline, spacing: 5) {
-                            Text(s.label("target", "Target").uppercased()).font(.system(size: 9.5, weight: .semibold)).foregroundColor(muted)
-                            Text(s.target).font(.system(size: 18, weight: .heavy, design: .rounded)).foregroundColor(classColor(s.powerCls) ?? .white)
+                            Text(s.label("target", "Target").uppercased()).font(.system(size: k * 9.5, weight: .semibold)).foregroundColor(muted)
+                            Text(s.target).font(.system(size: k * 18, weight: .heavy, design: .rounded)).foregroundColor(classColor(s.powerCls) ?? .white)
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 5) {
-                            Text(s.label("interval", "Interval").uppercased()).font(.system(size: 9.5, weight: .semibold)).foregroundColor(muted)
-                            Text(s.left).font(.system(size: 18, weight: .heavy, design: .rounded)).monospacedDigit().foregroundColor(.white)
+                            Text(s.label("interval", "Interval").uppercased()).font(.system(size: k * 9.5, weight: .semibold)).foregroundColor(muted)
+                            Text(s.left).font(.system(size: k * 18, weight: .heavy, design: .rounded)).monospacedDigit().foregroundColor(.white)
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 5) {
-                            Text(s.label("next", "Next").uppercased()).font(.system(size: 9.5, weight: .semibold)).foregroundColor(muted)
-                            Text(s.next).font(.system(size: 18, weight: .heavy, design: .rounded)).foregroundColor(.white)
+                            Text(s.label("next", "Next").uppercased()).font(.system(size: k * 9.5, weight: .semibold)).foregroundColor(muted)
+                            Text(s.next).font(.system(size: k * 18, weight: .heavy, design: .rounded)).foregroundColor(.white)
                         }
                         Spacer(minLength: 0)
                     }
@@ -226,21 +235,22 @@ struct Panel: View {
             }
             }
         }
-        .padding(.horizontal, 18).padding(.vertical, 14)
-        .frame(minWidth: 180, alignment: .leading)
+        .padding(.horizontal, 18 * k).padding(.vertical, 14 * k)
+        .frame(minWidth: 180 * k, alignment: .leading)
+        .environment(\.hudScale, k)
         .background(
             ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(hex: "#0c111b").opacity(m.opacity))
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 18 * k, style: .continuous).fill(Color(hex: "#0c111b").opacity(m.opacity))
+                RoundedRectangle(cornerRadius: 18 * k, style: .continuous)
                     .fill(RadialGradient(colors: [zc.opacity(0.28 * m.opacity), .clear], center: .bottomLeading, startRadius: 0, endRadius: 300))
-                RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 18 * k, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1)
             }
         )
         .overlay(
             Group {
                 if s.paused {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.55))
-                        .overlay(Text(s.label("paused", "PAUSED")).font(.system(size: 30, weight: .heavy)).tracking(4).foregroundColor(.white))
+                    RoundedRectangle(cornerRadius: 18 * k, style: .continuous).fill(Color.black.opacity(0.55))
+                        .overlay(Text(s.label("paused", "PAUSED")).font(.system(size: k * 30, weight: .heavy)).tracking(4).foregroundColor(.white))
                 }
             }
         )
@@ -384,6 +394,17 @@ final class App: NSObject, NSApplicationDelegate {
         }
         op.submenu = sub
         menu.addItem(op)
+        let sz = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        let sizes = NSMenu()
+        for (name, v) in [("Small", 0.8), ("Normal", 1.0), ("Large", 1.25), ("Extra large", 1.5)] {
+            let i = NSMenuItem(title: name, action: #selector(setScale(_:)), keyEquivalent: "")
+            i.representedObject = v
+            i.state = abs(model.scale - v) < 0.01 ? .on : .off
+            i.target = self
+            sizes.addItem(i)
+        }
+        sz.submenu = sizes
+        menu.addItem(sz)
         let shown = NSMenuItem(title: "Show", action: nil, keyEquivalent: "")
         let blocks = NSMenu()
         for (key, name) in [("power", "Power"), ("hr", "Heart rate"), ("cad", "Cadence"), ("workout", "Workout: target, interval, next"),
@@ -420,14 +441,25 @@ final class App: NSObject, NSApplicationDelegate {
         guard let key = sender.representedObject as? String else { return }
         if model.hidden.contains(key) { model.hidden.remove(key) } else { model.hidden.insert(key) }
         UserDefaults.standard.set(Array(model.hidden), forKey: "hiddenBlocks")
-        // keep the corner it sits in: the bottom-right stays put as the window shrinks or grows
+        refit()
+        rebuildMenu()
+    }
+
+    @objc func setScale(_ sender: NSMenuItem) {
+        model.scale = sender.representedObject as? Double ?? 1
+        UserDefaults.standard.set(model.scale, forKey: "scale")
+        refit()
+        rebuildMenu()
+    }
+
+    /// The window to the panel's new size, its bottom-right corner where it was (it sits in a corner of the screen).
+    func refit() {
         let old = panel.frame
         DispatchQueue.main.async { [weak self] in
             guard let self, let host = self.panel.contentView else { return }
             let size = host.fittingSize
             self.panel.setFrame(NSRect(x: old.maxX - size.width, y: old.minY, width: size.width, height: size.height), display: true)
         }
-        rebuildMenu()
     }
 
     @objc func setOpacity(_ sender: NSMenuItem) {
@@ -458,9 +490,10 @@ extension App {
     func updateLiveItem() { liveItem?.title = model.live ? "Riding: showing the numbers" : "Waiting for a ride in Gruppetto…" }
 }
 
-@MainActor func snapshot(to path: String, workout: Bool, hide: Set<String> = []) {
+@MainActor func snapshot(to path: String, workout: Bool, hide: Set<String> = [], scale: Double = 1) {
     let m = Model()
     m.hidden = hide
+    m.scale = scale
     var st = RideState()
     st.power = workout ? 232 : 150; st.zone = workout ? "Z4" : "Z2"; st.zoneColor = workout ? "#eab308" : "#3b82f6"
     st.powerColor = st.zoneColor; st.powerCls = workout ? "c-ok" : ""; st.wkg = workout ? "3.1 W/kg · 95% FTP" : "2.0 W/kg · 62% FTP"
@@ -479,11 +512,12 @@ extension App {
 enum Main {
     static let delegate = App()
     static func main() {
-        // --snapshot <file.png> [workout] [hide=cad,stats,wbal]: the panel with sample numbers drawn to a PNG (to check the look)
+        // --snapshot <file.png> [workout] [hide=cad,stats,wbal] [scale=0.8]: the panel with sample numbers drawn to a PNG (to check the look)
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
             let hide = Set(args.first { $0.hasPrefix("hide=") }?.dropFirst(5).split(separator: ",").map(String.init) ?? [])
-            MainActor.assumeIsolated { snapshot(to: args[i + 1], workout: args.contains("workout"), hide: hide) }
+            let scale = Double(args.first { $0.hasPrefix("scale=") }?.dropFirst(6) ?? "1") ?? 1
+            MainActor.assumeIsolated { snapshot(to: args[i + 1], workout: args.contains("workout"), hide: hide, scale: scale) }
             return
         }
         let app = NSApplication.shared

@@ -13,7 +13,7 @@ Gruppetto (the web page) sends the numbers over a WebSocket on this Mac (127.0.0
 4. The panel shows while a ride sends numbers and hides 8 s after it stops.
 
 Menu bar 🚴, or a right click on the panel (the 🚴 can hide behind a MacBook's notch; opening the app again shows
-the panel for a minute): background (solid … barely there), show (which blocks: heart rate, cadence, the
+the panel for a minute): background (solid … barely there), size (small … extra large), show (which blocks: heart rate, cadence, the
 workout, time · speed · distance, W′bal; power always stays), show it now (to drag it into place), quit.
 
 `GruppettoHUD --snapshot out.png [workout]` draws the panel with sample numbers to a PNG.
