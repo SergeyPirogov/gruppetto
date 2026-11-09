@@ -304,4 +304,11 @@ export const UK = {
   '⬇ Download all rides (.zip)': '⬇ Завантажити всі заїзди (.zip)', 'every ride as .FIT, a backup or a move to another app': 'кожен заїзд як .FIT: резервна копія чи перенесення в інший застосунок',
   'Packing… {n} of {total}': 'Пакую… {n} з {total}', 'No ride is kept in full on this device yet': 'На цьому пристрої ще немає збережених заїздів',
   '{n} rides as .FIT; {m} older ones keep only their summary': 'Заїздів у .FIT: {n}; від {m} старіших лишився тільки підсумок', '{n} rides as .FIT': 'Заїздів у .FIT: {n}',
+  'Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto asks only to upload, it reads nothing of yours.': 'Завершені заїзди йдуть у Strava як Virtual Ride з потужністю, пульсом і каденсом. Gruppetto просить лише дозвіл на завантаження й нічого твого не читає.',
+  'Upload the ride to Strava when finished': 'Завантажувати заїзд у Strava після фінішу', 'Connect Strava': 'Підключити Strava',
+  'Upload to Strava': 'Завантажити в Strava', 'Send to Strava': 'Надіслати в Strava', 'Upload the ride to Strava': 'Завантажити заїзд у Strava',
+  'Uploading to Strava…': 'Завантажую в Strava…', 'On Strava ✓': 'У Strava ✓', 'Already on Strava': 'Уже є в Strava',
+  'Strava: tick «Upload your activities» to let Gruppetto send rides': 'Strava: постав галочку «Upload your activities», щоб Gruppetto міг надсилати заїзди',
+  'Strava: not connected': 'Strava не підключено', 'Connecting to Strava…': 'Підключаюся до Strava…', 'Strava connected': 'Strava підключено',
+  'Strava: {error}': 'Strava: {error}', 'Connected: {name}': 'Підключено: {name}', 'Connected': 'Підключено',
 };

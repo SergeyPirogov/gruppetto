@@ -922,3 +922,18 @@ test('zip: CRC-32, stored files with UTF-8 names, repeated names kept apart', as
   }
   assert.deepEqual(names, ['a.fit', 'серпантин.fit', 'a (2).fit']);
 });
+
+test('Strava: the return from its page, and what an upload became', async () => {
+  const { stravaReturn, uploadOutcome, stravaAuthorizeUrl } = await import('../js/strava.js');
+  assert.equal(stravaReturn('?code=abc'), null); // not ours (Slipstream's return, or a plain link)
+  assert.deepEqual(stravaReturn('?state=gruppetto-strava&code=abc&scope=read,activity:write'), { code: 'abc' });
+  assert.deepEqual(stravaReturn('?state=gruppetto-strava&code=abc&scope=read'), { error: 'no-write' });
+  assert.deepEqual(stravaReturn('?state=gruppetto-strava&error=access_denied'), { error: 'denied' });
+  const u = new URL(stravaAuthorizeUrl('https://automation-remarks.com/gruppetto/'));
+  assert.equal(u.searchParams.get('redirect_uri'), 'https://automation-remarks.com/gruppetto/');
+  assert.ok(u.searchParams.get('scope').includes('activity:write'));
+  assert.equal(uploadOutcome({ status: 'Your activity is still being processed.', error: null }), null);
+  assert.deepEqual(uploadOutcome({ activity_id: 42, error: null }), { activityId: 42 });
+  assert.deepEqual(uploadOutcome({ error: "gruppetto.fit duplicate of <a href='/activities/12345' target='_blank'>Gruppetto ride</a>" }), { activityId: 12345, duplicate: true });
+  assert.deepEqual(uploadOutcome({ error: 'Time information is missing from the file.' }), { error: 'Time information is missing from the file.' });
+});

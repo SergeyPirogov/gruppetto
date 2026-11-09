@@ -16,6 +16,7 @@ import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSugge
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder, rideFileName } from './recorder.js';
 import { makeZip } from './zip.js';
+import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl } from './strava.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
@@ -37,7 +38,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
+  icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
@@ -407,6 +408,7 @@ function initLobby() {
   }
   updateDeviceUI();
   initIntervals();
+  initStrava();
 }
 
 /** The route cards in groups: flat, hilly, mountain, and the routes you imported. */
@@ -2651,13 +2653,23 @@ function showSummary(e, { live = false } = {}) {
     if (e.uploadedId) st.innerHTML = e.uploadedId === true ? tr('Uploaded to intervals.icu ✓') : `${tr('Uploaded to intervals.icu ✓')} · <a href="${activityUrl(e.uploadedId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
   };
   const canUpload = (rec) => !!(rec && icuClient && sum && sum.duration >= 60);
+  const canStrava = (rec) => !!(rec && stravaClient && sum && sum.duration >= 60);
+  const stravaUi = (can) => {
+    $('btn-strava-upload').hidden = !can;
+    $('btn-strava-upload').disabled = false;
+    $('btn-strava-upload').textContent = live ? tr('Upload to Strava') : tr('Send to Strava');
+    const st = $('strava-upload-status');
+    st.hidden = !e.stravaId;
+    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+  };
   files(live);
   uploadUi(live && canUpload(recorder));
+  stravaUi(live && canStrava(recorder) && !e.stravaId);
   $('btn-delete-ride').hidden = live;
   $('btn-delete-ride').dataset.id = e.id;
   $('btn-delete-ride').textContent = tr('Delete ride');
-  if (live) { scheduleUpload(canUpload(recorder)); return; }
-  scheduleUpload(false);
+  if (live) { scheduleUpload('icu', canUpload(recorder)); scheduleUpload('strava', canStrava(recorder) && !e.stravaId); return; }
+  scheduleUpload('icu', false); scheduleUpload('strava', false);
   getRide(e.id).then((r) => {
     if (!r || shown.entry !== e) return;
     const rec = new Recorder();
@@ -2665,6 +2677,7 @@ function showSummary(e, { live = false } = {}) {
     shown.rec = rec;
     files(true);
     uploadUi(canUpload(rec) && !e.uploadedId);
+    stravaUi(canStrava(rec) && !e.stravaId);
   });
 }
 /** The ride on the summary screen: its history entry and, when kept, its full record. */
@@ -3299,38 +3312,48 @@ function forgetIntervals() {
 }
 
 /**
- * The finish screen's "Upload to intervals.icu" switch (remembered for next time): when on, the ride
- * goes up after a 10 s countdown, or at once on leaving the screen; switched off, nothing is sent.
+ * The finish screen's "Upload to intervals.icu" and "Upload to Strava" switches (remembered for next time): when
+ * on, the ride goes up after a 10 s countdown, or at once on leaving the screen; switched off, nothing is sent.
  */
-let uploadTimer = null;
-function scheduleUpload(can) {
-  clearInterval(uploadTimer); uploadTimer = null;
-  const box = $('sum-icu-auto'), count = $('sum-icu-count');
-  $('sum-icu').hidden = !can;
-  count.textContent = '';
+const AUTO_UPLOAD = {
+  icu: { wrap: 'sum-icu', box: 'sum-icu-auto', count: 'sum-icu-count', key: 'icuUpload', profile: 'f-icu-upload', run: () => uploadToIntervals(), done: () => shown.entry?.uploadedId || lastRide?.uploadedId },
+  strava: { wrap: 'sum-strava', box: 'sum-strava-auto', count: 'sum-strava-count', key: 'stravaUpload', profile: 'f-strava-upload', run: () => uploadToStrava(), done: () => shown.entry?.stravaId },
+};
+const uploadTimers = {};
+function stopUploadTimer(kind) {
+  clearInterval(uploadTimers[kind]); uploadTimers[kind] = null;
+  $(AUTO_UPLOAD[kind].count).textContent = '';
+}
+function scheduleUpload(kind, can) {
+  const a = AUTO_UPLOAD[kind];
+  stopUploadTimer(kind);
+  const box = $(a.box), count = $(a.count);
+  $(a.wrap).hidden = !can;
   if (!can) return;
-  box.checked = !!settings.icuUpload;
+  box.checked = !!settings[a.key];
   let left = 10;
   const tick = () => {
-    if (left <= 0) { clearInterval(uploadTimer); uploadTimer = null; count.textContent = ''; uploadToIntervals(); return; }
+    if (left <= 0) { stopUploadTimer(kind); a.run(); return; }
     count.textContent = tr('in {s} s', { s: left }); left--;
   };
-  const start = () => { if (shown.entry?.uploadedId || lastRide?.uploadedId || uploadTimer) return; left = 10; uploadTimer = setInterval(tick, 1000); tick(); };
+  const start = () => { if (a.done() || uploadTimers[kind]) return; left = 10; uploadTimers[kind] = setInterval(tick, 1000); tick(); };
   box.onchange = () => {
-    settings.icuUpload = box.checked; saveSettings(); $('f-icu-upload').checked = box.checked;
-    if (box.checked) start(); else { clearInterval(uploadTimer); uploadTimer = null; count.textContent = ''; }
+    settings[a.key] = box.checked; saveSettings(); $(a.profile).checked = box.checked;
+    if (box.checked) start(); else stopUploadTimer(kind);
   };
   if (box.checked) start();
 }
 /** Leaving the finish screen: a pending upload goes now. */
 function flushUpload() {
-  if (!uploadTimer) return;
-  clearInterval(uploadTimer); uploadTimer = null;
-  uploadToIntervals();
+  for (const kind of Object.keys(AUTO_UPLOAD)) {
+    if (!uploadTimers[kind]) continue;
+    stopUploadTimer(kind);
+    AUTO_UPLOAD[kind].run();
+  }
 }
 
 async function uploadToIntervals() {
-  clearInterval(uploadTimer); uploadTimer = null; $('sum-icu-count').textContent = '';
+  stopUploadTimer('icu');
   const e = shown.entry, rec = shown.rec;
   if (!icuClient || !e?.summary || !rec || e.uploadedId) return;
   const status = $('icu-upload-status');
@@ -3356,6 +3379,74 @@ async function uploadToIntervals() {
     $('sum-icu').hidden = true;
   } catch (e) {
     status.textContent = tr('Upload failed: {error}', { error: e.message });
+    btn.disabled = false;
+    btn.textContent = tr('Try again');
+  }
+}
+
+// ---------- Strava ----------
+let stravaClient = null;
+
+function initStrava() {
+  stravaClient = StravaClient.saved();
+  $('f-strava-upload').checked = settings.stravaUpload;
+  $('f-strava-upload').onchange = () => { settings.stravaUpload = $('f-strava-upload').checked; saveSettings(); };
+  $('btn-strava').onclick = () => { track('strava', 'connect'); location.href = stravaAuthorizeUrl(stravaRedirect()); };
+  $('btn-strava-forget').onclick = () => { track('strava', 'forget'); stravaClient?.forget(); stravaClient = null; renderStrava(); };
+  $('btn-strava-upload').onclick = uploadToStrava;
+  renderStrava();
+  // back from Strava's page: the code becomes tokens, and the address loses it
+  const back = stravaReturn(location.search);
+  if (!back) return;
+  const url = new URL(location.href);
+  for (const k of ['state', 'code', 'scope', 'error']) url.searchParams.delete(k);
+  window.history.replaceState(null, '', url);
+  openDrawer('profile');
+  requestAnimationFrame(() => $('strava-card').scrollIntoView({ block: 'start' }));
+  if (back.error) {
+    $('strava-status').textContent = back.error === 'no-write' ? tr('Strava: tick «Upload your activities» to let Gruppetto send rides') : tr('Strava: not connected');
+    track('strava', back.error);
+    return;
+  }
+  $('strava-status').textContent = tr('Connecting to Strava…');
+  StravaClient.connect(back.code).then((c) => {
+    stravaClient = c; track('strava', 'connected');
+    renderStrava();
+    toast(tr('Strava connected'));
+  }).catch((err) => { $('strava-status').textContent = tr('Strava: {error}', { error: err.message }); });
+}
+
+function renderStrava() {
+  $('btn-strava').hidden = !!stravaClient;
+  $('btn-strava-forget').hidden = !stravaClient;
+  $('strava-status').textContent = stravaClient ? (stravaClient.name ? tr('Connected: {name}', { name: stravaClient.name }) : tr('Connected')) : '';
+}
+
+async function uploadToStrava() {
+  stopUploadTimer('strava');
+  const e = shown.entry, rec = shown.rec;
+  if (!stravaClient || !e?.summary || !rec || e.stravaId) return;
+  const status = $('strava-upload-status'), btn = $('btn-strava-upload');
+  status.hidden = false;
+  status.textContent = tr('Uploading to Strava…');
+  btn.disabled = true;
+  const sum = e.summary;
+  try {
+    const { activityId, duplicate } = await stravaClient.upload(rec.toFIT(), {
+      name: `Gruppetto: ${e.workoutName || e.routeName}`,
+      description: `${e.routeName} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`,
+      externalId: `gruppetto-${e.id}`,
+      filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit`,
+    });
+    e.stravaId = activityId;
+    if (history.includes(e)) saveHistory();
+    track('strava', duplicate ? 'duplicate' : 'uploaded');
+    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    btn.hidden = true;
+    $('sum-strava').hidden = true;
+  } catch (err) {
+    track('strava', 'failed');
+    status.textContent = tr('Upload failed: {error}', { error: err.message });
     btn.disabled = false;
     btn.textContent = tr('Try again');
   }

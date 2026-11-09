@@ -380,6 +380,16 @@
         <span id="icu-status" class="muted"></span>
       </div>
     </div>
+      <div class="card" id="strava-card" data-panel="profile">
+        <h2>Strava</h2>
+        <p class="muted">Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto asks only to upload, it reads nothing of yours.</p>
+        <label class="check"><input type="checkbox" id="f-strava-upload"> Upload the ride to Strava when finished</label>
+        <div class="row icu-row">
+          <button id="btn-strava">Connect Strava</button>
+          <button id="btn-strava-forget" hidden>Disconnect</button>
+          <span id="strava-status" class="muted"></span>
+        </div>
+      </div>
       <div class="card" data-panel="history">
         <h2>Ride history</h2>
         <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
@@ -562,13 +572,16 @@
         <button id="btn-download" class="primary">Download .FIT</button>
         <button id="btn-download-tcx">.TCX</button>
         <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
+        <button id="btn-strava-upload" hidden>Upload to Strava</button>
         <button id="btn-delete-ride" class="ghost" hidden>Delete ride</button>
         <button id="btn-challenge" hidden title="A link: your friend rides against your ghost">Challenge a friend 👻</button>
         <button id="btn-card">Share card</button>
         <button id="btn-again" class="ghost">Back to lobby</button>
       </div>
       <label class="check sum-icu" id="sum-icu" hidden><input type="checkbox" id="sum-icu-auto"> <span>Upload the ride to intervals.icu</span> <small id="sum-icu-count"></small></label>
+      <label class="check sum-icu" id="sum-strava" hidden><input type="checkbox" id="sum-strava-auto"> <span>Upload the ride to Strava</span> <small id="sum-strava-count"></small></label>
       <p id="icu-upload-status" class="hint" hidden></p>
+      <p id="strava-upload-status" class="hint" hidden></p>
       <p class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
     </main>
   </section>
