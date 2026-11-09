@@ -1814,6 +1814,7 @@ function pipState(p3, zone, hrNow, zs) {
     cad: $('m-cad').textContent, cadCls: $('m-cad').className, cadAvg: $('m-cad-avg').textContent,
     cadTarget: wk && $('wk-cad').textContent !== '—' ? `→ ${$('wk-cad').textContent}` : '',
     workout: wk, target: $('wk-target').textContent, left: $('wk-left').textContent, next: $('wk-next').textContent,
+    ...(() => { const t = wk ? targetAt(ride.workout, ride.workoutT, settings.ftp) : null; return t ? { stepF: 1 - t.remaining / Math.max(1, t.step.dur), stepLeft: t.remaining } : {}; })(),
     time: $('m-time').textContent, speed: $('m-speed').textContent, dist: $('m-dist').textContent,
     grade: $('grade').textContent, gradeColor: $('grade').style.color,
     wbalF: f, wbalLevel: f <= 0.1 ? 'empty' : f <= 0.25 ? 'low' : f <= 0.5 ? 'mid' : 'ok', wbalTxt: `W′bal ${$('m-wbal').textContent} ${tr('kJ')} · ${$('m-wbal-warn').textContent}`,
