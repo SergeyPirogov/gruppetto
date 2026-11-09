@@ -1886,6 +1886,9 @@ $('f-overlay').onchange = () => { settings.overlay = $('f-overlay').checked; sav
 $('btn-start-more').onclick = (e) => { e.stopPropagation(); $('start-menu').hidden = !$('start-menu').hidden; };
 $('start-watch').onclick = () => { $('start-menu').hidden = true; startRide({ watch: true }); };
 document.addEventListener('click', (e) => { if (!e.target.closest('#start-menu, #btn-start-more')) $('start-menu').hidden = true; });
+// from the Watch & ride page (watch.html): the Ride menu open at Watch & ride, one click away (the mini window
+// needs that click: a browser opens it only from one)
+if (new URLSearchParams(location.search).get('start') === 'watch' && !$('btn-start-more').hidden) $('start-menu').hidden = false;
 $('btn-pip').onclick = () => togglePip();
 $('pip-show-road').onclick = async () => {
   if (!ride) return;
