@@ -81,17 +81,20 @@ const CSS = `
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; color: #e8edf5; }
 /* the top in the grey of Chrome's own strip over the window, the zone's glow from the bottom corner */
-body { display: flex; flex-direction: column; justify-content: center; padding: 3.5vh 4.5vw; gap: 2.6vh;
+body { display: flex; flex-direction: column; justify-content: space-evenly; padding: 3vh 4.5vw; gap: 1.6vh;
   background: radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--zc) 26%, transparent), transparent 65%), linear-gradient(180deg, #202124 0%, #161b26 38%, #0c111b 100%);
   transition: background .6s; }
 /* the three numbers close together, power first and biggest */
-.top { display: flex; align-items: flex-end; gap: 6vw; }
+.top { display: grid; grid-template-columns: 1.55fr 1fr 1fr; align-items: end; gap: 3vw; } /* the full width, the numbers grown to fill it */
 .cell { display: flex; flex-direction: column; min-width: 0; }
 .cell.power { flex: none; }
 .cell.power { --c: var(--zc); } .cell.hr { --c: #ff6b78; } .cell.cad { --c: #4fdcf2; }
 .cell label { font-size: clamp(9px, min(5vh, 4vw), 14px); color: var(--c); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; display: flex; gap: .4em; align-items: center; margin-bottom: .3vh; }
-.cell b { font-variant-numeric: tabular-nums; line-height: .95; font-weight: 800; font-size: clamp(18px, min(21vh, 11vw), 120px); letter-spacing: -.02em; }
-.cell.power b { font-size: clamp(28px, min(34vh, 19vw), 190px); }
+.cell b { font-variant-numeric: tabular-nums; line-height: .95; font-weight: 800; font-size: clamp(18px, min(27vh, 10.5vw), 150px); letter-spacing: -.02em; }
+.cell.power b { font-size: clamp(28px, min(40vh, 15.5vw), 220px); }
+/* with the interval line the numbers give it room */
+body.has-wk .cell.power b { font-size: clamp(24px, min(30vh, 15.5vw), 200px); }
+body.has-wk .cell b { font-size: clamp(16px, min(20vh, 10.5vw), 130px); }
 .cell small { font-size: clamp(9px, min(4.6vh, 3.6vw), 13px); color: #9fb0c6; white-space: nowrap; margin-top: .6vh; }
 .unit { font-size: .3em; font-weight: 700; color: #9fb0c6; margin-left: .2em; letter-spacing: 0; }
 .tag { font-size: .9em; font-weight: 800; color: #0f1420; border-radius: 4px; padding: 0 .35em; }
@@ -106,9 +109,9 @@ body { display: flex; flex-direction: column; justify-content: center; padding: 
 .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3vw; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row > div { display: flex; flex-direction: column; min-width: 0; }
 .row i { font-style: normal; color: #9fb0c6; font-weight: 600; font-size: clamp(8px, min(4vh, 3.2vw), 12px); text-transform: uppercase; letter-spacing: .05em; }
-.row b { font-size: clamp(12px, min(8vh, 5.4vw), 26px); font-weight: 800; }
+.row b { font-size: clamp(12px, min(9vh, 5.6vw), 30px); font-weight: 800; line-height: 1.1; }
 .row span { color: #9fb0c6; font-weight: 600; font-size: .6em; margin-left: .2em; }
-.wbal { height: max(3px, 1.2vh); border-radius: 99px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: .6vh; }
+.wbal { height: max(3px, 1.2vh); border-radius: 99px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: 1vh; }
 .wbal > div { height: 100%; width: 100%; background: #a78bfa; transform-origin: left; transition: transform .4s; }
 .paused { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(12,17,27,.75); font-size: clamp(16px, 16vh, 60px); font-weight: 800; letter-spacing: .1em; }
 .pause-btn { position: fixed; top: 4px; right: 4px; width: 28px; height: 28px; padding: 0; border-radius: 8px; border: 1px solid #2a3448; background: #273249cc; color: #e8edf5; font-size: 14px; cursor: pointer; opacity: 0; transition: opacity .2s; z-index: 2; }
@@ -117,7 +120,7 @@ body:hover .pause-btn, .pause-btn:focus-visible { opacity: 1; }
 /* by the window's size: small = power and heart rate only; narrow = fewer cells */
 @media (max-height: 150px), (max-width: 240px) { .row, .cell.cad, .cell small { display: none; } .wk > div:nth-child(3) { display: none; } }
 @media (max-width: 300px) { .row > div:nth-child(3) { display: none; } .row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-aspect-ratio: 3/4) and (min-height: 260px) { .top { flex-direction: column; align-items: flex-start; gap: 2vh; } .row { grid-template-columns: 1fr 1fr; row-gap: 1.4vh; } .wk { flex-direction: column; gap: .6vh; } }
+@media (max-aspect-ratio: 3/4) and (min-height: 260px) { .top { grid-template-columns: 1fr; gap: 2vh; } .row { grid-template-columns: 1fr 1fr; row-gap: 1.4vh; } .wk { flex-direction: column; gap: .6vh; } }
 `;
 
 function buildDocument(w, opts) {
@@ -170,6 +173,7 @@ function updateDocument(s) {
   if (s.hrZone) { setText(E.hrZone, s.hrZone); E.hrZone.style.background = s.hrZoneColor; }
   setText(E.cad, s.cad); E.cad.className = s.cadCls || ''; setText(E.cadTarget, s.cadTarget || s.cadAvg || '');
   E.wk.hidden = !s.workout;
+  E.wk.ownerDocument.body.classList.toggle('has-wk', !!s.workout);
   if (s.workout) {
     setText(E.target, s.target); E.target.className = s.powerCls || ''; setText(E.left, s.left); setText(E.next, s.next);
     E.wkBar.style.transform = `scaleX(${(s.stepF ?? 0).toFixed(3)})`;
