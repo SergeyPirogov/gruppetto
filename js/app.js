@@ -21,6 +21,7 @@ import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
+import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1108,6 +1109,7 @@ async function startRide() {
   ride.lastSim = performance.now();
   clearInterval(rideTimer);
   rideTimer = setInterval(() => advance(), 250);
+  resetPip();
   keepAwake(true);
   if (simulated) toast(tr('Simulator mode: set power with the slider or ↑/↓'));
   const touch = matchMedia('(pointer: coarse)').matches;
@@ -1543,6 +1545,7 @@ function updateWbalHud(p3) {
 }
 
 function updateHud(cadence, hr, grade) {
+  ride.lastHud = [cadence, hr, grade];
   const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
   $('m-power').textContent = p3;
   $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} ${U.wkg}`;
@@ -1644,7 +1647,46 @@ function updateHud(cadence, hr, grade) {
   }
 
   drawProfile($('profile'), ride.route, [...ride.bots, ...(ride.ghost ? [{ dist: ride.ghost.dist, color: 'rgba(255,255,255,.6)' }] : []), { dist: ride.dist, color: settings.jersey, self: true }]);
+  if (pipOpen()) updatePip(pipState(p3, zone, hrNow, zs));
 }
+
+// ---------- The mini window over other apps (picture-in-picture) ----------
+/** What the mini window shows: the same numbers as the board, already formatted. */
+function pipState(p3, zone, hrNow, zs) {
+  const hz = zs && hrNow > 0 ? (zs.find((x) => hrNow < x.upTo) || zs[zs.length - 1]) : null;
+  const wp = wPrimeJ(), f = Math.max(0, Math.min(1, (ride.wbal ?? wp) / wp));
+  const wk = !!ride.workout && !ride.workoutDone;
+  return {
+    labels: { power: tr('Power'), hr: tr('HR'), cad: tr('Cadence'), W: U.W, kmh: tr('km/h'), km: U.km, target: tr('Target, W'), interval: tr('Interval'), next: tr('Next'), paused: tr('PAUSED') },
+    power: p3, powerCls: $('m-power').className, powerColor: p3 > 0 ? zone.color : '',
+    zone: `Z${zone.z}`, zoneColor: zone.color, wkg: `${(p3 / settings.weight).toFixed(1)} ${U.wkg} · ${$('m-ftp-pct').textContent}`,
+    hr: $('m-hr').textContent, hrAvg: $('m-hr-avg').textContent, hrZone: hz ? `Z${hz.z}` : '', hrZoneColor: hz?.color,
+    cad: $('m-cad').textContent, cadCls: $('m-cad').className, cadAvg: $('m-cad-avg').textContent,
+    cadTarget: wk && $('wk-cad').textContent !== '—' ? `→ ${$('wk-cad').textContent}` : '',
+    workout: wk, target: $('wk-target').textContent, left: $('wk-left').textContent, next: $('wk-next').textContent,
+    time: $('m-time').textContent, speed: $('m-speed').textContent, dist: $('m-dist').textContent,
+    grade: $('grade').textContent, gradeColor: $('grade').style.color,
+    wbalF: f, wbalLevel: $('m-wbal').dataset.level, wbalTxt: $('m-wbal-txt').textContent,
+    paused: !!ride.paused,
+  };
+}
+
+/** Open or close the mini window; it has to come from a click or a key press. */
+async function togglePip() {
+  if (!ride) return;
+  if (pipOpen()) { closePip(); return; }
+  const ok = await openPip({
+    onKey: onRideKey,
+    onPause: () => togglePause(),
+    heartbeat: () => { if (ride) advance(); }, // the hidden tab's timers slow down, the mini window's do not
+    onClose: () => $('btn-pip')?.classList.remove('on'),
+  });
+  if (!ok) { toast(tr('This browser cannot show a mini window over other apps')); return; }
+  $('btn-pip').classList.add('on');
+  if (ride.lastHud) updateHud(...ride.lastHud); // straight away, not in a second
+}
+$('btn-pip').hidden = !pipSupport();
+$('btn-pip').onclick = () => togglePip();
 
 // ---------- Minimap ----------
 const MAP_TURN = 2.5; // the 3D renderer's curvature factor: the map has the same bends as the road you see
@@ -1992,6 +2034,7 @@ function togglePause() {
   $('paused').hidden = !ride.paused;
   $('btn-pause').textContent = ride.paused ? tr('Resume') : tr('Pause');
   if (ride.paused) showControls(0); else showControls();
+  if (pipOpen() && ride.lastHud) updateHud(...ride.lastHud);
 }
 
 /** The ride so far, kept in case the page closes before Finish (#: crash safety). */
@@ -2049,6 +2092,7 @@ function finishRide() {
   rideFullscreen = false;
   advance();
   clearInterval(rideTimer);
+  closePip();
   keepAwake(false);
   crowdOff();
   const sum = recorder.summary();
@@ -3160,6 +3204,7 @@ const KEYS = [
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
   [['M'], 'Bigger map'],
+  [['I'], 'Mini window over other apps (film, football, YouTube)'],
   [['+', '−'], 'Simulator: power ±10 W'],
   [['Esc'], 'Menu: Finish and Settings'],
   [['?'], 'This list'],
@@ -3175,7 +3220,8 @@ function toggleFullscreen() {
   else document.documentElement.requestFullscreen?.().catch(() => {});
 }
 
-window.addEventListener('keydown', (e) => {
+window.addEventListener('keydown', onRideKey);
+function onRideKey(e) {
   // the workout page in the lobby: Enter rides it
   if (!ride && !$('wk-detail').hidden && e.code === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); $('wkd-ride').click(); return; }
   if (!ride) return;
@@ -3207,12 +3253,13 @@ window.addEventListener('keydown', (e) => {
   else if (c === 'KeyH') runIntent('hud');
   else if (c === 'KeyF') toggleFullscreen();
   else if (c === 'KeyM') toggleMinimap();
+  else if (c === 'KeyI') togglePip();
   else if (ride.simulated && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(c)) {
     const s = $('sim-power');
     s.value = Number(s.value) + (c === 'Equal' || c === 'NumpadAdd' ? 5 : -5);
     s.oninput();
   }
-});
+}
 
 // interface language (#31): the static page, the built-in routes, climbs and workouts, power zones
 translateDom();

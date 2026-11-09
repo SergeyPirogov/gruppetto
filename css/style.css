@@ -988,3 +988,4 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   #ride .stat .wbal { margin-top: 3px; }
   #ride #m-wbal-txt { display: none; }
 }
+#btn-pip.on { box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent); }
