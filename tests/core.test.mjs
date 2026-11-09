@@ -967,3 +967,33 @@ test('attacks (#48): due, waits for a climb, needs a bunch, the plan of power', 
   assert.equal(nextAttack(st3, { t: st3.nextAt + 100, bots, meDist: 2000, grade: 0.05, rnd }), null);
   assert.ok(bots.every((b) => !b.attack));
 });
+
+test('race bunch: together on the flat, split by a climb', async () => {
+  const { stepSpeed, packDraft, riderCdA } = await import('../js/physics.js');
+  const { bunchPower, BUNCH } = await import('../js/bunch.js');
+  let seed = 3; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const bots = Array.from({ length: 8 }, (_, i) => {
+    const w = 60 + rnd() * 28;
+    return { weight: w, cda: riderCdA(178, w), wkg: 3.3 * (0.82 + (i / 7) * 0.26), dist: -2 - Math.floor(i / 3) * 1.9, v: 0, lane: [-2, -0.4, 2][i % 3], line: BUNCH.lines[i % 2], climber: i % 3 === 0 };
+  });
+  const spread = () => { const d = bots.map((b) => b.dist); return Math.max(...d) - Math.min(...d); };
+  const dt = 0.1, climbFrom = 600, climbTo = 780;
+  let flatMax = 0;
+  for (let t = 0; t <= 780; t += dt) {
+    const g = t > climbFrom && t < climbTo ? 0.06 : 0;
+    for (const b of bots) {
+      const others = bots.filter((o) => o !== b);
+      const bd = packDraft(others.map((o) => ({ gap: o.dist - b.dist, sideways: o.lane - b.lane })));
+      const base = b.wkg * b.weight * (1 + Math.min(0.35, g * 4));
+      let p = t < 8 ? base * 1.15 : bunchPower(b, { t, dt, base, grade: g, cda: b.cda * (1 - bd), others, rnd });
+      if (b.climber && g > 0.035) p = Math.max(p, base * 1.12);
+      b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd) });
+      b.dist += b.v * dt;
+      b.lane += Math.sign(b.line - b.lane) * Math.min(Math.abs(b.line - b.lane), 0.8 * dt);
+      if (!(b.climber && g > 0.035)) for (const o of others) if (Math.abs(o.lane - b.lane) < 0.8 && o.dist - b.dist > 0 && o.dist - b.dist < 1.9) { b.dist = o.dist - 1.9; b.v = Math.min(b.v, o.v); }
+    }
+    if (t > 60 && t < climbFrom) flatMax = Math.max(flatMax, spread());
+  }
+  assert.ok(flatMax < 15, `the bunch holds on the flat (spread ${flatMax.toFixed(1)} m)`);
+  assert.ok(spread() > 40, `the climb splits it (spread ${spread().toFixed(1)} m)`);
+});

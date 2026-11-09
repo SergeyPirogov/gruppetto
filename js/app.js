@@ -17,6 +17,7 @@ import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from '.
 import { Recorder, rideFileName } from './recorder.js';
 import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
+import { bunchPower, BUNCH } from './bunch.js';
 import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl } from './strava.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
@@ -1220,7 +1221,7 @@ async function startRide(opts) {
       // on the start line: a grid of rows of three across the road, just behind you
       ? makeBots(Math.max(5, settings.bots || 5), { race: true }).map((b, i) => {
         const lane = [-2.0, -0.4, 2.0][i % 3], home = lane;
-        return { ...b, dist: -1.6 - Math.floor(i / 3) * 1.9, v: 0, pedal: i, lane, home, laneTarget: lane };
+        return { ...b, dist: -1.6 - Math.floor(i / 3) * 1.9, v: 0, pedal: i, lane, home, laneTarget: lane, line: BUNCH.lines[i % 2] };
       })
       : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     race: racing ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
@@ -1387,7 +1388,15 @@ function advance(now = performance.now()) {
     if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
       ride.laneCheck = 0;
       const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, heldFor: ride.heldFor, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
-      for (const b of ride.bots) b.laneTarget = pickLane(b, solid, b.home);
+      const inBunch = ride.race && ride.race.go && ride.elapsed - (ride.race.t0 ?? 0) > 8;
+      for (const b of ride.bots) {
+        const lane = pickLane(b, solid, inBunch && b.line != null ? b.line : b.home);
+        // in the race bunch a rider keeps to its line (two abreast, the left of the road free for you to move up);
+        // only a climber attacking on a climb, or anyone in the sprint, goes round
+        const toGo = ride.race ? ride.race.distance - b.dist : Infinity;
+        const goesRound = (b.climber && route.gradeAt(b.dist) > 0.035) || toGo < 300;
+        b.laneTarget = inBunch && b.line != null && !goesRound ? b.line : lane;
+      }
       if (!ride.steeredAt || ride.elapsed - ride.steeredAt > 4) { // unless you steered yourself just now
         const me = solid[0], t = pickLane(me, solid, ride.laneHome ?? START_LANE);
         if (t !== ride.laneTarget) { ride.laneTarget = t; ride.autoLane = true; }
@@ -1402,16 +1411,19 @@ function advance(now = performance.now()) {
       const swing = 1 + Math.sin(ride.elapsed * 0.05 + b.phase) * 0.05 + Math.sin(ride.elapsed * 0.17 + b.phase * 2) * 0.03;
       let p = b.wkg * b.weight * swing * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
       if (b.attack) p *= attackFactor(b, ride.elapsed);
+      const wheels = [{ dist: ride.dist, lane: ride.lane, v: ride.v }, ...ride.bots.filter((o) => o !== b)];
+      const bd = packDraft(wheels.map((o) => ({ gap: o.dist - b.dist, sideways: o.lane - b.lane })), W.cross);
       if (ride.race) {
-        const R = ride.race, toGo = R.distance - b.dist;
-        if (b.climber && g > 0.035) p *= 1.12;                 // climbers attack on the hills
-        if (toGo < 300 && toGo > 0) p *= 1.3;                  // everyone sprints for the line
-        if (toGo <= 0) p *= 0.5;                               // over the line: soft-pedalling
-        if (ride.elapsed - (R.t0 ?? 0) < 8) p *= 1.15;         // the start: out of the saddle
+        const R = ride.race, toGo = R.distance - b.dist, base = p;
+        const start = ride.elapsed - (R.t0 ?? 0) < 8;
+        // a bunch, as in a real race: on the wheel ahead, two abreast, turns at the front, dropped on a climb
+        if (!start && toGo > 0) p = bunchPower(b, { t: ride.elapsed, dt, base, grade: g, cda: b.cda * (1 - bd), wind: W.head, others: wheels });
+        if (b.climber && g > 0.035) p = Math.max(p, base * 1.12); // climbers attack on the hills
+        if (toGo < 300 && toGo > 0) p = Math.max(p, base * 1.3);  // everyone sprints for the line
+        if (toGo <= 0) p = base * 0.5;                            // over the line: soft-pedalling
+        if (start) p = base * 1.15;                               // the start: out of the saddle
       }
       b.power = p;
-      const wheels = [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b)];
-      const bd = packDraft(wheels.map((o) => ({ gap: o.dist - b.dist, sideways: o.lane - b.lane })), W.cross);
       b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd), wind: W.head });
       b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, b.weight, { cda: b.cda, wind: W.head });
       for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
