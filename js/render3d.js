@@ -1237,24 +1237,30 @@ export class Scene3D {
       for (let i = 0; i <= N; i++) H.push(hgt(i % N) + (hash((i % N) + seed * 99) - 0.5) * amp * 0.12);
       // the snow line wanders a little from column to column, as it does on real slopes
       const snowY = (i) => amp * (0.58 + (hash((i % N) * 3.7 + seed * 17) - 0.5) * 0.12);
-      const quad = (a0, a1, y00, y01, y10, y11, c0, c1) => {
+      // colours per corner: [bottom left, bottom right, top left, top right]
+      const quad = (a0, a1, y00, y01, y10, y11, [c00, c10, c01, c11]) => {
         const v = (a, y) => [Math.cos(a) * R, y, Math.sin(a) * R];
         const P = [v(a0, y00), v(a1, y10), v(a0, y01), v(a1, y10), v(a1, y11), v(a0, y01)];
-        const C = [c0, c0, c1, c0, c1, c1];
+        const C = [c00, c10, c01, c10, c11, c01];
         P.forEach((q, k) => { pos.push(...q); cs.push(C[k].r, C[k].g, C[k].b); });
       };
+      // baked relief: a slope rising along the ridge catches the light, a falling one is in shade. Shaded at the
+      // column edges from the slope across both neighbours, so it blends across a face (by face it striped the range)
+      const shadeAt = (i) => {
+        const d = (H[(i + 1) % N] - H[(i - 1 + N) % N]) / 2;
+        return 1 + Math.max(-1, Math.min(1, d / (amp * 0.1))) * (far ? 0.07 : 0.13);
+      };
+      const snowCol = (sh) => sh >= 1 ? snow.clone().multiplyScalar(Math.min(1.04, sh)) // snow in the shade goes a cool blue
+        : snow.clone().lerp(col('#b9c9e4').multiplyScalar(dim), (1 - sh) * 4).multiplyScalar(0.96);
       for (let i = 0; i < N; i++) {
         const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
-        const h0 = H[i], h1 = H[i + 1];
-        // baked relief: a face rising along the ridge catches the light, a falling one is in shade
-        const shade = 1 + Math.max(-1, Math.min(1, (h1 - h0) / (amp * 0.08))) * (far ? 0.08 : 0.16);
+        const h0 = H[i], h1 = H[i + 1], sh0 = shadeAt(i), sh1 = shadeAt(i + 1);
         const s0 = snowY(i), s1 = snowY(i + 1);
         const m0 = L.snow ? Math.min(h0, s0) : h0, m1 = L.snow ? Math.min(h1, s1) : h1;
-        const topC = base.clone().lerp(top, Math.min(1, Math.max(m0, m1) / amp)).multiplyScalar(shade);
-        quad(a0, a1, -250, m0, -250, m1, base.clone().multiplyScalar(0.96 + (shade - 1) * 0.4), topC);
-        // snow in the shade goes a cool blue, as at altitude
-        const snowC = shade >= 1 ? snow.clone().multiplyScalar(Math.min(1.04, shade)) : snow.clone().lerp(col('#b9c9e4').multiplyScalar(dim), (1 - shade) * 4).multiplyScalar(0.96);
-        if (L.snow && (h0 > s0 || h1 > s1)) quad(a0, a1, m0, h0, m1, h1, snowC, snowC);
+        const topAt = (m, sh) => base.clone().lerp(top, Math.min(1, m / amp)).multiplyScalar(sh);
+        const foot = (sh) => base.clone().multiplyScalar(0.96 + (sh - 1) * 0.4);
+        quad(a0, a1, -250, m0, -250, m1, [foot(sh0), foot(sh1), topAt(m0, sh0), topAt(m1, sh1)]);
+        if (L.snow && (h0 > s0 || h1 > s1)) { const c0 = snowCol(sh0), c1 = snowCol(sh1); quad(a0, a1, m0, h0, m1, h1, [c0, c1, c0, c1]); }
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
