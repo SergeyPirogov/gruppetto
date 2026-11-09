@@ -1320,3 +1320,6 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 /* riding in the mini window: only the note, Pause / Finish (always in sight) and the controls' bar stay here */
 #ride.resting .hud-left, #ride.resting .hud-right, #ride.resting .hud-center, #ride.resting #trace, #ride.resting .progress { display: none !important; }
 #ride.resting .controls { opacity: 1 !important; transform: none !important; pointer-events: auto !important; }
+.wk-kinds { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
+.wk-kinds .pill-btn { padding: 6px 12px; font-size: .82rem; border-radius: 999px; }
+.wk-kinds .pill-btn.sel { background: rgba(255,122,26,.18); border-color: #ff7a1a; color: #ffd3a8; }

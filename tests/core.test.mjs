@@ -794,3 +794,17 @@ test('Shelter in a bunch: deeper behind a line of riders, a little for the one i
   assert.equal(packDraft([{ gap: -4, sideways: 0 }]), 0);                         // too far behind
   assert.ok(packDraft(Array.from({ length: 12 }, (_, i) => ({ gap: 2 + i * 2, sideways: 0 }))) <= 0.5);
 });
+
+test('Workout library: unique ids, every workout of a known kind, sensible length and stress', async () => {
+  const { workouts, WORKOUT_KINDS, totalDuration, workoutStats } = await import('../js/workouts.js');
+  const kinds = new Set(WORKOUT_KINDS.map(([k]) => k));
+  assert.equal(new Set(workouts.map((w) => w.id)).size, workouts.length);
+  assert.ok(workouts.length >= 25);
+  for (const w of workouts) {
+    assert.ok(kinds.has(w.kind), `${w.id}: kind ${w.kind}`);
+    assert.ok(w.steps.every((s) => s.dur > 0), `${w.id}: a step without length`);
+    const min = totalDuration(w) / 60;
+    assert.ok(min >= 3 && min <= 150, `${w.id}: ${min} min`);
+    if (!w.ramp) assert.ok(workoutStats(w, 250).tss < 120, `${w.id}: TSS`);
+  }
+});

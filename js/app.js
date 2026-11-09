@@ -7,7 +7,7 @@ import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
 import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
-import { workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
+import { WORKOUT_KINDS, workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
 /** Heart rate zones in bpm: from intervals.icu when connected, otherwise from the threshold heart rate (Profile). */
 const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNames, lthr: s.lthr });
@@ -631,7 +631,16 @@ function openWorkoutMenu() {
   if (icuWorkouts.length) { head(tr('Your plan'), 'intervals.icu'); for (const w of icuWorkouts) add(w, dayLabel(w.date)); }
   if (myWorkouts.length) { head(tr('Your workouts'), tr('imported and built')); for (const w of myWorkouts) add(w, 'mine'); }
   head(tr('Gruppetto workouts'));
-  for (const w of [...workouts.filter((x) => x.ramp), ...workouts.filter((x) => !x.ramp)]) add(w);
+  // the library's filters: by what a workout is for (the choice remembered)
+  const kinds = WORKOUT_KINDS.filter(([k]) => workouts.some((w) => w.kind === k));
+  const pick = kinds.some(([k]) => k === settings.wkKind) ? settings.wkKind : 'all';
+  const chips = document.createElement('div');
+  chips.className = 'wk-kinds';
+  chips.innerHTML = [['all', 'All'], ...kinds].map(([k, name]) => `<button class="pill-btn${k === pick ? ' sel' : ''}" data-kind="${k}">${esc(tr(name))}</button>`).join('');
+  chips.onclick = (e) => { const b = e.target.closest('[data-kind]'); if (!b) return; settings.wkKind = b.dataset.kind; saveSettings(); openWorkoutMenu(); };
+  list.append(chips);
+  const shown = workouts.filter((w) => pick === 'all' || w.kind === pick);
+  for (const w of [...shown.filter((x) => x.ramp), ...shown.filter((x) => !x.ramp)]) add(w);
   menu.hidden = false;
 }
 function closeWorkoutMenu() { $('wk-menu').hidden = true; }

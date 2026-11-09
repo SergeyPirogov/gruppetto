@@ -178,6 +178,7 @@ export const UK = {
   'Watch & ride': 'Дивись і крути', 'In a mini window over a film or the match; the 3D road is not loaded. Works with a workout too.': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується. Працює й з тренуванням.',
   'More ways to ride': 'Інші способи їхати', 'In a mini window over a film or the match; the 3D road is not loaded': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується',
   'Mac overlay: the numbers in Gruppetto HUD, a see-through panel over everything (the app runs on this Mac)': 'Оверлей для Mac: цифри в Gruppetto HUD, прозорій панелі поверх усього (застосунок запущено на цьому Mac)',
+  'All': 'Усі', 'Sweet spot & threshold': 'Світ-спот і поріг', 'VO₂max': 'VO₂max', 'Anaerobic & sprints': 'Анаеробні й спринти', 'Cadence & technique': 'Каденс і техніка', 'Short': 'Короткі', 'Tests': 'Тести',
   'Speed': 'Швидкість', 'Target': 'Ціль',
   'Wind in races': 'Вітер у гонках', 'Ghost': 'Привид', 'against {name}': 'проти {name}', 'a friend': 'друга', 'against your last ride': 'проти свого останнього заїзду', 'against your best ride': 'проти свого найкращого заїзду', 'Shadow ride: race a ghost of your earlier ride on this route': 'Тінь: змагайся з привидом свого попереднього заїзду цим маршрутом', 'Riding on': 'На чому',
   'Trainer not connected': 'Тренажер не підключено', 'Simulator (no trainer)': 'Симулятор (без тренажера)', 'to the finish': 'до фінішу', 'in': 'за',
