@@ -375,9 +375,18 @@ function buildModels(theme) {
     { geom: gable(9, 7.2, 2.5), color: '#a9472f', pos: [0, 3.3, 0], flat: true },
     { geom: new THREE.BoxGeometry(0.7, 1.6, 0.7), color: '#7c5a48', pos: [2.3, 4.6, -1.1], flat: true },
     { geom: new THREE.BoxGeometry(1.0, 1.9, 0.08), color: '#6b4a32', pos: [0, 0.95 + 0.2, 3.02], flat: true },
-    ...winX.flatMap((x) => [3.02, -3.02].map((z) => ({ geom: new THREE.BoxGeometry(1.1, 1.0, 0.08), color: '#9cc3d8', pos: [x, 1.9, z], flat: true }))),
-    ...winZ.flatMap((z) => [4.02, -4.02].map((x) => ({ geom: new THREE.BoxGeometry(0.08, 1.0, 1.0), color: '#9cc3d8', pos: [x, 1.9, z], flat: true }))),
   ]);
+  // its windows apart, white: their own material shows the glass by day and a warm light at night
+  M.cottageGlass = merge([
+    ...winX.flatMap((x) => [3.02, -3.02].map((z) => ({ geom: new THREE.BoxGeometry(1.1, 1.0, 0.08), color: '#ffffff', pos: [x, 1.9, z], flat: true }))),
+    ...winZ.flatMap((z) => [4.02, -4.02].map((x) => ({ geom: new THREE.BoxGeometry(0.08, 1.0, 1.0), color: '#ffffff', pos: [x, 1.9, z], flat: true }))),
+  ]);
+  // a village street lamp: a dark pole with a lantern on top (the lantern lights up at night, its own material)
+  M.lamppost = merge([
+    { geom: new THREE.CylinderGeometry(0.07, 0.1, 4.4, 8), color: '#2f3238', pos: [0, 2.2, 0] },
+    { geom: new THREE.CylinderGeometry(0.28, 0.2, 0.12, 8), color: '#2f3238', pos: [0, 4.95, 0] },
+  ]);
+  M.lantern = merge([{ geom: new THREE.CylinderGeometry(0.2, 0.15, 0.5, 8), color: '#ffffff', pos: [0, 4.65, 0] }]);
   return M;
 }
 
@@ -1078,6 +1087,11 @@ export class Scene3D {
     this.matGrass = windify(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), 0.35, this.windTime);
     const asphalt = surfaceTexture();
     asphalt.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    // window glass and street lanterns: their light comes on at dusk (see _nightLights)
+    this.glassMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: '#9cc3d8' });
+    this.lanternMat = new THREE.MeshLambertMaterial({ vertexColors: true, color: '#d9d4c6' });
+    // the pool of light a lamp throws on the road: added on top, only after dark
+    this.poolMat = new THREE.MeshBasicMaterial({ map: sunGlowTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0, fog: true });
     this.roadMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: asphalt,
       bumpMap: asphalt, bumpScale: 0.035, roughness: 0.96, metalness: 0 });
     this.path = { x: [], z: [], h: [] };
@@ -1157,8 +1171,21 @@ export class Scene3D {
     this._clouds();
     this.rain = null;
     if (a.rain) this._rainfall();
+    this._nightLights();
     // a wet road: darker and glossy, the sky shining in it
     if (this.roadMat) { this.roadMat.roughness = a.rain ? 0.62 : 0.96; this.roadMat.metalness = 0; this.roadMat.color.setScalar(a.rain ? 0.7 : 1); }
+  }
+
+  /** Windows and street lamps light up when it gets dark: fully at night, half at dusk. */
+  _nightLights() {
+    const a = this.atm;
+    if (!a || !this.glassMat) return;
+    const on = a.night ? 1 : a.dim < 0.6 ? 0.55 : 0;
+    this.glassMat.color.set(on ? '#5a4a32' : '#9cc3d8');
+    this.glassMat.emissive.set('#ffb85c').multiplyScalar(on);
+    this.lanternMat.emissive.set('#ffd08a').multiplyScalar(on * 1.2);
+    this.poolMat.opacity = on * 0.85;
+    this.poolMat.visible = on > 0;
   }
 
   /** Rain: thin streaks of mixed length and speed, densest near the camera, slanting back as you ride
@@ -1759,6 +1786,28 @@ export class Scene3D {
         }
       }
     }
+    // street lamps through the villages: every 32 m, on alternate sides
+    const pools = [];
+    for (const [s0, s1] of this.villageSpans) {
+      const d0 = a0 * SEG, d1 = (a0 + rows - 1) * SEG, lap = loop ? Math.floor(d0 / L) * L : 0;
+      for (const base of [lap - L, lap, lap + L]) {
+        for (let d = Math.ceil((s0 + base) / 32) * 32; d < s1 + base; d += 32) {
+          if (d < d0 || d >= d1) continue;
+          const side = Math.round(d / 32) % 2 ? 1 : -1, r = Math.floor(d / SEG) - a0, o = side * (ROAD_HALF + 1.3), f = this.frame(d);
+          put('lamppost', mtx(f.x + f.rx * o, heightAt(r, o) - 0.05, f.z + f.rz * o, 0, 1));
+          const po = side * (ROAD_HALF - 0.6); // its light on the road, a little toward the middle
+          pools.push(new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * po, f.y + 0.07, f.z + f.rz * po),
+            new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2), new THREE.Vector3(1, 1, 1)));
+        }
+      }
+    }
+    if (pools.length) {
+      this.poolGeom ||= new THREE.PlaneGeometry(10, 10);
+      const im = new THREE.InstancedMesh(this.poolGeom, this.poolMat, pools.length);
+      pools.forEach((m, i) => im.setMatrixAt(i, m));
+      im.renderOrder = 1;
+      group.add(im);
+    }
     // buildings: an imported route's from the map, a made-up route's villages
     if (this.buildings.length) {
       const d0 = a0 * SEG, d1 = (a0 + rows - 1) * SEG;
@@ -1790,6 +1839,12 @@ export class Scene3D {
           : ['sunflowers', 'bush'].includes(type) ? this.matTall : this.mat;
       const im = new THREE.InstancedMesh(geom, mat, list.length);
       list.forEach((m, i) => im.setMatrixAt(i, m));
+      const lit = { cottage: ['cottageGlass', this.glassMat], lamppost: ['lantern', this.lanternMat] }[type];
+      if (lit && this.models[lit[0]]) {
+        const glow = new THREE.InstancedMesh(this.models[lit[0]], lit[1], list.length);
+        list.forEach((m, i) => glow.setMatrixAt(i, m));
+        group.add(glow);
+      }
       if (type === 'house' || type === 'cottage') list.forEach((m, i) => im.setColorAt(i, HOUSE_TINTS[Math.floor(hash2(m.elements[12] * 0.13, m.elements[14] * 0.17) * HOUSE_TINTS.length)]));
       im.castShadow = castShadow;
       im.receiveShadow = true;
@@ -2421,7 +2476,7 @@ export class Scene3D {
     const shared = new Set(Object.values(this.models || {}));
     // the crowd's meshes are shared by every chunk (fans: each chunk's geometry borrows the baked attributes)
     if (this.crowdModels) for (const k of ['body', 'flagUA', 'flagTeam']) shared.add(this.crowdModels[k]);
-    for (const k of ['wallGeom', 'portalGeom', 'lampGeom']) if (this[k]) shared.add(this[k]); // bridges' and tunnels' shared shapes
+    for (const k of ['wallGeom', 'portalGeom', 'lampGeom', 'poolGeom']) if (this[k]) shared.add(this[k]); // bridges' and tunnels' shared shapes
     group.traverse((o) => {
       if (o.geometry?.userData.borrowed) return; // its tiny per-fan colours go with the garbage collector
       if (o.geometry && !shared.has(o.geometry) && !this.natureKeep?.has(o.geometry)) o.geometry.dispose();
