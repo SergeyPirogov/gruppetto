@@ -1039,6 +1039,7 @@ export class Scene3D {
     }
     for (const texture of textures) if (!keep.has(texture)) texture.dispose();
     this.scene.clear();
+    this.birdWings = null; // the birds go with the old scene: a new route raises new flocks
 
     this.route = route;
     this.routeId = route.id;
@@ -1843,6 +1844,51 @@ export class Scene3D {
    * hands their own colours), and a flag on a pole (Ukrainian, or the instance colour). Arms are up,
    * marked with aArm so the shader waves them; the cloth is marked with aCloth so it flutters.
    */
+  /**
+   * Birds: a few small flocks wheeling high over the land, wings beating and now and then a glide. Silhouettes that
+   * fade into the haze; none at night, in rain or in fog; one flock on phones.
+   */
+  _birds(dt, cx, cy, cz) {
+    const off = this.atm?.night || this.atmWeather === 'rain' || this.atmWeather === 'fog';
+    if (!this.birdWings) {
+      const wing = (side) => {
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute([0.18, 0, 0, -0.14, 0, 0, -0.06, 0.02, side * 0.55], 3));
+        return g;
+      };
+      const mat = new THREE.MeshBasicMaterial({ color: '#2a2d36', side: THREE.DoubleSide, fog: true });
+      const flocks = LOW ? 1 : 3, per = 6;
+      this.birdWings = [-1, 1].map((sd) => { const m = new THREE.InstancedMesh(wing(sd), mat, flocks * per); m.frustumCulled = false; this.scene.add(m); return m; });
+      this.birdFlocks = Array.from({ length: flocks }, (_, k) => ({ phase: k * 2.1, r: 45 + k * 22, h: 20 + k * 7, w: (k % 2 ? -1 : 1) * (0.05 + k * 0.012), cx, cz, fresh: true }));
+      this.birdM = new THREE.Matrix4(); this.birdQ = new THREE.Quaternion(); this.birdE = new THREE.Euler();
+    }
+    for (const w of this.birdWings) w.visible = !off;
+    if (off) return;
+    const fwd = this.camera.getWorldDirection(new THREE.Vector3()); fwd.y = 0; fwd.normalize();
+    const t = this.clock, per = 6, M = this.birdM, q = this.birdQ, e = this.birdE, p = new THREE.Vector3(), s = new THREE.Vector3(2.4, 2.4, 2.4);
+    this.birdFlocks.forEach((F, k) => {
+      // each flock circles a point that drifts after a spot in front of the camera, so they stay in the sky ahead
+      const ahead = 170 + k * 60, tx = cx + fwd.x * ahead + fwd.z * (k - 1) * 70, tz = cz + fwd.z * ahead - fwd.x * (k - 1) * 70;
+      if (F.fresh) { F.cx = tx; F.cz = tz; F.fresh = false; } // the first frame: already there, not flying in
+      F.cx += (tx - F.cx) * Math.min(1, dt * 0.08); F.cz += (tz - F.cz) * Math.min(1, dt * 0.08);
+      const a = F.phase + t * F.w, heading = a + Math.sign(F.w) * Math.PI / 2;
+      const ox = F.cx + Math.cos(a) * F.r, oz = F.cz + Math.sin(a) * F.r;
+      for (let i = 0; i < per; i++) {
+        // a loose V behind the leader
+        const row = Math.ceil(i / 2), side = i % 2 ? 1 : -1, back = row * 2.2, across = row * side * 1.8;
+        const fx = Math.cos(heading), fz = Math.sin(heading);
+        p.set(ox - fx * back - fz * across, cy + F.h + Math.sin(t * 0.7 + i) * 0.6, oz - fz * back + fx * across);
+        const glide = Math.sin(t * 0.33 + k + i * 0.4) > 0.55; // now and then the wings stay out
+        const flap = glide ? 0.12 : Math.sin(t * 9 + i * 1.3) * 0.55;
+        this.birdWings.forEach((W, j) => {
+          e.set((j ? 1 : -1) * flap, -heading, 0, 'YXZ');
+          W.setMatrixAt(k * per + i, M.compose(p, q.setFromEuler(e), s));
+        });
+      }
+    });
+    for (const W of this.birdWings) W.instanceMatrix.needsUpdate = true;
+  }
+
   /** Over every stream in this chunk: the water in the gully and the bridge's stone walls along both edges. */
   _bridges(group, a0, rows) {
     const L = this.route.length, loop = !this.route.oneWay;
@@ -2411,7 +2457,7 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}` : r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}` : r.key || r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
@@ -2462,7 +2508,8 @@ export class Scene3D {
       if (!visible) return;
       const f = this.frame(d);
       const lane = r.lane ?? 0;
-      const slope = Math.atan((this._roadY(d + 2) - this._roadY(d - 2)) / 4);
+      const back = r.oncoming ? -1 : 1; // a rider coming the other way faces back down the road
+      const slope = back * Math.atan((this._roadY(d + 2) - this._roadY(d - 2)) / 4);
       R.group.position.set(f.x + f.rx * lane, f.y + 0.035, f.z + f.rz * lane); // tyres pressed 1.5 cm into the road
       // face along the road as a chord over a few metres (no wobble from small kinks in a real track),
       // turned slightly toward a lane change in progress
@@ -2478,10 +2525,10 @@ export class Scene3D {
       }
       // lean into a bend as a real rider does: tan(lean) = v² · curvature / g, eased, at most 20°
       const curv = (this.frame(d + 3).h - this.frame(d - 3).h) / 6;
-      const leanTo = Math.max(-0.35, Math.min(0.35, Math.atan(((R.speed || 0) ** 2 * curv) / 9.81)));
+      const leanTo = back * Math.max(-0.35, Math.min(0.35, Math.atan(((R.speed || 0) ** 2 * curv) / 9.81)));
       R.lean = (R.lean || 0) + (leanTo - (R.lean || 0)) * Math.min(1, dt * 4);
       if (R.lastD === undefined || d !== R.lastD) { R.lastD = d; R.lastLane = lane; R.lastMoveT = now; }
-      R.group.rotation.set(LEAN_SIGN * R.lean, -(head + (R.yaw || 0)), slope, 'YXZ');
+      R.group.rotation.set(LEAN_SIGN * R.lean, -(head + (R.yaw || 0)) + (r.oncoming ? Math.PI : 0), slope, 'YXZ');
       R.pose(r.pedal || 0);
       R.roll?.(d);
       R.bike?.pose(r.pedal || 0);
@@ -2565,6 +2612,7 @@ export class Scene3D {
       const cx = this.camera.position.x, cz = this.camera.position.z, cy = me.f.y;
       this.sky.position.set(cx, cy, cz);
       for (const ring of this.rings) ring.position.set(cx, cy - 40, cz);
+      this._birds(dt, cx, cy, cz);
       this.cloudGroup.position.set(cx, cy, cz);
       this.cloudGroup.rotation.y += dt * 0.0012;
       // Key light follows the heading: low, ahead and to the left, so the rider is lit from the side

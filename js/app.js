@@ -985,6 +985,22 @@ const BOT_KITS = [
  * a free ride some are a little slower than you, some a little faster), each with his own weight,
  * build (air drag from height and weight), cadence and kit; names and kits never repeat in a ride.
  */
+/**
+ * Riders coming the other way along the far edge of the road, one at a time, now and then: life on the road, for the
+ * eye only (they touch neither the physics nor the ride). Not in a race: the road is closed.
+ */
+function passersBy(dt) {
+  if (ride.race) return;
+  const list = (ride.passers ||= []);
+  for (const o of list) { o.dist -= o.v * dt; o.pedal += o.v * dt / 2.1; } // ~90 rpm at their speed
+  ride.passers = list.filter((o) => o.dist > ride.dist - 80);
+  ride.passerAt ??= ride.elapsed + 20 + Math.random() * 40;
+  if (ride.elapsed < ride.passerAt || ride.passers.length || ride.v < 1) return;
+  const [color, stripe] = BOT_KITS[Math.floor(Math.random() * BOT_KITS.length)];
+  ride.passers.push({ key: `passer${ride.passerN = (ride.passerN || 0) + 1}`, dist: ride.dist + 320, v: 7 + Math.random() * 3.5, lane: -3.0, color, stripe, pedal: 0, oncoming: true });
+  ride.passerAt = ride.elapsed + 30 + Math.random() * 60;
+}
+
 function makeBots(n, { race = false } = {}) {
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr.splice(Math.floor(Math.random() * arr.length), 1)[0];
@@ -1346,6 +1362,7 @@ function advance(now = performance.now()) {
         if (t !== ride.laneTarget) { ride.laneTarget = t; ride.autoLane = true; }
       }
     }
+    passersBy(dt);
     for (const b of ride.bots) b.lane = keepApart(b, easeLane(b.lane, b.laneTarget, dt, b), [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b), ...(pacerOn() ? [ride.pacer] : [])]);
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
@@ -1417,6 +1434,7 @@ function frame(now) {
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),
     ...(ride.climbGhost ? [ride.climbGhost] : []),
+    ...(ride.passers || []),
   ];
   // the mini window is open: the 3D road is not drawn (nobody looks at it, and the video you watch keeps the
   // graphics card); the ride goes on, and the road comes back the moment the mini window closes
