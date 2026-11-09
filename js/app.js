@@ -16,6 +16,7 @@ import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSugge
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder } from './recorder.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
+import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
@@ -34,7 +35,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto', pipMode: 'clean',
+  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
@@ -1132,8 +1133,9 @@ const installedApp = () => matchMedia('(display-mode: standalone), (display-mode
 async function startRide(opts) {
   // Watch & ride (#watch, from the Ride button's menu): the mini window opens now, while the click counts, and the
   // 3D world is not even loaded
-  const watching = opts?.watch === true && pipSupport();
-  const pipAsk = watching && !pipOpen() ? openMini() : null;
+  // with the Mac overlay (Gruppetto HUD) running, the numbers go to it, not to the browser's mini window
+  const watching = opts?.watch === true && (pipSupport() || overlayOn());
+  const pipAsk = watching && !overlayOn() && !pipOpen() ? openMini() : null;
   // the installed app rides full screen: no title bar over the road (asked now, while the click counts)
   const wentFull = watching ? false : installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
   if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); if (pipAsk) closePip(); return; }
@@ -1401,7 +1403,7 @@ function frame(now) {
   ];
   // the mini window is open: the 3D road is not drawn (nobody looks at it, and the video you watch keeps the
   // graphics card); the ride goes on, and the road comes back the moment the mini window closes
-  const inPip = ride.noScene || (pipOpen() && !ride.showRoadInPip);
+  const inPip = ride.noScene || ((pipOpen() || overlayOn()) && !ride.showRoadInPip);
   $('pip-rest').hidden = !inPip;
   $('ride').classList.toggle('resting', inPip); // the numbers are in the mini window: the board here goes too
   if (inPip) { ride.moved = 0; requestAnimationFrame(frame); return; }
@@ -1818,7 +1820,7 @@ function updateHud(cadence, hr, grade) {
   }
 
   drawProfile($('profile'), ride.route, [...ride.bots, ...(ride.ghost ? [{ dist: ride.ghost.dist, color: 'rgba(255,255,255,.6)' }] : []), { dist: ride.dist, color: settings.jersey, self: true }]);
-  if (pipOpen()) updatePip(pipState(p3, zone, hrNow, zs));
+  if (pipOpen() || overlayOn()) { const st = pipState(p3, zone, hrNow, zs); if (pipOpen()) updatePip(st); overlaySend(st); }
 }
 
 // ---------- The mini window over other apps (picture-in-picture) ----------
@@ -1864,7 +1866,12 @@ async function openMini() {
 }
 $('btn-pip').hidden = !pipSupport();
 // the Ride button's menu: Ride, or Watch & ride (the mini window over a film or the match, no 3D world)
-$('btn-start-more').hidden = !pipSupport();
+$('btn-start-more').hidden = !pipSupport() && !settings.overlay;
+// the Mac overlay: looked for while it is on in Profile, from the lobby already, so Watch & ride knows at the click
+function overlaySetting() { if (settings.overlay) overlayStart((on) => { if (on) track('overlay'); }); else overlayStop(); }
+overlaySetting();
+$('f-overlay').checked = !!settings.overlay;
+$('f-overlay').onchange = () => { settings.overlay = $('f-overlay').checked; saveSettings(); overlaySetting(); $('btn-start-more').hidden = !pipSupport() && !settings.overlay; };
 $('btn-start-more').onclick = (e) => { e.stopPropagation(); $('start-menu').hidden = !$('start-menu').hidden; };
 $('start-watch').onclick = () => { $('start-menu').hidden = true; startRide({ watch: true }); };
 document.addEventListener('click', (e) => { if (!e.target.closest('#start-menu, #btn-start-more')) $('start-menu').hidden = true; });
