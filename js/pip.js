@@ -205,6 +205,8 @@ async function openVideo(opts = {}) {
   document.body.append(video);
   video.srcObject = canvas.captureStream();
   startBeat(opts.heartbeat);
+  // a name for the video: some Chrome versions show it over the window on hover instead of the site's address
+  try { if ('mediaSession' in navigator) navigator.mediaSession.metadata = new MediaMetadata({ title: 'Gruppetto', artist: 'Ride', artwork: [{ src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' }] }); } catch { /* not there */ }
   drawCanvas(last); // a stream has no frame until the canvas is drawn after it was made
   video.addEventListener('leavepictureinpicture', closed, { once: true });
   video.addEventListener('webkitpresentationmodechanged', () => { if (video && video.webkitPresentationMode !== 'picture-in-picture') closed(); });
