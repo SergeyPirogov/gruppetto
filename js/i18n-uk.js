@@ -176,7 +176,7 @@ export const UK = {
   'Map data © ': 'Дані карти © ', ' contributors': ' учасники',
   'Riding in the mini window': 'Їдеш у міні-вікні', 'The road is paused to keep your computer cool. The ride goes on.': 'Дорога на паузі, щоб не вантажити комп’ютер. Заїзд триває.', 'Show the road': 'Показати дорогу',
   'Watch & ride': 'Дивись і крути', 'In a mini window over a film or the match; the 3D road is not loaded. Works with a workout too.': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується. Працює й з тренуванням.',
-  'More ways to ride': 'Інші способи їхати', 'In a mini window over a film or the match; the 3D road is not loaded': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується',
+  'On the 3D road': 'По 3D-дорозі', '📺 Watch & ride': '📺 Дивись і крути', 'More ways to ride': 'Інші способи їхати', 'In a mini window over a film or the match; the 3D road is not loaded': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується',
   '⬇ Download Gruppetto HUD for Mac': '⬇ Завантажити Gruppetto HUD для Mac',
   '· macOS 13+. The first time: System Settings → Privacy & Security → Open Anyway.': '· macOS 13+. Першого разу: Системні параметри → Приватність і безпека → Усе одно відкрити.',
   'Mac overlay: the numbers in Gruppetto HUD, a see-through panel over everything (the app runs on this Mac)': 'Оверлей для Mac: цифри в Gruppetto HUD, прозорій панелі поверх усього (застосунок запущено на цьому Mac)',
