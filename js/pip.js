@@ -80,42 +80,44 @@ const CSS = `
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; color: #e8edf5; }
-/* the window tinted by the power zone you ride in: Z2 or Z4 is seen from the corner of an eye, over the football */
-body { display: flex; flex-direction: column; justify-content: space-evenly; padding: 3vh 4vw; gap: 2vh;
-  /* the top in the grey of Chrome's own strip over the window (the site's address), so the strip reads as part of
-     the panel; the zone's glow from the bottom corner, away from it */
-  background: radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--zc) 28%, transparent), transparent 65%), linear-gradient(180deg, #202124 0%, #161b26 38%, #0c111b 100%);
+/* the top in the grey of Chrome's own strip over the window, the zone's glow from the bottom corner */
+body { display: flex; flex-direction: column; justify-content: center; padding: 3.5vh 4.5vw; gap: 2.6vh;
+  background: radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--zc) 26%, transparent), transparent 65%), linear-gradient(180deg, #202124 0%, #161b26 38%, #0c111b 100%);
   transition: background .6s; }
-.top { display: grid; grid-template-columns: 1.7fr 1fr 1fr; gap: 5vw; align-items: end; }
-.cell { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; }
-.cell.power { --c: var(--zc); } .cell.hr { --c: #ff4d5e; } .cell.cad { --c: #2fd4f0; }
-.cell label { font-size: clamp(9px, min(5.4vh, 4.4vw), 15px); color: var(--c, #9fb0c6); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; display: flex; gap: .4em; align-items: center; }
-.cell b { font-variant-numeric: tabular-nums; line-height: 1; font-weight: 800; font-size: clamp(18px, min(20vh, 11vw), 120px); }
-.cell.power b { font-size: clamp(26px, min(30vh, 17vw), 180px); }
-.cell small { font-size: clamp(9px, min(5vh, 4vw), 14px); color: #9fb0c6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.unit { font-size: .36em; font-weight: 600; color: #9fb0c6; margin-left: .15em; }
-.tag { font-size: .85em; font-weight: 800; color: #0f1420; border-radius: 4px; padding: 0 .35em; }
-.row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2vw; font-variant-numeric: tabular-nums; font-size: clamp(11px, 7.5vh, 24px); font-weight: 700; white-space: nowrap; padding-top: 1.4vh; border-top: 1px solid rgba(255,255,255,.08); }
-.row > div { overflow: hidden; text-overflow: ellipsis; }
-.row > div:last-child { text-align: right; }
-.row span { color: #9fb0c6; font-weight: 600; font-size: .66em; margin-left: .2em; }
-/* the interval: target, time left and what comes next, over a bar of how far into it you are */
-.wk { position: relative; display: flex; justify-content: space-between; gap: 2vw; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 1.4vh 2.8vw 2.2vh; font-size: clamp(11px, 8vh, 26px); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
-.wk i { font-style: normal; color: #9fb0c6; font-weight: 600; font-size: .6em; margin-right: .3em; text-transform: uppercase; }
-.wk .wk-bar { position: absolute; left: 0; bottom: 0; height: max(3px, 1.2vh); width: 100%; background: var(--zc); transform-origin: left; transition: transform .9s linear; opacity: .9; }
-.wk.soon { animation: soon 1s ease-in-out infinite; }
-@keyframes soon { 50% { border-color: #fbbf24; } }
-.wbal { height: max(4px, 2.2vh); border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; flex: none; }
+/* the three numbers close together, power first and biggest */
+.top { display: flex; align-items: flex-end; gap: 6vw; }
+.cell { display: flex; flex-direction: column; min-width: 0; }
+.cell.power { flex: none; }
+.cell.power { --c: var(--zc); } .cell.hr { --c: #ff6b78; } .cell.cad { --c: #4fdcf2; }
+.cell label { font-size: clamp(9px, min(5vh, 4vw), 14px); color: var(--c); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; white-space: nowrap; display: flex; gap: .4em; align-items: center; margin-bottom: .3vh; }
+.cell b { font-variant-numeric: tabular-nums; line-height: .95; font-weight: 800; font-size: clamp(18px, min(21vh, 11vw), 120px); letter-spacing: -.02em; }
+.cell.power b { font-size: clamp(28px, min(34vh, 19vw), 190px); }
+.cell small { font-size: clamp(9px, min(4.6vh, 3.6vw), 13px); color: #9fb0c6; white-space: nowrap; margin-top: .6vh; }
+.unit { font-size: .3em; font-weight: 700; color: #9fb0c6; margin-left: .2em; letter-spacing: 0; }
+.tag { font-size: .9em; font-weight: 800; color: #0f1420; border-radius: 4px; padding: 0 .35em; }
+/* the interval: one compact line — target, time left, next — over a thin bar of how far into it you are */
+.wk { position: relative; display: flex; align-items: baseline; gap: 5vw; padding: 1.2vh 3vw 1.8vh; border-radius: 8px; background: rgba(255,255,255,.05); font-size: clamp(11px, min(7.5vh, 5vw), 24px); font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; }
+.wk > div { display: flex; align-items: baseline; gap: .35em; }
+.wk i { font-style: normal; color: #9fb0c6; font-weight: 600; font-size: .58em; text-transform: uppercase; letter-spacing: .05em; }
+.wk .wk-bar { position: absolute; left: 0; bottom: 0; height: max(3px, 1vh); width: 100%; background: var(--zc); transform-origin: left; transition: transform .9s linear; }
+.wk.soon { box-shadow: inset 0 0 0 2px #fbbf24; animation: soon 1s ease-in-out infinite; }
+@keyframes soon { 50% { box-shadow: inset 0 0 0 2px transparent; } }
+/* the bottom row: time, speed, distance and W′bal, each named */
+.row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3vw; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.row > div { display: flex; flex-direction: column; min-width: 0; }
+.row i { font-style: normal; color: #9fb0c6; font-weight: 600; font-size: clamp(8px, min(4vh, 3.2vw), 12px); text-transform: uppercase; letter-spacing: .05em; }
+.row b { font-size: clamp(12px, min(8vh, 5.4vw), 26px); font-weight: 800; }
+.row span { color: #9fb0c6; font-weight: 600; font-size: .6em; margin-left: .2em; }
+.wbal { height: max(3px, 1.2vh); border-radius: 99px; background: rgba(255,255,255,.12); overflow: hidden; margin-top: .6vh; }
 .wbal > div { height: 100%; width: 100%; background: #a78bfa; transform-origin: left; transition: transform .4s; }
 .paused { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(12,17,27,.75); font-size: clamp(16px, 16vh, 60px); font-weight: 800; letter-spacing: .1em; }
 .pause-btn { position: fixed; top: 4px; right: 4px; width: 28px; height: 28px; padding: 0; border-radius: 8px; border: 1px solid #2a3448; background: #273249cc; color: #e8edf5; font-size: 14px; cursor: pointer; opacity: 0; transition: opacity .2s; z-index: 2; }
 body:hover .pause-btn, .pause-btn:focus-visible { opacity: 1; }
 .c-ok { color: #4ade80 !important; } .c-warn { color: #fbbf24 !important; } .c-bad { color: #f87171 !important; }
-/* layouts by the window's size: small = power and heart rate only, big; narrow = in a column */
-@media (max-height: 150px), (max-width: 240px) { .row, .wbal, .cell.cad, .cell small { display: none; } .top { grid-template-columns: 1.4fr 1fr; } .wk { padding-bottom: 1.8vh; } .wk > div:nth-child(3) { display: none; } }
-@media (max-width: 240px) { .wk { flex-direction: column; gap: .8vh; font-size: clamp(11px, 9vw, 22px); } .wk > div:nth-child(3) { display: none; } }
-@media (max-width: 300px) { .row > div:nth-child(4) { display: none; } .row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-aspect-ratio: 3/4) and (min-height: 260px) { .top { grid-template-columns: 1fr; gap: 2vh; } .cell b { font-size: clamp(22px, 12vw, 110px); } .cell.power b { font-size: clamp(30px, 22vw, 160px); } .row { grid-template-columns: 1fr 1fr; row-gap: 1vh; } .row > div:last-child { text-align: left; } }
+/* by the window's size: small = power and heart rate only; narrow = fewer cells */
+@media (max-height: 150px), (max-width: 240px) { .row, .cell.cad, .cell small { display: none; } .wk > div:nth-child(3) { display: none; } }
+@media (max-width: 300px) { .row > div:nth-child(3) { display: none; } .row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-aspect-ratio: 3/4) and (min-height: 260px) { .top { flex-direction: column; align-items: flex-start; gap: 2vh; } .row { grid-template-columns: 1fr 1fr; row-gap: 1.4vh; } .wk { flex-direction: column; gap: .6vh; } }
 `;
 
 function buildDocument(w, opts) {
@@ -135,8 +137,12 @@ function buildDocument(w, opts) {
       <div class="cell cad"><label data-l="cad"></label><b data-v="cad">0</b><small data-v="cadTarget"></small></div>
     </div>
     <div class="wk" data-v="wk" hidden><div><i data-l="target"></i><span data-v="target"></span></div><div><i data-l="interval"></i><span data-v="left"></span></div><div><i data-l="next"></i><span data-v="next"></span></div><i class="wk-bar" data-v="wkBar"></i></div>
-    <div class="row"><div data-v="time">0:00</div><div><b data-v="speed">0.0</b><span data-l="kmh"></span></div><div><b data-v="dist">0.00</b><span data-l="km"></span></div><div data-v="grade">0.0%</div></div>
-    <div class="wbal" data-v="wbalBox" title="W′bal"><div data-v="wbal"></div></div>
+    <div class="row">
+      <div><i data-l="time"></i><b data-v="time">0:00</b></div>
+      <div><i data-l="speed"></i><b><span data-v="speed" style="all:unset">0.0</span><span data-l="kmh"></span></b></div>
+      <div><i data-l="distance"></i><b><span data-v="dist" style="all:unset">0.00</span><span data-l="km"></span></b></div>
+      <div data-v="wbalBox"><i>W′bal</i><b><span data-v="wbalKj" style="all:unset">—</span><span data-l="kj"></span></b><div class="wbal"><div data-v="wbal"></div></div></div>
+    </div>
     <button class="pause-btn" data-v="pauseBtn">⏸</button>
     <div class="paused" data-v="paused" hidden></div>`;
   els = {};
@@ -170,7 +176,7 @@ function updateDocument(s) {
     E.wk.classList.toggle('soon', (s.stepLeft ?? 99) <= 10); // the last 10 s before the change
   }
   setText(E.time, s.time); setText(E.speed, s.speed); setText(E.dist, s.dist);
-  setText(E.grade, s.grade); E.grade.style.color = s.gradeColor;
+  setText(E.wbalKj, s.wbalKj ?? '');
   E.wbal.style.transform = `scaleX(${s.wbalF.toFixed(3)})`;
   E.wbal.style.background = s.wbalLevel === 'ok' ? '#a78bfa' : WBAL[s.wbalLevel];
   E.wbalBox.title = s.wbalTxt;
@@ -243,52 +249,61 @@ function drawCanvas(s) {
   };
   const L = s.labels || {};
   const wk = !!s.workout;
-  // three columns, each with its colour bar, as on the ride board
-  // the whole height used: without a workout the numbers are bigger and the bottom row lower (it left a third empty)
-  const top = 24, vy = wk ? 124 : 186, subY = vy + 30;
-  const col = (x, bar, name, val, unit, sub, color, z, zc2, big) => {
-    // the number's colour in its name (no bar beside it), the name just over its number
-    const px = big ? (wk ? 96 : 150) : (wk ? 58 : 70), ly = big ? top + 18 : vy - px * 0.78 - 10;
-    g.font = font(17, 700); g.fillStyle = bar; g.fillText(name.toUpperCase(), x + 16, ly);
-    if (z) tag(z, zc2, x + 22 + g.measureText(name.toUpperCase()).width, ly);
-    g.font = font(px); g.fillStyle = color || '#e8edf5';
-    g.fillText(val, x + 14, vy);
-    if (unit) { const vw = g.measureText(val).width; g.font = font(28, 600); g.fillStyle = muted; g.fillText(unit, x + 20 + vw, vy); }
-    if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x + 16, subY); }
+  // the three numbers close together, power first and biggest, each name in its colour just over it
+  let pPx = wk ? 108 : 150, sPx = wk ? 62 : 76;
+  // shrink to fit the width (a 3-digit power with HR and cadence beside it)
+  const widthAt = (k) => {
+    let t = 26;
+    g.font = font(Math.round(pPx * k)); t += g.measureText(String(s.power)).width; g.font = font(Math.round(pPx * k * 0.3), 700); t += g.measureText(L.W || 'W').width + 10 + 44;
+    for (const v of [s.hr, s.cad]) { g.font = font(Math.round(sPx * k)); t += Math.max(g.measureText(String(v)).width, 70) + 44; }
+    return t - 44 + 20;
   };
-  col(18, zc, L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', s.zone, s.zoneColor, true);
-  col(352, '#ff4d5e', L.hr || 'HR', s.hr, '', s.hrAvg, null, s.hrZone, s.hrZoneColor);
-  col(512, '#2fd4f0', L.cad || 'Cadence', s.cad, '', s.cadTarget || s.cadAvg, CLS[s.cadCls]);
-  // the interval: target, time left, next, over a bar of how far into it you are
-  let y = subY + 22;
+  const fit = Math.min(1, w / widthAt(1));
+  pPx = Math.round(pPx * fit); sPx = Math.round(sPx * fit);
+  const vy = wk ? 128 : 178, subY = vy + 28;
+  let x = 26;
+  const num = (name, val, unit, sub, color, labelColor, z, zc2, px) => {
+    const ly = vy - px * 0.76 - 12;
+    g.font = font(17, 700); g.fillStyle = labelColor; g.fillText(name.toUpperCase(), x, ly);
+    if (z) tag(z, zc2, x + 8 + g.measureText(name.toUpperCase()).width, ly);
+    g.font = font(px); g.fillStyle = color || '#e8edf5'; g.fillText(val, x - 3, vy);
+    let wv = g.measureText(val).width;
+    if (unit) { g.font = font(Math.round(px * 0.3), 700); g.fillStyle = muted; g.fillText(unit, x + wv + 4, vy); wv += g.measureText(unit).width + 6; }
+    if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x, subY); wv = Math.max(wv, g.measureText(sub).width); }
+    x += wv + 44;
+  };
+  num(L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', zc, s.zone, s.zoneColor, pPx);
+  num(L.hr || 'HR', s.hr, '', s.hrAvg, null, '#ff6b78', s.hrZone, s.hrZoneColor, sPx);
+  num(L.cad || 'Cadence', s.cad, '', s.cadTarget || s.cadAvg, CLS[s.cadCls], '#4fdcf2', null, null, sPx);
+  // the interval: one compact line over a thin bar of how far into it you are
+  let y = subY + 18;
   if (wk) {
     const soon = (s.stepLeft ?? 99) <= 10 && Math.floor(Date.now() / 500) % 2 === 0;
-    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect?.(16, y, w - 32, 64, 10); g.fill();
-    g.strokeStyle = soon ? '#fbbf24' : 'rgba(255,255,255,.1)'; g.lineWidth = 2; g.stroke();
-    const cells = [[L.target, s.target, CLS[s.powerCls]], [L.interval, s.left], [L.next, s.next]];
-    cells.forEach(([lab, v, c], i) => {
-      const x = 32 + i * ((w - 64) / 3);
-      g.font = font(15, 600); g.fillStyle = muted; g.fillText(String(lab || '').toUpperCase(), x, y + 24);
-      g.font = font(28); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), x, y + 54);
-    });
-    g.fillStyle = zc; g.fillRect(16, y + 60, (w - 32) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
-    y += 80;
-  }
-  // time, speed, distance, grade, under a thin line
-  if (!wk) y += 6;
-  g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(18, y, w - 36, 1);
-  y += wk ? 38 : 46;
-  const bits = [[s.time, ''], [s.speed, L.kmh], [s.dist, L.km], [s.grade, '', s.gradeColor]];
-  bits.forEach(([v, u, c], i) => {
-    const x = 22 + i * 152;
-    g.font = font(wk ? 30 : 36); g.fillStyle = c || '#e8edf5'; g.fillText(v, x, y);
-    if (u) { const vw = g.measureText(v).width; g.font = font(17, 600); g.fillStyle = muted; g.fillText(u, x + vw + 5, y); }
+    g.fillStyle = 'rgba(255,255,255,.05)'; g.beginPath(); g.roundRect?.(18, y, w - 36, 50, 8); g.fill();
+    if (soon) { g.strokeStyle = '#fbbf24'; g.lineWidth = 2; g.stroke(); }
+    let ix = 34;
+    for (const [lab, v, c] of [[L.target, s.target, CLS[s.powerCls]], [L.interval, s.left], [L.next, s.next]]) {
+      g.font = font(14, 600); g.fillStyle = muted; const lt = String(lab || '').toUpperCase(); g.fillText(lt, ix, y + 32);
+      const lw = g.measureText(lt).width;
+      g.font = font(26); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), ix + lw + 8, y + 33);
+      ix += lw + 8 + g.measureText(String(v)).width + 34;
+    }
+    g.fillStyle = zc; g.fillRect(18, y + 46, (w - 36) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
+    y += 64;
+  } else y += 14;
+  // the bottom row: time, speed, distance and W′bal, each named
+  const cw = (w - 52) / 4, rowLabel = y + 18, rowVal = y + 52;
+  const cells = [[L.time || 'Time', s.time, ''], [L.speed || 'Speed', s.speed, L.kmh], [L.distance || 'Distance', s.dist, L.km], ['W′bal', s.wbalKj ?? '', L.kj || 'kJ']];
+  cells.forEach(([lab, v, u], i) => {
+    const cx = 26 + i * cw;
+    g.font = font(14, 600); g.fillStyle = muted; g.fillText(String(lab).toUpperCase(), cx, rowLabel);
+    g.font = font(wk ? 30 : 34); g.fillStyle = '#e8edf5'; g.fillText(String(v), cx, rowVal);
+    if (u) { const vw = g.measureText(String(v)).width; g.font = font(16, 600); g.fillStyle = muted; g.fillText(u, cx + vw + 5, rowVal); }
   });
-  // W′bal: violet, amber to red as it runs low
-  // W′bal right under the bottom row (the very edge of the video can be cut by the window)
-  const by = Math.min(h - 26, y + 18);
-  g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect?.(22, by, w - 44, 9, 5); g.fill();
-  g.fillStyle = s.wbalLevel === 'ok' ? '#a78bfa' : WBAL[s.wbalLevel]; g.beginPath(); g.roundRect?.(22, by, (w - 44) * s.wbalF, 9, 5); g.fill();
+  // W′bal's own little bar under its number
+  const bx = 26 + 3 * cw, bw = cw - 12, by = rowVal + 12;
+  g.fillStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.roundRect?.(bx, by, bw, 7, 4); g.fill();
+  g.fillStyle = s.wbalLevel === 'ok' ? '#a78bfa' : WBAL[s.wbalLevel]; g.beginPath(); g.roundRect?.(bx, by, bw * s.wbalF, 7, 4); g.fill();
   if (s.paused) {
     g.fillStyle = 'rgba(12,17,27,.75)'; g.fillRect(0, 0, w, h);
     g.font = font(64); g.fillStyle = '#e8edf5'; g.textAlign = 'center'; g.fillText(L.paused || 'PAUSED', w / 2, h / 2 + 22); g.textAlign = 'left';

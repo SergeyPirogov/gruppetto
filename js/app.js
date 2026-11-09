@@ -1809,7 +1809,7 @@ function pipState(p3, zone, hrNow, zs) {
   const wp = wPrimeJ(), f = Math.max(0, Math.min(1, (ride.wbal ?? wp) / wp));
   const wk = !!ride.workout && !ride.workoutDone;
   return {
-    labels: { power: tr('Power'), hr: tr('HR'), cad: tr('Cadence'), W: U.W, kmh: tr('km/h'), km: U.km, target: tr('Target, W'), interval: tr('Interval'), next: tr('Next'), paused: tr('PAUSED') },
+    labels: { power: tr('Power'), hr: tr('HR'), cad: tr('Cadence'), W: U.W, kmh: tr('km/h'), km: U.km, kj: tr('kJ'), time: tr('Time'), speed: tr('Speed'), distance: tr('Distance'), target: tr('Target'), interval: tr('Interval'), next: tr('Next'), paused: tr('PAUSED') },
     power: p3, powerCls: $('m-power').className, powerColor: p3 > 0 ? zone.color : '',
     zone: `Z${zone.z}`, zoneColor: zone.color, wkg: `${(p3 / settings.weight).toFixed(1)} ${U.wkg} · ${$('m-ftp-pct').textContent}`,
     hr: $('m-hr').textContent, hrAvg: $('m-hr-avg').textContent, hrZone: hz ? `Z${hz.z}` : '', hrZoneColor: hz?.color,
@@ -1819,7 +1819,7 @@ function pipState(p3, zone, hrNow, zs) {
     ...(() => { const t = wk ? targetAt(ride.workout, ride.workoutT, settings.ftp) : null; return t ? { stepF: 1 - t.remaining / Math.max(1, t.step.dur), stepLeft: t.remaining } : {}; })(),
     time: $('m-time').textContent, speed: $('m-speed').textContent, dist: $('m-dist').textContent,
     grade: $('grade').textContent, gradeColor: $('grade').style.color,
-    wbalF: f, wbalLevel: f <= 0.1 ? 'empty' : f <= 0.25 ? 'low' : f <= 0.5 ? 'mid' : 'ok', wbalTxt: `W′bal ${$('m-wbal').textContent} ${tr('kJ')} · ${$('m-wbal-warn').textContent}`,
+    wbalF: f, wbalKj: ((ride.wbal ?? wp) / 1000).toFixed(1), wbalLevel: f <= 0.1 ? 'empty' : f <= 0.25 ? 'low' : f <= 0.5 ? 'mid' : 'ok', wbalTxt: `W′bal ${$('m-wbal').textContent} ${tr('kJ')} · ${$('m-wbal-warn').textContent}`,
     paused: !!ride.paused,
   };
 }
