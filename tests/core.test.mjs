@@ -882,3 +882,14 @@ test('nextWeather: a dry spell, then rain or fog for a while, then dry again', a
   assert.deepEqual(nextWeather('rain', 0.5, 0.5), { sky: 'clear', for: 540 });
   assert.equal(nextWeather('fog', 0, 0).sky, 'clear');
 });
+
+test('ride file name: start time, then the workout or route', async () => {
+  const { rideFileName } = await import('../js/recorder.js');
+  const d = new Date(2026, 10, 8, 14, 32);
+  assert.equal(rideFileName(d), 'gruppetto-2026-11-08-1432');
+  assert.equal(rideFileName(d, 'Rolling Hills'), 'gruppetto-2026-11-08-1432-rolling-hills');
+  assert.equal(rideFileName(d, 'FTP Ramp Test'), 'gruppetto-2026-11-08-1432-ftp-ramp-test');
+  assert.equal(rideFileName(d, 'Sweet Spot 3×12 (90%)'), 'gruppetto-2026-11-08-1432-sweet-spot-3-12-90');
+  assert.equal(rideFileName(d, 'Карпатський серпантин'), 'gruppetto-2026-11-08-1432-карпатський-серпантин');
+  assert.equal(rideFileName(d, '  /:*?  '), 'gruppetto-2026-11-08-1432');
+});

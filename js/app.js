@@ -14,7 +14,7 @@ const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNa
 import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
-import { Recorder } from './recorder.js';
+import { Recorder, rideFileName } from './recorder.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
@@ -363,6 +363,7 @@ function initLobby() {
   bind('f-weight', 'weight');
   bind('f-height', 'height');
   bind('f-ftp', 'ftp');
+  $('f-ftp').addEventListener('input', () => { settings.ftpSet = true; saveSettings(); renderFtpBox(); });
   bind('f-wprime', 'wPrimeKj');
   bind('f-lthr', 'lthr');
   bind('f-diff', 'difficulty');
@@ -691,6 +692,27 @@ function renderWhy() {
   $('why-box').hidden = closed || history.length > 0;
 }
 $('why-close').onclick = () => { track('why', 'close'); try { localStorage.setItem(WHY_KEY, '1'); } catch { /* private mode */ } renderWhy(); };
+// ---------- FTP still a guess: a ramp test, for a new rider ----------
+const FTP_BOX_KEY = 'gruppetto-ftp-box-closed';
+/** Your FTP is known: typed in, taken from intervals.icu or a test, or ever ramp-tested here. */
+const ftpKnown = () => !!settings.ftpSet || settings.ftp !== DEFAULT_SETTINGS.ftp || history.some((e) => e.ramp);
+function renderFtpBox() {
+  let closed = false;
+  try { closed = !!localStorage.getItem(FTP_BOX_KEY); } catch { /* private mode */ }
+  $('ftp-box').hidden = closed || ftpKnown();
+  $('ftp-title').textContent = tr('Your FTP is a guess: {w} W', { w: settings.ftp });
+}
+/** The ramp test's card, its Ride button one click away. */
+function openFtpTest(from) {
+  track('ftp-test', from);
+  const w = workouts.find((x) => x.ramp);
+  $('drawer').hidden = true;
+  if (w) openWorkoutDetail(w);
+}
+$('ftp-test').onclick = () => openFtpTest('lobby');
+$('f-ftp-test').onclick = () => openFtpTest('profile');
+$('ftp-know').onclick = () => { track('ftp-box', 'know'); openDrawer('profile'); requestAnimationFrame(() => { $('f-ftp').focus(); $('f-ftp').select(); }); };
+$('ftp-close').onclick = () => { track('ftp-box', 'close'); try { localStorage.setItem(FTP_BOX_KEY, '1'); } catch { /* private mode */ } renderFtpBox(); };
 $('why-zwo').onclick = () => { track('why', 'zwo'); $('wk-import-file').click(); };
 $('why-icu').addEventListener('click', () => track('why', 'icu'));
 
@@ -2691,13 +2713,13 @@ function renderFtpTip(el, e = null) {
   const b1 = e?.ramp && (e.bests?.[60] || e.summary?.best1min);
   if (b1 && rampFtp(b1) !== settings.ftp) {
     rows.push({ title: tr('Ramp test: your FTP is {w} W', { w: rampFtp(b1) }), why: `${tr('75 % of your best minute in a ramp test ({w} W)', { w: Math.round(b1) })} · ${tr('now {w} W', { w: settings.ftp })}`,
-      button: tr('Set FTP to {w} W', { w: rampFtp(b1) }), set: () => { settings.ftp = rampFtp(b1); $('f-ftp').value = settings.ftp; return tr('FTP set to {w} W', { w: settings.ftp }); } });
+      button: tr('Set FTP to {w} W', { w: rampFtp(b1) }), set: () => { settings.ftp = rampFtp(b1); settings.ftpSet = true; $('f-ftp').value = settings.ftp; return tr('FTP set to {w} W', { w: settings.ftp }); } });
   } else if (!e?.ramp) {
     const s = ftpSuggestion(curveEntries(), settings.ftp);
     if (s) {
       const from = s.ramp ? tr('75 % of your best minute in a ramp test ({w} W)', { w: s.w }) : tr('95 % of your best 20 minutes ({w} W, {date})', { w: s.w, date: new Date(s.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) });
       rows.push({ title: tr('Your rides suggest FTP {w} W', { w: s.ftp }), why: `${from} · ${tr('now {w} W', { w: settings.ftp })}`,
-        button: tr('Set FTP to {w} W', { w: s.ftp }), set: () => { settings.ftp = s.ftp; $('f-ftp').value = s.ftp; return tr('FTP set to {w} W', { w: s.ftp }); } });
+        button: tr('Set FTP to {w} W', { w: s.ftp }), set: () => { settings.ftp = s.ftp; settings.ftpSet = true; $('f-ftp').value = s.ftp; return tr('FTP set to {w} W', { w: s.ftp }); } });
     }
   }
   const wp = wPrimeSuggestion(curveEntries(), settings.wPrimeKj || DEFAULT_W_PRIME / 1000);
@@ -2709,7 +2731,7 @@ function renderFtpTip(el, e = null) {
   el.innerHTML = rows.map((r, i) => `<div class="ftp-row"><div><b>${esc(r.title)}</b><small>${esc(r.why)}</small></div><button class="primary" data-i="${i}">${esc(r.button)}</button></div>`).join('');
   for (const b of el.querySelectorAll('button')) b.onclick = () => {
     const msg = rows[+b.dataset.i].set(); saveSettings(); toast(msg);
-    renderFtpTip(el, e); renderPowerCurve();
+    renderFtpTip(el, e); renderPowerCurve(); renderFtpBox();
   };
 }
 
@@ -2788,6 +2810,7 @@ function renderFitness() {
 
 function renderHistory() {
   renderWhy();
+  renderFtpBox();
   renderProgress();
   renderChallenge();
   renderPowerCurve();
@@ -3114,11 +3137,8 @@ async function openRideCard() {
 $('btn-card').onclick = openRideCard;
 $('card-view').addEventListener('click', (ev) => { if (ev.target.closest('[data-card-close]')) $('card-view').hidden = true; });
 
-/** A ride's file name: gruppetto-2026-11-08-1432 (your local start time). */
-function rideFileName(d) {
-  const p = (n) => String(n).padStart(2, '0');
-  return `gruppetto-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`;
-}
+/** What a ride's files are named after: its workout, else its route. */
+const rideTitle = (e) => e?.workoutName || e?.routeName || '';
 function download(kind) {
   const rec = shown.rec || recorder;
   const d = rec.startTime || new Date();
@@ -3126,7 +3146,7 @@ function download(kind) {
   const blob = fit ? new Blob([rec.toFIT()], { type: 'application/vnd.ant.fit' }) : new Blob([rec.toTCX()], { type: 'application/vnd.garmin.tcx+xml' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${rideFileName(d)}.${fit ? 'fit' : 'tcx'}`;
+  a.download = `${rideFileName(d, rideTitle(shown.entry))}.${fit ? 'fit' : 'tcx'}`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
@@ -3166,7 +3186,7 @@ async function connectIntervals({ quiet = false } = {}) {
     icuClient = client;
     settings.icuKey = key;
     settings.icuAthlete = $('f-icu-athlete').value.trim();
-    if (athlete.ftp) { settings.ftp = athlete.ftp; $('f-ftp').value = athlete.ftp; }
+    if (athlete.ftp) { settings.ftp = athlete.ftp; settings.ftpSet = true; $('f-ftp').value = athlete.ftp; }
     if (athlete.weight) { settings.weight = Math.round(athlete.weight); $('f-weight').value = settings.weight; }
     // heart rate zones and max HR as set in intervals.icu
     if (athlete.hrZones) { settings.hrZones = athlete.hrZones; settings.hrZoneNames = athlete.hrZoneNames; }
@@ -3178,6 +3198,7 @@ async function connectIntervals({ quiet = false } = {}) {
     saveSettings();
     if (!quiet) track('icu-connect');
     renderRailDots();
+    renderFtpBox();
     loadIcuHistory(client); // your power curve and form there, Zwift's rides included: not waited for
     const n = icuWorkouts.length, st = icuWorkouts.stats || {};
     const notes = [];
@@ -3288,7 +3309,7 @@ async function uploadToIntervals() {
   const description = `${e.routeName} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`;
   try {
     const id = await icuClient.uploadActivity(rec.toFIT(), {
-      name, description, eventId: fromIcu ? e.eventId : undefined, filename: `${rideFileName(rec.startTime || new Date())}.fit`,
+      name, description, eventId: fromIcu ? e.eventId : undefined, filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit`,
     });
     e.uploadedId = id || true;
     if (lastRide && rec === recorder) lastRide.uploadedId = e.uploadedId;

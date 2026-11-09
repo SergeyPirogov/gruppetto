@@ -297,4 +297,8 @@ export const UK = {
   'Install Gruppetto as an app: its own window, an icon in the dock, works offline': 'Встановити Gruppetto як застосунок: окреме вікно, іконка в доку, працює без інтернету',
   'Click anywhere to hear the fans': 'Клацни будь-де, щоб чути вболівальників',
   '▶ Start the demo': '▶ Почати демо',
+  'Your FTP is a guess: {w} W': 'Твій FTP поки що навмання: {w} Вт',
+  "Workouts in ERG and the bots' pace go by it. A ramp test finds yours in about 20 minutes.": 'За ним ERG тримає ціль у тренуваннях, а боти підбирають темп. Рамп-тест визначить твій приблизно за 20 хвилин.',
+  '📈 Take the FTP test': '📈 Пройти FTP-тест', 'I know mine': 'Я знаю свій',
+  "Don't know your FTP?": 'Не знаєш свій FTP?', '📈 Take the ramp test': '📈 Пройти рамп-тест', '(about 20 minutes, to failure)': '(близько 20 хвилин, до відмови)',
 };

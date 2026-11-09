@@ -75,6 +75,12 @@
           </ul>
           <div class="why-actions"><button id="why-zwo" class="pill-btn">Import .zwo</button><button id="why-icu" class="pill-btn" data-open="icu">Connect intervals.icu</button></div>
         </div>
+        <!-- FTP still the default guess: find yours, or type it in Profile -->
+        <div id="ftp-box" class="ftp-box" hidden>
+          <button class="why-close" id="ftp-close" aria-label="Close">✕</button>
+          <div class="ftp-text"><b id="ftp-title"></b><span>Workouts in ERG and the bots' pace go by it. A ramp test finds yours in about 20 minutes.</span></div>
+          <div class="why-actions"><button id="ftp-test" class="primary">📈 Take the FTP test</button><button id="ftp-know" class="pill-btn">I know mine</button></div>
+        </div>
         <!-- a friend's challenge from a link: who, what to beat, and how -->
         <div id="challenge-box" class="challenge-box" hidden>
           <div class="ch-ghost">👻</div>
@@ -251,6 +257,7 @@
             <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
             <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
           </div>
+          <small class="hint time-hint ftp-hint">Don't know your FTP? <button id="f-ftp-test" class="link-btn">📈 Take the ramp test</button> (about 20 minutes, to failure)</small>
           <label>W′ (anaerobic reserve), kJ <input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"></label>
           <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
 

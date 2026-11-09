@@ -108,3 +108,14 @@ export function bestAverage(powers, window) {
   }
   return Math.round(best);
 }
+
+/**
+ * A ride's file name: gruppetto-2026-11-08-1432-rolling-hills (your local start time, then the workout or route,
+ * so a folder of rides says what each was). Letters of any script stay, the rest becomes dashes.
+ */
+export function rideFileName(d, title = '') {
+  const p = (n) => String(n).padStart(2, '0');
+  const slug = String(title || '').toLowerCase().normalize('NFC')
+    .replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 40).replace(/^-+|-+$/g, '');
+  return `gruppetto-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${slug ? `-${slug}` : ''}`;
+}
