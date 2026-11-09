@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Gruppetto — ride while you watch</title>
-  <meta name="description" content="Watch the match, a film or a series full screen. Your power, heart rate and workout float over it, and your trainer runs the workout. Free, in the browser.">
+  <meta name="description" content="Watch a film, a series or a race full screen. Your power, heart rate and workout float over it, and your trainer runs the workout. Free, in the browser.">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Gruppetto">
   <meta property="og:title" content="Ride while you watch. Free.">
-  <meta property="og:description" content="The match full screen, your numbers over it, the workout in ERG. The ride goes to Garmin, Strava and intervals.icu as a FIT.">
+  <meta property="og:description" content="A film or a race full screen, your numbers over it, the workout in ERG. The ride goes to Garmin, Strava and intervals.icu as a FIT.">
   <meta property="og:url" content="https://automation-remarks.com/gruppetto/watch.html">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <meta name="theme-color" content="#0d1422">
@@ -40,20 +40,17 @@
     .btn:hover { filter: brightness(1.08); }
     .fine { color: var(--muted); font-size: .88rem; margin-top: 14px; }
 
-    /* the picture: a match on a TV, the Gruppetto panel over it */
+    /* the picture: a film in a video player, the Gruppetto panel over it */
     .screen { position: relative; aspect-ratio: 16 / 9; border-radius: 16px; overflow: hidden; border: 1px solid var(--line);
-      box-shadow: 0 30px 80px rgba(0, 0, 0, .55); container-type: inline-size; }
-    .pitch { position: absolute; inset: 0;
-      background:
-        repeating-linear-gradient(90deg, #2f8a3c 0 8%, #2a7d36 8% 16%),
-        #2f8a3c; }
-    .pitch svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-    .pitch::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 120%, transparent 40%, rgba(0, 0, 0, .35)); }
-    .score { position: absolute; top: 4cqw; left: 4cqw; display: flex; font-weight: 800; font-size: 2.6cqw; border-radius: 1cqw; overflow: hidden; box-shadow: 0 .4cqw 1.6cqw rgba(0, 0, 0, .35); }
-    .score span { padding: .6cqw 1.4cqw; background: #f4f6fa; color: #111; }
-    .score span.s { background: #12182a; color: #fff; }
-    .score span.t { background: #ffd23f; color: #111; }
-    .hud { position: absolute; right: 2.5cqw; bottom: 2.5cqw; width: 46cqw; height: auto; filter: drop-shadow(0 1cqw 2cqw rgba(0, 0, 0, .35)); }
+      box-shadow: 0 30px 80px rgba(0, 0, 0, .55); container-type: inline-size; background: #0b0e16; }
+    .scene { position: absolute; inset: 0; }
+    .scene svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+    .scene::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0, 0, 0, .25), transparent 25%, transparent 70%, rgba(0, 0, 0, .55)); }
+    .player { position: absolute; left: 3cqw; right: 3cqw; bottom: 2.2cqw; display: flex; align-items: center; gap: 1.6cqw; color: #fff; font-size: 1.7cqw; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .player .bar { flex: 1; height: .5cqw; border-radius: .3cqw; background: rgba(255, 255, 255, .3); position: relative; }
+    .player .bar::before { content: ""; position: absolute; inset: 0 62% 0 0; background: #fff; border-radius: inherit; }
+    .player .play { font-size: 2.2cqw; }
+    .hud { position: absolute; right: 2.5cqw; bottom: 6cqw; width: 46cqw; height: auto; filter: drop-shadow(0 1cqw 2cqw rgba(0, 0, 0, .35)); }
     .lang { margin-left: 18px; font-size: .85rem; color: var(--muted); }
     .lang a { text-decoration: none; padding: 2px 4px; border-radius: 6px; margin: 0 !important; }
     .lang a.on { color: var(--text); background: #273249; }
@@ -90,7 +87,7 @@
       .hero { grid-template-columns: 1fr; gap: 28px; padding-top: 16px; }
       .steps, .vs { grid-template-columns: 1fr; }
       .feats { grid-template-columns: 1fr; }
-      header nav a:not(.go):not([data-lang]) { display: none; }
+      header nav a:not([data-lang]) { display: none; } /* the logo and the language; the main button is just below */
     }
   </style>
 </head>
@@ -104,7 +101,7 @@
     <div class="hero">
       <div>
         <h1>Ride while you <em>watch.</em></h1>
-        <p class="lead">The match, a film or a series, full screen. Your power, heart rate and workout float over it, and your
+        <p class="lead">A film, a series or a race, full screen. Your power, heart rate and workout float over it, and your
           trainer holds the target watts. No game world to stare at: just the thing you wanted to watch anyway.</p>
         <div class="cta">
           <a class="btn primary" href="./?start=watch">▶ Start Watch &amp; ride</a>
@@ -113,18 +110,23 @@
         <p class="fine">Free. No account, nothing to install: Chrome or Edge and a smart trainer.</p>
       </div>
 
-      <div class="screen" role="img" aria-label="A football match full screen with Gruppetto's panel in the corner: 232 W, heart rate 128, cadence 88, the interval and W′bal">
-        <div class="pitch">
-          <svg viewBox="0 0 160 90" preserveAspectRatio="none" fill="none" stroke="rgba(255,255,255,.75)" stroke-width=".5">
-            <rect x="6" y="8" width="148" height="74"/>
-            <line x1="80" y1="8" x2="80" y2="82"/>
-            <circle cx="80" cy="45" r="11"/>
-            <rect x="6" y="27" width="20" height="36"/><rect x="134" y="27" width="20" height="36"/>
-            <circle cx="80" cy="45" r=".9" fill="#fff"/>
-            <circle cx="104" cy="52" r="1.6" fill="#fff" stroke="none"/>
+      <div class="screen" role="img" aria-label="A film full screen with Gruppetto's panel in the corner: 232 W, heart rate 128, cadence 88, the interval and W′bal">
+        <div class="scene">
+          <svg viewBox="0 0 160 90" preserveAspectRatio="xMidYMid slice">
+            <defs>
+              <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#28306a"/><stop offset=".3" stop-color="#b6577e"/><stop offset=".55" stop-color="#f3a35f"/><stop offset=".7" stop-color="#ffd38a"/></linearGradient>
+              <radialGradient id="sun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff2c4"/><stop offset=".4" stop-color="#ffd27a" stop-opacity=".9"/><stop offset="1" stop-color="#ffb35a" stop-opacity="0"/></radialGradient>
+            </defs>
+            <rect width="160" height="90" fill="url(#sky)"/>
+            <circle cx="46" cy="44" r="22" fill="url(#sun)"/>
+            <path d="M0 52 L18 38 L30 46 L46 30 L62 44 L76 36 L92 48 L110 34 L126 44 L142 32 L160 42 L160 90 L0 90Z" fill="#4a3a63" opacity=".85"/>
+            <path d="M0 62 L20 52 L38 58 L56 48 L74 57 L96 50 L118 58 L136 50 L160 56 L160 90 L0 90Z" fill="#2f2848"/>
+            <path d="M0 74 Q40 62 80 66 T160 64 L160 90 L0 90Z" fill="#1b1830"/>
+            <path d="M70 90 C62 80 54 72 44 66 L46 66 C58 72 70 80 86 90Z" fill="#3a3352"/>
+            <path d="M78 90 C66 80 56 72 45 66.3" stroke="#f3c98b" stroke-width=".35" stroke-dasharray="1.6 1.4" fill="none" opacity=".8"/>
           </svg>
         </div>
-        <div class="score"><span>UKR</span><span class="s">2 – 1</span><span>ESP</span><span class="t">67′</span></div>
+        <div class="player"><span class="play">❚❚</span><span>1:12:40</span><span class="bar"></span><span>1:58:00</span></div>
         <img class="hud" src="assets/watch/hud-en.png" data-uk-src="assets/watch/hud-uk.png" alt="" width="395" height="259">
       </div>
     </div>
@@ -132,12 +134,12 @@
 
   <section id="how">
     <div class="wrap">
-      <h2>Three steps, then the kick-off</h2>
+      <h2>Three steps, then press play</h2>
       <p class="sub">Everything runs in the browser tab; the panel floats over whatever plays on your screen or TV.</p>
       <div class="steps">
         <div class="card"><h3>Connect the trainer</h3><p>Bluetooth, straight from Chrome or Edge: Wahoo, Tacx, Elite, Saris, a power meter, a heart rate strap.</p></div>
         <div class="card"><h3>Pick a workout, or just ride</h3><p>Sweet spot, VO₂max, endurance: almost 30 ready plans, your own .zwo, or what intervals.icu planned for today.</p></div>
-        <div class="card"><h3>Put the match on</h3><p>Full screen, any app. The numbers stay on top in a small window, or in Gruppetto HUD, a see-through overlay for Mac.</p></div>
+        <div class="card"><h3>Press play</h3><p>Full screen, any app. The numbers stay on top in a small window, or in Gruppetto HUD, a see-through overlay for Mac.</p></div>
       </div>
     </div>
   </section>
@@ -147,9 +149,9 @@
       <h2>Why not just…</h2>
       <p class="sub">Other apps are good at what they do. They just don't share the screen.</p>
       <div class="vs">
-        <div class="card"><div class="what">A cycling game</div><h3>Wants the whole screen</h3><p>Its 3D world is the show. Put the match on and the game is behind it, with your numbers.</p></div>
-        <div class="card"><div class="what">A head unit</div><h3>Numbers under your bars</h3><p>Looking down every interval, while the match is up there on the TV.</p></div>
-        <div class="card us"><div class="what">Gruppetto</div><h3>Numbers where you look</h3><p>A corner of the match: watts, the interval, what comes next. Glance, keep watching.</p></div>
+        <div class="card"><div class="what">A cycling game</div><h3>Wants the whole screen</h3><p>Its 3D world is the show. Put a film on and the game is behind it, with your numbers.</p></div>
+        <div class="card"><div class="what">A head unit</div><h3>Numbers under your bars</h3><p>Looking down every interval, while the film is up there on the screen.</p></div>
+        <div class="card us"><div class="what">Gruppetto</div><h3>Numbers where you look</h3><p>A corner of the screen: watts, the interval, what comes next. Glance, keep watching.</p></div>
       </div>
     </div>
   </section>
@@ -181,7 +183,7 @@
 
   <section class="final">
     <div class="wrap">
-      <h2>The match starts soon</h2>
+      <h2>The next episode is waiting</h2>
       <p class="sub" style="margin: 0 auto 24px">Warm-up included.</p>
       <div class="cta"><a class="btn primary" href="./?start=watch">▶ Start Watch &amp; ride</a></div>
     </div>
@@ -195,25 +197,25 @@
     const UK = {
       'How it works': 'Як це працює', 'Questions': 'Питання', 'Open Gruppetto →': 'Відкрити Gruppetto →',
       'Ride while you <em>watch.</em>': 'Крути, поки <em>дивишся.</em>',
-      'The match, a film or a series, full screen. Your power, heart rate and workout float over it, and your trainer holds the target watts. No game world to stare at: just the thing you wanted to watch anyway.':
-        'Матч, фільм чи серіал на весь екран. Потужність, пульс і тренування поверх нього, а станок сам тримає потрібні вати. Жодного ігрового світу: лише те, що ти й так хотів подивитись.',
+      'A film, a series or a race, full screen. Your power, heart rate and workout float over it, and your trainer holds the target watts. No game world to stare at: just the thing you wanted to watch anyway.':
+        'Фільм, серіал чи гонка на весь екран. Потужність, пульс і тренування поверх нього, а станок сам тримає потрібні вати. Жодного ігрового світу: лише те, що ти й так хотів подивитись.',
       '▶ Start Watch &amp; ride': '▶ Почати Watch &amp; ride', '⬇ Overlay for Mac': '⬇ Оверлей для Mac',
       'Free. No account, nothing to install: Chrome or Edge and a smart trainer.': 'Безкоштовно. Без реєстрації й без встановлення: Chrome чи Edge і смарт-станок.',
-      'Three steps, then the kick-off': 'Три кроки, і стартовий свисток',
+      'Three steps, then press play': 'Три кроки, і тисни ▶',
       'Everything runs in the browser tab; the panel floats over whatever plays on your screen or TV.': 'Усе працює у вкладці браузера; панель висить поверх того, що грає на екрані.',
       'Connect the trainer': 'Підключи станок',
       'Bluetooth, straight from Chrome or Edge: Wahoo, Tacx, Elite, Saris, a power meter, a heart rate strap.': 'Bluetooth просто з Chrome чи Edge: Wahoo, Tacx, Elite, Saris, вимірювач потужності, пульсометр.',
       'Pick a workout, or just ride': 'Обери тренування або просто крути',
       'Sweet spot, VO₂max, endurance: almost 30 ready plans, your own .zwo, or what intervals.icu planned for today.': 'Sweet spot, VO₂max, витривалість: майже 30 готових планів, свій .zwo або те, що intervals.icu запланував на сьогодні.',
-      'Put the match on': 'Вмикай матч',
+      'Press play': 'Тисни ▶',
       'Full screen, any app. The numbers stay on top in a small window, or in Gruppetto HUD, a see-through overlay for Mac.': 'На весь екран, у будь-якому застосунку. Цифри лишаються зверху в маленькому вікні або в Gruppetto HUD, прозорому оверлеї для Mac.',
       'Why not just…': 'Чому не просто…', 'Other apps are good at what they do. They just don\'t share the screen.': 'Інші застосунки добрі в тому, що роблять. Просто вони не діляться екраном.',
       'A cycling game': 'Вело-гра', 'Wants the whole screen': 'Хоче весь екран',
-      'Its 3D world is the show. Put the match on and the game is behind it, with your numbers.': 'Її 3D-світ і є шоу. Увімкнеш матч, і гра разом з твоїми цифрами опиниться позаду.',
+      'Its 3D world is the show. Put a film on and the game is behind it, with your numbers.': 'Її 3D-світ і є шоу. Увімкнеш фільм, і гра разом з твоїми цифрами опиниться позаду.',
       'A head unit': 'Велокомп\'ютер', 'Numbers under your bars': 'Цифри під кермом',
-      'Looking down every interval, while the match is up there on the TV.': 'Дивишся вниз кожен інтервал, а матч там, на телевізорі.',
+      'Looking down every interval, while the film is up there on the screen.': 'Дивишся вниз кожен інтервал, а фільм там, на екрані.',
       'Numbers where you look': 'Цифри там, куди дивишся',
-      'A corner of the match: watts, the interval, what comes next. Glance, keep watching.': 'Куточок матчу: вати, інтервал, що далі. Глянув і дивишся далі.',
+      'A corner of the screen: watts, the interval, what comes next. Glance, keep watching.': 'Куточок екрана: вати, інтервал, що далі. Глянув і дивишся далі.',
       'A real workout, not a distraction': 'Справжнє тренування, а не розвага',
       'The film is for your head; the rest is a proper training session.': 'Фільм для голови, а решта як на правильному тренуванні.',
       'ERG on the trainer': 'ERG на станку', 'It sets the watts; you pedal and watch.': 'Він ставить вати, ти крутиш і дивишся.',
@@ -232,7 +234,7 @@
         'Маленький безкоштовний застосунок для Mac: прозора заокруглена панель поверх усього, навіть відео на весь екран, без адресного рядка браузера. Не обовʼязковий: маленьке вікно працює й без нього.',
       'Is it really free?': 'Справді безкоштовно?',
       'Yes. No account, no subscription. Your rides stay in your browser until you send them somewhere.': 'Так. Без реєстрації й підписки. Заїзди лишаються у твоєму браузері, доки сам їх кудись не надішлеш.',
-      'The match starts soon': 'Матч скоро почнеться', 'Warm-up included.': 'Розминка включена.',
+      'The next episode is waiting': 'Наступна серія чекає', 'Warm-up included.': 'Розминка включена.',
       'Gruppetto · indoor cycling in your browser': 'Gruppetto · велотренування у браузері', 'Ride in 3D instead →': 'Їхати в 3D →',
     };
     const KEY = 'gruppetto.lang';
