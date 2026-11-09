@@ -10,7 +10,7 @@ import { encodeChallenge, decodeChallenge, challengeIn } from '../js/challenge.j
 import { wPrimeSuggestion, rampFtp } from '../js/power.js';
 import { addRide, progressFrom, levelOf, rideXp } from '../js/progress.js';
 import { wbalStep, wbalSeries, timeToEmpty } from '../js/wbal.js';
-import { villages, crossings } from '../js/villages.js';
+import { villages, crossings, tunnels } from '../js/villages.js';
 
 const dv = (bytes) => new DataView(new Uint8Array(bytes).buffer);
 
@@ -842,4 +842,20 @@ test('bridges: streams cross the road on level ground, clear of the start, climb
   }
   assert.ok(total >= 10);
   assert.deepEqual(crossings(routes.find((r) => r.theme === 'desert')), []);
+});
+
+test('tunnels: only in the mountains, 100–200 m, clear of climbs, sprints, villages and bridges', () => {
+  let total = 0;
+  for (const r of routes) {
+    const v = villages(r), xs = crossings(r, v.spans), ts = tunnels(r, v.spans, xs);
+    if (!['alpine', 'carpathians'].includes(r.theme)) assert.deepEqual(ts, [], r.id);
+    total += ts.length;
+    for (const [s, e] of ts) {
+      assert.ok(e - s >= 100 && e - s <= 200 && s > 1000 && e < r.length - 1000, `${r.id}: ${s}–${e}`);
+      for (const c of [...r.climbs, ...r.sprints]) assert.ok(e < c.start - 200 || s > c.start + c.length + 200, `${r.id}: a tunnel on ${c.name}`);
+      for (const [a, b] of v.spans) assert.ok(e < a - 250 || s > b + 250, `${r.id}: a tunnel in a village`);
+      for (const d of xs) assert.ok(e < d - 250 || s > d + 250, `${r.id}: a tunnel on a bridge`);
+    }
+  }
+  assert.ok(total >= 2);
 });

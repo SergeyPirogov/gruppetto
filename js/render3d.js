@@ -11,7 +11,7 @@ import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
 import { t, lang } from './i18n.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
-import { villages, crossings } from './villages.js';
+import { villages, crossings, tunnels } from './villages.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 import { loadFanModels } from './fans.js';
 
@@ -51,7 +51,8 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
-const GULLY = 17, GULLY_DEPTH = 6; // a stream under a bridge: half its width along the road and its depth (m)
+const GULLY = 17, GULLY_DEPTH = 6;
+const TUNNEL_R = 4.6, TUNNEL_WALL = 3.2, TUNNEL_HILL = 11; // a tunnel: half its width, its straight walls' height, the hill over it (m) // a stream under a bridge: half its width along the road and its depth (m)
 // house walls in a village are not all one white: cream, a cool white, peach, pale green (the roof takes a hint of it)
 const HOUSE_TINTS = ['#ffffff', '#fff0d6', '#e6eeff', '#ffe0d0', '#eaf5df', '#fff7c8'].map((c) => new THREE.Color(c));
 const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || (LOW ? 1 : 2); // ?csm=3 to compare
@@ -1058,7 +1059,8 @@ export class Scene3D {
     this.villageSpans = [];
     if (!this.buildings.length) ({ buildings: this.buildings, spans: this.villageSpans } = villages(route, this.t3.dip));
     this.crossings = crossings(route, this.villageSpans); // streams the road bridges
-    this.streamMat = null; this.wallMat = null;
+    this.tunnels = tunnels(route, this.villageSpans, this.crossings); // and mountains it goes through
+    this.streamMat = null; this.wallMat = null; this.tunnelMat = null; this.portalMat = null;
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     // road markings: flush with the asphalt (raised, they swallowed the bottom of the tyres), pulled
@@ -1436,7 +1438,13 @@ export class Scene3D {
       for (const c of this.crossings) { const dd = Math.abs(w - c); if (dd < GULLY) return 1 - (dd / GULLY) ** 2; }
       return 0;
     };
-    const onBridge = (a) => gully(a * SEG + SEG / 2) > 0 || gully(a * SEG) > 0 || gully(a * SEG + SEG) > 0;
+    // a tunnel: the mountain closes over the road between the portals ([start, end] along the route)
+    const inTunnel = (d, pad = 0) => {
+      const w = loop ? ((d % L) + L) % L : d;
+      return this.tunnels.some(([t0, t1]) => w >= t0 - pad && w <= t1 + pad);
+    };
+    const onBridge = (a) => gully(a * SEG + SEG / 2) > 0 || gully(a * SEG) > 0 || gully(a * SEG + SEG) > 0
+      || inTunnel(a * SEG, SEG) || inTunnel(a * SEG + SEG, SEG); // nor in a tunnel
     const sand = col('#e2cc96'), rockC = col(T3c.rockColor || '#8d8f8c'), snowC = col('#f2f6f9');
     const frames = [];
     for (let r = 0; r < rows; r++) frames.push(this.frame((a0 + r) * SEG));
@@ -1455,6 +1463,8 @@ export class Scene3D {
         let y = this._terrainY(f.y, o, x, z);
         const g = gully((a0 + r) * SEG);
         y -= g * GULLY_DEPTH;
+        // over a tunnel the hill rises 11 m above the road and slopes away beyond 12 m out
+        if (inTunnel((a0 + r) * SEG)) y = Math.max(y, f.y + TUNNEL_HILL - Math.max(0, Math.abs(o) - 12) * 0.28);
         const lc = this.land ? this._landAt(a0 + r, o) : '.';
         if (lc === 'w') y = Math.min(y, f.y - 1.3); // a lake or a wide river: flat, a little below the road
         // between two stretches of the same road the land slopes to meet halfway, at the mean height
@@ -1481,8 +1491,12 @@ export class Scene3D {
       }
     }
     const idx = [];
+    const roadK = COLS.findIndex((o) => o > 0) - 1; // the cell under the road
     for (let r = 0; r < rows - 1; r++) {
+      // through a tunnel's mouth and inside, no land across the road: the hill would close the way
+      const open = inTunnel((a0 + r) * SEG, SEG) || inTunnel((a0 + r + 1) * SEG, SEG);
       for (let k = 0; k < nc - 1; k++) {
+        if (open && k === roadK) continue;
         const a = r * nc + k, b = a + 1, d = a + nc, e = d + 1;
         idx.push(a, b, d, b, e, d);
       }
@@ -1496,12 +1510,13 @@ export class Scene3D {
     terrain.receiveShadow = true;
     group.add(terrain);
     this._bridges(group, a0, rows);
+    this._tunnels(group, a0, rows);
 
     // road ribbon + edge lines
     // the road is drawn every 1.25 m (the land every 5 m), so bends stay round on a wide road
     const SUB = 4, fine = [];
     for (let q = 0; q <= CHUNK * SUB; q++) fine.push(q % SUB ? this.frame((a0 + q / SUB) * SEG) : frames[q / SUB]);
-    const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false) => {
+    const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false, shade = null) => {
       const p = [], cs = [], uv = [];
       const cc = color instanceof THREE.Color ? color : col(color);
       for (let q = 0; q < fine.length - 1; q++) {
@@ -1514,7 +1529,8 @@ export class Scene3D {
         for (const v of [A, B, C, B, D, C]) {
           uv.push(v[0] / 4, v[2] / 4);
           // the asphalt is not one grey: older stretches and repair patches, darker where it was mended
-          const k = material === this.roadMat ? (0.9 + vnoise(v[0] / 9, v[2] / 9) * 0.14) * (vnoise(v[0] / 23 + 50, v[2] / 23) > 0.68 ? 0.8 : 1) : 1;
+          const k = (material === this.roadMat ? (0.9 + vnoise(v[0] / 9, v[2] / 9) * 0.14) * (vnoise(v[0] / 23 + 50, v[2] / 23) > 0.68 ? 0.8 : 1) : 1)
+            * (shade ? shade((a0 + q / SUB) * SEG) : 1);
           cs.push(cc.r * k, cc.g * k, cc.b * k);
         }
       }
@@ -1527,7 +1543,8 @@ export class Scene3D {
       m.receiveShadow = true;
       group.add(m);
     };
-    ribbon(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, 0.02, verge.clone().multiplyScalar(0.85));
+    ribbon(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, 0.02, verge.clone().multiplyScalar(0.85), this.mat, false,
+      (d) => (inTunnel(d, 2) ? 0.18 : 1)); // the verge in a tunnel is in the dark
     ribbon(-ROAD_HALF, ROAD_HALF, 0.05, rgb(T.road[0]), this.roadMat);
     ribbon(-ROAD_HALF * 0.9 - 0.07, -ROAD_HALF * 0.9 + 0.07, 0.052, rgb(T.line), this.lineMat);
     ribbon(ROAD_HALF * 0.9 - 0.07, ROAD_HALF * 0.9 + 0.07, 0.052, rgb(T.line), this.lineMat);
@@ -1807,6 +1824,71 @@ export class Scene3D {
     walls.forEach((m, i) => im.setMatrixAt(i, m));
     im.castShadow = im.receiveShadow = true;
     group.add(im);
+  }
+
+  /** The tunnels in this chunk: a vault over the road with lamps along its crown, a stone portal at each mouth. */
+  _tunnels(group, a0, rows) {
+    const L = this.route.length, loop = !this.route.oneWay;
+    const d0 = a0 * SEG, d1 = (a0 + rows - 1) * SEG, lap = loop ? Math.floor(d0 / L) * L : 0;
+    const spans = this.tunnels.flatMap(([s, e]) => [-L, 0, L].map((k) => [s + lap + k, e + lap + k])).filter(([s, e]) => e > d0 && s < d1);
+    if (!spans.length) return;
+    this.tunnelMat ||= new THREE.MeshBasicMaterial({ color: '#2f2d2a', side: THREE.DoubleSide }); // unlit: no daylight in there
+    this.lampMat ||= new THREE.MeshBasicMaterial({ color: '#ffd58a' });
+    const lamps = [];
+    for (const [s, e] of spans) {
+      // the vault: half rings every 2.5 m, from the first mouth to the second, clipped to this chunk
+      const from = Math.max(s - SEG, d0), to = Math.min(e + SEG, d1);
+      if (to > from) {
+        // the profile: straight walls, then a half circle over them
+        const prof = [[TUNNEL_R, -0.3], ...Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * Math.PI; return [Math.cos(t) * TUNNEL_R, TUNNEL_WALL + Math.sin(t) * TUNNEL_R]; }), [-TUNNEL_R, -0.3]];
+        const ARC = prof.length - 1, ringsN = Math.ceil((to - from) / 2.5) + 1, p = [], idx = [];
+        for (let i = 0; i < ringsN; i++) {
+          const f = this.frame(Math.min(to, from + i * 2.5));
+          for (const [o, y] of prof) p.push(f.x + f.rx * o, f.y + y, f.z + f.rz * o);
+          if (i) for (let k = 0; k < ARC; k++) { const a = (i - 1) * (ARC + 1) + k, b = a + ARC + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+        }
+        const g = new THREE.BufferGeometry();
+        g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+        g.setIndex(idx);
+        g.computeVertexNormals();
+        const vault = new THREE.Mesh(g, this.tunnelMat);
+        vault.castShadow = vault.receiveShadow = true;
+        group.add(vault);
+        for (let d = Math.ceil(from / 12) * 12; d < to; d += 12) {
+          const f = this.frame(d);
+          lamps.push(new THREE.Matrix4().compose(new THREE.Vector3(f.x, f.y + TUNNEL_WALL + TUNNEL_R - 0.25, f.z),
+            new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(f.rx, f.rz)), new THREE.Vector3(1.6, 0.12, 0.35)));
+        }
+      }
+      // the portals: a stone face with the arch cut out, set across the road at each mouth
+      for (const [dm, dir] of [[s - SEG, -1], [e + SEG, 1]]) {
+        if (dm < d0 || dm >= d1) continue;
+        this.portalGeom ||= (() => {
+          // a stone face a little narrower than the hill and below its top, so the hill shows around it
+          const W = TUNNEL_R + 3.4, H = TUNNEL_WALL + TUNNEL_R + 1.6, sh = new THREE.Shape();
+          sh.moveTo(-W, -1); sh.lineTo(W, -1); sh.lineTo(W, H); sh.lineTo(-W, H); sh.closePath();
+          const hole = new THREE.Path();
+          hole.moveTo(TUNNEL_R, -1); hole.lineTo(TUNNEL_R, TUNNEL_WALL);
+          hole.absarc(0, TUNNEL_WALL, TUNNEL_R, 0, Math.PI, false);
+          hole.lineTo(-TUNNEL_R, -1); hole.closePath();
+          sh.holes.push(hole);
+          return new THREE.ExtrudeGeometry(sh, { depth: 1.4, bevelEnabled: false, curveSegments: 16 });
+        })();
+        this.portalMat ||= new THREE.MeshLambertMaterial({ color: '#b9b2a4', emissive: '#2e2b25' }); // stone, never black even against the sun
+        const f = this.frame(dm), m = new THREE.Mesh(this.portalGeom, this.portalMat);
+        m.position.set(f.x, f.y, f.z);
+        m.rotation.y = Math.atan2(f.rx, f.rz) - Math.PI / 2; // its face across the road
+        m.translateZ(dir > 0 ? 0 : -1.4);
+        m.castShadow = m.receiveShadow = true;
+        group.add(m);
+      }
+    }
+    if (lamps.length) {
+      this.lampGeom ||= new THREE.BoxGeometry(1, 1, 1);
+      const im = new THREE.InstancedMesh(this.lampGeom, this.lampMat, lamps.length);
+      lamps.forEach((m, i) => im.setMatrixAt(i, m));
+      group.add(im);
+    }
   }
 
   _crowdModels() {
@@ -2230,7 +2312,7 @@ export class Scene3D {
     const shared = new Set(Object.values(this.models || {}));
     // the crowd's meshes are shared by every chunk (fans: each chunk's geometry borrows the baked attributes)
     if (this.crowdModels) for (const k of ['body', 'flagUA', 'flagTeam']) shared.add(this.crowdModels[k]);
-    if (this.wallGeom) shared.add(this.wallGeom); // the bridges' stone blocks
+    for (const k of ['wallGeom', 'portalGeom', 'lampGeom']) if (this[k]) shared.add(this[k]); // bridges' and tunnels' shared shapes
     group.traverse((o) => {
       if (o.geometry?.userData.borrowed) return; // its tiny per-fan colours go with the garbage collector
       if (o.geometry && !shared.has(o.geometry) && !this.natureKeep?.has(o.geometry)) o.geometry.dispose();

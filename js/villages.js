@@ -58,3 +58,25 @@ export function crossings(route, spans = villages(route).spans) {
   }
   return out;
 }
+
+/**
+ * Tunnels through the mountains (alpine and Carpathian worlds): [start, end] along the route, 110–190 m long, every
+ * 6–10 km, on steady ground, clear of the start, climbs, sprints, villages and bridges.
+ */
+export function tunnels(route, spans = villages(route).spans, bridges = crossings(route, spans)) {
+  const L = route.length;
+  if (!L || route.custom || route.buildings?.length || !['alpine', 'carpathians'].includes(route.theme) || L < 6000) return [];
+  const seed = idSeed(route.id) + 41;
+  const busy = [...(route.climbs || []), ...(route.sprints || [])].map((c) => [c.start - 200, c.start + c.length + 200])
+    .concat(spans.map(([a, b]) => [a - 250, b + 250]), bridges.map((d) => [d - 250, d + 250]));
+  const elev = (d) => route.segAt(Math.floor(d / SEG)).elev;
+  const out = [];
+  for (let k = 0, d = 2500 + rnd(seed) * 2500; d < L - 1500; k++, d += 6000 + rnd(seed + k * 2.9) * 4000) {
+    const len = 110 + rnd(seed + k * 6.1) * 80;
+    const s = Math.round(d / SEG) * SEG, e = Math.round((d + len) / SEG) * SEG;
+    if (busy.some(([a, b]) => e > a && s < b)) continue;
+    if (Math.abs(elev(e) - elev(s)) / (e - s) > 0.05) continue;
+    out.push([s, e]);
+  }
+  return out;
+}
