@@ -956,7 +956,7 @@ function openDrawer(panel) {
   // in the lobby a section is a page beside the rail; mid-ride it slides over the road
   drawer.classList.toggle('as-page', !ride);
   if (!ride) { $('wk-menu').hidden = true; drawer.querySelector('.drawer-panel').scrollTop = 0; }
-  for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel;
+  for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel || c.dataset.off === '1';
   if (panel === 'progress') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
   for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
   markRail(panel);
@@ -3387,7 +3387,29 @@ async function uploadToIntervals() {
 // ---------- Strava ----------
 let stravaClient = null;
 
+/**
+ * Strava stays out of sight until its app may connect more than its owner (Strava's athlete capacity of 1 before
+ * review): ?strava=1 shows it in this browser for good, ?strava=0 hides it again. Linked, or on the way back from
+ * Strava's page, it shows anyway.
+ */
+const STRAVA_ON_KEY = 'gruppetto.strava-on';
+function stravaShown() {
+  const url = new URL(location.href), flag = url.searchParams.get('strava');
+  if (flag !== null) {
+    try { if (flag === '1') localStorage.setItem(STRAVA_ON_KEY, '1'); else localStorage.removeItem(STRAVA_ON_KEY); } catch { /* private mode */ }
+    url.searchParams.delete('strava');
+    window.history.replaceState(null, '', url);
+  }
+  let on = false;
+  try { on = !!localStorage.getItem(STRAVA_ON_KEY); } catch { /* private mode */ }
+  return on || !!StravaClient.saved() || !!stravaReturn(location.search);
+}
+
 function initStrava() {
+  const shownHere = stravaShown();
+  $('strava-card').hidden = !shownHere;
+  $('strava-card').dataset.off = shownHere ? '' : '1'; // the Profile page shows its cards: this one stays out
+  if (!shownHere) return;
   stravaClient = StravaClient.saved();
   $('f-strava-upload').checked = settings.stravaUpload;
   $('f-strava-upload').onchange = () => { settings.stravaUpload = $('f-strava-upload').checked; saveSettings(); };
