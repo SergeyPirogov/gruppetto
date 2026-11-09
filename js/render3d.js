@@ -892,9 +892,10 @@ export class Scene3D {
           #include <colorspace_fragment>
           vec3 c = gl_FragColor.rgb;
           float l = dot(c, vec3(0.299, 0.587, 0.114));
-          c = mix(vec3(l), c, 1.08);                                  // a little more colour
+          c = mix(vec3(l), c, 1.16);                                  // richer colour, as in a painted landscape
           c = (c - 0.5) * 1.05 + 0.5;                                 // a little more contrast
-          c *= vec3(1.015, 1.0, 0.985);                               // a touch warmer
+          c *= mix(vec3(0.96, 0.99, 1.05), vec3(1.04, 1.0, 0.95), smoothstep(0.15, 0.75, l)); // warm light, cool shade
+          c = c * 0.97 + 0.025;                                       // shadows soft, never black
           vec2 d = vUv - 0.5; c *= 1.0 - dot(d, d) * 0.55;            // a soft vignette
           gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
         }`,
