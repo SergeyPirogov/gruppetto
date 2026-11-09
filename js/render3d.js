@@ -53,6 +53,21 @@ const T3 = {
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
 const GULLY = 17, GULLY_DEPTH = 6;
+// what each world has of its own: [type, chance per 5 m of road, metres out [from, to], how many together, scale]
+const LANDMARKS = {
+  meadow: [['haybale', 0.006, [14, 60], 5, 1]],
+  river: [['haybale', 0.004, [14, 18], 4, 1]],
+  steppe: [['haybale', 0.009, [14, 70], 6, 1], ['windmill', 0.0018, [35, 90], 1, 1]],
+  autumn: [['haybale', 0.007, [14, 60], 5, 1]],
+  sunset: [['haybale', 0.005, [14, 60], 4, 1]],
+  coast: [['lighthouse', 0.0016, [13, 14], 1, 1]],
+  winter: [['snowman', 0.004, [6, 11], 1, 1]],
+  carpathians: [['church', 0.0016, [24, 40], 1, 1.3], ['haybale', 0.003, [14, 30], 3, 1]],
+  alpine: [['haybale', 0.003, [14, 30], 4, 1]],
+  desert: [['rock', 0.006, [60, 180], 1, 9]],
+};
+// village walls by world: wood in the mountains, whitewash elsewhere
+const WOOD_TINTS = ['#b0805a', '#9c6c48', '#c09068', '#8d6342'].map((c) => new THREE.Color(c));
 const TUNNEL_R = 4.6, TUNNEL_WALL = 3.2, TUNNEL_HILL = 11; // a tunnel: half its width, its straight walls' height, the hill over it (m) // a stream under a bridge: half its width along the road and its depth (m)
 // house walls in a village are not all one white: cream, a cool white, peach, pale green (the roof takes a hint of it)
 const HOUSE_TINTS = ['#ffffff', '#fff0d6', '#e6eeff', '#ffe0d0', '#eaf5df', '#fff7c8'].map((c) => new THREE.Color(c));
@@ -388,6 +403,48 @@ function buildModels(theme) {
     { geom: new THREE.CylinderGeometry(0.28, 0.2, 0.12, 8), color: '#2f3238', pos: [0, 4.95, 0] },
   ]);
   M.lantern = merge([{ geom: new THREE.CylinderGeometry(0.2, 0.15, 0.5, 8), color: '#ffffff', pos: [0, 4.65, 0] }]);
+
+  // ---- landmarks: what makes each world its own, not only its colours ----
+  // a round hay bale lying in the field
+  M.haybale = merge([
+    { geom: new THREE.CylinderGeometry(0.78, 0.78, 1.25, 16), color: '#d9b45c', pos: [0, 0.74, 0], rot: [0, 0, Math.PI / 2], flat: true },
+    { geom: new THREE.CylinderGeometry(0.6, 0.6, 1.27, 16), color: '#c49a45', pos: [0, 0.74, 0], rot: [0, 0, Math.PI / 2], flat: true },
+  ]);
+  // a steppe windmill: a white tower, a dark cap and four sails
+  M.windmill = merge([
+    { geom: new THREE.CylinderGeometry(1.1, 1.7, 9, 12), color: '#efe9dc', pos: [0, 4.5, 0], flat: true },
+    { geom: new THREE.ConeGeometry(1.5, 2.2, 12), color: '#6e4630', pos: [0, 10.1, 0], flat: true },
+    { geom: new THREE.BoxGeometry(0.5, 0.5, 0.9), color: '#6e4630', pos: [0, 9.3, 1.4], flat: true },
+    ...[0, 1, 2, 3].map((k) => ({ geom: new THREE.BoxGeometry(0.75, 6.2, 0.08), color: '#d8cdb6', pos: [Math.sin(k * Math.PI / 2 + 0.4) * 3.2, 9.3 + Math.cos(k * Math.PI / 2 + 0.4) * 3.2, 1.85], rot: [0, 0, -(k * Math.PI / 2 + 0.4)], flat: true })),
+  ]);
+  // a lighthouse on the shore, red and white, its lamp lit at night (lighthouseLamp, its own material)
+  M.lighthouse = merge([
+    { geom: new THREE.CylinderGeometry(2.4, 2.8, 1.2, 14), color: '#9a958c', pos: [0, 0.6, 0], flat: true },
+    ...[0, 1, 2, 3].map((k) => ({ geom: new THREE.CylinderGeometry(1.75 - (k + 1) * 0.15, 1.75 - k * 0.15, 3.4, 14), color: k % 2 ? '#f4f1ea' : '#c8332b', pos: [0, 1.2 + 1.7 + k * 3.4, 0], flat: true })),
+    { geom: new THREE.CylinderGeometry(1.6, 1.6, 0.25, 14), color: '#2f3238', pos: [0, 15.0, 0], flat: true },
+    { geom: new THREE.ConeGeometry(1.0, 1.4, 14), color: '#c8332b', pos: [0, 17.1, 0], flat: true },
+  ]);
+  M.lighthouseLamp = merge([{ geom: new THREE.CylinderGeometry(0.9, 0.9, 1.3, 14), color: '#ffffff', pos: [0, 15.75, 0] }]);
+  // a Carpathian wooden church: a log nave, roofs in tiers and a small golden dome with a cross
+  M.church = merge([
+    { geom: new THREE.BoxGeometry(5, 4.2, 8), color: '#7a5233', pos: [0, 2.1, 0], flat: true },
+    { geom: gable(8.8, 6.4, 2.6), color: '#3f2b1d', pos: [0, 4.2, 0], rot: [0, Math.PI / 2, 0], flat: true },
+    { geom: new THREE.BoxGeometry(3.4, 3.2, 3.4), color: '#7a5233', pos: [0, 5.6, 0], flat: true },
+    { geom: new THREE.ConeGeometry(3.0, 2.2, 8), color: '#3f2b1d', pos: [0, 8.2, 0], flat: true },
+    { geom: new THREE.CylinderGeometry(0.9, 1.1, 1.4, 8), color: '#3f2b1d', pos: [0, 9.6, 0], flat: true },
+    { geom: new THREE.SphereGeometry(0.9, 12, 8), color: '#d4ad4a', pos: [0, 10.9, 0], scale: [1, 1.25, 1] },
+    { geom: new THREE.BoxGeometry(0.1, 1.5, 0.1), color: '#d4ad4a', pos: [0, 12.6, 0] },
+    { geom: new THREE.BoxGeometry(0.75, 0.1, 0.1), color: '#d4ad4a', pos: [0, 12.9, 0] },
+  ]);
+  // a snowman by the road in the winter forest
+  M.snowman = merge([
+    { geom: new THREE.SphereGeometry(0.62, 14, 10), color: '#f4f7fb', pos: [0, 0.55, 0] },
+    { geom: new THREE.SphereGeometry(0.45, 14, 10), color: '#f4f7fb', pos: [0, 1.3, 0] },
+    { geom: new THREE.SphereGeometry(0.31, 14, 10), color: '#f4f7fb', pos: [0, 1.9, 0] },
+    { geom: new THREE.ConeGeometry(0.06, 0.32, 8), color: '#f08a24', pos: [0, 1.92, 0.42], rot: [Math.PI / 2, 0, 0] },
+    { geom: new THREE.CylinderGeometry(0.22, 0.26, 0.3, 12), color: '#26262b', pos: [0, 2.28, 0] },
+    { geom: new THREE.TorusGeometry(0.36, 0.06, 6, 16), color: '#c8332b', pos: [0, 1.62, 0], rot: [Math.PI / 2, 0, 0] },
+  ]);
   return M;
 }
 
@@ -1540,6 +1597,12 @@ export class Scene3D {
       const w = loop ? ((d % L) + L) % L : d;
       return this.tunnels.some(([t0, t1]) => w >= t0 - pad && w <= t1 + pad);
     };
+    // a church, a windmill or a lighthouse stands in the open: no trees on the approach to it or just past it
+    const bigOnes = (LANDMARKS[this.route.theme] || []).map((x, j) => [...x, j]).filter(([type]) => ['church', 'windmill', 'lighthouse'].includes(type));
+    const nearLandmark = (idx) => bigOnes.some(([, chance, , , , j]) => {
+      for (let k = -8; k <= 16; k++) if (hash((((idx + k) % n) + n) % n * 1.931 + j * 71.3) < chance) return true; // 80 m on the approach, 40 m past
+      return false;
+    });
     const onBridge = (a) => gully(a * SEG + SEG / 2) > 0 || gully(a * SEG) > 0 || gully(a * SEG + SEG) > 0
       || inTunnel(a * SEG, SEG) || inTunnel(a * SEG + SEG, SEG); // nor in a tunnel
     const sand = col('#e2cc96'), rockC = col(T3c.rockColor || '#8d8f8c'), snowC = col('#f2f6f9');
@@ -1697,7 +1760,7 @@ export class Scene3D {
         }
         T.scenery.forEach((sc, j) => {
           if (this.land && TREE_TYPES.includes(sc.type)) return; // trees stand where the map has woods
-          if (TREE_TYPES.includes(sc.type) && inVillage(a * SEG)) return;
+          if (TREE_TYPES.includes(sc.type) && (inVillage(a * SEG) || nearLandmark(idxN))) return;
           const h = (k) => hash(idxN * 7.13 + side * 3.7 + (j * 4 + k) * 19.1);
           if (h(0) >= sc.prob) return;
           const o = side * (sc.off[0] + h(1) * (sc.off[1] - sc.off[0])) * ROAD_HALF;
@@ -1730,6 +1793,24 @@ export class Scene3D {
         });
         if (T.fence && hash(Math.floor(idxN / 50) * 3.1 + side * 11.7) < T.fence.prob) fenceSides.push([r, side]);
       }
+      // the world's landmarks (not on imported routes: theirs are on the map)
+      if (!this.land) (LANDMARKS[this.route.theme] || []).forEach(([type, chance, [o0, o1], n, sc], j) => {
+        const hl = (k) => hash(idxN * 1.931 + j * 71.3 + k * 13.7);
+        if (hl(0) >= chance || inVillage(a * SEG)) return;
+        // the coast's lighthouse stands on the beach, toward the sea; the rest on either side
+        const side = type === 'lighthouse' && T3c.dip ? T3c.dip.side : hl(1) < 0.5 ? -1 : 1;
+        for (let q = 0; q < n; q++) {
+          const hq = (k) => hash(idxN * 3.77 + j * 19.1 + q * 5.3 + k * 2.9);
+          const o = side * (o0 + (n > 1 ? hl(2) * (o1 - o0) + (hq(0) - 0.5) * 9 : hl(2) * (o1 - o0)));
+          if (reach[r] && Math.abs(o) > reach[r].lim[side > 0 ? 1 : 0] - 4) continue;
+          const ff = this.frame(a * SEG + (n > 1 ? (hq(1) - 0.5) * 14 : SEG / 2));
+          const y = heightAt(r, o);
+          if (this.water && type !== 'lighthouse' && y < f.y - (T3c.dip?.depth || 0) * 0.3) continue; // not in the lake
+          const big = type === 'rock' ? sc * (0.7 + hq(3) * 0.6) : sc;
+          put(type === 'rock' ? 'rock@far' : type, mtx(ff.x + ff.rx * o, y - (type === 'rock' ? big * 0.25 : 0.05), ff.z + ff.rz * o,
+            type === 'church' || type === 'windmill' ? -ff.h + Math.PI / 2 * side + hq(2) * 0.4 : hq(2) * 6.28, big));
+        }
+      });
       // far forest
       if (treeTypes.length && !this.land) {
         for (let q = 0; q < (LOW ? 3 : 5); q++) {
@@ -1740,6 +1821,7 @@ export class Scene3D {
           if (hq(0) > T3c.far * (wood ? 2.6 : 0.25)) continue;
           if (reach[r] && Math.abs(o) > reach[r].lim[side > 0 ? 1 : 0] - 4) continue;
           if (Math.abs(o) < 55 && inVillage(a * SEG)) continue;
+          if (Math.abs(o) < 70 && nearLandmark(idxN)) continue; // a landmark stands in the open
           const y = heightAt(r, o);
           if (this.water && y < f.y - (T3c.dip?.depth || 0) * 0.3) continue;
           const tt = treeTypes[Math.floor(hq(3) * treeTypes.length)].type;
@@ -1858,13 +1940,14 @@ export class Scene3D {
           : ['sunflowers', 'bush'].includes(type) ? this.matTall : this.mat;
       const im = new THREE.InstancedMesh(geom, mat, list.length);
       list.forEach((m, i) => im.setMatrixAt(i, m));
-      const lit = { cottage: ['cottageGlass', this.glassMat], lamppost: ['lantern', this.lanternMat] }[type];
+      const lit = { cottage: ['cottageGlass', this.glassMat], lamppost: ['lantern', this.lanternMat], lighthouse: ['lighthouseLamp', this.lanternMat] }[type];
       if (lit && this.models[lit[0]]) {
         const glow = new THREE.InstancedMesh(this.models[lit[0]], lit[1], list.length);
         list.forEach((m, i) => glow.setMatrixAt(i, m));
         group.add(glow);
       }
-      if (type === 'house' || type === 'cottage') list.forEach((m, i) => im.setColorAt(i, HOUSE_TINTS[Math.floor(hash2(m.elements[12] * 0.13, m.elements[14] * 0.17) * HOUSE_TINTS.length)]));
+      const tints = ['alpine', 'carpathians'].includes(this.route.theme) ? WOOD_TINTS : HOUSE_TINTS;
+      if (type === 'house' || type === 'cottage') list.forEach((m, i) => im.setColorAt(i, tints[Math.floor(hash2(m.elements[12] * 0.13, m.elements[14] * 0.17) * tints.length)]));
       im.castShadow = castShadow;
       im.receiveShadow = true;
       group.add(im);
