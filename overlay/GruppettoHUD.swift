@@ -324,13 +324,11 @@ final class App: NSObject, NSApplicationDelegate {
     var panel: HUDPanel!
     var status: NSStatusItem!
     var server: Server!
-    var clickThrough = UserDefaults.standard.bool(forKey: "clickThrough")
 
     func applicationDidFinishLaunching(_ n: Notification) {
         let host = NSHostingView(rootView: Panel(m: model))
         host.frame = NSRect(x: 0, y: 0, width: 430, height: 220)
         panel = HUDPanel(content: host)
-        panel.ignoresMouseEvents = clickThrough
         placePanel()
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         status.button?.title = "🚴"
@@ -375,10 +373,6 @@ final class App: NSObject, NSApplicationDelegate {
         updateLiveItem()
         menu.addItem(live)
         menu.addItem(.separator())
-        let ct = NSMenuItem(title: "Click through the panel", action: #selector(toggleClickThrough), keyEquivalent: "")
-        ct.state = clickThrough ? .on : .off
-        ct.target = self
-        menu.addItem(ct)
         let op = NSMenuItem(title: "Background", action: nil, keyEquivalent: "")
         let sub = NSMenu()
         for (name, v) in [("Solid", 0.95), ("See-through", 0.82), ("Light", 0.6), ("Barely there", 0.35)] {
@@ -422,13 +416,6 @@ final class App: NSObject, NSApplicationDelegate {
         return false
     }
 
-    @objc func toggleClickThrough() {
-        clickThrough.toggle()
-        UserDefaults.standard.set(clickThrough, forKey: "clickThrough")
-        panel.ignoresMouseEvents = clickThrough
-        rebuildMenu()
-    }
-
     @objc func toggleBlock(_ sender: NSMenuItem) {
         guard let key = sender.representedObject as? String else { return }
         if model.hidden.contains(key) { model.hidden.remove(key) } else { model.hidden.insert(key) }
@@ -460,12 +447,7 @@ final class App: NSObject, NSApplicationDelegate {
         hiddenUntilQuiet = false
         model.lastAt = Date().addingTimeInterval(52) // a minute on screen without a ride: to drag it and right-click it
         model.live = true
-        panel.ignoresMouseEvents = false // to drag it into place; click-through comes back with the next ride's numbers
         panel.orderFrontRegardless()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
-            guard let self else { return }
-            self.panel.ignoresMouseEvents = self.clickThrough
-        }
     }
 }
 
