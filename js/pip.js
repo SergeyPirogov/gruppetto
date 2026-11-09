@@ -253,59 +253,60 @@ function drawCanvas(s) {
   };
   const L = s.labels || {};
   const wk = !!s.workout;
-  // the three numbers close together, power first and biggest, each name in its colour just over it
-  let pPx = wk ? 108 : 150, sPx = wk ? 62 : 76;
-  // shrink to fit the width (a 3-digit power with HR and cadence beside it)
-  const widthAt = (k) => {
-    let t = 26;
-    g.font = font(Math.round(pPx * k)); t += g.measureText(String(s.power)).width; g.font = font(Math.round(pPx * k * 0.3), 700); t += g.measureText(L.W || 'W').width + 10 + 44;
-    for (const v of [s.hr, s.cad]) { g.font = font(Math.round(sPx * k)); t += Math.max(g.measureText(String(v)).width, 70) + 44; }
-    return t - 44 + 20;
+  // three columns across the full width (power the widest), the numbers grown to fill them, and the rows spread
+  // evenly down the whole height: no empty corner on the right, no empty band at the bottom
+  const pad = 26, inner = w - pad * 2;
+  const cols = [pad, pad + inner * 0.47, pad + inner * 0.75], colW = [inner * 0.47 - 18, inner * 0.28 - 18, inner * 0.25];
+  const fitPx = (txt, px, maxW, unitTxt = '') => {
+    for (; px > 30; px -= 2) {
+      g.font = font(px); let t = g.measureText(txt).width;
+      if (unitTxt) { g.font = font(Math.round(px * 0.3), 700); t += g.measureText(unitTxt).width + 6; }
+      if (t <= maxW) return px;
+    }
+    return px;
   };
-  const fit = Math.min(1, w / widthAt(1));
-  pPx = Math.round(pPx * fit); sPx = Math.round(sPx * fit);
-  const vy = wk ? 128 : 178, subY = vy + 28;
-  let x = 26;
-  const num = (name, val, unit, sub, color, labelColor, z, zc2, px) => {
-    const ly = vy - px * 0.76 - 12;
+  const pPx = fitPx(String(s.power), wk ? 124 : 176, colW[0], L.W || 'W');
+  const sPx = Math.min(fitPx(String(s.hr), wk ? 76 : 104, colW[1]), fitPx(String(s.cad), wk ? 76 : 104, colW[2]));
+  const numH = 22 + pPx * 0.74 + 30, wkH = wk ? 50 : 0, rowH = 64;
+  const blocks = wk ? 3 : 2, gap = Math.max(10, (h - pad * 2 - numH - wkH - rowH) / (blocks - 1 + 1));
+  const vy = pad + 22 + pPx * 0.74, subY = vy + 28;
+  const num = (x, name, val, unit, sub, color, labelColor, z, zc2, px) => {
+    const ly = vy - px * 0.74 - 12;
     g.font = font(17, 700); g.fillStyle = labelColor; g.fillText(name.toUpperCase(), x, ly);
     if (z) tag(z, zc2, x + 8 + g.measureText(name.toUpperCase()).width, ly);
     g.font = font(px); g.fillStyle = color || '#e8edf5'; g.fillText(val, x - 3, vy);
-    let wv = g.measureText(val).width;
-    if (unit) { g.font = font(Math.round(px * 0.3), 700); g.fillStyle = muted; g.fillText(unit, x + wv + 4, vy); wv += g.measureText(unit).width + 6; }
-    if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x, subY); wv = Math.max(wv, g.measureText(sub).width); }
-    x += wv + 44;
+    if (unit) { const wv = g.measureText(val).width; g.font = font(Math.round(px * 0.3), 700); g.fillStyle = muted; g.fillText(unit, x + wv + 4, vy); }
+    if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x, subY); }
   };
-  num(L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', zc, s.zone, s.zoneColor, pPx);
-  num(L.hr || 'HR', s.hr, '', s.hrAvg, null, '#ff6b78', s.hrZone, s.hrZoneColor, sPx);
-  num(L.cad || 'Cadence', s.cad, '', s.cadTarget || s.cadAvg, CLS[s.cadCls], '#4fdcf2', null, null, sPx);
-  // the interval: one compact line over a thin bar of how far into it you are
-  let y = subY + 18;
+  num(cols[0], L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', zc, s.zone, s.zoneColor, pPx);
+  num(cols[1], L.hr || 'HR', s.hr, '', s.hrAvg, null, '#ff6b78', s.hrZone, s.hrZoneColor, sPx);
+  num(cols[2], L.cad || 'Cadence', s.cad, '', s.cadTarget || s.cadAvg, CLS[s.cadCls], '#4fdcf2', null, null, sPx);
+  let y = pad + numH + gap;
+  // the interval: one line across the width, its three parts spread out, over a thin bar of how far into it you are
   if (wk) {
     const soon = (s.stepLeft ?? 99) <= 10 && Math.floor(Date.now() / 500) % 2 === 0;
-    g.fillStyle = 'rgba(255,255,255,.05)'; g.beginPath(); g.roundRect?.(18, y, w - 36, 50, 8); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect?.(pad - 8, y, inner + 16, 50, 8); g.fill();
     if (soon) { g.strokeStyle = '#fbbf24'; g.lineWidth = 2; g.stroke(); }
-    let ix = 34;
-    for (const [lab, v, c] of [[L.target, s.target, CLS[s.powerCls]], [L.interval, s.left], [L.next, s.next]]) {
+    [[L.target, s.target, CLS[s.powerCls]], [L.interval, s.left], [L.next, s.next]].forEach(([lab, v, c], i) => {
+      const ix = cols[i] + 8;
       g.font = font(14, 600); g.fillStyle = muted; const lt = String(lab || '').toUpperCase(); g.fillText(lt, ix, y + 32);
       const lw = g.measureText(lt).width;
-      g.font = font(26); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), ix + lw + 8, y + 33);
-      ix += lw + 8 + g.measureText(String(v)).width + 34;
-    }
-    g.fillStyle = zc; g.fillRect(18, y + 46, (w - 36) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
-    y += 64;
-  } else y += 14;
+      g.font = font(26); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), ix + lw + 10, y + 33);
+    });
+    g.fillStyle = zc; g.fillRect(pad - 8, y + 46, (inner + 16) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
+    y += 50 + gap;
+  }
   // the bottom row: time, speed, distance and W′bal, each named
-  const cw = (w - 52) / 4, rowLabel = y + 18, rowVal = y + 52;
+  const cw = inner / 4, rowLabel = y + 16, rowVal = y + 50;
   const cells = [[L.time || 'Time', s.time, ''], [L.speed || 'Speed', s.speed, L.kmh], [L.distance || 'Distance', s.dist, L.km], ['W′bal', s.wbalKj ?? '', L.kj || 'kJ']];
   cells.forEach(([lab, v, u], i) => {
-    const cx = 26 + i * cw;
+    const cx = pad + i * cw;
     g.font = font(14, 600); g.fillStyle = muted; g.fillText(String(lab).toUpperCase(), cx, rowLabel);
-    g.font = font(wk ? 30 : 34); g.fillStyle = '#e8edf5'; g.fillText(String(v), cx, rowVal);
+    g.font = font(wk ? 32 : 38); g.fillStyle = '#e8edf5'; g.fillText(String(v), cx, rowVal);
     if (u) { const vw = g.measureText(String(v)).width; g.font = font(16, 600); g.fillStyle = muted; g.fillText(u, cx + vw + 5, rowVal); }
   });
   // W′bal's own little bar under its number
-  const bx = 26 + 3 * cw, bw = cw - 12, by = rowVal + 12;
+  const bx = pad + 3 * cw, bw = cw - 6, by = rowVal + 10;
   g.fillStyle = 'rgba(255,255,255,.12)'; g.beginPath(); g.roundRect?.(bx, by, bw, 7, 4); g.fill();
   g.fillStyle = s.wbalLevel === 'ok' ? '#a78bfa' : WBAL[s.wbalLevel]; g.beginPath(); g.roundRect?.(bx, by, bw * s.wbalF, 7, 4); g.fill();
   if (s.paused) {
