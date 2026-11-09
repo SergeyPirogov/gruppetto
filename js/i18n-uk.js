@@ -176,7 +176,7 @@ export const UK = {
   'Map data © ': 'Дані карти © ', ' contributors': ' учасники',
   'Riding in the mini window': 'Їдеш у міні-вікні', 'The road is paused to keep your computer cool. The ride goes on.': 'Дорога на паузі, щоб не вантажити комп’ютер. Заїзд триває.', 'Show the road': 'Показати дорогу',
   'Watch & ride': 'Дивись і крути', 'In a mini window over a film or the match; the 3D road is not loaded. Works with a workout too.': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується. Працює й з тренуванням.',
-  'More ways to ride': 'Інші способи їхати', 'On the road, in 3D': 'На дорозі, у 3D', 'In a mini window over a film or the match; the 3D road is not loaded': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується',
+  'More ways to ride': 'Інші способи їхати', 'In a mini window over a film or the match; the 3D road is not loaded': 'У міні-вікні поверх фільму чи матчу; 3D-дорога не завантажується',
   'Speed': 'Швидкість', 'Target': 'Ціль',
   'Wind in races': 'Вітер у гонках', 'Ghost': 'Привид', 'against {name}': 'проти {name}', 'a friend': 'друга', 'against your last ride': 'проти свого останнього заїзду', 'against your best ride': 'проти свого найкращого заїзду', 'Shadow ride: race a ghost of your earlier ride on this route': 'Тінь: змагайся з привидом свого попереднього заїзду цим маршрутом', 'Riding on': 'На чому',
   'Trainer not connected': 'Тренажер не підключено', 'Simulator (no trainer)': 'Симулятор (без тренажера)', 'to the finish': 'до фінішу', 'in': 'за',

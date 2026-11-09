@@ -1865,7 +1865,6 @@ $('btn-pip').hidden = !pipSupport();
 $('btn-start-more').hidden = !pipSupport();
 $('btn-start-more').onclick = (e) => { e.stopPropagation(); $('start-menu').hidden = !$('start-menu').hidden; };
 $('start-watch').onclick = () => { $('start-menu').hidden = true; startRide({ watch: true }); };
-$('start-normal').onclick = () => { $('start-menu').hidden = true; startRide(); };
 document.addEventListener('click', (e) => { if (!e.target.closest('#start-menu, #btn-start-more')) $('start-menu').hidden = true; });
 $('btn-pip').onclick = () => togglePip();
 $('pip-show-road').onclick = async () => {
