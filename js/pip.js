@@ -235,9 +235,12 @@ async function openVideo(opts = {}) {
 
 function drawCanvas(s) {
   if (!canvas) return;
-  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, k = W / 640; // drawn at 640×360, scaled up
+  // a free ride has no interval line: a lower frame (640×300) so the window holds no empty band; a workout 640×360
+  const want = s && !s.workout ? 300 : 360;
+  if (canvas.height !== want * 2) canvas.height = want * 2;
+  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, k = W / 640; // drawn at 640 wide, scaled up
   g.setTransform(k, 0, 0, k, 0, 0);
-  const w = 640, h = 360, zc = s && s.power > 0 ? s.zoneColor : '#8a94a6';
+  const w = 640, h = want, zc = s && s.power > 0 ? s.zoneColor : '#8a94a6';
   // the panel, as the sharp window: dark, the zone's glow from the bottom corner
   const bg = g.createLinearGradient(0, 0, 0, h); bg.addColorStop(0, '#161b26'); bg.addColorStop(1, '#0c111b');
   g.fillStyle = bg; g.fillRect(0, 0, w, h);
@@ -271,7 +274,7 @@ function drawCanvas(s) {
   const numH = 22 + pPx * 0.74 + 30, wkH = wk ? 50 : 0, rowH = 68; // the bottom row with W′bal's bar under it
   // blocks a comfortable gap apart (not stretched over the height), the whole centred top to bottom
   const blocks = wk ? 3 : 2, spare = h - pad * 2 - numH - wkH - rowH;
-  const gap = Math.max(10, Math.min(28, spare / (blocks - 1)));
+  const gap = Math.max(10, Math.min(wk ? 28 : 22, spare / (blocks - 1)));
   const top = pad + Math.max(0, (spare - gap * (blocks - 1)) / 2);
   const vy = top + 22 + pPx * 0.74, subY = vy + 28;
   const num = (x, name, val, unit, sub, color, labelColor, z, zc2, px) => {
