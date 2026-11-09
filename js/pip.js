@@ -244,12 +244,13 @@ function drawCanvas(s) {
   const L = s.labels || {};
   const wk = !!s.workout;
   // three columns, each with its colour bar, as on the ride board
-  const top = 26, vy = wk ? 128 : 160, subY = vy + 28;
+  // the whole height used: without a workout the numbers are bigger and the bottom row lower (it left a third empty)
+  const top = 24, vy = wk ? 124 : 186, subY = vy + 30;
   const col = (x, bar, name, val, unit, sub, color, z, zc2, big) => {
     g.fillStyle = bar; g.fillRect(x, top, 5, subY - top + 6);
     g.font = font(17, 600); g.fillStyle = muted; g.fillText(name.toUpperCase(), x + 16, top + 18);
     if (z) tag(z, zc2, x + 22 + g.measureText(name.toUpperCase()).width, top + 18);
-    g.font = font(big ? (wk ? 100 : 124) : (wk ? 58 : 66)); g.fillStyle = color || '#e8edf5';
+    g.font = font(big ? (wk ? 96 : 150) : (wk ? 58 : 70)); g.fillStyle = color || '#e8edf5';
     g.fillText(val, x + 14, vy);
     if (unit) { const vw = g.measureText(val).width; g.font = font(28, 600); g.fillStyle = muted; g.fillText(unit, x + 20 + vw, vy); }
     if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x + 16, subY); }
@@ -273,17 +274,20 @@ function drawCanvas(s) {
     y += 80;
   }
   // time, speed, distance, grade, under a thin line
+  if (!wk) y += 6;
   g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(18, y, w - 36, 1);
-  y += 40;
+  y += wk ? 38 : 46;
   const bits = [[s.time, ''], [s.speed, L.kmh], [s.dist, L.km], [s.grade, '', s.gradeColor]];
   bits.forEach(([v, u, c], i) => {
     const x = 22 + i * 152;
-    g.font = font(32); g.fillStyle = c || '#e8edf5'; g.fillText(v, x, y);
+    g.font = font(wk ? 30 : 36); g.fillStyle = c || '#e8edf5'; g.fillText(v, x, y);
     if (u) { const vw = g.measureText(v).width; g.font = font(17, 600); g.fillStyle = muted; g.fillText(u, x + vw + 5, y); }
   });
   // W′bal: violet, amber to red as it runs low
-  g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect?.(22, h - 24, w - 44, 9, 5); g.fill();
-  g.fillStyle = s.wbalLevel === 'ok' ? '#a78bfa' : WBAL[s.wbalLevel]; g.beginPath(); g.roundRect?.(22, h - 24, (w - 44) * s.wbalF, 9, 5); g.fill();
+  // W′bal right under the bottom row (the very edge of the video can be cut by the window)
+  const by = Math.min(h - 26, y + 18);
+  g.fillStyle = 'rgba(255,255,255,.1)'; g.beginPath(); g.roundRect?.(22, by, w - 44, 9, 5); g.fill();
+  g.fillStyle = s.wbalLevel === 'ok' ? '#a78bfa' : WBAL[s.wbalLevel]; g.beginPath(); g.roundRect?.(22, by, (w - 44) * s.wbalF, 9, 5); g.fill();
   if (s.paused) {
     g.fillStyle = 'rgba(12,17,27,.75)'; g.fillRect(0, 0, w, h);
     g.font = font(64); g.fillStyle = '#e8edf5'; g.textAlign = 'center'; g.fillText(L.paused || 'PAUSED', w / 2, h / 2 + 22); g.textAlign = 'left';
