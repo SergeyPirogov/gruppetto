@@ -174,6 +174,7 @@ export const UK = {
   'Today · intervals.icu': 'Сьогодні · intervals.icu', '{left} to level {n}': 'ще {left} до рівня {n}', 'Routes': 'Маршрути', 'Install': 'Встановити', 'intervals': 'intervals',
   'Ready to ride': 'Готовий до заїзду', "Ready to ride · today's plan from intervals.icu": 'Готовий до заїзду · сьогоднішній план з intervals.icu',
   'Map data © ': 'Дані карти © ', ' contributors': ' учасники',
+  'Riding in the mini window': 'Їдеш у міні-вікні', 'The road is paused to keep your computer cool. The ride goes on.': 'Дорога на паузі, щоб не вантажити комп’ютер. Заїзд триває.', 'Show the road': 'Показати дорогу',
   'Speed': 'Швидкість', 'Target': 'Ціль',
   'Wind in races': 'Вітер у гонках', 'Ghost': 'Привид', 'against {name}': 'проти {name}', 'a friend': 'друга', 'against your last ride': 'проти свого останнього заїзду', 'against your best ride': 'проти свого найкращого заїзду', 'Shadow ride: race a ghost of your earlier ride on this route': 'Тінь: змагайся з привидом свого попереднього заїзду цим маршрутом', 'Riding on': 'На чому',
   'Trainer not connected': 'Тренажер не підключено', 'Simulator (no trainer)': 'Симулятор (без тренажера)', 'to the finish': 'до фінішу', 'in': 'за',

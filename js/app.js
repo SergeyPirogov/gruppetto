@@ -1386,6 +1386,11 @@ function frame(now) {
     ...(ride.ghost ? [ride.ghost] : []),
     ...(ride.climbGhost ? [ride.climbGhost] : []),
   ];
+  // the mini window is open: the 3D road is not drawn (nobody looks at it, and the video you watch keeps the
+  // graphics card); the ride goes on, and the road comes back the moment the mini window closes
+  const inPip = pipOpen() && !ride.showRoadInPip;
+  $('pip-rest').hidden = !inPip;
+  if (inPip) { ride.moved = 0; requestAnimationFrame(frame); return; }
   scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
   // the ghost's gap rides over your head, where the bots carry their names
@@ -1833,7 +1838,7 @@ async function togglePip() {
     onKey: onRideKey,
     onPause: () => togglePause(),
     heartbeat: () => { if (ride) advance(); }, // the hidden tab's timers slow down, the mini window's do not
-    onClose: () => $('btn-pip')?.classList.remove('on'),
+    onClose: () => { $('btn-pip')?.classList.remove('on'); $('pip-rest').hidden = true; if (ride) ride.showRoadInPip = false; },
   });
   if (!ok) { toast(tr('This browser cannot show a mini window over other apps')); return; }
   $('btn-pip').classList.add('on');
@@ -1841,6 +1846,7 @@ async function togglePip() {
 }
 $('btn-pip').hidden = !pipSupport();
 $('btn-pip').onclick = () => togglePip();
+$('pip-show-road').onclick = () => { if (ride) ride.showRoadInPip = true; $('pip-rest').hidden = true; };
 
 // ---------- Minimap ----------
 const MAP_TURN = 2.5; // the 3D renderer's curvature factor: the map has the same bends as the road you see
