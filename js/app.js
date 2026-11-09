@@ -34,7 +34,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto', pipClean: false,
+  icuKey: '', icuAthlete: '', icuUpload: true, stats: true, quality: 'auto', pipClean: true,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
@@ -563,14 +563,7 @@ function renderModes() {
     if (l) settings.raceLaps = Number(l.dataset.laps);
     settings.mode = 'race'; saveSettings(); renderModes();
   };
-  // Watch & ride: a switch on top of the mode — the ride in a mini window over a film or the match, no 3D world
-  const wr = document.createElement('button');
-  wr.className = `option watch-pick${settings.watchRide ? ' sel' : ''}`;
-  wr.dataset.id = 'watch';
-  wr.hidden = !pipSupport();
-  wr.innerHTML = `<span class="wk-pick-head"><b>📺 ${tr('Watch & ride')}</b><span class="watch-sw${settings.watchRide ? ' on' : ''}"><i></i></span></span><small>${tr('In a mini window over a film or the match; the 3D road is not loaded. Works with a workout too.')}</small>`;
-  wr.onclick = () => { settings.watchRide = !settings.watchRide; saveSettings(); renderModes(); };
-  ml.append(free, wb, race, wr);
+  ml.append(free, wb, race);
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
   wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
@@ -1135,9 +1128,10 @@ function preflight() {
 /** Opened as an installed app (its own window), not in a browser tab. */
 const installedApp = () => matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: fullscreen)').matches;
 
-async function startRide() {
-  // Watch & ride (#watch): the mini window opens now, while the click counts, and the 3D world is not even loaded
-  const watching = settings.watchRide && pipSupport();
+async function startRide(opts) {
+  // Watch & ride (#watch, from the Ride button's menu): the mini window opens now, while the click counts, and the
+  // 3D world is not even loaded
+  const watching = opts?.watch === true && pipSupport();
   const pipAsk = watching && !pipOpen() ? openMini() : null;
   // the installed app rides full screen: no title bar over the road (asked now, while the click counts)
   const wentFull = watching ? false : installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
@@ -1867,6 +1861,12 @@ async function openMini() {
   return ok;
 }
 $('btn-pip').hidden = !pipSupport();
+// the Ride button's menu: Ride, or Watch & ride (the mini window over a film or the match, no 3D world)
+$('btn-start-more').hidden = !pipSupport();
+$('btn-start-more').onclick = (e) => { e.stopPropagation(); $('start-menu').hidden = !$('start-menu').hidden; };
+$('start-watch').onclick = () => { $('start-menu').hidden = true; startRide({ watch: true }); };
+$('start-normal').onclick = () => { $('start-menu').hidden = true; startRide(); };
+document.addEventListener('click', (e) => { if (!e.target.closest('#start-menu, #btn-start-more')) $('start-menu').hidden = true; });
 $('btn-pip').onclick = () => togglePip();
 $('pip-show-road').onclick = async () => {
   if (!ride) return;
