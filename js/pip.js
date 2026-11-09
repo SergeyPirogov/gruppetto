@@ -265,11 +265,15 @@ function drawCanvas(s) {
     }
     return px;
   };
-  const pPx = fitPx(String(s.power), wk ? 124 : 176, colW[0], L.W || 'W');
-  const sPx = Math.min(fitPx(String(s.hr), wk ? 76 : 104, colW[1]), fitPx(String(s.cad), wk ? 76 : 104, colW[2]));
+  // as big as the column and the height allow: a free ride has the height of the interval line to spare
+  const pPx = fitPx(String(s.power), wk ? 124 : 210, colW[0], L.W || 'W');
+  const sPx = Math.min(fitPx(String(s.hr), wk ? 76 : 120, colW[1]), fitPx(String(s.cad), wk ? 76 : 120, colW[2]));
   const numH = 22 + pPx * 0.74 + 30, wkH = wk ? 50 : 0, rowH = 68; // the bottom row with W′bal's bar under it
-  const blocks = wk ? 3 : 2, gap = Math.max(10, (h - pad * 2 - numH - wkH - rowH) / (blocks - 1)); // the gaps between the blocks only: the last one ends at the bottom margin
-  const vy = pad + 22 + pPx * 0.74, subY = vy + 28;
+  // blocks a comfortable gap apart (not stretched over the height), the whole centred top to bottom
+  const blocks = wk ? 3 : 2, spare = h - pad * 2 - numH - wkH - rowH;
+  const gap = Math.max(10, Math.min(28, spare / (blocks - 1)));
+  const top = pad + Math.max(0, (spare - gap * (blocks - 1)) / 2);
+  const vy = top + 22 + pPx * 0.74, subY = vy + 28;
   const num = (x, name, val, unit, sub, color, labelColor, z, zc2, px) => {
     const ly = vy - px * 0.74 - 12;
     g.font = font(17, 700); g.fillStyle = labelColor; g.fillText(name.toUpperCase(), x, ly);
@@ -281,7 +285,7 @@ function drawCanvas(s) {
   num(cols[0], L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', zc, s.zone, s.zoneColor, pPx);
   num(cols[1], L.hr || 'HR', s.hr, '', s.hrAvg, null, '#ff6b78', s.hrZone, s.hrZoneColor, sPx);
   num(cols[2], L.cad || 'Cadence', s.cad, '', s.cadTarget || s.cadAvg, CLS[s.cadCls], '#4fdcf2', null, null, sPx);
-  let y = pad + numH + gap;
+  let y = top + numH + gap;
   // the interval: one line across the width, its three parts spread out, over a thin bar of how far into it you are
   if (wk) {
     const soon = (s.stepLeft ?? 99) <= 10 && Math.floor(Date.now() / 500) % 2 === 0;
