@@ -199,12 +199,18 @@ const ico = (r, d = 0) => new THREE.IcosahedronGeometry(r, d);
 
 /** Small repeatable surface maps; no downloads or canvas readback required. */
 function surfaceTexture(water = false) {
-  const size = 128, data = new Uint8Array(size * size * 4);
+  const size = water ? 128 : 256, data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
     const u = x / size * Math.PI * 2, v = y / size * Math.PI * 2;
-    const value = water
-      ? 128 + Math.sin(u * 3 + Math.sin(v * 2)) * 42 + Math.sin(v * 5 + u * 2) * 22
-      : 224 + hash2(x, y) * 31;
+    let value;
+    if (water) value = 128 + Math.sin(u * 3 + Math.sin(v * 2)) * 42 + Math.sin(v * 5 + u * 2) * 22;
+    else {
+      // asphalt: fine grain, a light or dark stone of the aggregate here and there, and soft worn blotches
+      const stone = hash2(x * 1.7 + 3.1, y * 2.3 + 5.7);
+      value = 214 + hash2(x, y) * 30 + (Math.sin(u * 2 + Math.sin(v * 3) * 1.3) + Math.sin(v * 3 + Math.cos(u * 2))) * 5;
+      if (stone > 0.975) value = 255; else if (stone < 0.03) value = 160;
+      value = Math.max(0, Math.min(255, value));
+    }
     const i = (y * size + x) * 4;
     data[i] = data[i + 1] = data[i + 2] = value; data[i + 3] = 255;
   }
@@ -1035,7 +1041,7 @@ export class Scene3D {
     const asphalt = surfaceTexture();
     asphalt.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     this.roadMat = new THREE.MeshStandardMaterial({ vertexColors: true, map: asphalt,
-      bumpMap: asphalt, bumpScale: 0.025, roughness: 0.96, metalness: 0 });
+      bumpMap: asphalt, bumpScale: 0.035, roughness: 0.96, metalness: 0 });
     this.path = { x: [], z: [], h: [] };
     this.minElev = route.minElev;
 
@@ -1451,8 +1457,12 @@ export class Scene3D {
         const A = v(f1, o1), B = v(f1, o2), C = v(f2, o1), D = v(f2, o2);
         p.push(...A, ...B, ...C, ...B, ...D, ...C);
         // World-space coordinates keep the asphalt continuous across chunks.
-        for (const v of [A, B, C, B, D, C]) uv.push(v[0] / 4, v[2] / 4);
-        for (let k = 0; k < 6; k++) cs.push(cc.r, cc.g, cc.b);
+        for (const v of [A, B, C, B, D, C]) {
+          uv.push(v[0] / 4, v[2] / 4);
+          // the asphalt is not one grey: older stretches and repair patches, darker where it was mended
+          const k = material === this.roadMat ? (0.9 + vnoise(v[0] / 9, v[2] / 9) * 0.14) * (vnoise(v[0] / 23 + 50, v[2] / 23) > 0.68 ? 0.8 : 1) : 1;
+          cs.push(cc.r * k, cc.g * k, cc.b * k);
+        }
       }
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
@@ -1489,6 +1499,14 @@ export class Scene3D {
         if (((a % 5) + 5) % 5 === 0) {
           const o = side * (ROAD_HALF + 0.45);
           put('delineator', mtx(f.x + f.rx * o, heightAt(r, o), f.z + f.rz * o, -f.h, 1));
+        }
+        // small stones on the verge, a few per stretch, half of them on phones
+        for (let q = 0; q < (LOW ? 1 : 2); q++) {
+          const seed = a * 7.9 + side * 17.3 + q * 5.1;
+          if (hash(seed) > 0.45 || T.snowfall) continue;
+          const o = side * (ROAD_HALF + 0.85 + hash(seed + 1) ** 2 * 4);
+          const ff = this.frame(a * SEG + hash(seed + 2) * SEG), s = 0.1 + hash(seed + 3) * 0.16;
+          put('rock@verge', mtx(ff.x + ff.rx * o, heightAt(r, o) - s * 0.2, ff.z + ff.rz * o, hash(seed + 4) * 6.28, s));
         }
         if (!T.snowfall && !T3c.beach && this.route.theme !== 'desert') {
           for (let q = 0; q < 3; q++) {
@@ -1552,7 +1570,7 @@ export class Scene3D {
         const a = a0 + r;
         for (const side of [-1, 1]) {
           const lim = reach[r] ? reach[r].lim[side > 0 ? 1 : 0] : Infinity;
-          for (let q = 0; q < (LOW ? 10 : 30); q++) { // a third of the grass on phones
+          for (let q = 0; q < (LOW ? 12 : 40); q++) { // a third of the grass on phones
             const hq = (k) => hash(a * 11.3 + side * 5.7 + q * 2.9 + k * 7.1);
             const o = side * (ROAD_HALF + 0.75 + hq(0) ** 2.4 * 30);
             if (Math.abs(o) > lim - 1 || (T3c.beach && side === T3c.dip.side && Math.abs(o) > 9)) continue;
@@ -1560,6 +1578,8 @@ export class Scene3D {
             const ff = this.frame(a * SEG + hq(1) * SEG);
             const x = ff.x + ff.rx * o, z = ff.z + ff.rz * o;
             grass.push([mtx(x, heightAt(r, o) - 0.02, z, hq(2) * 6.28, 0.75 + hq(3) * 0.7), 0.82 + hq(4) * 0.3]);
+            // now and then a wild flower in the grass near the road
+            if (hq(5) < 0.07 && Math.abs(o) < 14) flowers.push([x + 0.3, heightAt(r, o), z, flowerPalette[Math.floor(hq(6) * flowerPalette.length)]]);
           }
         }
       }
