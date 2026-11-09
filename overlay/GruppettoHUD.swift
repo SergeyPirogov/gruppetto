@@ -87,6 +87,9 @@ final class Model: ObservableObject {
     @Published var state = RideState()
     @Published var live = false
     @Published var opacity: Double = UserDefaults.standard.object(forKey: "opacity") as? Double ?? 0.82
+    /// the blocks switched off in the menu: power, hr, cad, workout, stats (time, speed, distance), wbal
+    @Published var hidden: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "hiddenBlocks") ?? [])
+    func shows(_ b: String) -> Bool { b == "power" ? true : !hidden.contains(b) }
     var lastAt = Date.distantPast
 }
 
@@ -157,6 +160,7 @@ struct Cell: View {
                 Text(value).font(.system(size: 19, weight: .heavy, design: .rounded)).monospacedDigit().foregroundColor(.white)
                 if !unit.isEmpty { Text(unit).font(.system(size: 10, weight: .semibold)).foregroundColor(muted) }
             }
+            .fixedSize() // a number never wraps: the panel grows to fit it
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -172,10 +176,10 @@ struct Panel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .bottom, spacing: 22) {
                 Number(name: s.label("power", "Power"), nameColor: zc, value: String(s.power), unit: s.label("W", "W"), sub: s.wkg, valueColor: pc, tag: (s.zone, Color(hex: s.zoneColor)), size: 64)
-                Number(name: s.label("hr", "HR"), nameColor: Color(hex: "#ff6b78"), value: s.hr, sub: s.hrAvg, size: 40)
-                Number(name: s.label("cad", "Cadence"), nameColor: Color(hex: "#4fdcf2"), value: s.cad, sub: s.cadTarget.isEmpty ? s.cadAvg : s.cadTarget, valueColor: classColor(s.cadCls) ?? .white, size: 40)
+                if m.shows("hr") { Number(name: s.label("hr", "HR"), nameColor: Color(hex: "#ff6b78"), value: s.hr, sub: s.hrAvg, size: 40) }
+                if m.shows("cad") { Number(name: s.label("cad", "Cadence"), nameColor: Color(hex: "#4fdcf2"), value: s.cad, sub: s.cadTarget.isEmpty ? s.cadAvg : s.cadTarget, valueColor: classColor(s.cadCls) ?? .white, size: 40) }
             }
-            if s.workout {
+            if s.workout && m.shows("workout") {
                 VStack(spacing: 0) {
                     HStack(spacing: 18) {
                         HStack(alignment: .firstTextBaseline, spacing: 5) {
@@ -200,10 +204,14 @@ struct Panel: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.07)))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke((s.stepLeft ?? 99) <= 10 ? Color(hex: "#fbbf24") : Color.clear, lineWidth: 1.5))
             }
-            HStack(alignment: .bottom, spacing: 8) {
-                Cell(name: s.label("time", "Time"), value: s.time)
-                Cell(name: s.label("speed", "Speed"), value: s.speed, unit: s.label("kmh", "km/h"))
-                Cell(name: s.label("distance", "Distance"), value: s.dist, unit: s.label("km", "km"))
+            if m.shows("stats") || m.shows("wbal") {
+            HStack(alignment: .bottom, spacing: 14) {
+                if m.shows("stats") {
+                    Cell(name: s.label("time", "Time"), value: s.time)
+                    Cell(name: s.label("speed", "Speed"), value: s.speed, unit: s.label("kmh", "km/h"))
+                    Cell(name: s.label("distance", "Distance"), value: s.dist, unit: s.label("km", "km"))
+                }
+                if m.shows("wbal") {
                 VStack(alignment: .leading, spacing: 3) {
                     Cell(name: "W′bal", value: s.wbalKj ?? "", unit: s.label("kj", "kJ"))
                     GeometryReader { g in
@@ -213,10 +221,13 @@ struct Panel: View {
                         }
                     }.frame(height: 4)
                 }
+                .frame(minWidth: 70)
+                }
+            }
             }
         }
         .padding(.horizontal, 18).padding(.vertical, 14)
-        .frame(width: 400, alignment: .leading)
+        .frame(minWidth: 180, alignment: .leading)
         .background(
             ZStack {
                 RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color(hex: "#0c111b").opacity(m.opacity))
@@ -367,6 +378,18 @@ final class App: NSObject, NSApplicationDelegate {
         }
         op.submenu = sub
         menu.addItem(op)
+        let shown = NSMenuItem(title: "Show", action: nil, keyEquivalent: "")
+        let blocks = NSMenu()
+        for (key, name) in [("power", "Power"), ("hr", "Heart rate"), ("cad", "Cadence"), ("workout", "Workout: target, interval, next"),
+                            ("stats", "Time, speed, distance"), ("wbal", "W′bal")] {
+            let i = NSMenuItem(title: name, action: key == "power" ? nil : #selector(toggleBlock(_:)), keyEquivalent: "")
+            i.representedObject = key
+            i.state = model.shows(key) ? .on : .off
+            i.target = self
+            blocks.addItem(i)
+        }
+        shown.submenu = blocks
+        menu.addItem(shown)
         let hide = NSMenuItem(title: "Hide until the next ride", action: #selector(hideNow), keyEquivalent: "")
         hide.target = self
         menu.addItem(hide)
@@ -383,6 +406,20 @@ final class App: NSObject, NSApplicationDelegate {
         clickThrough.toggle()
         UserDefaults.standard.set(clickThrough, forKey: "clickThrough")
         panel.ignoresMouseEvents = clickThrough
+        rebuildMenu()
+    }
+
+    @objc func toggleBlock(_ sender: NSMenuItem) {
+        guard let key = sender.representedObject as? String else { return }
+        if model.hidden.contains(key) { model.hidden.remove(key) } else { model.hidden.insert(key) }
+        UserDefaults.standard.set(Array(model.hidden), forKey: "hiddenBlocks")
+        // keep the corner it sits in: the bottom-right stays put as the window shrinks or grows
+        let old = panel.frame
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let host = self.panel.contentView else { return }
+            let size = host.fittingSize
+            self.panel.setFrame(NSRect(x: old.maxX - size.width, y: old.minY, width: size.width, height: size.height), display: true)
+        }
         rebuildMenu()
     }
 
@@ -419,8 +456,9 @@ extension App {
     func updateLiveItem() { liveItem?.title = model.live ? "Riding: showing the numbers" : "Waiting for a ride in Gruppetto…" }
 }
 
-@MainActor func snapshot(to path: String, workout: Bool) {
+@MainActor func snapshot(to path: String, workout: Bool, hide: Set<String> = []) {
     let m = Model()
+    m.hidden = hide
     var st = RideState()
     st.power = workout ? 232 : 150; st.zone = workout ? "Z4" : "Z2"; st.zoneColor = workout ? "#eab308" : "#3b82f6"
     st.powerColor = st.zoneColor; st.powerCls = workout ? "c-ok" : ""; st.wkg = workout ? "3.1 W/kg · 95% FTP" : "2.0 W/kg · 62% FTP"
@@ -439,10 +477,11 @@ extension App {
 enum Main {
     static let delegate = App()
     static func main() {
-        // --snapshot <file.png> [workout]: the panel with sample numbers drawn to a PNG (to check the look)
+        // --snapshot <file.png> [workout] [hide=cad,stats,wbal]: the panel with sample numbers drawn to a PNG (to check the look)
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--snapshot"), i + 1 < args.count {
-            MainActor.assumeIsolated { snapshot(to: args[i + 1], workout: args.contains("workout")) }
+            let hide = Set(args.first { $0.hasPrefix("hide=") }?.dropFirst(5).split(separator: ",").map(String.init) ?? [])
+            MainActor.assumeIsolated { snapshot(to: args[i + 1], workout: args.contains("workout"), hide: hide) }
             return
         }
         let app = NSApplication.shared

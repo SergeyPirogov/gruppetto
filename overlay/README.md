@@ -12,7 +12,8 @@ Gruppetto (the web page) sends the numbers over a WebSocket on this Mac (127.0.0
 3. In Gruppetto: Profile → «Mac overlay» on. Ride with Ride ▾ → «📺 Watch & ride» (the 3D road is not loaded), or any ride.
 4. The panel shows while a ride sends numbers and hides 8 s after it stops.
 
-Menu bar 🚴: click through the panel, background (solid … barely there), show it now (to drag it into place), quit.
+Menu bar 🚴: click through the panel, background (solid … barely there), show (which blocks: heart rate, cadence, the
+workout, time · speed · distance, W′bal; power always stays), show it now (to drag it into place), quit.
 
 `GruppettoHUD --snapshot out.png [workout]` draws the panel with sample numbers to a PNG.
 
