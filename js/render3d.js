@@ -11,7 +11,7 @@ import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
 import { t, lang } from './i18n.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
-import { villages } from './villages.js';
+import { villages, crossings } from './villages.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 import { loadFanModels } from './fans.js';
 
@@ -51,6 +51,7 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
+const GULLY = 17, GULLY_DEPTH = 6; // a stream under a bridge: half its width along the road and its depth (m)
 // house walls in a village are not all one white: cream, a cool white, peach, pale green (the roof takes a hint of it)
 const HOUSE_TINTS = ['#ffffff', '#fff0d6', '#e6eeff', '#ffe0d0', '#eaf5df', '#fff7c8'].map((c) => new THREE.Color(c));
 const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || (LOW ? 1 : 2); // ?csm=3 to compare
@@ -1056,6 +1057,8 @@ export class Scene3D {
     // the made-up routes get villages every few kilometres; trees keep out of them
     this.villageSpans = [];
     if (!this.buildings.length) ({ buildings: this.buildings, spans: this.villageSpans } = villages(route, this.t3.dip));
+    this.crossings = crossings(route, this.villageSpans); // streams the road bridges
+    this.streamMat = null; this.wallMat = null;
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     // road markings: flush with the asphalt (raised, they swallowed the bottom of the tyres), pulled
@@ -1427,6 +1430,13 @@ export class Scene3D {
     // in a village (a loop's later laps pass the same ones): no woods within 50 m of the road
     const L = this.route.length, loop = !this.route.oneWay;
     const inVillage = (d) => { const w = loop ? ((d % L) + L) % L : d; return this.villageSpans.some(([s0, s1]) => w > s0 - 20 && w < s1 + 20); };
+    // a stream under a bridge: the land dips into a gully across the whole view, deepest under the road
+    const gully = (d) => {
+      const w = loop ? ((d % L) + L) % L : d;
+      for (const c of this.crossings) { const dd = Math.abs(w - c); if (dd < GULLY) return 1 - (dd / GULLY) ** 2; }
+      return 0;
+    };
+    const onBridge = (a) => gully(a * SEG + SEG / 2) > 0 || gully(a * SEG) > 0 || gully(a * SEG + SEG) > 0;
     const sand = col('#e2cc96'), rockC = col(T3c.rockColor || '#8d8f8c'), snowC = col('#f2f6f9');
     const frames = [];
     for (let r = 0; r < rows; r++) frames.push(this.frame((a0 + r) * SEG));
@@ -1443,6 +1453,8 @@ export class Scene3D {
         const o = Math.sign(COLS[k]) * Math.min(Math.abs(COLS[k]), lim);
         const x = f.x + f.rx * o, z = f.z + f.rz * o;
         let y = this._terrainY(f.y, o, x, z);
+        const g = gully((a0 + r) * SEG);
+        y -= g * GULLY_DEPTH;
         const lc = this.land ? this._landAt(a0 + r, o) : '.';
         if (lc === 'w') y = Math.min(y, f.y - 1.3); // a lake or a wide river: flat, a little below the road
         // between two stretches of the same road the land slopes to meet halfway, at the mean height
@@ -1457,6 +1469,7 @@ export class Scene3D {
         let cc = grassA.clone().lerp(grassB, vnoise(x / 30, z / 30));
         cc.multiplyScalar(0.92 + vnoise(x / 9, z / 9) * 0.16);
         if (Math.abs(o) < 8) cc = verge.clone();
+        if (g > 0.6) cc = cc.lerp(col('#6f6551'), (g - 0.6) * 2.2); // the stream's muddy banks
         if (lc === 'f') cc.multiplyScalar(0.72);
         if (lc === 'w') cc = waterC.clone().lerp(cc, vnoise(x / 40, z / 40) * 0.08);
         const rel = y - f.y;
@@ -1482,6 +1495,7 @@ export class Scene3D {
     const terrain = new THREE.Mesh(tg, this.mat);
     terrain.receiveShadow = true;
     group.add(terrain);
+    this._bridges(group, a0, rows);
 
     // road ribbon + edge lines
     // the road is drawn every 1.25 m (the land every 5 m), so bends stay round on a wide road
@@ -1535,6 +1549,7 @@ export class Scene3D {
     const flowers = [], fenceSides = [];
     for (let r = 0; r < rows - 1; r++) {
       const a = a0 + r, idxN = ((a % n) + n) % n, f = frames[r];
+      if (onBridge(a)) continue; // nothing stands in the gully or on the bridge
       for (const side of [-1, 1]) {
         if (((a % 5) + 5) % 5 === 0) {
           const o = side * (ROAD_HALF + 0.45);
@@ -1610,6 +1625,7 @@ export class Scene3D {
     if (!T.snowfall && this.route.theme !== 'desert') {
       for (let r = 0; r < rows - 1; r++) {
         const a = a0 + r;
+        if (onBridge(a)) continue;
         for (const side of [-1, 1]) {
           const lim = reach[r] ? reach[r].lim[side > 0 ? 1 : 0] : Infinity;
           for (let q = 0; q < (LOW ? 12 : 40); q++) { // a third of the grass on phones
@@ -1747,6 +1763,52 @@ export class Scene3D {
    * hands their own colours), and a flag on a pole (Ukrainian, or the instance colour). Arms are up,
    * marked with aArm so the shader waves them; the cloth is marked with aCloth so it flutters.
    */
+  /** Over every stream in this chunk: the water in the gully and the bridge's stone walls along both edges. */
+  _bridges(group, a0, rows) {
+    const L = this.route.length, loop = !this.route.oneWay;
+    const d0 = a0 * SEG, d1 = (a0 + rows - 1) * SEG, lap = loop ? Math.floor(d0 / L) * L : 0;
+    const at = this.crossings.map((c) => [c + lap - L, c + lap, c + lap + L]).flat().filter((d) => d > d0 - GULLY && d < d1 + GULLY);
+    if (!at.length) return;
+    this.streamMat ||= new THREE.MeshPhongMaterial({ side: THREE.DoubleSide, color: '#4f8fb8', shininess: 120, specular: '#fff4e0', bumpMap: surfaceTexture(true), bumpScale: 0.1 });
+    const stone = col('#9a958c'), walls = [];
+    for (const dc of at) {
+      // the water: a strip across the land, following its rise and fall, a metre above the bottom of the gully
+      const p = [], idx = [];
+      for (const [j, dd] of [[0, -4.5], [1, 4.5]]) {
+        const f = this.frame(dc + dd);
+        for (const o of COLS) {
+          const x = f.x + f.rx * o, z = f.z + f.rz * o;
+          p.push(x, this._terrainY(f.y, o, x, z) - GULLY_DEPTH * (1 - (dd / GULLY) ** 2) + 1.3, z);
+        }
+        if (j) for (let k = 0; k < COLS.length - 1; k++) idx.push(k, k + 1, k + COLS.length, k + 1, k + 1 + COLS.length, k + COLS.length); // facing up
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+      g.setIndex(idx);
+      g.computeVertexNormals();
+      const water = new THREE.Mesh(g, this.streamMat);
+      water.receiveShadow = true;
+      group.add(water);
+      // the walls: a low parapet that runs down to the stone deck, in 2.5 m blocks
+      for (let d = dc - GULLY - 1; d < dc + GULLY + 1; d += 2.5) {
+        if (d < d0 || d >= d1) continue; // each chunk builds its own blocks
+        const f = this.frame(d + 1.25);
+        for (const side of [-1, 1]) {
+          const o = side * (ROAD_HALF + 0.75);
+          walls.push(new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * o, f.y - 0.3, f.z + f.rz * o),
+            new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(f.rx, f.rz)), new THREE.Vector3(2.55, 1.9, 0.45)));
+        }
+      }
+    }
+    if (!walls.length) return;
+    this.wallGeom ||= new THREE.BoxGeometry(1, 1, 1);
+    this.wallMat ||= new THREE.MeshLambertMaterial({ color: stone });
+    const im = new THREE.InstancedMesh(this.wallGeom, this.wallMat, walls.length);
+    walls.forEach((m, i) => im.setMatrixAt(i, m));
+    im.castShadow = im.receiveShadow = true;
+    group.add(im);
+  }
+
   _crowdModels() {
     if (this.crowdModels) return this.crowdModels;
     const parts = (list) => {
@@ -2168,6 +2230,7 @@ export class Scene3D {
     const shared = new Set(Object.values(this.models || {}));
     // the crowd's meshes are shared by every chunk (fans: each chunk's geometry borrows the baked attributes)
     if (this.crowdModels) for (const k of ['body', 'flagUA', 'flagTeam']) shared.add(this.crowdModels[k]);
+    if (this.wallGeom) shared.add(this.wallGeom); // the bridges' stone blocks
     group.traverse((o) => {
       if (o.geometry?.userData.borrowed) return; // its tiny per-fan colours go with the garbage collector
       if (o.geometry && !shared.has(o.geometry) && !this.natureKeep?.has(o.geometry)) o.geometry.dispose();

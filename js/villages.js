@@ -38,3 +38,23 @@ export function villages(route, shore = null) {
   }
   return { spans, buildings };
 }
+
+/**
+ * Where the road crosses a stream on a bridge (distances along the route): every 3–6 km on gentle ground, clear of
+ * the start, the climbs, the sprints and the villages. None in the desert or on imported routes.
+ */
+export function crossings(route, spans = villages(route).spans) {
+  const L = route.length;
+  if (!L || route.custom || route.buildings?.length || route.theme === 'desert' || L < 5000) return [];
+  const seed = idSeed(route.id) + 17;
+  const busy = [...(route.climbs || []), ...(route.sprints || [])].map((c) => [c.start - 150, c.start + c.length + 150])
+    .concat(spans.map(([a, b]) => [a - 150, b + 150]));
+  const elev = (d) => route.segAt(Math.floor(d / SEG)).elev;
+  const out = [];
+  for (let k = 0, d = 1500 + rnd(seed) * 1500; d < L - 1000; k++, d += 3000 + rnd(seed + k * 4.3) * 3000) {
+    if (busy.some(([a, b]) => d > a && d < b)) continue;
+    if (Math.abs(elev(d + 40) - elev(d - 40)) / 80 > 0.03) continue; // a bridge lies level
+    out.push(Math.round(d / SEG) * SEG);
+  }
+  return out;
+}
