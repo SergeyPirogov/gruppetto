@@ -1275,6 +1275,55 @@ export class Scene3D {
       this.rings.push(mesh);
       this.scene.add(mesh);
     });
+    this._forestRings();
+  }
+
+  /**
+   * Wooded hills on the horizon, in front of the mountains: the theme's treelines (its layers' `trees`), a near ring
+   * and a far one, crowns along the top, each bluer with the distance. They fill the bare land between the road's
+   * chunks and the peaks.
+   */
+  _forestRings() {
+    const wooded = this.t.layers.filter((l) => l.trees && l.kind !== 'sea');
+    if (!wooded.length || this.route.custom) return;
+    const fog = rgb(this.t.fog), dim = (this.atm?.dim ?? 1) ** 2.2;
+    const veil = this.atmWeather === 'fog' ? 0.6 : this.atmWeather === 'rain' ? 0.35 : 0;
+    const conifer = ['alpine', 'carpathians', 'winter', 'river', 'lakes'].includes(this.route.theme);
+    [[1400, wooded[0], 0.36, 0.7], [950, wooded[wooded.length - 1], 0.14, 1]].forEach(([R, L, haze, scale], li) => {
+      const N = Math.round(R * 2 * Math.PI / 5), pos = [], cs = [];
+      const tint = (c) => col(c).lerp(fog, Math.min(0.9, haze + veil)).multiplyScalar(dim);
+      const ground = tint(L.base), crown = tint(L.trees.color), crownLit = crown.clone().lerp(tint(L.top), 0.35);
+      const seed = 31 + li * 7;
+      const hill = (i) => {
+        const u = (i / N) * Math.PI * 2;
+        return (0.5 + 0.3 * Math.sin(u * 3 + seed) + 0.2 * Math.sin(u * 7.3 + seed * 2)) * 120 * scale + 75;
+      };
+      // a tree every column where the wood is (density), a gap in the clearings
+      const tree = (i) => {
+        const wood = vnoise(i * 0.045 + seed, seed) < L.trees.density * 0.95;
+        if (!wood) return 0;
+        const h = 12 + hash(i * 1.37 + seed) * 12;
+        return conifer ? (i % 2 ? h * 0.35 : h * 1.25) : h * (0.75 + 0.25 * Math.sin(i * 1.9));
+      };
+      for (let i = 0; i < N; i++) {
+        const a0 = (i / N) * Math.PI * 2, a1 = ((i + 1) / N) * Math.PI * 2;
+        const v = (a, y) => [Math.cos(a) * R, y, Math.sin(a) * R];
+        const g0 = hill(i), g1 = hill(i + 1), t0 = g0 + tree(i), t1 = g1 + tree(i + 1);
+        const lit = (i % 7) / 7 > 0.5 ? crownLit : crown;
+        // the hillside up to the foot of the trees, then the crowns
+        const P = [v(a0, -200), v(a1, -200), v(a0, g0 - 6), v(a1, -200), v(a1, g1 - 6), v(a0, g0 - 6),
+          v(a0, g0 - 6), v(a1, g1 - 6), v(a0, t0), v(a1, g1 - 6), v(a1, t1), v(a0, t0)];
+        const C = [ground, ground, crown, ground, crown, crown, crown, crown, lit, crown, lit, lit];
+        P.forEach((q, k) => { pos.push(...q); cs.push(C[k].r, C[k].g, C[k].b); });
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3));
+      const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide }));
+      mesh.renderOrder = -4 + li;
+      this.rings.push(mesh);
+      this.scene.add(mesh);
+    });
   }
 
   _clouds() {
@@ -1624,10 +1673,12 @@ export class Scene3D {
       }
       // far forest
       if (treeTypes.length && !this.land) {
-        for (let q = 0; q < 3; q++) {
+        for (let q = 0; q < (LOW ? 3 : 5); q++) {
           const hq = (k) => hash(idxN * 3.31 + q * 51.7 + k * 7.9);
-          if (hq(0) > T3c.far) continue;
           const side = hq(1) < 0.5 ? -1 : 1, o = side * (30 + hq(2) * 230);
+          // trees stand together in woods with open meadow between, not one by one all over
+          const wood = vnoise((f.x + f.rx * o) / 140, (f.z + f.rz * o) / 140) > 0.56;
+          if (hq(0) > T3c.far * (wood ? 2.6 : 0.25)) continue;
           if (reach[r] && Math.abs(o) > reach[r].lim[side > 0 ? 1 : 0] - 4) continue;
           if (Math.abs(o) < 55 && inVillage(a * SEG)) continue;
           const y = heightAt(r, o);
