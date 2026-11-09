@@ -923,9 +923,12 @@ export class Scene3D {
     P.targets?.forEach((t) => t.dispose());
     const w = Math.max(1, size.x), h = Math.max(1, size.y), q = 4; // the glow at a quarter size: soft and cheap
     P.scene0 = new THREE.WebGLRenderTarget(w, h, { ...opts, samples: 4 });
+    P.scene0.depthTexture = new THREE.DepthTexture(w, h); // for the soft shading in corners (AO)
     P.blurA = new THREE.WebGLRenderTarget(Math.ceil(w / q), Math.ceil(h / q), opts);
     P.blurB = new THREE.WebGLRenderTarget(Math.ceil(w / q), Math.ceil(h / q), opts);
-    P.targets = [P.scene0, P.blurA, P.blurB];
+    P.aoA = new THREE.WebGLRenderTarget(Math.ceil(w / 2), Math.ceil(h / 2), opts); // AO at half size, then blurred
+    P.aoB = new THREE.WebGLRenderTarget(Math.ceil(w / 2), Math.ceil(h / 2), opts);
+    P.targets = [P.scene0, P.blurA, P.blurB, P.aoA, P.aoB];
     if (P.quad) return;
     P.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     P.scene = new THREE.Scene();
@@ -943,15 +946,42 @@ export class Scene3D {
           gl_FragColor = vec4(s, 1.0);
         }`,
     });
+    // soft shading where things meet (AO) from the depth alone: samples in pairs across the pixel, so a plane seen at a
+    // slant (the road ahead) stays clear and only a real crease darkens: grass at the foot of a wall, under a tree,
+    // a rock in the verge, the eaves of a house
+    P.ao = new THREE.ShaderMaterial({
+      uniforms: { tDepth: { value: null }, near: { value: 0.1 }, far: { value: 1000 }, proj: { value: new THREE.Vector2(1, 1) } },
+      vertexShader: vert, depthTest: false, depthWrite: false,
+      fragmentShader: `uniform sampler2D tDepth; uniform float near; uniform float far; uniform vec2 proj; varying vec2 vUv;
+        float dist(vec2 uv) { float d = texture2D(tDepth, uv).x; return -(near * far) / ((far - near) * d - far); }
+        void main() {
+          float z = dist(vUv);
+          if (z > 120.0) { gl_FragColor = vec4(1.0); return; }        // far land and the sky: none
+          float tol = 0.05 + z * 0.006;                               // depth gets coarse with distance: no false creases
+          const float R = 0.9;                                        // metres around the point
+          float spin = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) * 6.2832;
+          float occ = 0.0;
+          for (int i = 0; i < 10; i++) {
+            float a = float(i) * 2.39996 + spin, r = sqrt((float(i) + 0.5) / 10.0);
+            vec2 o = vec2(cos(a) * proj.x, sin(a) * proj.y) * (R * r * 0.5 / z);
+            float pair = (dist(vUv + o) + dist(vUv - o)) * 0.5;       // both sides nearer than the point: a crease
+            float dz = z - pair;
+            occ += smoothstep(tol, tol + 0.3, dz) * (1.0 - smoothstep(R * 1.5, R * 4.0, dz));
+          }
+          float ao = 1.0 - occ / 10.0 * (1.0 - smoothstep(80.0, 120.0, z)); // fading out before it stops
+          gl_FragColor = vec4(vec3(ao), 1.0);
+        }`,
+    });
     // the final picture: the scene, its glow, a gentle colour grade (a touch more contrast and warmth) and a vignette
     P.final = new THREE.ShaderMaterial({
-      uniforms: { tScene: { value: null }, tGlow: { value: null }, glow: { value: 0.55 } },
+      uniforms: { tScene: { value: null }, tGlow: { value: null }, glow: { value: 0.55 }, tAO: { value: null }, aoAmount: { value: 0.75 } },
       vertexShader: vert, depthTest: false, depthWrite: false, toneMapped: true,
       // a render target holds the scene linear and not tone-mapped (three.js maps only on the way to the screen):
       // glow is added there, then the renderer's own tone mapping and sRGB, then the grade
-      fragmentShader: `uniform sampler2D tScene; uniform sampler2D tGlow; uniform float glow; varying vec2 vUv;
+      fragmentShader: `uniform sampler2D tScene; uniform sampler2D tGlow; uniform float glow; uniform sampler2D tAO; uniform float aoAmount; varying vec2 vUv;
         void main() {
-          gl_FragColor = vec4(texture2D(tScene, vUv).rgb + texture2D(tGlow, vUv).rgb * glow, 1.0);
+          float ao = mix(1.0, texture2D(tAO, vUv).r, aoAmount);
+          gl_FragColor = vec4(texture2D(tScene, vUv).rgb * ao + texture2D(tGlow, vUv).rgb * glow, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
           vec3 c = gl_FragColor.rgb;
@@ -976,7 +1006,13 @@ export class Scene3D {
     const px = (t) => new THREE.Vector2(1 / t.width, 1 / t.height);
     P.blur.uniforms.tSrc.value = P.scene0.texture; P.blur.uniforms.pick.value = 1; P.blur.uniforms.dir.value.copy(px(P.blurA)).multiply(new THREE.Vector2(1, 0)); pass(P.blur, P.blurA);
     P.blur.uniforms.tSrc.value = P.blurA.texture; P.blur.uniforms.pick.value = 0; P.blur.uniforms.dir.value.copy(px(P.blurB)).multiply(new THREE.Vector2(0, 1)); pass(P.blur, P.blurB);
-    P.final.uniforms.tScene.value = P.scene0.texture; P.final.uniforms.tGlow.value = P.blurB.texture;
+    // AO from the depth, blurred across and down (the blur without the bright pick)
+    P.ao.uniforms.tDepth.value = P.scene0.depthTexture; P.ao.uniforms.near.value = this.camera.near; P.ao.uniforms.far.value = this.camera.far;
+    P.ao.uniforms.proj.value.set(this.camera.projectionMatrix.elements[0], this.camera.projectionMatrix.elements[5]);
+    pass(P.ao, P.aoA);
+    P.blur.uniforms.tSrc.value = P.aoA.texture; P.blur.uniforms.pick.value = 0; P.blur.uniforms.dir.value.copy(px(P.aoB)).multiply(new THREE.Vector2(1, 0)); pass(P.blur, P.aoB);
+    P.blur.uniforms.tSrc.value = P.aoB.texture; P.blur.uniforms.dir.value.copy(px(P.aoA)).multiply(new THREE.Vector2(0, 1)); pass(P.blur, P.aoA);
+    P.final.uniforms.tScene.value = P.scene0.texture; P.final.uniforms.tGlow.value = P.blurB.texture; P.final.uniforms.tAO.value = P.aoA.texture;
     pass(P.final, null);
   }
 
