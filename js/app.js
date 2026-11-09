@@ -1402,6 +1402,7 @@ function frame(now) {
   // graphics card); the ride goes on, and the road comes back the moment the mini window closes
   const inPip = ride.noScene || (pipOpen() && !ride.showRoadInPip);
   $('pip-rest').hidden = !inPip;
+  $('ride').classList.toggle('resting', inPip); // the numbers are in the mini window: the board here goes too
   if (inPip) { ride.moved = 0; requestAnimationFrame(frame); return; }
   scene.render(ride.route, ride.dist, riders, ride.moved);
   ride.moved = 0;
@@ -1855,7 +1856,7 @@ async function openMini() {
     onKey: onRideKey,
     onPause: () => togglePause(),
     heartbeat: () => { if (ride) advance(); }, // the hidden tab's timers slow down, the mini window's do not
-    onClose: () => { $('btn-pip')?.classList.remove('on'); $('pip-rest').hidden = true; if (ride) ride.showRoadInPip = false; },
+    onClose: () => { $('btn-pip')?.classList.remove('on'); $('pip-rest').hidden = true; $('ride').classList.remove('resting'); if (ride) ride.showRoadInPip = false; },
   });
   if (ok) $('btn-pip').classList.add('on');
   return ok;
