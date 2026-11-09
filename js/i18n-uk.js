@@ -311,4 +311,7 @@ export const UK = {
   'Strava: tick «Upload your activities» to let Gruppetto send rides': 'Strava: постав галочку «Upload your activities», щоб Gruppetto міг надсилати заїзди',
   'Strava: not connected': 'Strava не підключено', 'Connecting to Strava…': 'Підключаюся до Strava…', 'Strava connected': 'Strava підключено',
   'Strava: {error}': 'Strava: {error}', 'Connected: {name}': 'Підключено: {name}', 'Connected': 'Підключено',
+  'Attacks in a free ride: now and then a rider goes clear of the bunch, most often on a climb; chase or let him go': 'Атаки у вільній їзді: час від часу хтось відривається від групи, найчастіше на підйомі; доганяй або відпусти',
+  '⚡ {name} attacks!': '⚡ {name} атакує!', '⚡ {name} goes across': '⚡ {name} іде слідом', 'You caught {name}': '{name} спійманий',
+  '{name} is tiring: {s} s to close': '{name} видихається: до нього {s} с',
 };

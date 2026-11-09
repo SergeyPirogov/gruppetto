@@ -16,6 +16,7 @@ import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSugge
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder, rideFileName } from './recorder.js';
 import { makeZip } from './zip.js';
+import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
 import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl } from './strava.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
@@ -41,7 +42,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '',
-  intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -1220,6 +1221,7 @@ async function startRide(opts) {
       })
       : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     race: racing ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
+    attacks: !racing && !workout && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
     ghost: racing ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
@@ -1390,11 +1392,13 @@ function advance(now = performance.now()) {
     }
     passersBy(dt);
     for (const b of ride.bots) b.lane = keepApart(b, easeLane(b.lane, b.laneTarget, dt, b), [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b), ...(pacerOn() ? [ride.pacer] : [])]);
+    if (ride.attacks) attackStep(grade);
     for (const b of ride.bots) {
       const g = route.gradeAt(b.dist);
       // his steady pace, harder up the climbs and easier down, and never perfectly even
       const swing = 1 + Math.sin(ride.elapsed * 0.05 + b.phase) * 0.05 + Math.sin(ride.elapsed * 0.17 + b.phase * 2) * 0.03;
       let p = b.wkg * b.weight * swing * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
+      if (b.attack) p *= attackFactor(b, ride.elapsed);
       if (ride.race) {
         const R = ride.race, toGo = R.distance - b.dist;
         if (b.climber && g > 0.035) p *= 1.12;                 // climbers attack on the hills
@@ -1426,6 +1430,29 @@ function advance(now = performance.now()) {
       const p1 = powerAt(t);
       tick(p1, cadenceAt(t, p1), hrAt(t));
     }
+  }
+}
+
+/**
+ * Free ride (#48): an attack when one is due, and what you hear of it: who goes, who goes across, who you
+ * catch, and when the break starts to tire with a gap still to close.
+ */
+function attackStep(grade) {
+  const t = ride.elapsed;
+  const ev = nextAttack(ride.attacks, { t, bots: ride.bots, meDist: ride.dist, grade });
+  if (ev) { ev.attacker.attack.lead = true; track('attack', grade > 0.025 ? 'climb' : 'flat'); }
+  for (const b of ride.bots) {
+    const a = b.attack;
+    if (!a || t >= a.fadeEnd) continue;
+    if (!a.told && t >= a.start) {
+      a.told = true;
+      const msg = a.lead ? tr('⚡ {name} attacks!', { name: b.name }) : tr('⚡ {name} goes across', { name: b.name });
+      toast(msg); cueSay(msg.replace('⚡ ', ''));
+    }
+    const gap = b.dist - ride.dist;
+    if (gap > 15) a.away = true;
+    if (attacking(b, t) && a.away && !a.caught && gap < -2) { a.caught = true; toast(tr('You caught {name}', { name: b.name })); }
+    if (!a.tiring && t >= a.holdEnd) { a.tiring = true; if (a.lead && gap > 30) toast(tr('{name} is tiring: {s} s to close', { name: b.name, s: Math.round(gap / Math.max(ride.v, 3)) })); }
   }
 }
 
@@ -1528,13 +1555,13 @@ function updateAhead() {
   const v = Math.max(ride.v, 2), all = [...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...(ride.ghost ? [ride.ghost] : []), ...(ride.climbGhost ? [ride.climbGhost] : [])];
   const ahead = all
     .map((r) => ({ r, gap: r.dist - ride.dist }))
-    .filter(({ gap }) => gap > 0.5 && gap / v <= 10)
+    .filter(({ r, gap }) => gap > 0.5 && (gap / v <= 10 || (r.attack && attacking(r, ride.elapsed) && gap < 1500)))
     .sort((a, b) => a.gap - b.gap)
     .slice(0, 3);
   $('ahead').hidden = !ahead.length;
   $('ahead-rows').innerHTML = ahead.map(({ r, gap }) => {
     const wkg = r.weight ? wkgNow(r) : r.wkg ?? (r.power ? r.power / settings.weight : 0); // a bot's W/kg right now
-    return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}${tr('s')}</span><small>${Math.round(gap)} ${U.m}${wkg ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''}</small></div>`;
+    return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.attack && attacking(r, ride.elapsed) ? `⚡ ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}${tr('s')}</span><small>${Math.round(gap)} ${U.m}${wkg ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''}</small></div>`;
   }).join('');
 }
 
@@ -3541,6 +3568,8 @@ for (const id of ['f-name', 'f-jersey']) $(id).addEventListener('input', () => {
 $('btn-challenge').onclick = () => challengeFriend(shown.entry);
 $('btn-dev-lost').onclick = () => openDrawer('devices');
 $('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
+$('f-attacks').checked = settings.attacks !== false;
+$('f-attacks').onchange = () => { settings.attacks = $('f-attacks').checked; saveSettings(); if (ride && !ride.race && !ride.workout) ride.attacks = settings.attacks ? attackState() : null; };
 $('f-free-pacer').checked = !!settings.freePacer;
 $('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
 $('f-free-wkg').value = settings.freePacerWkg;

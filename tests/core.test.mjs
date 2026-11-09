@@ -937,3 +937,33 @@ test('Strava: the return from its page, and what an upload became', async () => 
   assert.deepEqual(uploadOutcome({ error: "gruppetto.fit duplicate of <a href='/activities/12345' target='_blank'>Gruppetto ride</a>" }), { activityId: 12345, duplicate: true });
   assert.deepEqual(uploadOutcome({ error: 'Time information is missing from the file.' }), { error: 'Time information is missing from the file.' });
 });
+
+test('attacks (#48): due, waits for a climb, needs a bunch, the plan of power', async () => {
+  const { attackState, nextAttack, attackFactor, attacking, ATTACK_POWER } = await import('../js/attacks.js');
+  let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const bunch = () => [1, 2, 3, 4].map((i) => ({ name: `b${i}`, wkg: 2 + i * 0.3, weight: 60 + i * 5, dist: 100 + i * 5 }));
+  const st = attackState(rnd);
+  assert.ok(st.nextAt >= 180 && st.nextAt <= 300);
+  let bots = bunch();
+  assert.equal(nextAttack(st, { t: 100, bots, meDist: 105, grade: 0.05, rnd }), null);          // not yet
+  const t = st.nextAt + 1;
+  assert.equal(nextAttack(st, { t, bots, meDist: 105, grade: 0, rnd }), null);                  // flat: waits for a climb
+  const ev = nextAttack(st, { t: t + 10, bots, meDist: 105, grade: 0.05, rnd });                // a climb: goes
+  assert.ok(ev && ev.attacker.attack);
+  assert.ok(st.nextAt >= t + 10 + 240);
+  const a = ev.attacker.attack;
+  assert.equal(attackFactor(ev.attacker, a.start + 1), ATTACK_POWER.surgeClimb);
+  assert.equal(attackFactor(ev.attacker, a.surgeEnd + 1), ATTACK_POWER.hold);
+  assert.equal(attackFactor(ev.attacker, a.holdEnd + 1), ATTACK_POWER.fade);
+  assert.equal(attackFactor(ev.attacker, a.fadeEnd + 1), 1);
+  assert.ok(attacking(ev.attacker, a.surgeEnd + 1) && !attacking(ev.attacker, a.holdEnd + 1));
+  assert.ok(a.holdEnd - a.start >= 100 && a.holdEnd - a.start <= 270);
+  // flat, a minute past due: goes anyway
+  const st2 = attackState(rnd); bots = bunch();
+  assert.equal(nextAttack(st2, { t: st2.nextAt, bots, meDist: 105, grade: 0, rnd }), null);
+  assert.ok(nextAttack(st2, { t: st2.nextAt + 61, bots, meDist: 105, grade: 0, rnd }));
+  // you far from the bunch: nobody goes, it looks again in 30 s
+  const st3 = attackState(rnd); bots = bunch();
+  assert.equal(nextAttack(st3, { t: st3.nextAt + 100, bots, meDist: 2000, grade: 0.05, rnd }), null);
+  assert.ok(bots.every((b) => !b.attack));
+});
