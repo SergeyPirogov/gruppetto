@@ -267,8 +267,8 @@ function drawCanvas(s) {
   };
   const pPx = fitPx(String(s.power), wk ? 124 : 176, colW[0], L.W || 'W');
   const sPx = Math.min(fitPx(String(s.hr), wk ? 76 : 104, colW[1]), fitPx(String(s.cad), wk ? 76 : 104, colW[2]));
-  const numH = 22 + pPx * 0.74 + 30, wkH = wk ? 50 : 0, rowH = 64;
-  const blocks = wk ? 3 : 2, gap = Math.max(10, (h - pad * 2 - numH - wkH - rowH) / (blocks - 1 + 1));
+  const numH = 22 + pPx * 0.74 + 30, wkH = wk ? 50 : 0, rowH = 68; // the bottom row with W′bal's bar under it
+  const blocks = wk ? 3 : 2, gap = Math.max(10, (h - pad * 2 - numH - wkH - rowH) / (blocks - 1)); // the gaps between the blocks only: the last one ends at the bottom margin
   const vy = pad + 22 + pPx * 0.74, subY = vy + 28;
   const num = (x, name, val, unit, sub, color, labelColor, z, zc2, px) => {
     const ly = vy - px * 0.74 - 12;
