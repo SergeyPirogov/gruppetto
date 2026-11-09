@@ -1881,6 +1881,7 @@ $('btn-start-more').hidden = !pipSupport() && !settings.overlay;
 function overlaySetting() { if (settings.overlay) overlayStart((on) => { if (on) track('overlay'); }); else overlayStop(); }
 overlaySetting();
 $('f-overlay').checked = !!settings.overlay;
+$('hud-get').hidden = !/Mac/.test(navigator.platform || navigator.userAgent); // the app is for Macs only
 $('f-overlay').onchange = () => { settings.overlay = $('f-overlay').checked; saveSettings(); overlaySetting(); $('btn-start-more').hidden = !pipSupport() && !settings.overlay; };
 $('btn-start-more').onclick = (e) => { e.stopPropagation(); $('start-menu').hidden = !$('start-menu').hidden; };
 $('start-watch').onclick = () => { $('start-menu').hidden = true; startRide({ watch: true }); };

@@ -18,5 +18,9 @@ Menu bar 🚴: click through the panel, background (solid … barely there), sho
 
 ## Sharing it
 
-The build is signed ad hoc: it runs on the Mac that built it. To hand it to others without Gatekeeper's warning it
-needs a Developer ID signature and notarization (an Apple developer account).
+`build.sh` also packs `overlay/Gruppetto-HUD.zip`, with the app's icon (drawn by `icon.swift`). Attach it to a GitHub
+release under that name: Profile → «Download Gruppetto HUD for Mac» points at
+`releases/latest/download/Gruppetto-HUD.zip`.
+
+The build is signed ad hoc, so on another Mac Gatekeeper stops the first launch: System Settings → Privacy & Security
+→ Open Anyway. Without that step it needs a Developer ID signature and notarization (an Apple developer account).

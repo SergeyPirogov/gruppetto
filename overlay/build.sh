@@ -7,6 +7,9 @@ rm -rf "$app" && mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 swiftc -O -parse-as-library -o "$app/Contents/MacOS/GruppettoHUD" GruppettoHUD.swift \
   -framework AppKit -framework SwiftUI -framework Network 2>&1 | grep -v "^$" || true
 test -x "$app/Contents/MacOS/GruppettoHUD"
+iconset="$(mktemp -d)/AppIcon.iconset"
+swift icon.swift "$iconset"
+iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -14,6 +17,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
   <key>CFBundleName</key><string>Gruppetto HUD</string>
   <key>CFBundleDisplayName</key><string>Gruppetto HUD</string>
   <key>CFBundleIdentifier</key><string>com.automation-remarks.gruppetto-hud</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundleExecutable</key><string>GruppettoHUD</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
@@ -24,4 +28,6 @@ cat > "$app/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 codesign --force -s - "$app" >/dev/null 2>&1 || true # ad hoc: runs on this Mac
-echo "Built: $(pwd)/$app"
+# the zip that Profile's «Download for Mac» points at: attach it to a GitHub release as Gruppetto-HUD.zip
+rm -f Gruppetto-HUD.zip && ditto -c -k --keepParent "$app" Gruppetto-HUD.zip
+echo "Built: $(pwd)/$app and $(pwd)/Gruppetto-HUD.zip"
