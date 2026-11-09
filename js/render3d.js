@@ -1628,14 +1628,24 @@ export class Scene3D {
           if (hash(seed) > 0.45 || T.snowfall) continue;
           const o = side * (ROAD_HALF + 0.85 + hash(seed + 1) ** 2 * 4);
           const ff = this.frame(a * SEG + hash(seed + 2) * SEG), s = 0.1 + hash(seed + 3) * 0.16;
-          put('rock@verge', mtx(ff.x + ff.rx * o, heightAt(r, o) - s * 0.2, ff.z + ff.rz * o, hash(seed + 4) * 6.28, s));
+          if (this.nature?.types.pebble) put('pebble@verge', mtx(ff.x + ff.rx * o, heightAt(r, o) - 0.03, ff.z + ff.rz * o, hash(seed + 4) * 6.28, s * 5));
+          else put('rock@verge', mtx(ff.x + ff.rx * o, heightAt(r, o) - s * 0.2, ff.z + ff.rz * o, hash(seed + 4) * 6.28, s));
         }
         if (!T.snowfall && !T3c.beach && this.route.theme !== 'desert') {
           for (let q = 0; q < 3; q++) {
             const seed = a * 13.7 + side * 31 + q * 7.3;
             const o = side * (4.6 + hash(seed) * 5.0);
             const ff = this.frame(a * SEG + hash(seed + 1) * SEG);
-            put('tuft', mtx(ff.x + ff.rx * o, heightAt(r, o), ff.z + ff.rz * o, hash(seed + 2) * 6.28, 0.65 + hash(seed + 3) * 0.7));
+            // with the nature models, some tufts are tall grass or a broad-leaved plant
+            const kind = !this.nature?.types.tallgrass ? 'tuft' : hash(seed + 5) < 0.3 ? 'tallgrass' : hash(seed + 5) < 0.42 ? 'plant' : 'tuft';
+            put(kind, mtx(ff.x + ff.rx * o, heightAt(r, o), ff.z + ff.rz * o, hash(seed + 2) * 6.28, 0.65 + hash(seed + 3) * 0.7));
+          }
+          // now and then a boulder a few metres out
+          const bs = a * 5.3 + side * 23.9;
+          if (hash(bs) < 0.025) {
+            const o = side * (ROAD_HALF + 3 + hash(bs + 1) * 6), ff = this.frame(a * SEG + hash(bs + 2) * SEG), sc = 0.6 + hash(bs + 3) * 0.7;
+            const m = mtx(ff.x + ff.rx * o, heightAt(r, o) - 0.15, ff.z + ff.rz * o, hash(bs + 4) * 6.28, this.nature?.types.boulder ? sc : sc * 1.8);
+            put(this.nature?.types.boulder ? 'boulder' : 'rock', m);
           }
         }
         T.scenery.forEach((sc, j) => {
@@ -1658,6 +1668,7 @@ export class Scene3D {
             if (this.nature) {
               for (let q = 0; q < (LOW ? 3 : 7); q++) put('flower', mtx(...spot(q, 3.2), hash(a * 5 + q) * 6.28, 0.8 + hash(a * 7 + q) * 0.6));
               for (let q = 7; q < (LOW ? 8 : 10); q++) put('clover', mtx(...spot(q, 2.6), hash(a + q * 9) * 6.28, 0.8 + hash(a + q) * 0.5));
+              if (this.nature.types.flowers3) for (let q = 50; q < (LOW ? 51 : 54); q++) put('flowers3', mtx(...spot(q, 3), hash(a + q * 3.3) * 6.28, 0.8 + hash(a + q * 1.1) * 0.6));
             } else {
               for (let q = 0; q < 14; q++) flowers.push([...spot(q, 3.2), flowerPalette[(q + j) % flowerPalette.length]]);
             }
@@ -1769,7 +1780,7 @@ export class Scene3D {
     for (const [key, list] of Object.entries(place)) {
       const [type, far] = key.split('@');
       if (!list.length) continue;
-      const castShadow = !far && !['tuft', 'sunflowers', 'lupine'].includes(type);
+      const castShadow = !far && !['tuft', 'sunflowers', 'lupine', 'tallgrass', 'plant', 'flowers3'].includes(type);
       if (this.nature?.types[type]) { this._addNature(group, type, list, castShadow); continue; }
       const geom = this.models[type];
       if (!geom) continue;

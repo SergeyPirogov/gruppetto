@@ -21,13 +21,15 @@ MODELS = [
     'Grass_Common_Short', 'Grass_Wispy_Short',
     'Flower_3_Single', 'Flower_4_Single', 'Clover_1',
     'Fern_1', 'Mushroom_Common',
+    'Flower_3_Group', 'Flower_4_Group', 'Grass_Common_Tall', 'Grass_Wispy_Tall', 'Plant_1', 'Plant_7',
+    'Pebble_Round_1', 'Pebble_Round_2', 'Pebble_Round_3',
 ]
 # texture -> max size in px. Tree leaves use the coloured (_C) maps: the app keeps their light and
 # shade and swaps the hue for the route's palette (green meadow, orange autumn...).
 TEXTURES = {
     'Bark_NormalTree.png': 512, 'Leaves_NormalTree_C.png': 512, 'Leaf_Pine_C.png': 512,
     'Leaves_TwistedTree_C.png': 512, 'Leaves.png': 512, 'Flowers.png': 512, 'Grass.png': 256,
-    'Rocks_Diffuse.png': 512, 'Mushrooms.png': 256,
+    'Rocks_Diffuse.png': 512, 'Mushrooms.png': 256, 'PathRocks_Diffuse.png': 256,
 }
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent

@@ -19,6 +19,12 @@ export const NATURE_TYPES = {
   fern: { models: ['Fern_1'], height: 1.0 },
   clover: { models: ['Clover_1'], height: 0.35 },
   mushroom: { models: ['Mushroom_Common'], height: 0.32 },
+  // the verge as in a painted landscape: clumps of flowers, tall grass, broad-leaved plants, pebbles, boulders
+  flowers3: { models: ['Flower_3_Group', 'Flower_4_Group'], height: 0.85 },
+  tallgrass: { models: ['Grass_Common_Tall', 'Grass_Wispy_Tall'], height: 1.0 },
+  plant: { models: ['Plant_1', 'Plant_7'], height: 0.8 },
+  pebble: { models: ['Pebble_Round_1', 'Pebble_Round_2', 'Pebble_Round_3'], height: 0.25 },
+  boulder: { models: ['Rock_Medium_1', 'Rock_Medium_2', 'Rock_Medium_3'], height: 2.0 },
 };
 
 /**
@@ -35,6 +41,7 @@ export const NATURE_MATERIALS = {
   Flowers: { map: 'Flowers.png', mode: 'plain', alpha: true },
   Grass: { map: 'Grass.png', mode: 'plain', alpha: true },
   Rocks: { map: 'Rocks_Diffuse.png', mode: 'plain' },
+  PathRocks: { map: 'PathRocks_Diffuse.png', mode: 'plain' },
   Mushrooms: { map: 'Mushrooms.png', mode: 'plain' },
 };
 
