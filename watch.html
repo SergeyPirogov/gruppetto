@@ -78,6 +78,12 @@
     details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; }
     summary { cursor: pointer; font-weight: 700; }
     details p { color: var(--muted); margin: 10px 0 0; }
+    .howto { color: var(--muted); margin: 10px 0 0; padding-left: 22px; }
+    .howto li { margin: 6px 0; }
+    .howto b { color: var(--text); font-weight: 600; }
+    details details { background: #121a28; margin: 14px 0 0; }
+    pre { background: #0b1019; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; overflow-x: auto; font-size: .82rem; color: var(--text); margin: 10px 0 0; }
+    .fine a { color: var(--accent2); }
 
     .final { text-align: center; }
     .final .cta { justify-content: center; }
@@ -108,6 +114,7 @@
           <a class="btn" href="https://github.com/SergeyPirogov/gruppetto/releases/latest/download/Gruppetto-HUD.zip">⬇ Overlay for Mac</a>
         </div>
         <p class="fine">Free. No account, nothing to install: Chrome or Edge and a smart trainer.</p>
+        <p class="fine"><a href="#hud-install">How to open the Mac overlay the first time</a></p>
       </div>
 
       <div class="screen" role="img" aria-label="A film full screen with Gruppetto's panel in the corner: 232 W, heart rate 128, cadence 88, the interval and W′bal">
@@ -177,6 +184,19 @@
       <details><summary>What can I watch?</summary><p>Anything on the same computer: YouTube, Netflix, a sports stream, a file. The small window stays on top of other apps and full-screen video. On a TV, keep Gruppetto on the laptop beside you.</p></details>
       <details><summary>Which browser?</summary><p>Chrome or Edge on Mac, Windows, Linux or Android: they have Web Bluetooth. Safari and Firefox don't.</p></details>
       <details><summary>What is Gruppetto HUD?</summary><p>A tiny free Mac app: a see-through rounded panel over everything, even full-screen video, without the browser's address bar. Optional; the small window works without it.</p></details>
+      <details id="hud-install"><summary>How do I open Gruppetto HUD the first time?</summary>
+        <ol class="howto">
+          <li>Download the zip, open it and drag <b>Gruppetto HUD</b> to Applications.</li>
+          <li>Open it. macOS says it could not check the app: click <b>Done</b>. That's expected: the app is free and not signed with a paid Apple developer certificate.</li>
+          <li>Open <b>System Settings → Privacy &amp; Security</b>, scroll down to the line about Gruppetto HUD and click <b>Open Anyway</b>, then confirm with your password or Touch ID.</li>
+          <li>Done: from now on it opens like any app. The panel shows when a ride starts; right-click it for the menu (size, which numbers, background).</li>
+        </ol>
+        <p>On macOS 13 and 14 there is a shorter way: right-click the app in Applications → <b>Open</b> → <b>Open</b>.</p>
+        <details><summary>For the technical: one command in Terminal</summary>
+          <p>It downloads the app into Applications and removes the "downloaded from the internet" mark, so macOS does not stop it. Read it before you run it.</p>
+          <pre><code>curl -L https://github.com/SergeyPirogov/gruppetto/releases/latest/download/Gruppetto-HUD.zip -o /tmp/gruppetto-hud.zip &amp;&amp; ditto -x -k /tmp/gruppetto-hud.zip /Applications &amp;&amp; xattr -dr com.apple.quarantine "/Applications/Gruppetto HUD.app" &amp;&amp; open "/Applications/Gruppetto HUD.app"</code></pre>
+        </details>
+      </details>
       <details><summary>Is it really free?</summary><p>Yes. No account, no subscription. Your rides stay in your browser until you send them somewhere.</p></details>
     </div>
   </section>
@@ -233,6 +253,19 @@
       'A tiny free Mac app: a see-through rounded panel over everything, even full-screen video, without the browser\'s address bar. Optional; the small window works without it.':
         'Маленький безкоштовний застосунок для Mac: прозора заокруглена панель поверх усього, навіть відео на весь екран, без адресного рядка браузера. Не обовʼязковий: маленьке вікно працює й без нього.',
       'Is it really free?': 'Справді безкоштовно?',
+      '<a href="#hud-install">How to open the Mac overlay the first time</a>': '<a href="#hud-install">Як відкрити оверлей для Mac першого разу</a>',
+      'How do I open Gruppetto HUD the first time?': 'Як відкрити Gruppetto HUD першого разу?',
+      'Download the zip, open it and drag <b>Gruppetto HUD</b> to Applications.': 'Завантаж zip, відкрий його й перетягни <b>Gruppetto HUD</b> у Програми.',
+      'Open it. macOS says it could not check the app: click <b>Done</b>. That\'s expected: the app is free and not signed with a paid Apple developer certificate.':
+        'Відкрий його. macOS скаже, що не змогла перевірити застосунок: натисни <b>Готово</b>. Так і має бути: застосунок безкоштовний і не підписаний платним сертифікатом розробника Apple.',
+      'Open <b>System Settings → Privacy &amp; Security</b>, scroll down to the line about Gruppetto HUD and click <b>Open Anyway</b>, then confirm with your password or Touch ID.':
+        'Відкрий <b>Системні параметри → Приватність і безпека</b>, прогорни вниз до рядка про Gruppetto HUD і натисни <b>Усе одно відкрити</b>, тоді підтверди паролем чи Touch ID.',
+      'Done: from now on it opens like any app. The panel shows when a ride starts; right-click it for the menu (size, which numbers, background).':
+        'Готово: далі він відкривається як будь-який застосунок. Панель зʼявляється, коли починається заїзд; права кнопка на ній відкриває меню (розмір, які цифри, фон).',
+      'On macOS 13 and 14 there is a shorter way: right-click the app in Applications → <b>Open</b> → <b>Open</b>.': 'На macOS 13 і 14 є коротший шлях: права кнопка на застосунку в Програмах → <b>Відкрити</b> → <b>Відкрити</b>.',
+      'For the technical: one command in Terminal': 'Для технічних: одна команда в Терміналі',
+      'It downloads the app into Applications and removes the "downloaded from the internet" mark, so macOS does not stop it. Read it before you run it.':
+        'Вона завантажує застосунок у Програми й знімає позначку «завантажено з інтернету», тож macOS його не зупиняє. Прочитай її, перш ніж запускати.',
       'Yes. No account, no subscription. Your rides stay in your browser until you send them somewhere.': 'Так. Без реєстрації й підписки. Заїзди лишаються у твоєму браузері, доки сам їх кудись не надішлеш.',
       'The next episode is waiting': 'Наступна серія чекає', 'Warm-up included.': 'Розминка включена.',
       'Gruppetto · indoor cycling in your browser': 'Gruppetto · велотренування у браузері', 'Ride in 3D instead →': 'Їхати в 3D →',
@@ -246,12 +279,15 @@
     if (lang === 'uk') {
       document.documentElement.lang = 'uk';
       document.title = 'Gruppetto — крути, поки дивишся';
-      for (const el of document.querySelectorAll('header nav a:not([data-lang]), h1, h2, h3, p, summary, .btn, .what, .feats b, .feats span, footer span, footer a')) {
+      for (const el of document.querySelectorAll('header nav a:not([data-lang]), h1, h2, h3, p, summary, .btn, .what, .feats b, .feats span, .howto li, footer span, footer a')) {
         const k = el.innerHTML.replace(/\s+/g, ' ').trim();
         if (UK[k]) el.innerHTML = UK[k];
       }
       for (const img of document.querySelectorAll('[data-uk-src]')) img.src = img.dataset.ukSrc;
     }
+    // a link to a question opens it
+    const openAsked = () => { const d = location.hash && document.querySelector(location.hash); if (d?.tagName === 'DETAILS') d.open = true; };
+    addEventListener('hashchange', openAsked); openAsked();
   </script>
 </body>
 </html>
