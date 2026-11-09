@@ -400,6 +400,14 @@ final class App: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit Gruppetto HUD", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         menu.delegate = self
         status.menu = menu
+        // the same menu on a right click on the panel: the 🚴 can hide behind a MacBook's notch
+        panel.contentView?.menu = menu.copy() as? NSMenu
+    }
+
+    /// Opened again (Applications, Spotlight, Launchpad): the panel shows now, to place it and to right-click it.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showNow()
+        return false
     }
 
     @objc func toggleClickThrough() {
@@ -438,11 +446,11 @@ final class App: NSObject, NSApplicationDelegate {
 
     @objc func showNow() {
         hiddenUntilQuiet = false
-        model.lastAt = Date()
+        model.lastAt = Date().addingTimeInterval(52) // a minute on screen without a ride: to drag it and right-click it
         model.live = true
         panel.ignoresMouseEvents = false // to drag it into place; click-through comes back with the next ride's numbers
         panel.orderFrontRegardless()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self] in
             guard let self else { return }
             self.panel.ignoresMouseEvents = self.clickThrough
         }
