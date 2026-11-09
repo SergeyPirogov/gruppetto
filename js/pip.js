@@ -73,7 +73,9 @@ const CSS = `
 html, body { margin: 0; height: 100%; overflow: hidden; user-select: none; color: #e8edf5; }
 /* the window tinted by the power zone you ride in: Z2 or Z4 is seen from the corner of an eye, over the football */
 body { display: flex; flex-direction: column; justify-content: space-evenly; padding: 3vh 4vw; gap: 2vh;
-  background: radial-gradient(120% 90% at 0% 0%, color-mix(in srgb, var(--zc) 30%, transparent), transparent 65%), linear-gradient(160deg, #141c2c, #0c111b);
+  /* the top in the grey of Chrome's own strip over the window (the site's address), so the strip reads as part of
+     the panel; the zone's glow from the bottom corner, away from it */
+  background: radial-gradient(120% 90% at 0% 100%, color-mix(in srgb, var(--zc) 28%, transparent), transparent 65%), linear-gradient(180deg, #202124 0%, #161b26 38%, #0c111b 100%);
   transition: background .6s; }
 .top { display: grid; grid-template-columns: 1.6fr 1fr 1fr; gap: 3vw; align-items: stretch; }
 .cell { display: flex; flex-direction: column; justify-content: flex-end; min-width: 0; padding-left: 2.4vw; border-left: max(3px, .9vw) solid var(--c, #8a94a6); }
@@ -110,6 +112,10 @@ body:hover .pause-btn, .pause-btn:focus-visible { opacity: 1; }
 function buildDocument(w, opts) {
   const d = w.document;
   d.title = 'Gruppetto';
+  // some Chrome versions paint the window's strip in the page's theme colour: the same grey as the top of the panel
+  const theme = d.createElement('meta');
+  theme.name = 'theme-color'; theme.content = '#202124';
+  d.head.append(theme);
   const style = d.createElement('style');
   style.textContent = CSS;
   d.head.append(style);
