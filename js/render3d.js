@@ -244,6 +244,32 @@ function surfaceTexture(water = false) {
   return texture;
 }
 
+/**
+ * Worn paint for the road lines: mostly white, thinner in patches where tyres run over it, with flecks where the
+ * asphalt's grain shows through. Alpha carries the wear, so the road shows under it.
+ */
+function wornPaintTexture() {
+  const size = 128, data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    const u = x / size * Math.PI * 2, v = y / size * Math.PI * 2;
+    // soft worn patches (tileable) and fine grain
+    const patch = 0.5 + 0.25 * Math.sin(u * 2 + Math.sin(v * 3) * 1.6) + 0.25 * Math.sin(v * 5 + Math.cos(u * 3));
+    const grain = hash2(x * 2.3 + 7, y * 1.9 + 3);
+    let a = 0.95 - Math.max(0, patch - 0.55) * 1.2 - (grain > 0.82 ? 0.45 : 0) - grain * 0.1;
+    a = Math.max(0.18, Math.min(1, a));
+    const i = (y * size + x) * 4;
+    data[i] = data[i + 1] = data[i + 2] = 236 + grain * 19; data[i + 3] = a * 255;
+  }
+  const texture = new THREE.DataTexture(data, size, size);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.generateMipmaps = true;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
 function sunGlowTexture() {
   const size = 64, data = new Uint8Array(size * size * 4);
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
@@ -1168,7 +1194,11 @@ export class Scene3D {
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     // road markings: flush with the asphalt (raised, they swallowed the bottom of the tyres), pulled
     // forward in depth instead so they never flicker through it
-    this.lineMat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    // the lines: worn paint, the asphalt showing through where tyres wore it away
+    const paint = wornPaintTexture();
+    paint.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    this.lineMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: paint, transparent: true, depthWrite: false,
+      polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
     this.natureMats = this.nature ? natureMaterials(this.nature) : null;
     // wind: metres of sway per metre² of height, so a 9 m tree's crown moves ~15-20 cm, grass ~7 cm
     const WIND = { Bark_NormalTree: 0.0022, Leaves_NormalTree: 0.0022, Leaves_Pine: 0.0018, Leaves_TwistedTree: 0.03, Leaves: 0.12, Flowers: 0.15, Grass: 0.16 };
@@ -1725,7 +1755,8 @@ export class Scene3D {
         for (const v of [A, B, C, B, D, C]) {
           uv.push(v[0] / 4, v[2] / 4);
           // the asphalt is not one grey: older stretches and repair patches, darker where it was mended
-          const k = (material === this.roadMat ? (0.9 + vnoise(v[0] / 9, v[2] / 9) * 0.14) * (vnoise(v[0] / 23 + 50, v[2] / 23) > 0.68 ? 0.8 : 1) : 1)
+          const k = (material === this.roadMat ? (0.9 + vnoise(v[0] / 9, v[2] / 9) * 0.14) * (vnoise(v[0] / 23 + 50, v[2] / 23) > 0.68 ? 0.8 : 1)
+            : material === this.lineMat ? 0.8 + vnoise(v[0] / 30 + 9, v[2] / 30) * 0.2 : 1) // the paint older on some stretches than others
             * (shade ? shade((a0 + q / SUB) * SEG) : 1);
           cs.push(cc.r * k, cc.g * k, cc.b * k);
         }
