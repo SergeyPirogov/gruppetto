@@ -317,14 +317,16 @@ final class App: NSObject, NSApplicationDelegate {
         // shown while a ride sends numbers, hidden 8 s after it stops
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self else { return }
-            let live = Date().timeIntervalSince(self.model.lastAt) < 8
+            let live = Date().timeIntervalSince(self.model.lastAt) < 8 && !self.hiddenUntilQuiet
             if live != self.model.live { self.model.live = live; live ? self.panel.orderFrontRegardless() : self.panel.orderOut(nil) }
         }
     }
 
     func got(_ s: RideState) {
         model.state = s
+        let quiet = Date().timeIntervalSince(model.lastAt) > 30
         model.lastAt = Date()
+        if hiddenUntilQuiet { if quiet { hiddenUntilQuiet = false } else { return } }
         if !model.live { model.live = true; panel.orderFrontRegardless() }
         if let host = panel.contentView { panel.setContentSize(host.fittingSize) }
     }
@@ -365,6 +367,9 @@ final class App: NSObject, NSApplicationDelegate {
         }
         op.submenu = sub
         menu.addItem(op)
+        let hide = NSMenuItem(title: "Hide until the next ride", action: #selector(hideNow), keyEquivalent: "")
+        hide.target = self
+        menu.addItem(hide)
         let show = NSMenuItem(title: "Show it now (to place it)", action: #selector(showNow), keyEquivalent: "")
         show.target = self
         menu.addItem(show)
@@ -387,7 +392,15 @@ final class App: NSObject, NSApplicationDelegate {
         rebuildMenu()
     }
 
+    var hiddenUntilQuiet = false
+    @objc func hideNow() {
+        hiddenUntilQuiet = true // back with the next ride: once numbers have stopped for a while and come again
+        model.live = false
+        panel.orderOut(nil)
+    }
+
     @objc func showNow() {
+        hiddenUntilQuiet = false
         model.lastAt = Date()
         model.live = true
         panel.ignoresMouseEvents = false // to drag it into place; click-through comes back with the next ride's numbers
