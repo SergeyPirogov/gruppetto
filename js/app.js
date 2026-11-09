@@ -399,12 +399,15 @@ function initLobby() {
   renderHistory();
   $('sim').addEventListener('change', updateDeviceUI);
 
+  // «Ride» on the button is the verb: in Ukrainian «Поїхали» (its own key), not «Заїзд», the noun the word is elsewhere
+  const rideVerb = lang === 'en' ? 'Ride' : tr('Ride (go)');
+  $('btn-start').textContent = rideVerb;
   $('btn-start').onclick = startRide;
   // from the Watch & ride page (watch.html, ?start=watch): the big button is Watch & ride, the ▾ menu has the 3D ride
   if (new URLSearchParams(location.search).get('start') === 'watch' && (pipSupport() || settings.overlay)) {
     $('btn-start').textContent = `📺 ${tr('Watch & ride')}`;
     $('btn-start').onclick = () => startRide({ watch: true });
-    $('start-watch').innerHTML = `<b>${tr('Ride ▶')}</b><small>${tr('On the 3D road')}</small>`;
+    $('start-watch').innerHTML = `<b>${rideVerb}</b><small>${tr('On the 3D road')}</small>`;
     $('start-watch').onclick = () => { $('start-menu').hidden = true; startRide(); };
   }
   updateDeviceUI();

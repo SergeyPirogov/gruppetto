@@ -6,7 +6,7 @@ export const UK = {
 
   // lobby: top bar, routes, modes
   'Trainer': 'Тренажер', 'Heart rate': 'Пульс', 'Cadence': 'Каденс', 'Controllers': 'Контролери', 'Simulator': 'Симулятор',
-  'Profile': 'Профіль', 'Route': 'Маршрут', 'Mode': 'Режим', 'Ride ▶': 'Поїхали ▶',
+  'Profile': 'Профіль', 'Route': 'Маршрут', 'Mode': 'Режим', 'Ride (go)': 'Поїхали',
   'Shadow ride': 'Шедоу-райд', 'race a ghost of your earlier ride': 'женися з привидом свого попереднього заїзду',
   '👻 Your best': '👻 Твій рекорд', 'Last ride': 'Останній заїзд', 'Your best': 'Твій рекорд', 'Off': 'Вимк.',
   'ride on your own': 'їдеш сам', 'last ride': 'останній заїзд', 'your best': 'твій рекорд',
