@@ -19,3 +19,12 @@ export function blendAtmosphere(a, b, k) {
     disk: hex(a.disk, b.disk), diskSize: a.diskSize && b.diskSize ? num(a.diskSize, b.diskSize) : late.diskSize, dim: num(a.dim, b.dim),
     fogNear: num(a.fogNear, b.fogNear), fogFar: num(a.fogFar, b.fogFar) };
 }
+
+/**
+ * «Changeable» weather during a ride: what comes after `now`, and for how long (s). A dry spell of 6–12 min, then
+ * rain (three times in four) or fog for 4–8 min, then dry again. `r1`, `r2`: random numbers 0…1.
+ */
+export function nextWeather(now, r1 = Math.random(), r2 = Math.random()) {
+  if (now === 'clear') return { sky: r1 < 0.75 ? 'rain' : 'fog', for: 240 + r2 * 240 };
+  return { sky: 'clear', for: 360 + r2 * 360 };
+}

@@ -254,7 +254,7 @@ export const UK = {
   'Camera: drag to turn, pinch to zoom, double-tap to reset': 'Камера: тягни, щоб покрутити, зведи пальці для масштабу, подвійний дотик, щоб скинути',
   // time of day and weather (#41)
   'Time of day': 'Час доби', 'Midday': 'День', 'Morning': 'Ранок', 'Evening (golden hour)': 'Вечір (золота година)', 'Night': 'Ніч', 'By the clock': 'За годинником',
-  'Weather': 'Погода', 'Clear': 'Ясно', 'Fog': 'Туман', 'Rain': 'Дощ',
+  'Weather': 'Погода', 'Clear': 'Ясно', 'Fog': 'Туман', 'Rain': 'Дощ', 'Changeable: rain comes and goes': 'Мінлива: дощ то починається, то минає',
   'waiting for a reading…': 'чекаю на дані…',
   'Chainring': 'Зірка спереду', 'Rear cog': 'Зірка ззаду', '14 · Zwift': '14 · Zwift',
   'The gear your chain stays in: the buttons shift virtual gears on top of it.': 'Передача, у якій стоїть ланцюг: кнопки перемикають віртуальні передачі поверх неї.',

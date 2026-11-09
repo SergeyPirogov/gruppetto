@@ -26,6 +26,7 @@ import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } f
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
+import { nextWeather } from './atmo-blend.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
 
 const $ = (id) => document.getElementById(id);
@@ -252,7 +253,7 @@ function applyLive(key) {
   }
   if (key === 'style') scene?.setStyle?.(settings.style);
   if (key === 'camera') scene?.setCamera?.(settings.camera);
-  if (key === 'timeOfDay' || key === 'weather') scene?.setAtmosphere?.(settings.timeOfDay, settings.weather);
+  if (key === 'timeOfDay' || key === 'weather') scene?.setAtmosphere?.(settings.timeOfDay, weatherNow());
 }
 
 /** Remembered device ids per slot (the browser decides whether it still allows them). */
@@ -1049,7 +1050,7 @@ let sceneKind = null;
 function applySceneSettings() {
   scene.setStyle?.(settings.style);
   scene.setQuality?.(settings.quality);
-  scene.setAtmosphere?.(settings.timeOfDay, settings.weather);
+  scene.setAtmosphere?.(settings.timeOfDay, weatherNow());
   scene.setCamera?.(settings.camera);
 }
 async function ensureScene() {
@@ -2840,9 +2841,24 @@ function renderTimeHint() {
 setInterval(() => {
   if (!ride || settings.timeOfDay !== 'auto' || !scene) return;
   const look = phaseOf(sunAt(new Date(), placeFromZone()));
-  if (ride.look && look !== ride.look) scene.setAtmosphere?.('auto', settings.weather, { smooth: true }); // over 40 s, not in a jump
+  if (ride.look && look !== ride.look) scene.setAtmosphere?.('auto', weatherNow(), { smooth: true }); // over 40 s, not in a jump
   ride.look = look;
 }, 60000);
+
+/** The weather the scene shows now: the setting, or with «Changeable» the spell this ride is in. */
+function weatherNow() {
+  return settings.weather === 'changeable' ? (ride?.sky || 'clear') : settings.weather;
+}
+// «Changeable»: rain or fog comes and goes during the ride, over 40 s each time (checked every 20 s)
+setInterval(() => {
+  if (!ride || settings.weather !== 'changeable' || !scene || ride.race) return;
+  ride.sky ||= 'clear';
+  ride.skyUntil ??= ride.elapsed + 360 + Math.random() * 360; // the first dry spell
+  if (ride.elapsed < ride.skyUntil) return;
+  const next = nextWeather(ride.sky);
+  ride.sky = next.sky; ride.skyUntil = ride.elapsed + next.for;
+  scene.setAtmosphere?.(settings.timeOfDay, ride.sky, { smooth: true });
+}, 20000);
 
 /** The rail's profile button: your initial on your jersey's colour. */
 function renderAvatar() {

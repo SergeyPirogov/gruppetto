@@ -873,3 +873,12 @@ test('blendAtmosphere: colours and numbers part way, switches flip at the middle
   assert.deepEqual(blendAtmosphere(day, night, 1).t.sky, night.t.sky);
   assert.equal(blendAtmosphere(day, night, 0).exposure, 1);
 });
+
+test('nextWeather: a dry spell, then rain or fog for a while, then dry again', async () => {
+  const { nextWeather } = await import('../js/atmo-blend.js');
+  assert.deepEqual(nextWeather('clear', 0.1, 0), { sky: 'rain', for: 240 });
+  assert.equal(nextWeather('clear', 0.9, 1).sky, 'fog');
+  assert.equal(nextWeather('clear', 0.9, 1).for, 480);
+  assert.deepEqual(nextWeather('rain', 0.5, 0.5), { sky: 'clear', for: 540 });
+  assert.equal(nextWeather('fog', 0, 0).sky, 'clear');
+});
