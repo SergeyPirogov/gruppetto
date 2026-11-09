@@ -265,6 +265,18 @@ final class HUDPanel: NSPanel {
         contentView = content
     }
     override var canBecomeKey: Bool { false }
+
+    /// The menu on a right click or a Ctrl-click anywhere on the panel. Caught here, before SwiftUI's view takes the
+    /// click (a view's own `menu` never showed).
+    var contextMenu: NSMenu?
+    override func sendEvent(_ e: NSEvent) {
+        let right = e.type == .rightMouseDown || (e.type == .leftMouseDown && e.modifierFlags.contains(.control))
+        if right, let m = contextMenu, let v = contentView {
+            NSMenu.popUpContextMenu(m, with: e, for: v)
+            return
+        }
+        super.sendEvent(e)
+    }
 }
 
 // MARK: - The WebSocket server on 127.0.0.1
@@ -401,7 +413,7 @@ final class App: NSObject, NSApplicationDelegate {
         menu.delegate = self
         status.menu = menu
         // the same menu on a right click on the panel: the 🚴 can hide behind a MacBook's notch
-        panel.contentView?.menu = menu.copy() as? NSMenu
+        panel.contextMenu = menu.copy() as? NSMenu
     }
 
     /// Opened again (Applications, Spotlight, Launchpad): the panel shows now, to place it and to right-click it.
