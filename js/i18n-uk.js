@@ -301,4 +301,7 @@ export const UK = {
   "Workouts in ERG and the bots' pace go by it. A ramp test finds yours in about 20 minutes.": 'За ним ERG тримає ціль у тренуваннях, а боти підбирають темп. Рамп-тест визначить твій приблизно за 20 хвилин.',
   '📈 Take the FTP test': '📈 Пройти FTP-тест', 'I know mine': 'Я знаю свій',
   "Don't know your FTP?": 'Не знаєш свій FTP?', '📈 Take the ramp test': '📈 Пройти рамп-тест', '(about 20 minutes, to failure)': '(близько 20 хвилин, до відмови)',
+  '⬇ Download all rides (.zip)': '⬇ Завантажити всі заїзди (.zip)', 'every ride as .FIT, a backup or a move to another app': 'кожен заїзд як .FIT: резервна копія чи перенесення в інший застосунок',
+  'Packing… {n} of {total}': 'Пакую… {n} з {total}', 'No ride is kept in full on this device yet': 'На цьому пристрої ще немає збережених заїздів',
+  '{n} rides as .FIT; {m} older ones keep only their summary': 'Заїздів у .FIT: {n}; від {m} старіших лишився тільки підсумок', '{n} rides as .FIT': 'Заїздів у .FIT: {n}',
 };

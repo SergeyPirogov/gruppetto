@@ -15,6 +15,7 @@ import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
 import { Recorder, rideFileName } from './recorder.js';
+import { makeZip } from './zip.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
@@ -2822,6 +2823,7 @@ function renderHistory() {
   };
   // the lobby has no list of rides: they are in History
   renderWeek();
+  $('hist-backup').hidden = !history.length;
   $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
   // (the week's numbers are on the lobby's tiles)
   for (const b of document.querySelectorAll('.hist-row')) {
@@ -3150,6 +3152,39 @@ function download(kind) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+
+/**
+ * Every ride kept in full (the latest 50) as .FIT in one .zip: a backup, or a move to another app. An older ride
+ * has only its summary left, so it is counted, not packed.
+ */
+async function downloadAllRides() {
+  const btn = $('btn-backup'), label = btn.textContent;
+  btn.disabled = true;
+  const files = [];
+  let missing = 0;
+  try {
+    for (const [i, e] of history.entries()) {
+      btn.textContent = tr('Packing… {n} of {total}', { n: i + 1, total: history.length });
+      const r = await getRide(e.id);
+      if (!r?.samples?.length) { missing++; continue; }
+      const rec = new Recorder();
+      rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0];
+      files.push({ name: `${rideFileName(rec.startTime, rideTitle(e))}.fit`, data: rec.toFIT(), date: rec.startTime });
+    }
+    track('backup', !files.length ? 'empty' : files.length < 10 ? '1-9' : files.length < 30 ? '10-29' : '30+');
+    if (!files.length) { toast(tr('No ride is kept in full on this device yet')); return; }
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([makeZip(files)], { type: 'application/zip' }));
+    a.download = `gruppetto-rides-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(missing ? tr('{n} rides as .FIT; {m} older ones keep only their summary', { n: files.length, m: missing }) : tr('{n} rides as .FIT', { n: files.length }));
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+$('btn-backup').onclick = downloadAllRides;
 
 // ---------- intervals.icu ----------
 let icuClient = null;

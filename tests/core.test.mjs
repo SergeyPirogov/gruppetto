@@ -893,3 +893,32 @@ test('ride file name: start time, then the workout or route', async () => {
   assert.equal(rideFileName(d, 'Карпатський серпантин'), 'gruppetto-2026-11-08-1432-карпатський-серпантин');
   assert.equal(rideFileName(d, '  /:*?  '), 'gruppetto-2026-11-08-1432');
 });
+
+test('zip: CRC-32, stored files with UTF-8 names, repeated names kept apart', async () => {
+  const { crc32, makeZip } = await import('../js/zip.js');
+  const enc = new TextEncoder();
+  assert.equal(crc32(enc.encode('123456789')), 0xcbf43926);
+  const date = new Date(2026, 10, 8, 14, 32);
+  const z = makeZip([
+    { name: 'a.fit', data: enc.encode('hello'), date },
+    { name: 'серпантин.fit', data: new Uint8Array([1, 2, 3]), date },
+    { name: 'a.fit', data: enc.encode('again'), date },
+  ]);
+  const v = new DataView(z.buffer);
+  const end = z.length - 22;
+  assert.equal(v.getUint32(end, true), 0x06054b50);
+  assert.equal(v.getUint16(end + 10, true), 3);
+  // walk the central directory: names, sizes, and each local header where it says
+  let p = v.getUint32(end + 16, true);
+  const names = [];
+  for (let i = 0; i < 3; i++) {
+    assert.equal(v.getUint32(p, true), 0x02014b50);
+    const size = v.getUint32(p + 20, true), nl = v.getUint16(p + 28, true), off = v.getUint32(p + 42, true);
+    names.push(new TextDecoder().decode(z.subarray(p + 46, p + 46 + nl)));
+    assert.equal(v.getUint32(off, true), 0x04034b50);
+    const data = z.subarray(off + 30 + nl, off + 30 + nl + size);
+    assert.equal(crc32(data), v.getUint32(p + 16, true));
+    p += 46 + nl;
+  }
+  assert.deepEqual(names, ['a.fit', 'серпантин.fit', 'a (2).fit']);
+});

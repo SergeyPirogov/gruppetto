@@ -545,6 +545,8 @@ body.pixel-ui .seg-panel { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .hist-head span { color: var(--muted); font-size: .85rem; }
 .hist-head button { margin-left: auto; padding: 4px 10px; font-size: .8rem; }
 .hist-list { display: flex; flex-direction: column; gap: 6px; }
+.hist-backup { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 0 0 12px; font-size: .82rem; }
+.hist-backup[hidden] { display: none; }
 .hist-row {
   display: grid; grid-template-columns: 56px 1fr 90px 90px; align-items: center; gap: 10px; text-align: left;
   padding: 9px 12px; border-radius: 10px; background: #121a28; border: 1px solid var(--line); font-variant-numeric: tabular-nums;
