@@ -10,6 +10,7 @@ import { encodeChallenge, decodeChallenge, challengeIn } from '../js/challenge.j
 import { wPrimeSuggestion, rampFtp } from '../js/power.js';
 import { addRide, progressFrom, levelOf, rideXp } from '../js/progress.js';
 import { wbalStep, wbalSeries, timeToEmpty } from '../js/wbal.js';
+import { villages } from '../js/villages.js';
 
 const dv = (bytes) => new DataView(new Uint8Array(bytes).buffer);
 
@@ -807,4 +808,22 @@ test('Workout library: unique ids, every workout of a known kind, sensible lengt
     assert.ok(min >= 3 && min <= 150, `${w.id}: ${min} min`);
     if (!w.ramp) assert.ok(workoutStats(w, 250).tss < 120, `${w.id}: TSS`);
   }
+});
+
+test('villages: the same on every load, clear of the start, the climbs and the water, none in the desert', () => {
+  const level = routes.find((r) => r.id === 'level');
+  const a = villages(level, { side: 1, from: 14 }), b = villages(level, { side: 1, from: 14 });
+  assert.deepEqual(a, b);
+  assert.ok(a.spans.length >= 3 && a.buildings.length >= 20);
+  for (const [, o] of a.buildings) assert.ok(o < 0 || o <= 9, `a house at ${o} m on the lake side`);
+  for (const r of routes) {
+    const v = villages(r);
+    for (const [d0, d1] of v.spans) {
+      assert.ok(d0 > 1000 && d1 < r.length - 1000, `${r.id}: a village on the start line`);
+      for (const c of [...r.climbs, ...r.sprints]) assert.ok(d1 <= c.start - 200 || d0 >= c.start + c.length + 200, `${r.id}: a village on ${c.name}`);
+    }
+    for (const [d, o] of v.buildings) assert.ok(Math.abs(o) >= 12 && v.spans.some(([s0, s1]) => d >= s0 && d <= s1));
+  }
+  assert.deepEqual(villages(routes.find((r) => r.theme === 'desert')).buildings, []);
+  assert.deepEqual(villages({ ...level, custom: true }).buildings, []);
 });

@@ -11,6 +11,7 @@ import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike } from './bike-model.js';
 import { t, lang } from './i18n.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
+import { villages } from './villages.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 import { loadFanModels } from './fans.js';
 
@@ -50,6 +51,8 @@ const T3 = {
   alpine: { amp: 28, far: 0.45, wall: 75, rock: 50, snow: 85 },
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
+// house walls in a village are not all one white: cream, a cool white, peach, pale green (the roof takes a hint of it)
+const HOUSE_TINTS = ['#ffffff', '#fff0d6', '#e6eeff', '#ffe0d0', '#eaf5df', '#fff7c8'].map((c) => new THREE.Color(c));
 const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || (LOW ? 1 : 2); // ?csm=3 to compare
 const CSM_FAR = LOW ? 120 : 240;
 const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
@@ -362,7 +365,32 @@ function buildModels(theme) {
     { geom: new THREE.BoxGeometry(1.0, 1.7, 0.08), color: '#6b4a32', pos: [1.6, 0.85, 3.02], flat: true },
     { geom: new THREE.BoxGeometry(1.2, 1.0, 0.08), color: '#9cc3d8', pos: [-1.8, 2.4, 3.02], flat: true },
   ]);
+  // a village cottage (made-up routes): low walls under a gable roof with eaves, a chimney, windows all round
+  const winX = [-2.4, 2.4], winZ = [-1.4, 1.4];
+  M.cottage = merge([
+    { geom: new THREE.BoxGeometry(8.2, 0.5, 6.2), color: '#8d8a84', pos: [0, 0.1, 0], flat: true },
+    { geom: new THREE.BoxGeometry(8, 3.1, 6), color: '#efe6d6', pos: [0, 1.75, 0], flat: true },
+    { geom: gable(9, 7.2, 2.5), color: '#a9472f', pos: [0, 3.3, 0], flat: true },
+    { geom: new THREE.BoxGeometry(0.7, 1.6, 0.7), color: '#7c5a48', pos: [2.3, 4.6, -1.1], flat: true },
+    { geom: new THREE.BoxGeometry(1.0, 1.9, 0.08), color: '#6b4a32', pos: [0, 0.95 + 0.2, 3.02], flat: true },
+    ...winX.flatMap((x) => [3.02, -3.02].map((z) => ({ geom: new THREE.BoxGeometry(1.1, 1.0, 0.08), color: '#9cc3d8', pos: [x, 1.9, z], flat: true }))),
+    ...winZ.flatMap((z) => [4.02, -4.02].map((x) => ({ geom: new THREE.BoxGeometry(0.08, 1.0, 1.0), color: '#9cc3d8', pos: [x, 1.9, z], flat: true }))),
+  ]);
   return M;
+}
+
+/** A gable roof: ridge along x (`len`), eaves `width` apart across z, `h` from eaves to ridge; sits on y = 0. */
+function gable(len, width, h) {
+  const x = len / 2, z = width / 2;
+  const v = [
+    [-x, 0, z], [x, 0, z], [x, h, 0], [-x, 0, z], [x, h, 0], [-x, h, 0], // front slope
+    [x, 0, -z], [-x, 0, -z], [-x, h, 0], [x, 0, -z], [-x, h, 0], [x, h, 0], // back slope
+    [-x, 0, -z], [-x, 0, z], [-x, h, 0], [x, 0, z], [x, 0, -z], [x, h, 0], // gable ends
+    [-x, 0, -z], [x, 0, -z], [x, 0, z], [-x, 0, -z], [x, 0, z], [-x, 0, z], // the underside of the eaves
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v.flat(), 3));
+  return g;
 }
 
 // ---------- Rider ----------
@@ -1025,6 +1053,9 @@ export class Scene3D {
     // imported routes with OpenStreetMap data: woods, water and buildings where they really are
     this.land = route.land || null;
     this.buildings = route.buildings || [];
+    // the made-up routes get villages every few kilometres; trees keep out of them
+    this.villageSpans = [];
+    if (!this.buildings.length) ({ buildings: this.buildings, spans: this.villageSpans } = villages(route, this.t3.dip));
     this.models = buildModels(this.t);
     this.mat = new THREE.MeshLambertMaterial({ vertexColors: true });
     // road markings: flush with the asphalt (raised, they swallowed the bottom of the tyres), pulled
@@ -1387,6 +1418,9 @@ export class Scene3D {
     const T = this.t, T3c = this.t3;
     const grassA = rgb(T.grass[0]), grassB = rgb(T.grass[1]), verge = rgb(T.verge[0]);
     const waterC = col('#4f93c4');
+    // in a village (a loop's later laps pass the same ones): no woods within 50 m of the road
+    const L = this.route.length, loop = !this.route.oneWay;
+    const inVillage = (d) => { const w = loop ? ((d % L) + L) % L : d; return this.villageSpans.some(([s0, s1]) => w > s0 - 20 && w < s1 + 20); };
     const sand = col('#e2cc96'), rockC = col(T3c.rockColor || '#8d8f8c'), snowC = col('#f2f6f9');
     const frames = [];
     for (let r = 0; r < rows; r++) frames.push(this.frame((a0 + r) * SEG));
@@ -1518,6 +1552,7 @@ export class Scene3D {
         }
         T.scenery.forEach((sc, j) => {
           if (this.land && TREE_TYPES.includes(sc.type)) return; // trees stand where the map has woods
+          if (TREE_TYPES.includes(sc.type) && inVillage(a * SEG)) return;
           const h = (k) => hash(idxN * 7.13 + side * 3.7 + (j * 4 + k) * 19.1);
           if (h(0) >= sc.prob) return;
           const o = side * (sc.off[0] + h(1) * (sc.off[1] - sc.off[0])) * ROAD_HALF;
@@ -1556,6 +1591,7 @@ export class Scene3D {
           if (hq(0) > T3c.far) continue;
           const side = hq(1) < 0.5 ? -1 : 1, o = side * (30 + hq(2) * 230);
           if (reach[r] && Math.abs(o) > reach[r].lim[side > 0 ? 1 : 0] - 4) continue;
+          if (Math.abs(o) < 55 && inVillage(a * SEG)) continue;
           const y = heightAt(r, o);
           if (this.water && y < f.y - (T3c.dip?.depth || 0) * 0.3) continue;
           const tt = treeTypes[Math.floor(hq(3) * treeTypes.length)].type;
@@ -1619,10 +1655,15 @@ export class Scene3D {
           });
         }
       }
+    }
+    // buildings: an imported route's from the map, a made-up route's villages
+    if (this.buildings.length) {
       const d0 = a0 * SEG, d1 = (a0 + rows - 1) * SEG;
       const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0);
-      for (const [d, o, size, ang, floors = 1] of this.buildings) {
-        if (d < d0 || d >= d1) continue;
+      const lap = loop && !this.land ? Math.floor(d0 / L) * L : 0;
+      for (const [d00, o, size, ang, floors = 1, kind = 'house'] of this.buildings) {
+        const d = [d00 + lap, d00 + lap + L].find((x) => x >= d0 && x < d1) ?? (lap ? NaN : d00); // a loop's villages on every lap
+        if (!(d >= d0 && d < d1)) continue;
         const r = Math.floor(d / SEG) - a0, lim = reach[r] ? reach[r].lim[o > 0 ? 1 : 0] : Infinity;
         if (Math.abs(o) > lim - size / 2) continue;
         const f = this.frame(d), s = size / 8;
@@ -1630,7 +1671,7 @@ export class Scene3D {
         const tall = floors >= 4, sy = tall ? floors : Math.min(1.3, 0.75 + floors * 0.25);
         const m = new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * o, heightAt(r, o) - 0.2, f.z + f.rz * o),
           q.setFromAxisAngle(up, -f.h - ang), new THREE.Vector3(s, sy, s));
-        put(tall ? 'block' : 'house', m);
+        put(tall ? 'block' : kind, m);
       }
     }
 
@@ -1646,6 +1687,7 @@ export class Scene3D {
           : ['sunflowers', 'bush'].includes(type) ? this.matTall : this.mat;
       const im = new THREE.InstancedMesh(geom, mat, list.length);
       list.forEach((m, i) => im.setMatrixAt(i, m));
+      if (type === 'house' || type === 'cottage') list.forEach((m, i) => im.setColorAt(i, HOUSE_TINTS[Math.floor(hash2(m.elements[12] * 0.13, m.elements[14] * 0.17) * HOUSE_TINTS.length)]));
       im.castShadow = castShadow;
       im.receiveShadow = true;
       group.add(im);
