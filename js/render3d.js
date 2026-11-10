@@ -1597,7 +1597,7 @@ export class Scene3D {
    * stretch of the same road (hairpins, a track that comes back past itself). Imported routes only.
    */
   _reachAt(a, f) {
-    if (!this.route.custom) return null;
+    if (!this.route.custom && !this.route.nearItself) return null; // an imported road, or a built-in one that passes close to itself
     if (!this.reach) { // spatial grid of the whole road, 50 m cells
       const cells = new Map(), n = this.route.segments.length;
       for (let b = -20; b < n + 20; b += 2) {
