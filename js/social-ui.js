@@ -113,7 +113,7 @@ function renderHeader() {
 
 /** Profile, at the account card. */
 function showAccount() {
-  ctx.openDrawer('profile');
+  ctx.openDrawer('profile', 'me');
   requestAnimationFrame(() => $('social-card').scrollIntoView({ block: 'start' }));
 }
 

@@ -63,7 +63,11 @@ export const UK = {
   'Could not connect: {error}': 'Не вдалося підключити: {error}',
 
   // drawer: profile
-  'Settings': 'Налаштування',
+  'Settings': 'Налаштування', 'Your name': 'Твоє ім’я',
+  'Mini window (I)': 'Міні-вікно (I)', 'Graphics': 'Графіка', 'Auto (by this device)': 'Авто (за цим пристроєм)',
+  'Low: fast on any laptop': 'Низька: швидко на будь-якому ноутбуці', 'Medium': 'Середня', 'High: glow and colour finish': 'Висока: сяйво й кольорова обробка',
+  "Sharp window (Chrome shows the site's address over it)": 'Чітке вікно (Chrome показує над ним адресу сайту)',
+  'Clean, no address bar (drawn as a video, a little softer)': 'Чисте, без адресного рядка (як відео, трохи м’якше)', 'Me': 'Я', 'Connections': 'Підключення', 'Look': 'Вигляд', 'App': 'Застосунок', 'Your profile': 'Твій профіль', 'Category': 'Категорія', 'Weight': 'Вага', 'kg': 'кг',
   'Rider': 'Райдер', 'Ride': 'Заїзд', 'Gears': 'Передачі', 'Accent color': 'Колір акценту', 'Stripe and decals': 'Смуга й наліпки',
   'Sound': 'Звук', 'Free-ride pacer: rides at a set W/kg and waits at the foot of climbs': 'Пейсер у вільній їзді: їде на заданих Вт/кг і чекає біля підніжжя підйомів',
   'Free-ride pacer, W/kg': 'Пейсер у вільній їзді, Вт/кг', '{name} waits for you at the foot of {climb}': '{name} чекає тебе біля підніжжя: {climb}',

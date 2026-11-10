@@ -246,8 +246,13 @@
         <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
         <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
       </div>
+      <!-- Profile: three tabs (Me, Connections, Settings); a card shows on the tab its data-ptab names -->
+      <nav class="card ptabs" data-panel="profile" aria-label="Profile">
+        <button data-ptab-go="me">Me</button><button data-ptab-go="links">Connections</button><button data-ptab-go="settings">Settings</button>
+      </nav>
+      <div class="card me-hero" id="me-hero" data-panel="profile" data-ptab="me"></div>
       <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
-      <div class="card" id="social-card" data-panel="profile" data-off="1" hidden>
+      <div class="card" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
         <h2>Account &amp; leaderboards</h2>
         <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps in the tables with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
         <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
@@ -263,15 +268,10 @@
         <p class="muted" id="social-status"></p>
         <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
       </div>
-      <div class="card" data-panel="profile">
-        <h2>Profile &amp; settings</h2>
+      <div class="card" data-panel="profile" data-ptab="me">
+        <h2>Rider</h2>
         <div class="fields">
-          <h3 class="fields-head">Rider</h3>
-          <label>Name <input id="f-name" maxlength="16"></label>
-          <label>Language <select id="f-lang"></select></label>
-          <label>Jersey color <input id="f-jersey" type="color"></label>
-          <label>Accent color <input id="f-stripe" type="color" title="Stripe and decals"></label>
-          <label>Bike color <input id="f-bike" type="color" title="The frame"></label>
+          <label>Your name <input id="f-name" maxlength="16"></label>
           <div class="fields-3">
             <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
             <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
@@ -281,7 +281,15 @@
           <label>W′ (anaerobic reserve), kJ <input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"></label>
           <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
 
-          <h3 class="fields-head">Ride</h3>
+          <h3 class="fields-head">Look</h3>
+          <label>Jersey color <input id="f-jersey" type="color"></label>
+          <label>Accent color <input id="f-stripe" type="color" title="Stripe and decals"></label>
+          <label>Bike color <input id="f-bike" type="color" title="The frame"></label>
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>Ride</h2>
+        <div class="fields">
           <label>3D style
             <select id="f-style">
               <option value="cartoon">Cartoon</option>
@@ -347,7 +355,11 @@
           <label class="check wide"><input type="checkbox" id="f-attacks"> Attacks in a free ride: now and then a rider goes clear of the bunch, most often on a climb; chase or let him go</label>
           <label class="wide">Climb difficulty <span id="diff-val" class="range-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
 
-          <h3 class="fields-head">Gears</h3>
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>Gears</h2>
+        <div class="fields">
           <div class="fields-3 fields-gears">
           <label>Virtual gears
             <select id="f-shift">
@@ -373,12 +385,22 @@
           </div>
           <p class="muted fields-note wide">The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.</p>
 
-          <h3 class="fields-head">Pacer</h3>
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>Pacer</h2>
+        <div class="fields">
           <label class="check wide"><input type="checkbox" id="f-pacer"> Workout pacer: a virtual partner riding the target power</label>
           <label class="check wide"><input type="checkbox" id="f-free-pacer"> Free-ride pacer: rides at a set W/kg and waits at the foot of climbs</label>
           <label>Pacer name <input id="f-pacer-name" maxlength="16" placeholder="Pacer"></label>
           <label>Free-ride pacer, W/kg <input id="f-free-wkg" type="number" min="0.5" max="7" step="0.1"></label>
 
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>App</h2>
+        <div class="fields">
+          <label>Language <select id="f-lang"></select></label>
           <h3 class="fields-head">Sound</h3>
           <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
 
@@ -386,7 +408,7 @@
           <label class="check wide"><input type="checkbox" id="f-stats"> Send anonymous usage stats: which features are used, never your name, data or place</label>
         </div>
       </div>
-      <div class="card" id="icu-card" data-panel="profile">
+      <div class="card" id="icu-card" data-panel="profile" data-ptab="links">
       <h2>intervals.icu</h2>
       <p class="muted">Pull planned workouts from your calendar and upload completed rides automatically.
         Find your API key in intervals.icu → Settings → Developer Settings.</p>
@@ -401,7 +423,7 @@
         <span id="icu-status" class="muted"></span>
       </div>
     </div>
-      <div class="card" id="strava-card" data-panel="profile">
+      <div class="card" id="strava-card" data-panel="profile" data-ptab="links">
         <h2>Strava</h2>
         <p class="muted">Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto asks only to upload, it reads nothing of yours.</p>
         <label class="check"><input type="checkbox" id="f-strava-upload"> Upload the ride to Strava when finished</label>
