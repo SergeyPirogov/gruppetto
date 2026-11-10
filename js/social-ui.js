@@ -43,17 +43,22 @@ export async function initSocialUi(c) {
   try { start = await initSocial({ stravaState: c.stravaState }); } catch (e) { status(tr('Account: {error}', { error: e.message })); }
   onUser(() => { profileRow = null; renderCard(); boards.clear(); renderRoute(); });
   renderCard();
-  if (start?.error) { c.openDrawer('profile'); status(tr('Not signed in: {error}', { error: start.error })); }
-  if (start?.returned && start.user) { c.track('social-login'); c.openDrawer('profile'); requestAnimationFrame(() => $('social-card').scrollIntoView({ block: 'start' })); }
+  // back from Google: stay in the lobby (a new account gets its window over it, from sync)
+  if (start?.error) { status(tr('Not signed in: {error}', { error: start.error })); c.toast(tr('Not signed in: {error}', { error: start.error })); }
   if (currentUser()) await sync({ send: true }).catch((e) => status(tr('Account: {error}', { error: e.message })));
+  if (start?.returned && start.user) {
+    c.track('social-login');
+    if (profileRow) c.toast(tr('Signed in: {name}', { name: profileRow.display_name }));
+  }
   renderRoute();
 }
 
 function status(text) { const el = $('social-status'); if (el) el.textContent = text || ''; }
 
 function buildUi() {
-  $('social-card').hidden = false;
+  // the card belongs to the Profile page: shown when that page is (another may be open right now)
   $('social-card').dataset.off = '';
+  $('social-card').hidden = !!document.querySelector('[data-panel="profile"]:not(#social-card)')?.hidden;
   $('btn-social-in').onclick = () => { ctx.track('social', 'sign-in'); signIn(redirect()).catch((e) => status(e.message)); };
   $('btn-social-out').onclick = async () => { await signOut(); status(tr('Signed out. Everything stays on this device.')); };
   $('btn-social-edit').onclick = () => openSetup();

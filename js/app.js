@@ -4100,7 +4100,7 @@ initLobby();
 offerDraft();
 // accounts and leaderboards: nothing at all without a project in social-config.js
 initSocialUi({
-  settings, records, lang, locale, tr, esc, fmtTime, track, openDrawer, stravaState: STRAVA_STATE,
+  settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,
   getProgress: () => progress, setProgress: (p) => { progress = p; saveProgress(); },
   saveSettingsRaw: writeSettings, saveRecords,
   currentRoute: () => routes.find((x) => x.id === settings.routeId) || routes[0],
