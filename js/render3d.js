@@ -5,8 +5,8 @@ import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
 import { sunAt, phaseOf, placeFromZone } from './sun.js';
-import { loadRiderModel, loadCustomRiderModel, ModelRider } from './rider-model.js';
 import { loadDummyRider, DummyRider } from './dummy-rider.js';
+import { loadRiderModel, ModelRider } from './rider-model.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike, setBikeEnvironment } from './bike-model.js';
 import { t, lang } from './i18n.js';
@@ -79,8 +79,8 @@ let preloaded = null;
 export function preloadModels() {
   return preloaded ||= {
     bike: loadBikeModel(),
-    // your own assets/rider.(glb|fbx) first, then the dummy, then the bundled characters
-    rider: SHOW_RIDER ? loadCustomRiderModel().then((c) => c || loadDummyRider()).then((d) => d || loadRiderModel()) : Promise.resolve(null),
+    // our own rider (assets/riders/male.glb), else the dummy if you have it, else simple shapes
+    rider: SHOW_RIDER ? loadRiderModel().then((m) => m || loadDummyRider()) : Promise.resolve(null),
     nature: loadNature().catch((e) => { console.warn('Nature models unavailable, using built-in shapes', e); return null; }),
     // fans: people posed from the rider model (phones keep the simple figures: a crowd of them is heavy)
     fans: LOW ? Promise.resolve(null) : loadFanModels().catch((e) => { console.warn('Fan models unavailable, using simple figures', e); return null; }),
@@ -793,7 +793,7 @@ export class Scene3D {
   }
 
   /**
-   * Camera you can turn a little: drag (mouse or one finger) to orbit around your rider, wheel or
+   * Camera you can turn all the way round: drag (mouse or one finger) to orbit around your rider, wheel or
    * pinch to zoom, double-click or double-tap to go back to the chase view.
    */
   _orbitControls(canvas) {
@@ -803,13 +803,11 @@ export class Scene3D {
     const O = this.orbit;
     const pts = new Map();
     let pinch = 0, lastTap = 0;
-    // kept near the chase view: up to ~30° round to either side, higher up or a little lower, a little
-    // closer or farther — enough to see the rider from behind and three-quarters, never from in front
-    // ?freecam: all the way round, from low down to overhead, close up or far (for looking at the models)
-    const FREE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('freecam');
-    const clampZoom = (z) => (FREE ? Math.max(0.15, Math.min(3, z)) : Math.max(0.6, Math.min(1.3, z)));
-    const clampYaw = (y) => (FREE ? y : Math.max(-0.5, Math.min(0.5, y)));
-    const clampPitch = (p) => (FREE ? Math.max(-0.6, Math.min(1.2, p)) : Math.max(-0.1, Math.min(0.25, p)));
+    // all the way round the rider (front too), from road level to overhead, close up or far;
+    // the camera never goes below the road (see the orbit branch of the chase camera)
+    const clampZoom = (z) => Math.max(0.25, Math.min(3, z));
+    const clampYaw = (y) => y;
+    const clampPitch = (p) => Math.max(-0.6, Math.min(1.2, p));
     canvas.style.touchAction = 'none';
     canvas.style.cursor = 'grab';
     canvas.addEventListener('pointerdown', (e) => {

@@ -1,81 +1,21 @@
-// The rider character: a rigged humanoid file placed at assets/rider.glb or assets/rider.fbx
-// (e.g. straight from Mixamo), or, when there is none, the rider built in code
-// (rider-procedural.js). The character is seated on the bike and posed every frame with inverse
-// kinematics (feet on the pedals, hands on the hoods, torso leaning forward). If a file carries a
-// cycling animation clip, that clip is played instead, its speed following cadence.
+// The rider character: Gruppetto's own rider (assets/riders/male.glb), built and posed on the bike in Blender
+// (blender/rider_male.blend, MakeHuman/MPFB body, exported by tools/export_rider_blend.py). It carries one
+// crank turn of pedalling as a clip, played in step with the cranks; its kit is a mask painted in each
+// rider's colours. Its settings live next to it in assets/riders/male.json. A model without such a clip is
+// seated on the bike and posed every frame with inverse kinematics (feet on the pedals, hands on the hoods).
 import * as THREE from 'three';
 import { gltfLoader } from './gltf.js';
-import { FBXLoader } from '../vendor/three/addons/loaders/FBXLoader.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
-import { buildProceduralRider } from './rider-procedural.js';
 
-const URL_CFG = 'assets/rider.json';
 const SADDLE0 = { x: -0.15, y: 1.03 }; // saddle of the built-in bike the hips settings were tuned on
-const TRANSPARENT_PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 
-// Default hero: Microsoft Rocketbox "Sports_Male_04" (MIT, see assets/default-rider/LICENSE.md).
-// Its FBX points at .tga files on the author's disk; they are served as compact JPEGs next to it.
-const DEFAULT_DIR = 'assets/default-rider/';
-const DEFAULT_TEXTURES = { m026_body_color: 'body.jpg', m026_head_color: 'head.jpg' };
-const DEFAULT_CFG = {
-  // fit on a 56 cm race bike (saddle ~0.80 m above the cranks): knee ~67° at the top, ~148° at the bottom
-  height: 1.88, hipsX: -0.15, hipsY: 0.93, torsoLean: 36, clavicle: { out: 0.8, fwd: -0.6, up: -0.35 },
-  helmet: false, // bare head, no glasses
-  glasses: false,
-  neckAngle: 40, headAngle: 40, // this skeleton's head bone points further back: these keep the eyes on the road
-  // Recolour the kit in the body texture atlas (UV rectangles, 0..1 from the top-left).
-  kit: { jerseyHue: [195, 245], shorts: [[0, 0, 0.31, 0.185], [0.7, 0, 1, 0.185]], stripes: [[0.205, 0.255], [0.68, 0.73]], shirtX: [0.32, 0.69] },
-};
-
-function defaultManager() {
-  const manager = new THREE.LoadingManager();
-  manager.setURLModifier((url) => {
-    if (url.startsWith('data:') || url.startsWith('blob:') || url.endsWith('.fbx')) return url;
-    const m = url.split(/[\\/]/).pop().match(/^([A-Za-z0-9_\-]+)\.(tga|png|jpe?g)/i);
-    const file = m && DEFAULT_TEXTURES[m[1]];
-    return file ? DEFAULT_DIR + file : TRANSPARENT_PX; // normal/specular maps are not shipped
-  });
-  // FBXLoader asks for a dedicated .tga handler; a plain texture loader goes through the URL map above
-  manager.addHandler(/\.tga$/i, new THREE.TextureLoader(manager));
-  return manager;
-}
-
-// Your own model wins: glTF, or FBX straight from Mixamo (embedded textures) — no conversion needed.
 const CANDIDATES = [
-  { url: 'assets/rider.glb', custom: true, load: async (u) => gltfLoader().loadAsync(u) },
-  { url: 'assets/rider.fbx', custom: true, load: async (u) => { const g = await new FBXLoader().loadAsync(u); return { scene: g, animations: g.animations || [] }; } },
-  // bundled CC0 character (Quaternius Universal Base Characters, see tools/prepare_rider.py),
-  // with its own settings next to it; assets/rider.json still overrides them
-  {
-    url: 'assets/rider/rider.gltf',
-    cfg: 'assets/rider/rider.json',
-    load: async (u, cfg) => {
-      const gltf = await gltfLoader().loadAsync(u);
-      await attachParts(gltf.scene, (cfg.attach || []).map((f) => `assets/rider/${f}`));
-      if (cfg.hairColor) tintHair(gltf.scene, cfg.hairColor);
-      return gltf;
-    },
-  },
-  {
-    url: `${DEFAULT_DIR}Sports_Male_04.fbx`,
-    builtin: true,
-    load: async (u) => {
-      const manager = defaultManager();
-      const texturesDone = new Promise((resolve) => { manager.onLoad = resolve; manager.onError = () => {}; });
-      const g = await new FBXLoader(manager).loadAsync(u);
-      await Promise.race([texturesDone, new Promise((r) => setTimeout(r, 8000))]); // paint only once images exist
-      g.traverse((o) => {
-        if (!o.isMesh) return;
-        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-          m.normalMap = null; m.specularMap = null; m.bumpMap = null; m.vertexColors = false;
-          m.shininess = 6; m.specular?.set('#111111'); m.color?.set('#ffffff');
-          if (m.map) m.map.colorSpace = THREE.SRGBColorSpace;
-          m.needsUpdate = true;
-        }
-      });
-      return { scene: g, animations: g.animations || [] };
-    },
-  },
+  { url: 'assets/riders/male.glb', cfg: 'assets/riders/male.json', load: async (u, cfg) => {
+    const gltf = await gltfLoader().loadAsync(u);
+    await attachParts(gltf.scene, (cfg.attach || []).map((f) => `assets/riders/${f}`));
+    if (cfg.hairColor) tintHair(gltf.scene, cfg.hairColor);
+    return gltf;
+  } },
 ];
 
 /**
@@ -115,21 +55,9 @@ function tintHair(scene, hex) {
   });
 }
 
-/** Only your own assets/rider.(glb|fbx): { gltf, cfg }, or null when there is none. */
-export async function loadCustomRiderModel() {
-  return tryCandidates(CANDIDATES.filter((c) => c.custom));
-}
-
-/** Loads the model once: your assets/rider.(glb|fbx) if present, otherwise the built-in hero. */
+/** Loads the rider once: { gltf, cfg }, or null when the file is missing. */
 export async function loadRiderModel() {
-  const found = await tryCandidates(CANDIDATES);
-  if (found) return found;
-  try {
-    return { gltf: buildProceduralRider(cfg), cfg: { sockHeight: false, sleeve: false, armSlim: 1, height: 1.84, pelvisTilt: 62, hipsX: -0.25, hipsY: 1.075, ...cfg } };
-  } catch (e) {
-    console.warn('Procedural rider not built', e);
-    return null;
-  }
+  return tryCandidates(CANDIDATES);
 }
 
 async function tryCandidates(list) {
@@ -137,9 +65,8 @@ async function tryCandidates(list) {
     try {
       const head = await fetch(c.url, { method: 'HEAD' });
       if (!head.ok) continue;
-      let cfg = c.builtin ? { ...DEFAULT_CFG } : {};
+      let cfg = {};
       if (c.cfg) { try { const r = await fetch(c.cfg); if (r.ok) cfg = await r.json(); } catch { /* optional */ } }
-      if (!c.builtin) { try { const r = await fetch(URL_CFG); if (r.ok) cfg = { ...cfg, ...(await r.json()) }; } catch { /* optional */ } }
       const gltf = await c.load(c.url, cfg);
       return { gltf, cfg };
     } catch (e) {
@@ -776,6 +703,34 @@ function buildGlasses(fit, colors = {}) {
 }
 
 /**
+ * A kit painted from a mask texture (rider.json "kitMask": material names): red = the jersey colour,
+ * green = the accent (stripe) colour, neither = the zip ("kitZip"). Every rider gets their own colours
+ * from the same texture.
+ */
+function kitMaskMaterial(m, jersey, stripe, zip) {
+  const c = m.clone();
+  c.color = new THREE.Color('#ffffff');
+  if (c.map) { c.map = c.map.clone(); c.map.colorSpace = THREE.NoColorSpace; c.map.needsUpdate = true; } // a mask, not a colour
+  const uniforms = {
+    kitMain: { value: new THREE.Color(jersey || '#1f6fd6') },
+    kitAccent: { value: new THREE.Color(stripe || '#0b1024') },
+    kitZip: { value: new THREE.Color(zip || '#1a1a1a') },
+  };
+  c.onBeforeCompile = (shader) => {
+    Object.assign(shader.uniforms, uniforms);
+    shader.fragmentShader = 'uniform vec3 kitMain;\nuniform vec3 kitAccent;\nuniform vec3 kitZip;\n' + shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#ifdef USE_MAP
+        vec4 kitTex = texture2D( map, vMapUv );
+        diffuseColor.rgb *= kitTex.r * kitMain + kitTex.g * kitAccent + max( 0.0, 1.0 - kitTex.r - kitTex.g ) * kitZip;
+      #endif`,
+    );
+  };
+  c.customProgramCacheKey = () => 'kitMask';
+  return c;
+}
+
+/**
  * A custom character attached to a rider group (bike in local space, forward = +x, up = +y).
  * `group` must already be in the scene graph when pose() is called.
  */
@@ -793,6 +748,7 @@ export class ModelRider {
       // one texture atlas between all clothes, but keep separate meshes (Ch08_Hoodie, Ch08_Pants).
       const meshName = (o.name || '').toLowerCase();
       const recolor = (m) => {
+        if ((cfg.kitMask || []).includes(m.name)) return kitMaskMaterial(m, jersey, stripe, cfg.kitZip);
         if (cfg.kit && m.map?.image?.width && /body/.test(m.map.image.src || '')) {
           const c = m.clone();
           c.map = paintKit(m.map.image, cfg.kit, jersey, stripe);
@@ -822,7 +778,7 @@ export class ModelRider {
     this.root.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(this.root);
     const h = box.max.y - box.min.y || 1;
-    this.root.scale.setScalar((cfg.height || 1.75) / h);
+    if (!cfg.asModelled) this.root.scale.setScalar((cfg.height || 1.75) / h); // "asModelled": built to size on our bike
     this.bones = findBones(this.root);
     // longer arms ("armLength": 1 = as modelled): the elbow and wrist joints are moved out along the
     // bones and the skin stretches with them, so a short-armed character can reach the bars lower down
@@ -883,6 +839,8 @@ export class ModelRider {
     }
     this.root.rotation.y = cfg.rotateY !== undefined ? THREE.MathUtils.degToRad(cfg.rotateY) : rotY;
     group.add(this.root);
+    // "offset": where a model built on the bike sits in the rider group (bottom bracket at x 0, y 0.29)
+    if (cfg.offset) this.root.position.set(...cfg.offset);
 
     // a cycling clip, but not exercise clips such as Mixamo's "Bicycle Crunch" (a floor exercise)
     const clip = gltf.animations.find((a) => /cycl|bike|pedal|ride/i.test(a.name) && !/crunch|sit.?up|exercise|kick/i.test(a.name));
@@ -941,6 +899,13 @@ export class ModelRider {
       if (this._skinTries > 600) this._skinDone = true;
     }
     this.group.updateMatrixWorld(true);
+    if (this.mixer && this.cfg.clipFollowsCrank) {
+      // one clip = one crank turn, so the feet stay on the pedals at any cadence
+      const T = this.action.getClip().duration, turn = Math.PI * 2;
+      this.action.time = ((((angle % turn) + turn) % turn) / turn) * T;
+      this.mixer.update(0);
+      return;
+    }
     if (this.mixer) {
       this.action.timeScale = cadence > 1 ? cadence / this.clipCadence : 0;
       this.mixer.update(dtSeconds);
@@ -968,10 +933,20 @@ export class ModelRider {
     // torso: lean toward the bars
     const top = B.neck || B.head;
     if (spine && top) {
-      const base = wp(spine);
-      const torsoLen = base.distanceTo(wp(top));
-      const lean = THREE.MathUtils.degToRad(this.cfg.torsoLean ?? 28); // spine-to-neck angle above horizontal: race position on the hoods
-      aim(spine, top, base.clone().addScaledVector(fwd, Math.cos(lean) * torsoLen).addScaledVector(up, Math.sin(lean) * torsoLen));
+      // every vertebra, not just the lowest: a skeleton standing with a curved spine (MPFB's bends most at
+      // spine_02) would otherwise keep that kink and grow a hump between the shoulder blades. Each segment
+      // goes at the lean angle (above horizontal, race position on the hoods), the upper ones a few degrees
+      // flatter ("backRound"), for a gently rounded, not broken, back.
+      const lean = THREE.MathUtils.degToRad(this.cfg.torsoLean ?? 28);
+      const round = THREE.MathUtils.degToRad(this.cfg.backRound ?? 4);
+      const chain = [...B.spine, top];
+      const n = chain.length - 1;
+      for (let i = 0; i < n; i++) {
+        const base = wp(chain[i]);
+        const len = base.distanceTo(wp(chain[i + 1]));
+        const a = lean + round * ((n - 1) / 2 - i);
+        aim(chain[i], chain[i + 1], base.addScaledVector(fwd, Math.cos(a) * len).addScaledVector(up, Math.sin(a) * len));
+      }
     }
     // neck and head: aim them in world space (rotateOnWorldAxis is wrong here, it assumes an
     // unrotated parent and would roll the head sideways). The neck rises more steeply than the

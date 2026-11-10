@@ -164,6 +164,12 @@ export class ModelBike {
       o.receiveShadow = true;
       o.frustumCulled = false;
       if (/decal/i.test(o.material?.name || '')) this.hasDecal = true;
+      // decals lie a fraction of a millimetre over the paint: pull them forward in depth so the two
+      // don't z-fight (speckles) when the bike is seen from a distance
+      if (/decal|accent/i.test(o.material?.name || '')) {
+        o.material = o.material.clone();
+        Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+      }
       if (own) {
         if (color && /^paint/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(color); }
         if (tape && /^tape/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(tape); }
