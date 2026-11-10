@@ -42,11 +42,12 @@ const ROUTES = [
     curves: [[0.006, 4000, 0], [0.004, 1000, 1.3]],
   },
   {
-    // 500 m of flat oval: a lap every 40–50 s, and a flying 250 m from the back straight to the line. For short
-    // efforts on the track, and for trying laps and sprints (their records and tables) in minutes
-    id: 'velodrome', theme: 'meadow', group: 'flat',
-    name: 'Velodrome',
-    description: 'A flat 500 m oval: a lap every 45 s and a flying 250 m to the line. For short efforts and track intervals.',
+    // 500 m of flat oval road in a meadow (its id from when it was called the velodrome): a lap every 40–50 s, and
+    // a flying 250 m from the back straight to the line. For short efforts, and for trying laps and sprints (their
+    // records and tables) in minutes. Its two straights are 96 m apart: the 3D land and trees keep between them
+    id: 'velodrome', theme: 'meadow', group: 'flat', nearItself: true,
+    name: 'Meadow Ring',
+    description: 'A flat 500 m ring road through a meadow: a lap every 45 s and a flying 250 m to the line. For short efforts and intervals.',
     ...oval(),
     fixedSprints: [{ start: 250, length: 250, name: 'Flying 250 m' }],
   },

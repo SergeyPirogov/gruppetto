@@ -46,6 +46,8 @@
     <header class="lobby-top">
       <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
       <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
+      <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
+      <button id="hdr-account" class="hdr-account" hidden></button>
       <div class="dev-chips">
         <button class="dev-chip" data-key="trainer" data-open="devices"><i></i>Trainer</button>
         <button class="dev-chip" data-key="hr" data-open="devices"><i></i>Heart rate</button>
@@ -244,6 +246,23 @@
         <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
         <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
       </div>
+      <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
+      <div class="card" id="social-card" data-panel="profile" data-off="1" hidden>
+        <h2>Account &amp; leaderboards</h2>
+        <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps in the tables with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
+        <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
+        <div id="social-in" hidden>
+          <p class="muted" id="social-who"></p>
+          <label class="check"><input type="checkbox" id="f-social-public"> Show me in the tables</label>
+          <div class="row icu-row">
+            <button id="btn-social-edit">Name in the tables…</button>
+            <button id="btn-social-out" class="ghost">Sign out</button>
+            <button id="btn-social-delete" class="ghost">Delete account</button>
+          </div>
+        </div>
+        <p class="muted" id="social-status"></p>
+        <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+      </div>
       <div class="card" data-panel="profile">
         <h2>Profile &amp; settings</h2>
         <div class="fields">
@@ -391,23 +410,6 @@
           <button id="btn-strava-forget" hidden>Disconnect</button>
           <span id="strava-status" class="muted"></span>
         </div>
-      </div>
-      <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
-      <div class="card" id="social-card" data-panel="profile" data-off="1" hidden>
-        <h2>Account &amp; leaderboards</h2>
-        <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps in the tables with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
-        <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
-        <div id="social-in" hidden>
-          <p class="muted" id="social-who"></p>
-          <label class="check"><input type="checkbox" id="f-social-public"> Show me in the tables</label>
-          <div class="row icu-row">
-            <button id="btn-social-edit">Name in the tables…</button>
-            <button id="btn-social-out" class="ghost">Sign out</button>
-            <button id="btn-social-delete" class="ghost">Delete account</button>
-          </div>
-        </div>
-        <p class="muted" id="social-status"></p>
-        <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
       </div>
       <div class="card" data-panel="history">
         <h2>Ride history</h2>

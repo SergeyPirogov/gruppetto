@@ -83,8 +83,9 @@ async function openApp({ config = true, signedIn = false, verifier = false, loca
     const u = route.request().url();
     if (u.startsWith(SB)) return mock ? mock.handler(route) : route.abort();
     if (!u.startsWith(APP)) { outside.push(u); return route.abort(); } // nothing else leaves the test
-    if (config && u.startsWith(`${APP}js/social-config.js`)) {
-      return route.fulfill({ contentType: 'text/javascript', body: `export const SUPABASE_URL = '${SB}';\nexport const SUPABASE_ANON_KEY = 'anon-key';\n` });
+    if (u.startsWith(`${APP}js/social-config.js`)) { // the mock project, or none (never the real one in the repo)
+      const [url, key] = config ? [SB, 'anon-key'] : ['', ''];
+      return route.fulfill({ contentType: 'text/javascript', body: `export const SUPABASE_URL = '${url}';\nexport const SUPABASE_ANON_KEY = '${key}';\n` });
     }
     return route.continue();
   });
@@ -139,6 +140,7 @@ test('without a project nothing social shows, and nothing goes to Supabase', asy
   const { page, context, errors } = await openApp({ config: false, mock, local: LOCAL });
   assert.equal(await page.isHidden('#social-card'), true);
   assert.equal(await page.isHidden('#route-board'), true);
+  assert.equal(await page.isHidden('#hdr-account'), true);
   await page.waitForTimeout(500);
   assert.equal(mock.db.requests.length, 0);
   assert.deepEqual(errors, []);
@@ -152,7 +154,8 @@ test('signing in: back from Google, this device\'s profile and the account\'s me
   const local = { ...LOCAL, 'gruppetto.records': { lap: { rolling: 900, coast: 1200 }, seg: { 'rolling-c1': 190 }, segTrace: { 'rolling-c1': [0, 10] }, top: { 'rolling-s1': 50 } } };
   const { page, context, errors } = await openApp({ mock, local, verifier: true, query: '?code=google-code' });
   await page.waitForFunction(() => !document.getElementById('social-in').hidden);
-  await page.waitForFunction(() => document.getElementById('f-ftp').value === '255'); // the account's profile is newer
+  await page.waitForFunction(() => document.getElementById('f-ftp').value === '255');
+  assert.match(await page.textContent('#hdr-account'), /Olena R|Olena/); // the lobby shows who you are // the account's profile is newer
   assert.equal(new URL(page.url()).search, ''); // the code left the address
   const exchange = mock.db.requests.find((r) => r.path === '/auth/v1/token');
   assert.match(exchange.search, /grant_type=pkce/);
@@ -205,7 +208,8 @@ test('a ride in the simulator sends nothing to the tables', async () => {
   await rideSprint(page, { real: false });
   await page.waitForTimeout(800);
   assert.equal(mock.db.requests.filter((r) => r.path.endsWith('/submit_efforts')).length, 0);
-  assert.equal(await page.isHidden('#sum-social'), true);
+  assert.match(await page.textContent('#sum-social-text'), /Simulator ride/); // said why, rather than nothing
+  assert.equal(await page.isHidden('#btn-social-cta'), true);
   assert.deepEqual(errors, []);
   await context.close();
 });

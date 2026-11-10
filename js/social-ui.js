@@ -94,8 +94,29 @@ function buildUi() {
   $('f-lang')?.addEventListener('change', () => { ctx.settings.settingsUpdatedAt = Date.now(); ctx.saveSettingsRaw(); });
 }
 
+/** The way to the account from the lobby: «Sign in with Google», or, signed in, who you are in the tables. */
+function renderHeader() {
+  const b = $('hdr-account');
+  if (!b) return;
+  const u = currentUser();
+  b.hidden = false;
+  b.classList.toggle('in', !!u);
+  b.innerHTML = u ? `🏆 <span>${ctx.esc(profileRow?.display_name || u.email || '')}</span>` : `${GOOGLE_G}<span>${ctx.esc(tr('Sign in with Google'))}</span>`;
+  b.title = u ? tr('Your account and leaderboards') : tr('Sign in to put your times in the tables, and to have your profile on every device');
+  b.onclick = u ? showAccount : () => { ctx.track('social', 'sign-in-header'); signIn(redirect()).catch((e) => status(e.message)); };
+}
+
+/** Profile, at the account card. */
+function showAccount() {
+  ctx.openDrawer('profile');
+  requestAnimationFrame(() => $('social-card').scrollIntoView({ block: 'start' }));
+}
+
+const GOOGLE_G = '<svg viewBox="0 0 48 48" class="g-logo" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+
 function renderCard() {
   if (!on()) return;
+  renderHeader();
   const u = currentUser();
   $('social-out').hidden = !!u;
   $('social-in').hidden = !u;
@@ -213,12 +234,23 @@ async function flush(items = []) {
  * After a ride (items: its results that may go in the tables). Signed in: they go now (or wait for the
  * network) and the finish screen shows the places; signed out: the finish screen asks you to sign in.
  */
-export async function socialAfterRide(items, { firstName } = {}) {
+export async function socialAfterRide(items, { firstName, simulated = false, timed = false } = {}) {
   if (!on()) return;
   const cta = $('sum-social');
   cta.hidden = true;
   results = new Map();
-  if (!items.length) { if (currentUser()) sync().catch(() => {}); return; }
+  if (!items.length) {
+    if (currentUser()) sync().catch(() => {});
+    // laps or segments were timed, but none go to the tables: say why, rather than nothing
+    if (timed) {
+      $('sum-social-text').textContent = simulated
+        ? tr('Simulator ride: these times stay on this device. The tables take rides on a trainer only.')
+        : tr('These times did not pass the checks (power, speed, weight), so they are not in the tables.');
+      $('btn-social-cta').hidden = true;
+      cta.hidden = false;
+    }
+    return;
+  }
   if (!currentUser()) {
     $('btn-social-cta').hidden = false;
     $('btn-social-cta').textContent = tr('Sign in, so your time on {climb} goes into the table', { climb: firstName || tr('this route') });
@@ -303,15 +335,20 @@ export async function renderRoute(route = ctx?.currentRoute()) {
     if (ctx.currentRoute()?.id !== route.id) return;
     box.innerHTML = html;
     box.hidden = false;
-    box.querySelector('button').onclick = () => openBoard(route);
+    box.querySelector('[data-board]').onclick = () => openBoard(route);
+    const si = box.querySelector('[data-signin]');
+    if (si) si.onclick = () => { ctx.track('social', 'sign-in-board'); signIn(redirect()).catch((e) => status(e.message)); };
   }
   try {
     const b = await leaderboard({ segment: `${route.id}-lap`, version: versionOf(route) });
     const lead = b.rows[0], me = b.rows.find((r) => r.me);
-    const what = route.oneWay ? tr('Finish') : tr('Lap');
-    const html = `<span>🏆 ${what}: ${lead ? `${flagOf(lead.country)} ${ctx.esc(lead.display_name)} <b>${ctx.fmtTime(Number(lead.time_s))}</b>` : tr('no times yet')}`
-      + `${me ? ` · ${tr('you {time}, #{place} of {total}', { time: ctx.fmtTime(Number(me.time_s)), place: me.place, total: b.total })}` : ''}</span>`
-      + `<button class="pill-btn">${tr('Leaderboards')}</button>`;
+    const who = lead && `${flagOf(lead.country)} ${ctx.esc(lead.display_name)} <b>${ctx.fmtTime(Number(lead.time_s))}</b>`;
+    const head = lead
+      ? (route.oneWay ? tr('🏆 Best finish: {who}', { who }) : tr('🏆 Best lap: {who}', { who }))
+      : (route.oneWay ? tr('🏆 No finish times in the table yet: ride it on a trainer to be the first') : tr('🏆 No lap times in the table yet: ride a lap on a trainer to be the first'));
+    const html = `<span>${head}${me ? ` · ${tr('yours {time}, {place} of {total}', { time: ctx.fmtTime(Number(me.time_s)), place: me.place, total: b.total })}` : ''}`
+      + `${currentUser() ? '' : ` <button class="link-btn" data-signin>${tr('Sign in so your time is here')}</button>`}</span>`
+      + `<button class="pill-btn" data-board>${tr('Leaderboards')}</button>`;
     boards.set(route.id, { at: Date.now(), html });
     show(html);
   } catch { box.hidden = true; }

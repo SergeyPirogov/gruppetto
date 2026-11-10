@@ -436,7 +436,7 @@ function renderRouteList() {
   // so rolling hills still read as hills and only the passes fill the box
   const cardScale = 0.4 * Math.max(...routes.filter((r) => !r.custom).map((r) => r.maxElev - r.minElev));
   for (const g of ROUTE_GROUPS) {
-    const list = routes.filter((r) => (r.custom ? 'mine' : r.group) === g.id);
+    const list = routes.filter((r) => (r.custom ? 'mine' : r.group) === g.id).sort((a, b) => a.length - b.length); // shortest first
     if (!list.length && g.id !== 'mine') continue;
     const sec = document.createElement('div');
     sec.className = 'route-group';
@@ -2426,6 +2426,8 @@ function finishRide() {
     route: ride.route, version: versionOf(ride.route), simulated: ride.simulated && !window.__pretendTrainer,
     laps: ride.lapEfforts, efforts: ride.efforts, weight: settings.weight, ftp: settings.ftp, client: SOCIAL_CLIENT,
   });
+  const socialSim = ride.simulated && !window.__pretendTrainer;
+  const socialTimed = !ride.route.custom && (ride.lapEfforts.length + ride.efforts.length) > 0;
   const socialFirst = ride.efforts.find((x) => socialItems.some((i) => i.segment_id === x.segId))?.name.replace(/^\S+\s/, '') || ride.route.name;
   ride = null;
   if (trainer.connected && trainer.controllable) {
@@ -2437,7 +2439,7 @@ function finishRide() {
   deleteDraft();
   $('ride').hidden = true;
   showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
-  socialAfterRide(socialItems, { firstName: socialFirst });
+  socialAfterRide(socialItems, { firstName: socialFirst, simulated: socialSim, timed: socialTimed });
 }
 
 // ---------- Ride history (#19) ----------
