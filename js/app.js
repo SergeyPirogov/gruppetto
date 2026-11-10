@@ -1539,7 +1539,7 @@ function frame(now) {
     }
   }
   const riders = [
-    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane, v: ride.v },
     ...ride.bots,
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),

@@ -2749,7 +2749,10 @@ export class Scene3D {
         const ds = (d - R.lastD) / span, dl = (lane - R.lastLane) / span;
         const yaw = Math.abs(ds) < 0.5 || Math.abs(ds) > 40 ? 0 : Math.atan2(dl, Math.max(2, ds));
         R.yaw = (R.yaw || 0) + (yaw - (R.yaw || 0)) * Math.min(1, span * 5);
-        R.speed = Math.abs(ds) > 40 ? 0 : ds; // a jump along the road is not speed
+        // the rider's own speed when the app gives it: distance over this frame's span is noisy (the ride steps
+        // on the frame's timestamp, the span is measured here), ±50 % in a bend, and the lean goes as v², so the
+        // rider shook in every bend
+        R.speed = Number.isFinite(r.v) && !r.oncoming ? r.v : Math.abs(ds) > 40 ? 0 : ds; // a jump along the road is not speed
       }
       // lean into a bend as a real rider does: tan(lean) = v² · curvature / g, eased, at most 20°
       const curv = (this.frame(d + 3).h - this.frame(d - 3).h) / 6;
