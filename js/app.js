@@ -24,7 +24,7 @@ import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js'
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
-import { averages, rideItems } from './social-core.js';
+import { averages, rideItems, categoryOf } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
 import { initSocialUi, socialSettingsSaved, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
@@ -106,7 +106,7 @@ const gradeColor = (g) => g > 0.1 ? '#e11d48' : g > 0.07 ? '#ef4444' : g > 0.04 
 const fmtDelta = (d) => `${d < 0 ? '−' : '+'}${fmtTime(Math.abs(d))}`;
 const writeSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
 // a change to a setting that follows you to your other devices (name, weight, FTP…) goes up to the account too
-const saveSettings = () => { writeSettings(); socialSettingsSaved(); };
+const saveSettings = () => { writeSettings(); socialSettingsSaved(); if (!$('drawer').hidden) renderMeHero(); };
 /** The profile's fields as the settings are now (after the account brought them from another device). */
 function refreshProfileForm() {
   const fields = [['f-name', 'name'], ['f-jersey', 'jersey'], ['f-stripe', 'stripe'], ['f-weight', 'weight'], ['f-height', 'height'], ['f-ftp', 'ftp'], ['f-wprime', 'wPrimeKj'], ['f-lthr', 'lthr']];
@@ -731,7 +731,7 @@ function openFtpTest(from) {
 }
 $('ftp-test').onclick = () => openFtpTest('lobby');
 $('f-ftp-test').onclick = () => openFtpTest('profile');
-$('ftp-know').onclick = () => { track('ftp-box', 'know'); openDrawer('profile'); requestAnimationFrame(() => { $('f-ftp').focus(); $('f-ftp').select(); }); };
+$('ftp-know').onclick = () => { track('ftp-box', 'know'); openDrawer('profile', 'me'); requestAnimationFrame(() => { $('f-ftp').focus(); $('f-ftp').select(); }); };
 $('ftp-close').onclick = () => { track('ftp-box', 'close'); try { localStorage.setItem(FTP_BOX_KEY, '1'); } catch { /* private mode */ } renderFtpBox(); };
 $('why-zwo').onclick = () => { track('why', 'zwo'); $('wk-import-file').click(); };
 $('why-icu').addEventListener('click', () => track('why', 'icu'));
@@ -963,11 +963,12 @@ function updateSummary() {
   el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? (g.friend ? tr('against {name}', { name: g.name || tr('a friend') }) : settings.ghost === 'last' ? tr('against your last ride') : tr('against your best ride')) : null, pacer].filter(Boolean).join(' · ');
 }
 
-/** Side drawer with Devices, Profile and intervals.icu, opened from the top bar. */
-function openDrawer(panel) {
-  // intervals.icu lives on the Profile page now: asked for, the page opens at it
+/** Side drawer with Devices, Profile and intervals.icu, opened from the top bar; Profile at one of its tabs. */
+function openDrawer(panel, tab) {
+  // intervals.icu lives on the Profile page now, on its Connections tab: asked for, the page opens at it
   const atIcu = panel === 'icu';
-  if (atIcu) panel = 'profile';
+  if (atIcu) { panel = 'profile'; tab = 'links'; }
+  if (panel === 'profile') { showProfileTab(tab || profileTab); renderMeHero(); }
   const drawer = $('drawer');
   drawer.hidden = false;
   drawer.classList.toggle('in-ride', !!ride);
@@ -980,6 +981,34 @@ function openDrawer(panel) {
   markRail(panel);
   if (atIcu) requestAnimationFrame(() => $('icu-card').scrollIntoView({ block: 'start' }));
 }
+// ---------- Profile: Me, Connections, Settings ----------
+const PTAB_KEY = 'gruppetto.profile-tab';
+let profileTab = (() => { try { return localStorage.getItem(PTAB_KEY) || 'me'; } catch { return 'me'; } })();
+/** One of Profile's tabs (me, links, settings): the cards of the others step aside. */
+function showProfileTab(t) {
+  if (!['me', 'links', 'settings'].includes(t)) t = 'me';
+  profileTab = t;
+  $('drawer').dataset.ptab = t;
+  for (const b of document.querySelectorAll('[data-ptab-go]')) b.classList.toggle('sel', b.dataset.ptabGo === t);
+  try { localStorage.setItem(PTAB_KEY, t); } catch { /* private mode */ }
+  $('drawer').querySelector('.drawer-panel').scrollTop = 0;
+}
+for (const b of document.querySelectorAll('[data-ptab-go]')) b.onclick = () => showProfileTab(b.dataset.ptabGo);
+
+/** The top of Me: who you are at a glance (initial, name, level) and the numbers the rides go by. */
+function renderMeHero() {
+  const box = $('me-hero');
+  if (!box) return;
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  const L = levelOf(progress?.xp || 0), wkg = settings.ftp / settings.weight;
+  const initial = named ? esc(settings.name.trim()[0].toUpperCase()) : '<svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="9" r="3.6"/><path d="M5.5 19.5c1.2-3.3 3.6-5 6.5-5s5.3 1.7 6.5 5"/></svg>';
+  const stat = (label, value) => `<div><label>${label}</label><b>${value}</b></div>`;
+  box.innerHTML = `<div class="me-who"><span class="avatar me-avatar" style="background:${esc(settings.jersey)}">${initial}</span>`
+    + `<div><b>${named ? esc(settings.name.trim()) : tr('Your profile')}</b><small>${tr('Level {n}', { n: L.level })} · ${progress?.rides || 0} ${tr('rides')} · ${Math.round(progress?.km || 0)} ${U.km}</small>`
+    + `<i class="me-lvl"><i style="width:${Math.round(L.frac * 100)}%"></i></i></div></div>`
+    + `<div class="me-stats">${stat('FTP', `${settings.ftp} ${U.W}`)}${stat(U.wkg, wkg > 0 ? wkg.toFixed(1) : '—')}${stat(tr('Category'), categoryOf(settings.ftp, settings.weight))}${stat(tr('Weight'), `${settings.weight} ${tr('kg')}`)}</div>`;
+}
+
 /** The rail lights the section open in the drawer, and Ride again once it closes. */
 function markRail(panel) {
   for (const b of document.querySelectorAll('.rail .rail-btn')) b.classList.toggle('on', panel ? (b.dataset.open || b.dataset.page) === panel : b.hasAttribute('data-home'));
@@ -3500,7 +3529,7 @@ function initStrava() {
   const url = new URL(location.href);
   for (const k of ['state', 'code', 'scope', 'error']) url.searchParams.delete(k);
   window.history.replaceState(null, '', url);
-  openDrawer('profile');
+  openDrawer('profile', 'links');
   requestAnimationFrame(() => $('strava-card').scrollIntoView({ block: 'start' }));
   if (back.error) {
     $('strava-status').textContent = back.error === 'no-write' ? tr('Strava: tick «Upload your activities» to let Gruppetto send rides') : tr('Strava: not connected');
@@ -3612,7 +3641,7 @@ $('f-pacer-name').oninput = () => {
   settings.pacerName = $('f-pacer-name').value; saveSettings();
   if (ride?.pacer) ride.pacer.name = settings.pacerName.trim() || tr('Pacer');
 };
-$('btn-settings').onclick = () => openDrawer('profile');
+$('btn-settings').onclick = () => openDrawer('profile', 'settings');
 $('rail-workouts').onclick = () => openWorkoutMenu();
 for (const id of ['f-name', 'f-jersey']) $(id).addEventListener('input', () => { renderAvatar(); renderGreeting(); });
 $('btn-challenge').onclick = () => challengeFriend(shown.entry);
@@ -4100,7 +4129,7 @@ initLobby();
 offerDraft();
 // accounts and leaderboards: nothing at all without a project in social-config.js
 initSocialUi({
-  settings, records, lang, locale, tr, esc, fmtTime, track, openDrawer, stravaState: STRAVA_STATE,
+  settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,
   getProgress: () => progress, setProgress: (p) => { progress = p; saveProgress(); },
   saveSettingsRaw: writeSettings, saveRecords,
   currentRoute: () => routes.find((x) => x.id === settings.routeId) || routes[0],

@@ -157,6 +157,7 @@ test('signing in: back from Google, this device\'s profile and the account\'s me
   await page.waitForFunction(() => document.getElementById('f-ftp').value === '255');
   assert.match(await page.textContent('#hdr-account'), /Olena R|Olena/); // the lobby shows who you are // the account's profile is newer
   assert.equal(new URL(page.url()).search, ''); // the code left the address
+  assert.equal(await page.evaluate(() => document.getElementById('drawer').hidden || document.getElementById('social-card').hidden), true); // not sent to Profile (a first visit may open Devices)
   const exchange = mock.db.requests.find((r) => r.path === '/auth/v1/token');
   assert.match(exchange.search, /grant_type=pkce/);
   assert.match(exchange.body, /verifier-123/);

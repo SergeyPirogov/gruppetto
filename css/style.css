@@ -1372,3 +1372,25 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .hdr-account span { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
 .g-logo { width: 18px; height: 18px; flex: none; }
 .link-btn { width: auto; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+
+/* ---------- Profile: tabs and the Me card ---------- */
+.ptabs { display: flex; gap: 4px; padding: 4px; border-radius: 12px; position: sticky; top: 0; z-index: 2; }
+.ptabs button { flex: 1; width: auto; padding: 9px 10px; border: 0; border-radius: 9px; background: none; color: var(--muted); font-weight: 700; }
+.ptabs button.sel { background: var(--accent); color: #1a1205; }
+#drawer[data-ptab="me"] [data-ptab]:not([data-ptab="me"]),
+#drawer[data-ptab="links"] [data-ptab]:not([data-ptab="links"]),
+#drawer[data-ptab="settings"] [data-ptab]:not([data-ptab="settings"]) { display: none; }
+.me-hero { display: grid; gap: 14px; }
+.me-who { display: flex; align-items: center; gap: 14px; }
+.me-who > div { display: grid; gap: 3px; flex: 1; min-width: 0; }
+.me-who b { font-size: 1.35rem; overflow-wrap: anywhere; }
+.me-who small { color: var(--muted); }
+.avatar.me-avatar { width: 56px; height: 56px; font-size: 1.5rem; flex: none; }
+.avatar.me-avatar .ic { width: 30px; height: 30px; }
+.me-lvl { display: block; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, .1); overflow: hidden; margin-top: 3px; }
+.me-lvl i { display: block; height: 100%; background: var(--accent); }
+.me-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.me-stats div { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.me-stats label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.me-stats b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .me-stats { grid-template-columns: repeat(2, 1fr); } }
