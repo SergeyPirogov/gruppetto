@@ -446,7 +446,7 @@ function renderRouteList() {
       const b = document.createElement('button');
       b.className = 'option';
       b.dataset.id = r.id;
-      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}${r.maxGrade >= 0.02 ? ` · ${tr('max {n}%', { n: Math.round(r.maxGrade * 100) })}` : ''}</small><small>${esc(r.description)}</small><canvas></canvas>`
+      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom || r.length < 1000 ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}${r.maxGrade >= 0.02 ? ` · ${tr('max {n}%', { n: Math.round(r.maxGrade * 100) })}` : ''}</small><small>${esc(r.description)}</small><canvas></canvas>`
         + (r.custom ? `<span class="rc-del" title="${tr('Delete this route')}" role="button">✕</span>` : '');
       b.onclick = (ev) => {
         if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
@@ -476,7 +476,7 @@ function localizeClimbs(r) {
     r.description = `${from} ${r.oneWay ? tr('Point to point, finish at {km} km.', { km }) : tr('A loop of {km} km: ride it lap after lap.', { km })}`;
   }
   for (const c of r.climbs) { const m = /^Climb (\d+)$/.exec(c.name); c.name = m ? tr('Climb {n}', { n: m[1] }) : tr(c.name); }
-  for (const s of r.sprints || []) { const m = /^Sprint (\d+)$/.exec(s.name); if (m) s.name = tr('Sprint {n}', { n: m[1] }); }
+  for (const s of r.sprints || []) { const m = /^Sprint (\d+)$/.exec(s.name); s.name = m ? tr('Sprint {n}', { n: m[1] }) : tr(s.name); }
 }
 
 function markRoute() {
@@ -2196,7 +2196,7 @@ function updateProgress() {
   $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
   const best = bestLap(ride.route);
   if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} ${U.km} · ${fmtTime(ride.elapsed)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
-  else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
+  else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(L < 1000 ? 1 : 0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   if (ride.workout) {
     const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
     $('wk-name').textContent = ride.workout.name;

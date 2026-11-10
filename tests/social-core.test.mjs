@@ -200,3 +200,23 @@ test('social: a table has one row a person, the top 10 and my window, filtered',
   assert.equal(flagOf('UA'), '🇺🇦');
   assert.equal(flagOf(''), '');
 });
+
+test('social: a ride sends one result a segment, its fastest', () => {
+  const route = routes.find((r) => r.id === 'velodrome');
+  const lap = (time, k) => ({ segId: 'velodrome-lap', kind: 'lap', time, length: 500, power: 250, hr: 150, at: Date.UTC(2026, 10, 9, 10, k) });
+  const items = rideItems({ route, version: 'v', weight: 75, ftp: 250, laps: [lap(48, 1), lap(44.2, 2), lap(46, 3)], efforts: [] });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].time_s, 44.2);
+});
+
+test('velodrome: a closed 500 m flat oval with a flying 250 m', () => {
+  const r = routes.find((x) => x.id === 'velodrome');
+  assert.equal(r.length, 500);
+  assert.equal(r.elevationGain, 0);
+  assert.equal(r.climbs.length, 0);
+  assert.deepEqual(r.sprints.map((s) => [s.id, s.start, s.length]), [['velodrome-s1', 250, 250]]);
+  let h = 0, x = 0, y = 0; // the road as render3d lays it: it comes back to the line, facing the same way
+  for (const s of r.segments) { h += (s.curve * 2.5) / 5; x += 5 * Math.cos(h); y += 5 * Math.sin(h); }
+  assert.ok(Math.abs(h - 2 * Math.PI) < 1e-9);
+  assert.ok(Math.hypot(x, y) < 0.5);
+});

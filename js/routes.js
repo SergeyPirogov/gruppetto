@@ -3,6 +3,23 @@
 
 export const SEG = 5; // metres per segment
 
+/**
+ * A velodrome's oval as data, one value per 5 m segment: two straights and two bends of 180°, with an easement
+ * into and out of each bend, dead flat. The 3D road turns curve × TURN / SEG radians a segment (render3d.js),
+ * so each bend's curvatures add up to π there.
+ */
+function oval({ straight = 100, bend = 150, ease = 30 } = {}) {
+  const TURN = 2.5;
+  const bendShape = [];
+  const n = Math.round(bend / SEG), e = Math.round(ease / SEG);
+  for (let i = 0; i < n; i++) bendShape.push(Math.min(1, (i + 0.5) / e, (n - i - 0.5) / e));
+  const k = (Math.PI * SEG) / (TURN * bendShape.reduce((a, b) => a + b, 0));
+  const half = Math.round(straight / 2 / SEG), flat = Array(2 * half).fill(0);
+  // from the middle of the home straight: half a straight, a bend, the back straight, a bend, half a straight
+  const curve = [...flat.slice(0, half), ...bendShape.map((x) => x * k), ...flat, ...bendShape.map((x) => x * k), ...flat.slice(0, half)];
+  return { elev: curve.map(() => 100), curve };
+}
+
 // theme: visual world (see themes.js). Grades stay under ~10 %.
 const ROUTES = [
   {
@@ -23,6 +40,15 @@ const ROUTES = [
     length: 8000,
     hills: [[3, 8000, 0], [2, 2000, 1], [1, 1000, 2]],
     curves: [[0.006, 4000, 0], [0.004, 1000, 1.3]],
+  },
+  {
+    // 500 m of flat oval: a lap every 40–50 s, and a flying 250 m from the back straight to the line. For short
+    // efforts on the track, and for trying laps and sprints (their records and tables) in minutes
+    id: 'velodrome', theme: 'meadow', group: 'flat',
+    name: 'Velodrome',
+    description: 'A flat 500 m oval: a lap every 45 s and a flying 250 m to the line. For short efforts and track intervals.',
+    ...oval(),
+    fixedSprints: [{ start: 250, length: 250, name: 'Flying 250 m' }],
   },
   {
     id: 'lakes', theme: 'river',
@@ -146,7 +172,9 @@ export class Route {
     this.minElev = Math.min(...this.segments.map((s) => s.elev));
     this.maxElev = Math.max(...this.segments.map((s) => s.elev));
     this.climbs = findClimbs(this);
-    this.sprints = findSprints(this);
+    this.sprints = def.fixedSprints // a route that says where its sprints are (the velodrome: too short to find any)
+      ? def.fixedSprints.map((x, k) => ({ start: x.start, length: x.length, end: x.start + x.length, id: `${this.id}-s${k + 1}`, name: x.name || `Sprint ${k + 1}`, sprint: true, grade: 0 }))
+      : findSprints(this);
     this.group ||= routeGroup(this);
   }
 

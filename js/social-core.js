@@ -146,8 +146,8 @@ export function averages(samples, from, to) {
 }
 
 /**
- * What a ride sends to the tables: its laps (or the finish) and its climbs and sprints, on a built-in route,
- * never from the simulator. `efforts` and `laps` come from the ride as { segId, kind, time, length, power, hr,
+ * What a ride sends to the tables: its best lap (or the finish) and its best on each climb and sprint, on a
+ * built-in route, never from the simulator. `efforts` and `laps` come from the ride as { segId, kind, time, length, power, hr,
  * top?, at }. The ones the server would refuse stay here.
  */
 export function rideItems({ route, version, simulated, efforts = [], laps = [], weight, ftp, client }) {
@@ -161,7 +161,11 @@ export function rideItems({ route, version, simulated, efforts = [], laps = [], 
       weight_kg: Math.round(weight * 10) / 10, ftp: Math.round(ftp), top_speed_kmh: x.top ?? null,
       ridden_at: new Date(x.at).toISOString(), client: client || null,
     };
-    if (checkEffort(item).ok) out.push(item);
+    if (!checkEffort(item).ok) continue;
+    // one a segment: the fastest of the ride (a table keeps one time a person anyway, and a short lap
+    // ridden 80 times an hour would use up the day's 200 results)
+    const k = out.findIndex((y) => y.segment_id === item.segment_id);
+    if (k < 0) out.push(item); else if (item.time_s < out[k].time_s) out[k] = item;
   }
   return out;
 }
