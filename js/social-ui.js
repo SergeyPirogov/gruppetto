@@ -213,12 +213,23 @@ async function flush(items = []) {
  * After a ride (items: its results that may go in the tables). Signed in: they go now (or wait for the
  * network) and the finish screen shows the places; signed out: the finish screen asks you to sign in.
  */
-export async function socialAfterRide(items, { firstName } = {}) {
+export async function socialAfterRide(items, { firstName, simulated = false, timed = false } = {}) {
   if (!on()) return;
   const cta = $('sum-social');
   cta.hidden = true;
   results = new Map();
-  if (!items.length) { if (currentUser()) sync().catch(() => {}); return; }
+  if (!items.length) {
+    if (currentUser()) sync().catch(() => {});
+    // laps or segments were timed, but none go to the tables: say why, rather than nothing
+    if (timed) {
+      $('sum-social-text').textContent = simulated
+        ? tr('Simulator ride: these times stay on this device. The tables take rides on a trainer only.')
+        : tr('These times did not pass the checks (power, speed, weight), so they are not in the tables.');
+      $('btn-social-cta').hidden = true;
+      cta.hidden = false;
+    }
+    return;
+  }
   if (!currentUser()) {
     $('btn-social-cta').hidden = false;
     $('btn-social-cta').textContent = tr('Sign in, so your time on {climb} goes into the table', { climb: firstName || tr('this route') });
@@ -308,9 +319,11 @@ export async function renderRoute(route = ctx?.currentRoute()) {
   try {
     const b = await leaderboard({ segment: `${route.id}-lap`, version: versionOf(route) });
     const lead = b.rows[0], me = b.rows.find((r) => r.me);
-    const what = route.oneWay ? tr('Finish') : tr('Lap');
-    const html = `<span>🏆 ${what}: ${lead ? `${flagOf(lead.country)} ${ctx.esc(lead.display_name)} <b>${ctx.fmtTime(Number(lead.time_s))}</b>` : tr('no times yet')}`
-      + `${me ? ` · ${tr('you {time}, #{place} of {total}', { time: ctx.fmtTime(Number(me.time_s)), place: me.place, total: b.total })}` : ''}</span>`
+    const who = lead && `${flagOf(lead.country)} ${ctx.esc(lead.display_name)} <b>${ctx.fmtTime(Number(lead.time_s))}</b>`;
+    const head = lead
+      ? (route.oneWay ? tr('🏆 Best finish: {who}', { who }) : tr('🏆 Best lap: {who}', { who }))
+      : (route.oneWay ? tr('🏆 No finish times in the table yet: ride it on a trainer to be the first') : tr('🏆 No lap times in the table yet: ride a lap on a trainer to be the first'));
+    const html = `<span>${head}${me ? ` · ${tr('yours {time}, {place} of {total}', { time: ctx.fmtTime(Number(me.time_s)), place: me.place, total: b.total })}` : ''}</span>`
       + `<button class="pill-btn">${tr('Leaderboards')}</button>`;
     boards.set(route.id, { at: Date.now(), html });
     show(html);

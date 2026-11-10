@@ -342,6 +342,11 @@ export const UK = {
   'Not believable, so not in the table': 'Неправдоподібно, тож не в таблиці',
   '#{place} of {total}': '#{place} з {total}', 'week #{n}': 'тиждень #{n}', 'Loading…': 'Завантаження…', '{n} riders': 'райдерів: {n}',
   'Unconfirmed: no heart rate, or close to the limit of the possible': 'Не підтверджено: без пульсу або близько до межі можливого',
-  'No connection to the tables: {error}': 'Немає зв’язку з таблицями: {error}', 'no times yet': 'ще немає часів',
-  'you {time}, #{place} of {total}': 'ти {time}, #{place} з {total}', '{time} this week, {cat}': '{time} цього тижня, {cat}',
+  'No connection to the tables: {error}': 'Немає зв’язку з таблицями: {error}',
+  '🏆 Best lap: {who}': '🏆 Найкраще коло: {who}', '🏆 Best finish: {who}': '🏆 Найкращий фініш: {who}',
+  '🏆 No lap times in the table yet: ride a lap on a trainer to be the first': '🏆 У таблиці кіл ще порожньо: проїдь коло на тренажері, і твій час буде першим',
+  '🏆 No finish times in the table yet: ride it on a trainer to be the first': '🏆 У таблиці фінішів ще порожньо: проїдь маршрут на тренажері, і твій час буде першим',
+  'yours {time}, {place} of {total}': 'твій {time}, {place}-й з {total}',
+  'Simulator ride: these times stay on this device. The tables take rides on a trainer only.': 'Заїзд у симуляторі: ці часи лишаються на пристрої. У таблиці потрапляють лише заїзди на тренажері.',
+  'These times did not pass the checks (power, speed, weight), so they are not in the tables.': 'Ці часи не пройшли перевірку (потужність, швидкість, вага), тож у таблиці їх немає.', '{time} this week, {cat}': '{time} цього тижня, {cat}',
 };

@@ -83,8 +83,9 @@ async function openApp({ config = true, signedIn = false, verifier = false, loca
     const u = route.request().url();
     if (u.startsWith(SB)) return mock ? mock.handler(route) : route.abort();
     if (!u.startsWith(APP)) { outside.push(u); return route.abort(); } // nothing else leaves the test
-    if (config && u.startsWith(`${APP}js/social-config.js`)) {
-      return route.fulfill({ contentType: 'text/javascript', body: `export const SUPABASE_URL = '${SB}';\nexport const SUPABASE_ANON_KEY = 'anon-key';\n` });
+    if (u.startsWith(`${APP}js/social-config.js`)) { // the mock project, or none (never the real one in the repo)
+      const [url, key] = config ? [SB, 'anon-key'] : ['', ''];
+      return route.fulfill({ contentType: 'text/javascript', body: `export const SUPABASE_URL = '${url}';\nexport const SUPABASE_ANON_KEY = '${key}';\n` });
     }
     return route.continue();
   });
@@ -205,7 +206,8 @@ test('a ride in the simulator sends nothing to the tables', async () => {
   await rideSprint(page, { real: false });
   await page.waitForTimeout(800);
   assert.equal(mock.db.requests.filter((r) => r.path.endsWith('/submit_efforts')).length, 0);
-  assert.equal(await page.isHidden('#sum-social'), true);
+  assert.match(await page.textContent('#sum-social-text'), /Simulator ride/); // said why, rather than nothing
+  assert.equal(await page.isHidden('#btn-social-cta'), true);
   assert.deepEqual(errors, []);
   await context.close();
 });
