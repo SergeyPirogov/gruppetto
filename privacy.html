@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gruppetto — конфіденційність · Privacy</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <style>
+    :root { --bg: #0d1422; --text: #e8edf5; --muted: #9aa7bb; --line: #223047; --accent: #ff7a1a; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 1.6rem; margin: 0 0 4px; }
+    h2 { font-size: 1.15rem; margin: 28px 0 6px; }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); }
+    nav { display: flex; gap: 12px; margin: 0 0 16px; }
+    section + section { border-top: 1px solid var(--line); margin-top: 40px; padding-top: 8px; }
+    table { border-collapse: collapse; width: 100%; }
+    td { border-top: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
+  </style>
+</head>
+<body>
+<main>
+  <nav><a href="./">← Gruppetto</a><a href="#uk">Українська</a><a href="#en">English</a></nav>
+
+  <section id="uk" lang="uk">
+    <h1>Конфіденційність</h1>
+    <p class="muted">Акаунт і лідерборди Gruppetto. Оновлено 10 листопада 2026.</p>
+    <p>Без входу Gruppetto нічого про тебе не зберігає поза твоїм браузером: заїзди, рекорди, налаштування лежать лише на цьому пристрої.
+      Усе, що нижче, стосується тільки тих, хто увійшов через Google.</p>
+
+    <h2>Що ми зберігаємо</h2>
+    <table>
+      <tr><td>Ім’я в таблицях, країна, стать</td><td>те, що ти вказав сам; країна й стать — необов’язкові</td></tr>
+      <tr><td>Профіль</td><td>вага, зріст, FTP, W′, пульсові межі й зони, кольори форми й велосипеда, мова</td></tr>
+      <tr><td>Рівні й рекорди</td><td>XP, бейджі, найкращі часи кіл, підйомів і спринтів</td></tr>
+      <tr><td>Результати сегментів</td><td>час на підйомі, спринті чи колі, середня потужність і пульс, вага й FTP на день заїзду, дата</td></tr>
+      <tr><td>Акаунт Google</td><td>email і ідентифікатор, які Google передає при вході</td></tr>
+    </table>
+    <p><b>Не зберігаємо ніколи:</b> ключ intervals.icu, зв’язок зі Strava, пристрої, секундні записи й історію заїздів — вони лишаються в браузері.</p>
+
+    <h2>Навіщо</h2>
+    <p>Щоб профіль і рекорди були однакові на кожному пристрої, і щоб твої часи стояли в таблицях поруч з іншими райдерами. Нічого не продаємо, реклами немає.</p>
+
+    <h2>Де</h2>
+    <p>У базі даних Supabase у Франкфурті (ЄС). Доступ до чужих даних закритий на рівні бази (Row Level Security): кожен читає й змінює лише свій профіль.</p>
+
+    <h2>Хто що бачить</h2>
+    <p>Публічно, у таблицях: ім’я, прапорець країни, час, Вт/кг, середній пульс і дата. Вагу, FTP і потужність окремо не показуємо.
+      Зніми «Показувати мене в таблицях» у профілі — і тебе в таблицях не буде, хоча результати зберігаються для тебе.</p>
+
+    <h2>Статистика</h2>
+    <p>Анонімні події (GoatCounter, без cookies): наприклад, «вхід» чи «результати відправлено», без імені, email і чисел, що відрізняють одного райдера від іншого. Вимикається в профілі.</p>
+
+    <h2>Як видалити</h2>
+    <p>Профіль → «Акаунт і лідерборди» → «Видалити акаунт». Акаунт, профіль і всі результати зникають одразу й назавжди. Дані на твоєму пристрої лишаються.</p>
+
+    <h2>Контакт</h2>
+    <p>Питання й прохання — у <a href="https://github.com/SergeyPirogov/gruppetto/issues">issues на GitHub</a>.</p>
+  </section>
+
+  <section id="en" lang="en">
+    <h1>Privacy</h1>
+    <p class="muted">Gruppetto accounts and leaderboards. Updated 10 November 2026.</p>
+    <p>Without signing in, Gruppetto keeps nothing about you outside your browser: rides, records and settings stay on this device.
+      Everything below is about those who sign in with Google.</p>
+
+    <h2>What we keep</h2>
+    <table>
+      <tr><td>Name in the tables, country, gender</td><td>what you give yourself; country and gender are optional</td></tr>
+      <tr><td>Profile</td><td>weight, height, FTP, W′, heart rate limits and zones, jersey and bike colours, language</td></tr>
+      <tr><td>Levels and records</td><td>XP, badges, best lap, climb and sprint times</td></tr>
+      <tr><td>Segment results</td><td>time on a climb, sprint or lap, average power and heart rate, weight and FTP on the day, the date</td></tr>
+      <tr><td>Google account</td><td>the email and id Google passes on at sign-in</td></tr>
+    </table>
+    <p><b>Never kept:</b> your intervals.icu key, your Strava link, devices, second-by-second records and ride history — they stay in the browser.</p>
+
+    <h2>Why</h2>
+    <p>So your profile and records are the same on every device, and your times stand in the tables beside other riders. Nothing is sold, there are no ads.</p>
+
+    <h2>Where</h2>
+    <p>In a Supabase database in Frankfurt (EU). The database itself keeps others out (Row Level Security): everyone reads and changes only their own profile.</p>
+
+    <h2>Who sees what</h2>
+    <p>Publicly, in the tables: name, country flag, time, W/kg, average heart rate and date. Weight, FTP and power are not shown on their own.
+      Untick «Show me in the tables» in Profile and you are not in the tables, though your results are kept for you.</p>
+
+    <h2>Stats</h2>
+    <p>Anonymous events (GoatCounter, no cookies), such as «signed in» or «results sent», with no name, email or number that tells one rider from another. Off in Profile.</p>
+
+    <h2>How to delete</h2>
+    <p>Profile → «Account &amp; leaderboards» → «Delete account». The account, profile and every result go at once and for good. What is on your device stays.</p>
+
+    <h2>Contact</h2>
+    <p>Questions and requests: <a href="https://github.com/SergeyPirogov/gruppetto/issues">issues on GitHub</a>.</p>
+  </section>
+</main>
+</body>
+</html>
