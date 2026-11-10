@@ -13,7 +13,7 @@ git archive HEAD | tar -x -C "$out"
 for f in assets/bike/bike.glb assets/rider/dummy.gltf assets/rider/dummy.bin assets/rider/head.glb; do
   if [ -f "$f" ]; then mkdir -p "$out/$(dirname "$f")"; cp "$f" "$out/$f"; else echo "missing (skipped): $f"; fi
 done
-rm -rf "$out/tools" "$out/tests" "$out/node_modules"
+rm -rf "$out/tools" "$out/tests" "$out/node_modules" "$out/supabase" "$out/docs"
 touch "$out/.nojekyll" # serve every file as is
 
 cd "$out"

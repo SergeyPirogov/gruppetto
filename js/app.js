@@ -18,12 +18,15 @@ import { Recorder, rideFileName } from './recorder.js';
 import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
 import { bunchPower, BUNCH } from './bunch.js';
-import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl } from './strava.js';
+import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl, STRAVA_STATE } from './strava.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
+import { averages, rideItems } from './social-core.js';
+import { CLIENT as SOCIAL_CLIENT } from './social.js';
+import { initSocialUi, socialSettingsSaved, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -59,6 +62,7 @@ if (!settings.pacerOffByDefault) {
 if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__ride', { get: () => ride });
   Object.defineProperty(window, '__scene', { get: () => scene });
+  window.__pretendTrainer = false; // true: a simulator ride counts as a real one for the leaderboards (the browser tests)
   window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async () => null }; renderModes(); }; // try the plan box and uploads without an account
 }
 
@@ -100,7 +104,15 @@ const TRACE_STEP = 10;
 // dark red; flat white, downhill blue
 const gradeColor = (g) => g > 0.1 ? '#e11d48' : g > 0.07 ? '#ef4444' : g > 0.04 ? '#f97316' : g > 0.02 ? '#facc15' : g > 0.005 ? '#4ade80' : g < -0.02 ? '#60a5fa' : '#e8edf5';
 const fmtDelta = (d) => `${d < 0 ? '−' : '+'}${fmtTime(Math.abs(d))}`;
-const saveSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
+const writeSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
+// a change to a setting that follows you to your other devices (name, weight, FTP…) goes up to the account too
+const saveSettings = () => { writeSettings(); socialSettingsSaved(); };
+/** The profile's fields as the settings are now (after the account brought them from another device). */
+function refreshProfileForm() {
+  const fields = [['f-name', 'name'], ['f-jersey', 'jersey'], ['f-stripe', 'stripe'], ['f-weight', 'weight'], ['f-height', 'height'], ['f-ftp', 'ftp'], ['f-wprime', 'wPrimeKj'], ['f-lthr', 'lthr']];
+  for (const [id, key] of fields) if ($(id) && settings[key] !== undefined) $(id).value = settings[key];
+  if ($('f-bike')) $('f-bike').value = settings.bikeColor || settings.jersey;
+}
 
 // ---------- Devices & live data ----------
 const trainer = new Trainer();
@@ -932,6 +944,7 @@ function showRoute() {
   // OpenStreetMap's licence (ODbL) asks for the attribution wherever its data shows: a route built with its map
   const r = routes.find((x) => x.id === settings.routeId) || routes[0];
   $('osm-attr').hidden = !r?.land;
+  socialRoute(r);
   renderGhostPicker();
   updateSummary();
 }
@@ -1211,7 +1224,7 @@ async function startRide(opts) {
   ride = {
     route, workout, simulated,
     dist: 0, v: 0, elapsed: 0, secAcc: 0, workoutT: 0, workoutDone: false,
-    gain: 0, lastElev: route.elevAt(0), laps: 0, lapStartT: 0, lapTimes: [], efforts: [], seg: null, prevDist: 0,
+    gain: 0, lastElev: route.elevAt(0), laps: 0, lapStartT: 0, lapStartI: 0, lapTimes: [], lapEfforts: [], efforts: [], seg: null, prevDist: 0,
     hold: null, splits: [], splitFrom: { t: 0, d: 0, i: 0 }, // free ride: power held in ERG, manual laps
     paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
     powerHist: [], wbal: wPrimeJ(), wbalMin: wPrimeJ(), target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
@@ -1699,6 +1712,7 @@ function tick(power, cadence, hr) {
       ride.finished = true;
       const t = ride.elapsed, best = bestLap(route);
       ride.lapTimes.push(t);
+      noteLap(t);
       if ((!best || t < best) && plausibleLap(t, route.length)) { records.lap[route.id] = t; saveRecords(); }
       if (!ride.race) toast(!best ? tr('Finish! {time} 🏁', { time: fmtTime(t) }) : t < best ? tr('Finish! {time} — new record! ({delta}) 🏆', { time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('Finish! {time} ({delta} vs best)', { time: fmtTime(t), delta: fmtDelta(t - best) }));
       if (!ride.race) { cueBeep(1180, 0.3); setTimeout(() => { if (ride?.finished) finishRide(); }, 2500); } // a race ends from raceFinished()
@@ -1710,6 +1724,7 @@ function tick(power, cadence, hr) {
     const t = ride.elapsed - ride.lapStartT, best = bestLap(route);
     ride.lapStartT = ride.elapsed;
     ride.lapTimes.push(t);
+    noteLap(t);
     if (ride.race) { if ((!best || t < best) && plausibleLap(t, route.length)) { records.lap[route.id] = t; saveRecords(); } } // the race board says it all
     else if ((!best || t < best) && plausibleLap(t, route.length)) {
       records.lap[route.id] = t; saveRecords();
@@ -2100,6 +2115,13 @@ function drawMinimap() {
   g.restore();
 }
 
+/** A lap (or the finish) for the leaderboards: its time, with the power and heart rate it was ridden at. */
+function noteLap(t) {
+  const n = recorder.samples.length, a = averages(recorder.samples, ride.lapStartI, n);
+  ride.lapEfforts.push({ segId: `${ride.route.id}-lap`, kind: 'lap', time: t, length: ride.route.length, power: a.power, hr: a.hr, at: Date.now() });
+  ride.lapStartI = n;
+}
+
 /** Climb segments: start the timer at the foot, stop it at the top, compare with the best. */
 function updateSegments() {
   const { route } = ride, L = route.length, prev = ride.prevDist, cur = ride.dist;
@@ -2110,7 +2132,8 @@ function updateSegments() {
     if (done >= S.climb.length) {
       const t = Math.round((ride.elapsed - S.t0) * 10) / 10, best = records.seg[S.climb.id];
       const top = S.climb.sprint ? Math.round(S.vmax * 3.6 * 10) / 10 : null;
-      ride.efforts.push({ name: `${S.climb.sprint ? '⚡' : '⛰'} ${S.climb.name}`, time: t, best, pb: !best || t < best, ...(top ? { top } : {}) });
+      const a = averages(recorder.samples, S.i0, recorder.samples.length); // for the leaderboards
+      ride.efforts.push({ name: `${S.climb.sprint ? '⚡' : '⛰'} ${S.climb.name}`, time: t, best, pb: !best || t < best, ...(top ? { top } : {}), segId: S.climb.id, kind: S.climb.sprint ? 'sprint' : 'climb', length: S.climb.length, power: a.power, hr: a.hr, at: Date.now() });
       if (top && top > (records.top[S.climb.id] || 0)) { records.top[S.climb.id] = top; saveRecords(); }
       if (!best || t < best) {
         records.seg[S.climb.id] = t;
@@ -2138,7 +2161,8 @@ function updateSegments() {
   if (!ride.seg) {
     const c = [...route.climbs, ...(route.sprints || [])].find((cl) => crossed(cl.start));
     if (c) {
-      ride.seg = { climb: c, t0: ride.elapsed, d0: cur - (((cur - c.start) % L) + L) % L, trace: [0], lastT: 0, lastOff: 0, vmax: ride.v };
+      ride.seg = { climb: c, t0: ride.elapsed, i0: recorder.samples.length, d0: cur - (((cur - c.start) % L) + L) % L, trace: [0], lastT: 0, lastOff: 0, vmax: ride.v };
+      socialSegStart(route, c); // the week's leader in your category, for the panel
       // your record on this climb starts beside you and rides it at its own pace (#26)
       const best = records.seg[c.id];
       ride.climbGhost = best ? { name: c.sprint ? tr('Sprint record') : tr('Climb record'), ghost: true, climb: true, color: settings.jersey, stripe: settings.stripe, dist: ride.seg.d0, pedal: 0.6, lane: START_LANE + 1.1, trace: records.segTrace[c.id] || null, best, length: c.length } : null;
@@ -2156,7 +2180,7 @@ function updateSegments() {
     panel.classList.toggle('sprint', !!S.climb.sprint);
     $('seg-time').textContent = S.climb.sprint && t < 60 ? `${t.toFixed(1)} ${tr('s')}` : fmtTime(t);
     $('seg-left').textContent = S.climb.sprint ? `${tr('{n} m to the line', { n: left })} · ${Math.round((S.vmax || ride.v) * 3.6)} ${tr('km/h')} ${tr('max')}` : tr('{n} m to the top', { n: left });
-    $('seg-best').textContent = best ? tr('best {time}', { time: fmtTime(best) }) : tr('no record yet');
+    $('seg-best').textContent = (best ? tr('best {time}', { time: fmtTime(best) }) : tr('no record yet')) + socialSegLeader(S.climb.id);
     // on pace: compare with the best time scaled to the distance done so far
     const pace = best ? t - traceTime(records.segTrace[S.climb.id], best, S.climb.length, cur - S.d0) : 0;
     $('seg-pace').textContent = best && frac > 0.05 ? fmtDelta(pace) : '';
@@ -2397,6 +2421,12 @@ function finishRide() {
   const sum = recorder.summary();
   const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
   lastRide = { race: raceResults(), raceLaps: ride.race?.laps, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
+  // the ride's laps, climbs and sprints for the leaderboards (a real ride on a built-in route only)
+  const socialItems = ride.route.custom ? [] : rideItems({
+    route: ride.route, version: versionOf(ride.route), simulated: ride.simulated && !window.__pretendTrainer,
+    laps: ride.lapEfforts, efforts: ride.efforts, weight: settings.weight, ftp: settings.ftp, client: SOCIAL_CLIENT,
+  });
+  const socialFirst = ride.efforts.find((x) => socialItems.some((i) => i.segment_id === x.segId))?.name.replace(/^\S+\s/, '') || ride.route.name;
   ride = null;
   if (trainer.connected && trainer.controllable) {
     trainer.setSimulation(0);
@@ -2407,6 +2437,7 @@ function finishRide() {
   deleteDraft();
   $('ride').hidden = true;
   showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
+  socialAfterRide(socialItems, { firstName: socialFirst });
 }
 
 // ---------- Ride history (#19) ----------
@@ -2667,17 +2698,19 @@ function showSummary(e, { live = false } = {}) {
   $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   // laps and climbs of this ride, with personal bests
   const rows = [
-    ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? tr('Finish') : tr('Lap {n}', { n: i + 1 }), t, null]),
-    ...e.efforts.map((x) => [x.name, x.time, x]),
+    ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? tr('Finish') : tr('Lap {n}', { n: i + 1 }), t, null, `${e.routeId}-lap`]),
+    ...e.efforts.map((x) => [x.name, x.time, x, x.segId]),
     ...(e.splits || []).map((x, i) => [tr('Split {n}', { n: i + 1 }), x.time, { note: `${(x.dist / 1000).toFixed(2)} ${U.km} · ${x.power} ${U.W}` }]),
   ];
   $('sum-segments').hidden = !rows.length;
-  $('sum-seg-rows').innerHTML = rows.map(([name, t, x]) => {
+  $('sum-seg-rows').innerHTML = rows.map(([name, t, x, seg]) => {
     const lapRoute = routes.find((r) => r.id === e.routeId);
     const pb = x ? x.pb : t <= ((lapRoute && bestLap(lapRoute)) ?? Infinity);
     const vs = (x?.note ? esc(x.note) : x && x.best ? fmtDelta(t - x.best) : '') + (x?.top ? ` · ${x.top} ${tr('km/h')}` : '');
-    return `<tr><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>${x?.top ? ` · ${x.top} ${tr('km/h')}` : ''}` : vs}</td></tr>`;
+    const lb = seg ? ` data-seg="${esc(seg)}" data-t="${Math.round(t * 10) / 10}"` : ''; // the place in its table goes beside it
+    return `<tr${lb}><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>${x?.top ? ` · ${x.top} ${tr('km/h')}` : ''}` : vs}</td><td class="lb-cell"></td></tr>`;
   }).join('');
+  decorateSummary();
   // files and intervals.icu: the ride just finished, or an older one whose full record is still kept
   shown = { entry: e, rec: live ? recorder : null };
   renderEarned(e);
@@ -4063,6 +4096,15 @@ $('f-lang').value = lang;
 $('f-lang').onchange = () => setLang($('f-lang').value);
 initLobby();
 offerDraft();
+// accounts and leaderboards: nothing at all without a project in social-config.js
+initSocialUi({
+  settings, records, lang, locale, tr, esc, fmtTime, track, openDrawer, stravaState: STRAVA_STATE,
+  getProgress: () => progress, setProgress: (p) => { progress = p; saveProgress(); },
+  saveSettingsRaw: writeSettings, saveRecords,
+  currentRoute: () => routes.find((x) => x.id === settings.routeId) || routes[0],
+  routeOfSegment: (seg) => routes.find((x) => !x.custom && seg.startsWith(`${x.id}-`) && (seg === `${x.id}-lap` || [...x.climbs, ...(x.sprints || [])].some((c) => c.id === seg))),
+  refresh: () => { refreshProfileForm(); updateSummary(); renderProgress(); renderFtpBox(); },
+});
 // leaving in the middle of a ride: keep what is there and ask first
 window.addEventListener('beforeunload', (e) => {
   if (!ride || ride.elapsed < 10) return;

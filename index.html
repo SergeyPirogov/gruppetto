@@ -105,6 +105,7 @@
         <h2>Routes</h2>
         <p id="osm-attr" class="hint osm-attr" hidden>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
         <div id="lobby-msg" class="lobby-msg" hidden></div>
+        <div id="route-board" class="route-board" hidden></div>
         <div id="route-list" class="route-list"></div>
         <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" hidden>
       </section>
@@ -391,6 +392,23 @@
           <span id="strava-status" class="muted"></span>
         </div>
       </div>
+      <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
+      <div class="card" id="social-card" data-panel="profile" data-off="1" hidden>
+        <h2>Account &amp; leaderboards</h2>
+        <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps in the tables with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
+        <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
+        <div id="social-in" hidden>
+          <p class="muted" id="social-who"></p>
+          <label class="check"><input type="checkbox" id="f-social-public"> Show me in the tables</label>
+          <div class="row icu-row">
+            <button id="btn-social-edit">Name in the tables…</button>
+            <button id="btn-social-out" class="ghost">Sign out</button>
+            <button id="btn-social-delete" class="ghost">Delete account</button>
+          </div>
+        </div>
+        <p class="muted" id="social-status"></p>
+        <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+      </div>
       <div class="card" data-panel="history">
         <h2>Ride history</h2>
         <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
@@ -568,6 +586,7 @@
       <div id="sum-segments" class="card sum-segments" hidden>
         <h2>Laps &amp; climbs</h2>
         <table><tbody id="sum-seg-rows"></tbody></table>
+        <p id="sum-social" class="sum-social" hidden><span id="sum-social-text" class="hint"></span><button id="btn-social-cta" class="pill-btn"></button></p>
       </div>
       <div class="sum-actions">
         <button id="btn-download" class="primary">Download .FIT</button>
@@ -606,6 +625,43 @@
         <div class="card-formats"><button class="pill-btn" data-card-format="story">Story 9:16</button><button class="pill-btn" data-card-format="post">Post 4:5</button></div>
         <canvas id="card-canvas" width="1080" height="1920"></canvas>
         <div class="wkd-actions"><button id="card-download" class="pill-btn">Download PNG</button><button id="card-share" class="primary wkd-ride">Share…</button></div>
+      </div>
+    </div>
+
+    <!-- the first sign-in: how you show in the tables -->
+    <div id="social-setup" class="wk-menu" hidden>
+      <div class="drawer-bg" data-ss-close></div>
+      <div class="wk-menu-panel social-setup-panel">
+        <div class="wk-menu-head"><h2>You in the tables</h2><button class="drawer-close" data-ss-close aria-label="Close">✕</button></div>
+        <div class="fields">
+          <label>Name in the tables <input id="ss-name" maxlength="24" autocomplete="nickname"></label>
+          <label>Country <select id="ss-country"></select></label>
+          <label>Gender, for the filter <select id="ss-gender"><option value="">Rather not say</option><option value="f">Female</option><option value="m">Male</option></select></label>
+        </div>
+        <label class="check"><input type="checkbox" id="ss-public" checked> Show me in the tables</label>
+        <p class="hint">Others see your name, country, times and W/kg; never your weight. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+        <p id="ss-error" class="hint c-bad"></p>
+        <div class="wkd-actions"><button id="ss-save" class="primary wkd-ride">Save</button></div>
+      </div>
+    </div>
+
+    <!-- a leaderboard: a lap, climb or sprint of a built-in route -->
+    <div id="lb-view" class="wk-menu" hidden>
+      <div class="drawer-bg" data-lb-close></div>
+      <div class="wk-menu-panel lb-panel">
+        <div class="wk-menu-head"><h2 id="lb-title">Leaderboards</h2><button class="drawer-close" data-lb-close aria-label="Close">✕</button></div>
+        <div class="lb-top"><select id="lb-seg" aria-label="Segment"></select><small id="lb-count" class="muted"></small></div>
+        <div class="lb-filters">
+          <div class="lb-chips" id="lb-period"><button class="pill-btn sel" data-v="all">All time</button><button class="pill-btn" data-v="month">This month</button><button class="pill-btn" data-v="week">This week</button></div>
+          <div class="lb-chips" id="lb-gender"><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
+          <div class="lb-chips" id="lb-cat"><button class="pill-btn sel" data-v="">All</button><button class="pill-btn" data-v="A">A</button><button class="pill-btn" data-v="B">B</button><button class="pill-btn" data-v="C">C</button><button class="pill-btn" data-v="D">D</button></div>
+        </div>
+        <div class="lb-scroll">
+          <table class="lb-table"><thead><tr><th>#</th><th></th><th>Rider</th><th>Time</th><th>W/kg</th><th>HR</th><th>Date</th></tr></thead><tbody id="lb-rows"></tbody></table>
+        </div>
+        <p id="lb-empty" class="hint" hidden>No times here yet: be the first.</p>
+        <p id="lb-cta" class="hint" hidden><button id="lb-signin" class="pill-btn">Sign in with Google</button> to put your times here</p>
+        <p class="hint">Categories by FTP per kilo: A from 4.0, B 3.2–4.0, C 2.5–3.2, D below 2.5 W/kg. «?»: no heart rate, or close to the limit of the possible.</p>
       </div>
     </div>
 
