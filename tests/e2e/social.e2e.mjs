@@ -23,7 +23,10 @@ let server, browser;
 before(async () => {
   server = spawn('python3', [join(root, 'tools/serve.py'), String(PORT)], { stdio: 'ignore' });
   for (let i = 0; i < 50; i++) { try { await fetch(APP); break; } catch { await new Promise((r) => setTimeout(r, 100)); } }
-  browser = await chromium.launch();
+  // without WebGL the app draws the road in 2D: headless Chromium renders the 3D world in software, a frame every
+  // 1–3 s, and the rides here (about the tables, not the graphics) ran out of time. Since 3D became the only
+  // choice, a «graphics: '2d'» setting no longer does this
+  browser = await chromium.launch({ args: ['--disable-webgl', '--disable-webgl2'] });
 });
 after(async () => { await browser?.close(); server?.kill(); });
 
@@ -102,7 +105,7 @@ async function openApp({ config = true, signedIn = false, verifier = false, loca
   return { page, context, errors, outside };
 }
 
-const SETTINGS = { name: 'Olena', weight: 60, ftp: 240, icuKey: ICU_SECRET, icuAthlete: 'i42', graphics: '2d', bots: 0, stats: false, settingsUpdatedAt: 1000 };
+const SETTINGS = { name: 'Olena', weight: 60, ftp: 240, icuKey: ICU_SECRET, icuAthlete: 'i42', bots: 0, stats: false, settingsUpdatedAt: 1000 };
 const LOCAL = { 'powerup.settings': SETTINGS, 'gruppetto.strava': { access: STRAVA_SECRET, refresh: STRAVA_SECRET, expires: 9e9, name: 'R' } };
 const PROFILE = (data = {}) => ({ display_name: 'Olena', country: 'UA', gender: 'f', public: true, data: { profile: { name: 'Olena' }, settingsUpdatedAt: 1, records: { lap: {}, seg: {}, top: {} }, ...data } });
 
