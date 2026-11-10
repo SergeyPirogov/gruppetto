@@ -1,9 +1,11 @@
 // Optional bike model instead of the bike built in code (Rider3D in render3d.js). Two kinds:
 //
-// • Rigged, at assets/bike/bike.glb — e.g. "Canyon Aeroad | Road Bike" by hipoojan on Sketchfab
-//   (Sketchfab Standard licence, not redistributed, see .gitignore). Its skeleton has bones for the
-//   wheels, the chainring with the pedals and the handlebar, turned here every frame; the frame paint
-//   baked into the vertex colours takes the rider's jersey colour.
+// • Rigged, at assets/bike/bike.glb — "Canyon Aeroad | Road Bike" by hipoojan on Sketchfab
+//   (Sketchfab Standard licence: used in the app, not redistributed as a file, see .gitignore). Its
+//   skeleton has bones for the wheels, the chainring with the pedals and the handlebar, turned here
+//   every frame; the frame paint baked into the vertex colours takes the rider's jersey colour.
+//   assets/bikes/aero.glb (tools/prepare_bike.py) is the same format with its own materials, where
+//   only "Paint" takes the rider's colour; it is the fallback when the Canyon file is missing.
 // • Any static glTF at assets/bike.glb (e.g. a CC-BY model from Sketchfab): turned to face +x, scaled
 //   to the built-in bike's size and set on the ground; a crank part, if it has one, spins with the
 //   pedals. Fine-tune with assets/bike.json:
@@ -13,14 +15,38 @@ import { gltfLoader } from './gltf.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 
 const CANDIDATES = [
+  // aero bike on the Pinarello F12 frame by jiet17 (CC-BY), built in blender/f12_bike.blend
+  { url: 'assets/bikes/f12.glb', cfg: 'assets/bikes/f12.json' },
   { url: 'assets/bike/bike.glb', cfg: 'assets/bike/bike.json' },
+  // Gruppetto's own aero road bike (CC0, built by tools/prepare_bike.py), same rigged format
+  { url: 'assets/bikes/aero.glb', cfg: 'assets/bikes/aero.json' },
   { url: 'assets/bike.glb', cfg: 'assets/bike.json' },
 ];
 const DEFAULT_LENGTH = 1.68; // wheel to wheel, matches the built-in bike the rider is posed on
 const BB = new THREE.Vector3(0, 0.29, 0); // bottom bracket in the rider group
-const WHEEL_R = 0.36;                     // m, tyre radius of the rigged model
+const WHEEL_R = 0.36;                     // m, tyre radius of the rigged model (unless its json says)
 
 /** Loads the bike once: { gltf, cfg }, or null when there is no model file. */
+// a soft sky/ground light probe for the bike's PBR materials; set once by the renderer
+let ENV = null;
+export function setBikeEnvironment(renderer) {
+  if (ENV || !renderer) return;
+  const geo = new THREE.SphereGeometry(10, 32, 16);
+  const col = [], c = new THREE.Color(), sky = new THREE.Color(0.78, 0.86, 1.0), haze = new THREE.Color(1.0, 0.98, 0.94), ground = new THREE.Color(0.22, 0.24, 0.2);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i) / 10;
+    if (y >= 0) c.copy(haze).lerp(sky, Math.min(1, y * 1.6)); else c.copy(haze).lerp(ground, Math.min(1, -y * 4));
+    col.push(c.r, c.g, c.b);
+  }
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const env = new THREE.Scene();
+  env.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const pm = new THREE.PMREMGenerator(renderer);
+  ENV = pm.fromScene(env, 0.04).texture;
+  pm.dispose(); geo.dispose();
+}
+
 export async function loadBikeModel() {
   for (const c of CANDIDATES) {
     try {
@@ -72,12 +98,17 @@ function recolor(geometry, color) {
 
 export class ModelBike {
   /** `group` is the rider group (forward = +x, right = +z, road at y = 0). */
-  constructor(model, group, { color } = {}) {
+  /**
+   * `color` paints the "Paint" material (frame, fork), `tape` the "Tape" one (handlebar tape),
+   * `accent` the "Accent" one (rim decals).
+   */
+  constructor(model, group, { color, tape, accent } = {}) {
     const { gltf, cfg } = model;
     this.group = group;
     this._q = new THREE.Quaternion();
     const rigged = bone(gltf.scene, /back.?wheel/i) && bone(gltf.scene, /front.?wheel/i);
-    if (rigged) this._rigged(gltf, group, color);
+    this.wheelR = cfg.wheelRadius || WHEEL_R; // assets/bike(s)/*.json "wheelRadius": m, for rolling
+    if (rigged) this._rigged(gltf, group, color, tape, accent);
     else this._static(gltf, cfg, group);
     // where the rider sits and holds on (measured once per model, in the rider group's frame)
     this.fit = model.fit ||= this._measureFit(cfg);
@@ -120,13 +151,27 @@ export class ModelBike {
 
   // ----- rigged model: bones for the wheels, chainring + pedals, handlebar -----
 
-  _rigged(gltf, group, color) {
+  _rigged(gltf, group, color, tape, accent) {
     this.root = SkeletonUtils.clone(gltf.scene);
+    // a model with its own materials (tools/prepare_bike.py) renders as made, only "Paint" takes the
+    // rider's colour, "Tape" the bar tape colour and "Accent" the kit's accent; one with the paint
+    // baked into vertex colours is repainted per vertex
+    let own = false;
+    gltf.scene.traverse((o) => { if (o.isMesh && /^paint/i.test(o.material?.name || '')) own = true; });
     this.root.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
       o.receiveShadow = true;
       o.frustumCulled = false;
+      if (/decal/i.test(o.material?.name || '')) this.hasDecal = true;
+      if (own) {
+        if (color && /^paint/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(color); }
+        if (tape && /^tape/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(tape); }
+        if (accent && /^accent/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(accent); }
+        // reflections: without them gloss, clear coat and metal render flat black (Blender previews with an HDRI)
+        if (ENV && o.material.envMap !== ENV) { o.material.envMap = ENV; o.material.envMapIntensity = 0.9; o.material.needsUpdate = true; }
+        return;
+      }
       o.geometry = o.geometry.clone(); // own vertex colours per rider
       if (color) recolor(o.geometry, color);
       o.material = o.material.clone();
@@ -226,7 +271,7 @@ export class ModelBike {
   /** Distance ridden (m): the wheels of a rigged model roll forward. */
   roll(dist) {
     if (!this.bones) return;
-    const a = -dist / WHEEL_R;
+    const a = -dist / this.wheelR;
     this._turn(this.bones.back, a);
     this._turn(this.bones.front, a);
   }
