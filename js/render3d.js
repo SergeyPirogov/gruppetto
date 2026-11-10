@@ -5,10 +5,10 @@ import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
 import { sunAt, phaseOf, placeFromZone } from './sun.js';
-import { loadRiderModel, ModelRider } from './rider-model.js';
+import { loadRiderModel, loadCustomRiderModel, ModelRider } from './rider-model.js';
 import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadNature, natureMaterials } from './nature.js';
-import { loadBikeModel, ModelBike } from './bike-model.js';
+import { loadBikeModel, ModelBike, setBikeEnvironment } from './bike-model.js';
 import { t, lang } from './i18n.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
 import { villages, crossings, tunnels } from './villages.js';
@@ -79,7 +79,8 @@ let preloaded = null;
 export function preloadModels() {
   return preloaded ||= {
     bike: loadBikeModel(),
-    rider: SHOW_RIDER ? loadDummyRider().then((d) => d || loadRiderModel()) : Promise.resolve(null),
+    // your own assets/rider.(glb|fbx) first, then the dummy, then the bundled characters
+    rider: SHOW_RIDER ? loadCustomRiderModel().then((c) => c || loadDummyRider()).then((d) => d || loadRiderModel()) : Promise.resolve(null),
     nature: loadNature().catch((e) => { console.warn('Nature models unavailable, using built-in shapes', e); return null; }),
     // fans: people posed from the rider model (phones keep the simple figures: a crowd of them is heavy)
     fans: LOW ? Promise.resolve(null) : loadFanModels().catch((e) => { console.warn('Fan models unavailable, using simple figures', e); return null; }),
@@ -747,6 +748,7 @@ export class Scene3D {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
+    try { setBikeEnvironment(this.renderer); } catch { /* reflections are optional */ }
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.3, 4000);
     this.camPos = null;
@@ -803,8 +805,11 @@ export class Scene3D {
     let pinch = 0, lastTap = 0;
     // kept near the chase view: up to ~30° round to either side, higher up or a little lower, a little
     // closer or farther — enough to see the rider from behind and three-quarters, never from in front
-    const clampZoom = (z) => Math.max(0.6, Math.min(1.3, z));
-    const clampYaw = (y) => Math.max(-0.5, Math.min(0.5, y));
+    // ?freecam: all the way round, from low down to overhead, close up or far (for looking at the models)
+    const FREE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('freecam');
+    const clampZoom = (z) => (FREE ? Math.max(0.15, Math.min(3, z)) : Math.max(0.6, Math.min(1.3, z)));
+    const clampYaw = (y) => (FREE ? y : Math.max(-0.5, Math.min(0.5, y)));
+    const clampPitch = (p) => (FREE ? Math.max(-0.6, Math.min(1.2, p)) : Math.max(-0.1, Math.min(0.25, p)));
     canvas.style.touchAction = 'none';
     canvas.style.cursor = 'grab';
     canvas.addEventListener('pointerdown', (e) => {
@@ -824,7 +829,7 @@ export class Scene3D {
       p.x = e.clientX; p.y = e.clientY;
       if (pts.size === 1) {
         O.yaw = clampYaw(O.yaw - dx * 0.006);
-        O.pitch = Math.max(-0.1, Math.min(0.25, O.pitch + dy * 0.004));
+        O.pitch = clampPitch(O.pitch + dy * 0.004);
       } else if (pts.size === 2) {
         const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
         if (pinch) O.zoom = clampZoom(O.zoom * pinch / d);
@@ -2685,7 +2690,7 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}` : r.key || r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}` : r.key || r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
@@ -2709,7 +2714,7 @@ export class Scene3D {
           R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
         }
         // the frame its own colour, or the jersey's
-        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color }); R.group.add(this._frameDecal()); }
+        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
         // a ghost (your own earlier ride): see-through, and drawn after the solid scene
         if (r.ghost) {
           R.group.traverse((o) => {

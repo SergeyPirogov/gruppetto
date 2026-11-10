@@ -11,3 +11,11 @@
 
 Файли зібрано з архівів скриптами `tools/prepare_nature.py`, `tools/prepare_rider.py` і `tools/prepare_fans.py`
 (вибрані моделі, зменшені текстури). Підтримати автора: https://www.patreon.com/quaternius
+
+## Не CC0
+
+| Файл | Модель | Автор | Ліцензія | Звідки |
+|---|---|---|---|---|
+| `assets/bikes/f12.glb`, `blender/f12_bike.blend` | рама й вилка: Pinarello F12 Frame | jiet17 | CC BY 4.0 (вказати автора) | Sketchfab |
+| `assets/bikes/f12.glb`, `blender/f12_bike.blend` | ручки STI (капюшони) з моделі Roadbike / Bicycle Canyon Endurace CF | mmaarriioo | CC BY 4.0 (вказати автора) | https://sketchfab.com/3d-models/cb74e3c579be44dc9b1872bc3d34a17c |
+| `assets/bike/bike.glb` | Canyon Aeroad \| Road Bike | hipoojan | Sketchfab Standard: можна використовувати й змінювати в застосунку, не можна поширювати як окремий файл (тому поза git) | Sketchfab (посилання на сторінку моделі — додати) |

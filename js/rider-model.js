@@ -42,8 +42,8 @@ function defaultManager() {
 
 // Your own model wins: glTF, or FBX straight from Mixamo (embedded textures) — no conversion needed.
 const CANDIDATES = [
-  { url: 'assets/rider.glb', load: async (u) => gltfLoader().loadAsync(u) },
-  { url: 'assets/rider.fbx', load: async (u) => { const g = await new FBXLoader().loadAsync(u); return { scene: g, animations: g.animations || [] }; } },
+  { url: 'assets/rider.glb', custom: true, load: async (u) => gltfLoader().loadAsync(u) },
+  { url: 'assets/rider.fbx', custom: true, load: async (u) => { const g = await new FBXLoader().loadAsync(u); return { scene: g, animations: g.animations || [] }; } },
   // bundled CC0 character (Quaternius Universal Base Characters, see tools/prepare_rider.py),
   // with its own settings next to it; assets/rider.json still overrides them
   {
@@ -115,9 +115,25 @@ function tintHair(scene, hex) {
   });
 }
 
+/** Only your own assets/rider.(glb|fbx): { gltf, cfg }, or null when there is none. */
+export async function loadCustomRiderModel() {
+  return tryCandidates(CANDIDATES.filter((c) => c.custom));
+}
+
 /** Loads the model once: your assets/rider.(glb|fbx) if present, otherwise the built-in hero. */
 export async function loadRiderModel() {
-  for (const c of CANDIDATES) {
+  const found = await tryCandidates(CANDIDATES);
+  if (found) return found;
+  try {
+    return { gltf: buildProceduralRider(cfg), cfg: { sockHeight: false, sleeve: false, armSlim: 1, height: 1.84, pelvisTilt: 62, hipsX: -0.25, hipsY: 1.075, ...cfg } };
+  } catch (e) {
+    console.warn('Procedural rider not built', e);
+    return null;
+  }
+}
+
+async function tryCandidates(list) {
+  for (const c of list) {
     try {
       const head = await fetch(c.url, { method: 'HEAD' });
       if (!head.ok) continue;
@@ -130,12 +146,7 @@ export async function loadRiderModel() {
       console.warn(`Rider model ${c.url} not loaded`, e);
     }
   }
-  try {
-    return { gltf: buildProceduralRider(cfg), cfg: { sockHeight: false, sleeve: false, armSlim: 1, height: 1.84, pelvisTilt: 62, hipsX: -0.25, hipsY: 1.075, ...cfg } };
-  } catch (e) {
-    console.warn('Procedural rider not built', e);
-    return null;
-  }
+  return null;
 }
 
 /**
