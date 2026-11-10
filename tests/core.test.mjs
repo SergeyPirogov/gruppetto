@@ -168,9 +168,9 @@ test('intervals.icu workout_doc conversion', () => {
 
 import { THEMES } from '../js/themes.js';
 
-test('12 routes, each with an existing theme and distinct name', () => {
-  assert.equal(routes.length, 12);
-  assert.equal(new Set(routes.map((r) => r.name)).size, 12);
+test('13 routes, each with an existing theme and distinct name', () => {
+  assert.equal(routes.length, 13);
+  assert.equal(new Set(routes.map((r) => r.name)).size, 13);
   for (const r of routes) assert.ok(THEMES[r.theme], `${r.id} theme ${r.theme}`);
 });
 
@@ -500,6 +500,7 @@ test('sprint segments: flat, straight, clear of climbs and of each other (#38)',
   const { routes } = await import('../js/routes.js');
   for (const r of routes) {
     const L = r.length;
+    if (r.fixedSprints) continue; // the velodrome says where its sprint is (its own test)
     if (L < 3000) { assert.equal(r.sprints.length, 0); continue; }
     assert.ok(r.sprints.length >= 1 && r.sprints.length <= 4, `${r.id}: ${r.sprints.length} sprints`);
     for (const s of r.sprints) {
