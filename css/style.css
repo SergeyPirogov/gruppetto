@@ -1364,3 +1364,11 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .lb-table .lb-gap td { text-align: center; color: var(--muted); padding: 2px; }
 .lb-flag { color: var(--muted); cursor: help; }
 @media (max-width: 520px) { .lb-table th:nth-child(6), .lb-table td:nth-child(6) { display: none; } }
+.hdr-account { display: inline-flex; align-items: center; gap: 8px; width: auto; padding: 8px 14px; border-radius: 999px; font-weight: 700; font-size: .9rem; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; white-space: nowrap; }
+.hdr-account[hidden] { display: none; }
+.hdr-account:hover { background: #f3f4f6; }
+.hdr-account.in { background: rgba(255, 122, 26, .14); border-color: rgba(255, 122, 26, .5); color: var(--accent); }
+.hdr-account.in:hover { background: rgba(255, 122, 26, .22); }
+.hdr-account span { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
+.g-logo { width: 18px; height: 18px; flex: none; }
+.link-btn { width: auto; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }

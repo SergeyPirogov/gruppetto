@@ -318,7 +318,8 @@ export const UK = {
   'Account & leaderboards': 'Акаунт і лідерборди',
   'Sign in to put your times on climbs, sprints and laps in the tables with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.':
     'Увійди, щоб твої часи на підйомах, спринтах і колах потрапили в таблиці з іншими райдерами, а профіль і рекорди були на кожному пристрої. Без входу все працює, як і раніше, у цьому браузері.',
-  'Sign in with Google': 'Увійти через Google', 'Show me in the tables': 'Показувати мене в таблицях',
+  'Sign in with Google': 'Увійти через Google', 'Your account and leaderboards': 'Твій акаунт і лідерборди', 'Sign in so your time is here': 'Увійди, щоб твій час був тут',
+  'Sign in to put your times in the tables, and to have your profile on every device': 'Увійди, щоб твої часи були в таблицях, а профіль — на кожному пристрої', 'Show me in the tables': 'Показувати мене в таблицях',
   'Name in the tables…': 'Ім’я в таблицях…', 'Name in the tables': 'Ім’я в таблицях', 'Sign out': 'Вийти', 'Delete account': 'Видалити акаунт',
   'Your intervals.icu key and Strava link never leave this browser.': 'Ключ intervals.icu і зв’язок зі Strava ніколи не покидають цей браузер.',
   'You in the tables': 'Ти в таблицях', 'Country': 'Країна', 'Gender, for the filter': 'Стать, для фільтра',
