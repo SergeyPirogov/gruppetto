@@ -741,7 +741,7 @@ function kitMaskMaterial(m, jersey, stripe, zip) {
  * `group` must already be in the scene graph when pose() is called.
  */
 export class ModelRider {
-  constructor(model, group, { jersey, stripe }) {
+  constructor(model, group, { jersey, stripe, helmet, lens }) {
     const { gltf, cfg } = model;
     this.cfg = cfg;
     this.group = group;
@@ -755,6 +755,14 @@ export class ModelRider {
       const meshName = (o.name || '').toLowerCase();
       const recolor = (m) => {
         if ((cfg.kitMask || []).includes(m.name)) return kitMaskMaterial(m, jersey, stripe, cfg.kitZip);
+        // rider.json "helmetMaterials" / "lensMaterials": the helmet shell and the sunglass lenses in
+        // the rider's own colours (a lens stays a dark mirror: metallic, glossy)
+        if (helmet && (cfg.helmetMaterials || []).includes(m.name)) { const c = m.clone(); c.color = new THREE.Color(helmet); c.map = null; return c; }
+        if (lens && (cfg.lensMaterials || []).includes(m.name)) {
+          const c = m.clone(); c.color = new THREE.Color(lens); c.map = null;
+          if ('metalness' in c) Object.assign(c, { metalness: 0.5, roughness: 0.15 });
+          return c;
+        }
         if (cfg.kit && m.map?.image?.width && /body/.test(m.map.image.src || '')) {
           const c = m.clone();
           c.map = paintKit(m.map.image, cfg.kit, jersey, stripe);

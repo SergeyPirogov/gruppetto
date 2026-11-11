@@ -12,6 +12,12 @@
     "PocketsMask"
   ],
   "kitZip": "#1a1a1a",
+  "helmetMaterials": [
+    "Helmet main"
+  ],
+  "lensMaterials": [
+    "Oak lens"
+  ],
   "jerseyMaterials": [
     "-"
   ],

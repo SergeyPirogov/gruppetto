@@ -494,6 +494,7 @@ def run():
         'clipFollowsCrank': True,                  # clip time = crank angle (one turn = one clip)
         'kitMask': ['JerseyMask', 'PocketsMask'],  # red = jersey colour, green = accent (stripe)
         'kitZip': '#1a1a1a',
+        'helmetMaterials': ['Helmet main'], 'lensMaterials': ['Oak lens'],  # recoloured per rider
         'jerseyMaterials': ['-'], 'shortsMaterials': ['-'],
         'sleeve': False, 'sockHeight': False, 'armSlim': 1, 'helmet': False, 'glasses': False,
         'pedalTilt': pedal_tilt(),                 # the bike's pedals follow the soles, as in Blender

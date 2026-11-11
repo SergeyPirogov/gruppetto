@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
-  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416',
+  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', helmetColor: '#f2f2f2', lensColor: '#1c2230',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
@@ -378,6 +378,8 @@ function initLobby() {
   bind('f-bike', 'bikeColor', false);
   $('f-bike').value = settings.bikeColor || settings.jersey; // until one is picked, the frame wears the jersey's colour
   bind('f-tape', 'tapeColor', false);
+  bind('f-helmet', 'helmetColor', false);
+  bind('f-lens', 'lensColor', false);
   bind('f-weight', 'weight');
   bind('f-height', 'height');
   bind('f-ftp', 'ftp');
@@ -1541,7 +1543,7 @@ function frame(now) {
     }
   }
   const riders = [
-    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane, v: ride.v },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane, v: ride.v },
     ...ride.bots,
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),

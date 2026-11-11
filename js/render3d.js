@@ -2689,7 +2689,7 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}` : r.key || r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.helmet || ''}:${r.lens || ''}` : r.key || r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
@@ -2710,7 +2710,7 @@ export class Scene3D {
         this.scene.add(R.group);
         if (this.riderModel) {
           const Model = this.riderModel.dummy ? DummyRider : ModelRider;
-          R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
+          R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens });
         }
         // the frame its own colour, or the jersey's
         if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
