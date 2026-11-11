@@ -32,7 +32,7 @@ CLEATS = {'Cleat.L': 'foot_l', 'Cleat.R': 'foot_r'}   # shoe cleats, parented to
 HEAD_GEAR = ['Helmet', 'HelmetStraps', 'HelmetBuckle', 'StrapSlider_R', 'StrapSlider_L', 'Glasses', 'GlassesEnds']
 DECIMATE = {'Helmet': 0.25, 'Glasses': 0.06}        # ratio of the source mesh
 SUBSURF = {'MH_Body_v2': 1, 'MH_Jersey': 1, 'MH_JerseyPockets': 1}  # levels used for the game
-MORPH_PARTS = ['MH_Body_v2', 'MH_Jersey', 'MH_Shorts']  # get per-frame shape keys
+MORPH_PARTS = ['MH_Body_v2', 'MH_Jersey', 'MH_JerseyPockets', 'MH_Shorts']  # get per-frame shape keys (pockets too, or they slide on the jersey)
 TUCK = {'MH_Body_v2'}                               # skin kept inside the kit in the game (see tuck)
 KIT_OVER_SKIN = ['MH_Jersey', 'MH_Shorts']
 TUCK_GAP = 0.0015                                   # skin at least 1.5 mm under the cloth
@@ -421,15 +421,20 @@ def run():
     body_img = save_jpeg(bake_object(O['MH_Body_v2'], 2048, 'rider_body'), 'rider_body')
     shoe_img = save_jpeg(bake_object(O['MH_Shoes'], 1024, 'rider_shoes'), 'rider_shoes')
     fill_uvs(O['MH_Jersey'])
-    fill_uvs(O['MH_JerseyPockets'])
+    # parts hidden from render in the .blend stay out of the game (e.g. the pockets, switched off)
+    BODY_PARTS[:] = [n for n in BODY_PARTS if not O[n].hide_render]
     kit_img = save_jpeg(bake_kit_mask(O['MH_Jersey'], 2048, 'rider_kit'), 'rider_kit', 95)
-    pocket_img = save_jpeg(bake_kit_mask(O['MH_JerseyPockets'], 1024, 'rider_pockets'), 'rider_pockets', 95)
+    pocket_img = None
+    if 'MH_JerseyPockets' in BODY_PARTS:
+        fill_uvs(O['MH_JerseyPockets'])
+        pocket_img = save_jpeg(bake_kit_mask(O['MH_JerseyPockets'], 1024, 'rider_pockets'), 'rider_pockets', 95)
     mats = {
         'MH_Body_v2': textured_material('Skin', body_img, src=bpy.data.materials['Skin.001']),
         'MH_Shoes': textured_material('Shoes', shoe_img, rough=0.35),
         'MH_Jersey': textured_material('JerseyMask', kit_img, rough=0.45),
-        'MH_JerseyPockets': textured_material('PocketsMask', pocket_img, rough=0.45),
     }
+    if pocket_img:
+        mats['MH_JerseyPockets'] = textured_material('PocketsMask', pocket_img, rough=0.45)
     for part, mname in (('MH_Hair', 'Hair'), ('MH_Eyebrows', 'Eyebrows'), ('MH_Eyelashes', 'Eyelashes'), ('MH_Eyes', 'Eyes')):
         src = O[part].material_slots[0].material
         img = image_of(src) if part != 'MH_Eyebrows' else image_of(src, 'bumpmapTexture')
