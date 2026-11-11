@@ -805,7 +805,8 @@ export class Scene3D {
     let pinch = 0, lastTap = 0;
     // all the way round the rider (front too), from road level to overhead, close up or far;
     // the camera never goes below the road (see the orbit branch of the chase camera)
-    const clampZoom = (z) => Math.max(0.25, Math.min(3, z));
+    // not closer than 0.4: nearer, the camera's near plane (0.3 m) cuts into the rider
+    const clampZoom = (z) => Math.max(0.4, Math.min(3, z));
     const clampYaw = (y) => y;
     const clampPitch = (p) => Math.max(-0.6, Math.min(1.2, p));
     canvas.style.touchAction = 'none';
@@ -2725,7 +2726,7 @@ export class Scene3D {
             o.renderOrder = 2;
           });
         }
-        if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; } // saddle, hoods and pedals of this bike
+        if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; R.bike.pedalTilt = R.model.cfg?.pedalTilt; } // saddle, hoods and pedals of this bike; pedals tilted with the soles
         this._csmMaterials(R.group);
       }
       const d = r.dist;

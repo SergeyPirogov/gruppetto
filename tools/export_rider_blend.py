@@ -26,11 +26,19 @@ TMP = os.path.join(bpy.app.tempdir, 'rider_bake')
 os.makedirs(TMP, exist_ok=True)
 
 RIG = 'MH_Rig'
-BODY_PARTS = ['MH_Body', 'MH_Eyebrows', 'MH_Eyelashes', 'MH_Eyes', 'MH_Hair', 'MH_Jersey',
+BODY_PARTS = ['MH_Body_v2', 'MH_Eyebrows', 'MH_Eyelashes', 'MH_Eyes', 'MH_Hair', 'MH_Jersey',
               'MH_JerseyPockets', 'MH_Shoes', 'MH_Shorts']
+CLEATS = {'Cleat.L': 'foot_l', 'Cleat.R': 'foot_r'}   # shoe cleats, parented to the foot bones
 HEAD_GEAR = ['Helmet', 'HelmetStraps', 'HelmetBuckle', 'StrapSlider_R', 'StrapSlider_L', 'Glasses', 'GlassesEnds']
 DECIMATE = {'Helmet': 0.25, 'Glasses': 0.06}        # ratio of the source mesh
-SUBSURF = {'MH_Body': 0, 'MH_Jersey': 1, 'MH_JerseyPockets': 0}  # levels used for the game
+SUBSURF = {'MH_Body_v2': 1, 'MH_Jersey': 1, 'MH_JerseyPockets': 1}  # levels used for the game
+MORPH_PARTS = ['MH_Body_v2', 'MH_Jersey', 'MH_Shorts']  # get per-frame shape keys
+TUCK = {'MH_Body_v2'}                               # skin kept inside the kit in the game (see tuck)
+KIT_OVER_SKIN = ['MH_Jersey', 'MH_Shorts']
+TUCK_GAP = 0.0015                                   # skin at least 1.5 mm under the cloth
+TUCK_REACH = 0.012                                  # only skin within 12 mm of the cloth
+MORPH_STEP = 2                                     # a key every 2nd frame of the clip, blended between
+MORPH_EPS = 0.0003                                  # deltas under 0.3 mm dropped (sparse in the GLB)
 FRAMES = (1, 17)                                    # one crank turn (ChainRing keyed 0..2pi over 1..17)
 BIKE_BB = (0.0, 0.29)                               # bottom bracket in the game's rider group (x, y)
 HAIR_RGB = (0.075, 0.068, 0.062)                    # hair and eyebrow colour (sRGB, near black); None keeps the texture
@@ -105,6 +113,26 @@ def bake_kit_mask(obj, size, name):
     return img
 
 
+def fill_uvs(*objs):
+    """Stretch the objects' UV layout over the whole texture, the same box for all of them.
+
+    The kit's UVs use only about a quarter of the image, so the baked mask had few pixels across the
+    zip and the collar and sleeve edges (jagged in the game). The kit colours are procedural, so the
+    layout itself does not matter in Blender; the file is reverted after the export anyway.
+    """
+    uvs = []
+    for ob in objs:
+        a = np.empty(len(ob.data.loops) * 2, np.float32)
+        ob.data.uv_layers.active.data.foreach_get('uv', a)
+        uvs.append(a.reshape(-1, 2))
+    lo, hi = np.min([u.min(0) for u in uvs], 0), np.max([u.max(0) for u in uvs], 0)
+    pad = 0.01
+    for ob, u in zip(objs, uvs):
+        u = pad + (u - lo) / (hi - lo) * (1 - 2 * pad)
+        ob.data.uv_layers.active.data.foreach_set('uv', u.ravel())
+        ob.data.update()
+
+
 def textured_material(name, img, rough=0.6, alpha=False, src=None):
     m = bpy.data.materials.new(name)
     m.use_nodes = True
@@ -159,7 +187,7 @@ def rest_copy(src, rig):
         m.show_viewport = True
     if me.shape_keys:
         pass
-    ob = bpy.data.objects.new('X_' + src.name.replace('MH_', ''), me)
+    ob = bpy.data.objects.new('X_' + src.name.replace('MH_', '').replace('_v2', ''), me)
     sc.collection.objects.link(ob)
     for vg in src.vertex_groups:
         ob.vertex_groups.new(name=vg.name)
@@ -170,12 +198,117 @@ def rest_copy(src, rig):
 
 
 def match_pose(ob, src, rig):
+    res = solve_rest(ob, src, rig, normals=True)
+    if res is None:
+        return
+    out, nrm = res
+    ob.data.vertices.foreach_set('co', out.ravel())
+    ob.data.update()
+    if nrm is not None:
+        # after the positions: custom normals are kept relative to the mesh's own shape
+        ob.data.normals_split_custom_set([tuple(n) for n in nrm])
+        ob.data.update()
+
+
+def pose_morphs(copies, rig):
+    """Per-frame corrections as shape keys, keyed into the "pedal_cycle" action.
+
+    match_pose makes the game exact in one pose only; as the legs go round, linear skinning drifts
+    from Blender's preserve volume (the seat and the hips most). For every MORPH_STEP-th frame of the
+    clip the rest shape is solved again and stored as a shape key that is on (1) at that frame and
+    off at its neighbours, so the game blends the right shape in between. Small deltas are zeroed,
+    so the exporter can write them as sparse accessors.
+    """
+    act = rig.animation_data.action
+    frames = list(range(FRAMES[0], FRAMES[1] + 1, MORPH_STEP))
+    if frames[-1] != FRAMES[1]:
+        frames.append(FRAMES[1])
+    for src_name, ob in copies:
+        if src_name not in MORPH_PARTS:
+            continue
+        src = O[src_name]
+        base = np.array([tuple(v.co) for v in ob.data.vertices])
+        ob.shape_key_add(name='Basis', from_mix=False)
+        keys = []
+        for f in frames[1:]:
+            sc.frame_set(f)
+            out = solve_rest(ob, src, rig)
+            if out is None:
+                break
+            d = out - base
+            d[np.linalg.norm(d, axis=1) < MORPH_EPS] = 0
+            kb = ob.shape_key_add(name='f%02d' % f, from_mix=False)
+            kb.data.foreach_set('co', (base + d).ravel())
+            kb.slider_min, kb.slider_max = 0.0, 1.0
+            keys.append((f, kb))
+        sc.frame_set(FRAMES[0])
+        if not keys:
+            continue
+        key = ob.data.shape_keys
+        ad = key.animation_data_create()
+        ad.action = act
+        slot = act.slots.new(id_type='KEY', name=ob.name)
+        ad.action_slot = slot
+        for i, (f, kb) in enumerate(keys):
+            prev = frames[i]                                   # neighbour frames: the key is 0 there
+            nxt = frames[i + 2] if i + 2 < len(frames) else None
+            for fr, val in ((prev, 0.0), (f, 1.0)) + (((nxt, 0.0),) if nxt else ()):
+                kb.value = val
+                kb.keyframe_insert('value', frame=fr)
+        kb.value = 0.0
+        for fc in act_fcurves(act, slot):
+            for kp in fc.keyframe_points:
+                kp.interpolation = 'LINEAR'
+
+
+def act_fcurves(act, slot):
+    try:
+        return list(act.layers[0].strips[0].channelbag(slot).fcurves)
+    except Exception:
+        return [fc for fc in getattr(act, 'fcurves', [])]
+
+
+def tuck(target, dg):
+    """Keep the skin TUCK_GAP inside the kit in the game.
+
+    The body goes out at a lower subdivision than Blender shows it, and a coarser cage stands
+    proud of the smooth surface on convex parts (shoulders, upper back) by a few mm: enough for
+    the skin to show through the jersey. So every skin vertex close under (or poking through)
+    the jersey or shorts is pushed back in along the cloth's normal.
+    """
+    from mathutils import Vector
+    from mathutils.bvhtree import BVHTree
+    out = target.copy()
+    for name in KIT_OVER_SKIN:
+        cloth = O[name]
+        tree = BVHTree.FromObject(cloth.evaluated_get(dg), dg)
+        mw, mi = cloth.matrix_world, cloth.matrix_world.inverted()
+        rot = mw.to_3x3()
+        for i, p in enumerate(out):
+            q = mi @ Vector(p)
+            loc, nrm, _, dist = tree.find_nearest(q, TUCK_REACH)
+            if loc is None:
+                continue
+            s = (q - loc).dot(nrm)                      # > 0: skin outside the cloth
+            side = ((q - loc) - nrm * s).length         # > 0: nearest point is the cloth's edge, not over the skin
+            if s > -TUCK_GAP and side < 0.001:
+                n = (rot @ nrm).normalized()
+                out[i] = tuple(Vector(p) - n * (s + TUCK_GAP) * mw.to_scale()[0])
+    return out
+
+
+def solve_rest(ob, src, rig, normals=False):
     """Make the game show exactly what Blender shows in the riding pose.
 
     Blender deforms with preserve volume, any number of bones and modifiers after the armature
     (OverShorts, Thick); the game skins linearly with the 4 strongest bones. So the rest shape of
     the export copy is solved backwards from Blender's posed mesh: rest = (sum w*S)^-1 @ posed, with
     the same top-4 normalised weights the glTF exporter writes. Call with the rig in POSE.
+
+    normals=True also returns the rest corner normals that skin back to Blender's posed normals
+    (the game turns a normal by the blended skin matrix): the solved rest shape is sheared where
+    the weights change from bone to bone, and normals worked out from it would shade the riding
+    pose with dark blotches (lower back, under the pockets). Returns (rest, normals) then.
     """
     dg = bpy.context.evaluated_depsgraph_get()
     ev = src.evaluated_get(dg)
@@ -184,10 +317,19 @@ def match_pose(ob, src, rig):
     if len(tm.vertices) != n:
         ev.to_mesh_clear()
         print('match_pose: vertex count differs, skipped', src.name)
-        return
+        return None
     mw = src.matrix_world
     target = np.array([tuple(mw @ v.co) for v in tm.vertices])
+    cn = lv = None
+    if normals and len(tm.loops) == len(ob.data.loops):
+        cn = np.empty(len(tm.loops) * 3)
+        tm.corner_normals.foreach_get('vector', cn)
+        cn = cn.reshape(-1, 3) @ np.array(mw.to_3x3()).T
+        lv = np.empty(len(tm.loops), dtype=np.int64)
+        tm.loops.foreach_get('vertex_index', lv)
     ev.to_mesh_clear()
+    if src.name in TUCK:
+        target = tuck(target, dg)
     bones = rig.data.bones
     names = [vg.name for vg in ob.vertex_groups]
     skin = {}
@@ -200,6 +342,7 @@ def match_pose(ob, src, rig):
     obw = ob.matrix_world
     obwi = np.array(obw.inverted())
     out = np.empty((n, 3))
+    inv3 = np.tile(np.eye(3), (n, 1, 1))  # per vertex: posed -> rest for directions
     for v in ob.data.vertices:
         ws = sorted(((g.weight, g.group) for g in v.groups if g.group in skin and g.weight > 0), reverse=True)[:4]
         tot = sum(w for w, _ in ws)
@@ -209,8 +352,14 @@ def match_pose(ob, src, rig):
         M = sum((w / tot) * skin[gi] for w, gi in ws)
         r = np.linalg.solve(M, np.append(target[v.index], 1.0))
         out[v.index] = (obwi @ (r / r[3]))[:3]
-    ob.data.vertices.foreach_set('co', out.ravel())
-    ob.data.update()
+        inv3[v.index] = np.linalg.inv(M[:3, :3])
+    if not normals:
+        return out
+    if cn is None:
+        return out, None
+    nr = np.einsum('lij,lj->li', inv3[lv], cn) @ obwi[:3, :3].T
+    nr /= np.maximum(np.linalg.norm(nr, axis=1, keepdims=True), 1e-9)
+    return out, nr
 
 
 def gear_copy(src):
@@ -227,6 +376,38 @@ def gear_copy(src):
     return ob
 
 
+def cleat_copy(src, rig, bone):
+    """A cleat parented straight to its foot bone (its Sole empty is not exported), kept where it is now."""
+    me = src.data.copy()
+    ob = bpy.data.objects.new('X_' + src.name.replace('.', '_'), me)
+    sc.collection.objects.link(ob)
+    mw = src.matrix_world.copy()
+    ob.parent = rig; ob.parent_type = 'BONE'; ob.parent_bone = bone
+    bpy.context.view_layer.update()
+    ob.matrix_world = mw
+    return ob
+
+
+def pedal_tilt():
+    """How the drive-side pedal tilts over one crank turn, fitted as [mean, cos, sin] in degrees.
+
+    In Blender the pedals copy the soles' pitch (toe down near the bottom of the stroke); the game turns
+    the bike's pedals by the same angle (js/bike-model.js), left pedal half a turn later. Positive = toe
+    down; the crank angle is that of the clip (0 at frame FRAMES[0]).
+    """
+    ped = O['RightPedal']
+    rows, vals = [], []
+    n = FRAMES[1] - FRAMES[0]
+    for f in range(FRAMES[0], FRAMES[1]):
+        sc.frame_set(f)
+        a = 2 * np.pi * (f - FRAMES[0]) / n
+        rows.append((1, np.cos(a), np.sin(a)))
+        vals.append(np.degrees(ped.matrix_world.to_euler().y))
+    sc.frame_set(FRAMES[0])
+    k = np.linalg.lstsq(np.array(rows), np.array(vals), rcond=None)[0]
+    return [round(float(x), 2) for x in k]
+
+
 def run():
     assert bpy.data.filepath, 'open blender/rider_male.blend first'
     bpy.ops.wm.save_mainfile()
@@ -237,12 +418,14 @@ def run():
 
     # 1. textures
     set_engine_cycles()
-    body_img = save_jpeg(bake_object(O['MH_Body'], 2048, 'rider_body'), 'rider_body')
+    body_img = save_jpeg(bake_object(O['MH_Body_v2'], 2048, 'rider_body'), 'rider_body')
     shoe_img = save_jpeg(bake_object(O['MH_Shoes'], 1024, 'rider_shoes'), 'rider_shoes')
-    kit_img = save_jpeg(bake_kit_mask(O['MH_Jersey'], 1024, 'rider_kit'), 'rider_kit', 95)
-    pocket_img = save_jpeg(bake_kit_mask(O['MH_JerseyPockets'], 512, 'rider_pockets'), 'rider_pockets', 95)
+    fill_uvs(O['MH_Jersey'])
+    fill_uvs(O['MH_JerseyPockets'])
+    kit_img = save_jpeg(bake_kit_mask(O['MH_Jersey'], 2048, 'rider_kit'), 'rider_kit', 95)
+    pocket_img = save_jpeg(bake_kit_mask(O['MH_JerseyPockets'], 1024, 'rider_pockets'), 'rider_pockets', 95)
     mats = {
-        'MH_Body': textured_material('Skin', body_img, src=bpy.data.materials['Skin.001']),
+        'MH_Body_v2': textured_material('Skin', body_img, src=bpy.data.materials['Skin.001']),
         'MH_Shoes': textured_material('Shoes', shoe_img, rough=0.35),
         'MH_Jersey': textured_material('JerseyMask', kit_img, rough=0.45),
         'MH_JerseyPockets': textured_material('PocketsMask', pocket_img, rough=0.45),
@@ -280,15 +463,19 @@ def run():
     bpy.context.view_layer.update()
     for n, ob in zip(BODY_PARTS, copies):
         match_pose(ob, O[n], rig)
+    pose_morphs(list(zip(BODY_PARTS, copies)), rig)
     for n in HEAD_GEAR:
         copies.append(gear_copy(O[n]))
+    sc.frame_set(FRAMES[0])
+    for n, bone in CLEATS.items():
+        copies.append(cleat_copy(O[n], rig, bone))
     bpy.ops.object.select_all(action='DESELECT')
     for ob in copies + [rig]:
         ob.hide_set(False); ob.select_set(True)
     bpy.context.view_layer.objects.active = rig
     opts = dict(filepath=OUT_GLB, export_format='GLB', use_selection=True, export_apply=False,
                 export_skins=True, export_def_bones=True, export_animations=True, export_animation_mode='ACTIONS',
-                export_anim_slide_to_zero=True, export_force_sampling=True, export_morph=False,
+                export_anim_slide_to_zero=True, export_force_sampling=True, export_morph=True, export_morph_normal=False, export_morph_animation=True,
                 export_yup=True, export_image_format='AUTO', export_cameras=False, export_lights=False,
                 export_extras=False)
     bpy.ops.export_scene.gltf(**opts)
@@ -304,6 +491,7 @@ def run():
         'kitZip': '#1a1a1a',
         'jerseyMaterials': ['-'], 'shortsMaterials': ['-'],
         'sleeve': False, 'sockHeight': False, 'armSlim': 1, 'helmet': False, 'glasses': False,
+        'pedalTilt': pedal_tilt(),                 # the bike's pedals follow the soles, as in Blender
     }
     with open(OUT_CFG, 'w') as f:
         json.dump(cfg, f, indent=2)

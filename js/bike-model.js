@@ -271,7 +271,14 @@ export class ModelBike {
     if (!this.bones) return;
     const a = -angle;
     this._turn(this.bones.ring, a);
-    for (const p of this.bones.pedals) this._turn(p, -a); // pedals stay level while the cranks turn
+    // pedals stay level while the cranks turn, or tilt with the rider's soles: rider.json "pedalTilt":
+    // [mean, cos, sin] degrees toe down for the drive-side pedal over the crank angle, the left one half a turn on
+    const T = this.pedalTilt;
+    this.bones.pedals.forEach((p, i) => {
+      const c = angle + i * Math.PI; // pedals = [right, left]
+      const tilt = T ? THREE.MathUtils.degToRad(T[0] + T[1] * Math.cos(c) + T[2] * Math.sin(c)) : 0;
+      this._turn(p, -a - tilt);
+    });
   }
 
   /** Distance ridden (m): the wheels of a rigged model roll forward. */

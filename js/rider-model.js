@@ -713,7 +713,8 @@ function kitMaskMaterial(m, jersey, stripe, zip) {
   if (c.map) { c.map = c.map.clone(); c.map.colorSpace = THREE.NoColorSpace; c.map.needsUpdate = true; } // a mask, not a colour
   const uniforms = {
     kitMain: { value: new THREE.Color(jersey || '#1f6fd6') },
-    kitAccent: { value: new THREE.Color(stripe || '#0b1024') },
+    // the pockets' seams are green in the mask too: paint them the jersey colour, not the accent
+    kitAccent: { value: new THREE.Color((/pocket/i.test(m.name) ? jersey : stripe) || '#0b1024') },
     kitZip: { value: new THREE.Color(zip || '#1a1a1a') },
   };
   c.onBeforeCompile = (shader) => {
@@ -727,6 +728,11 @@ function kitMaskMaterial(m, jersey, stripe, zip) {
     );
   };
   c.customProgramCacheKey = () => 'kitMask';
+  // the jersey lies 2-3 mm over the skin and the shorts, and the pockets a millimetre or two over the
+  // jersey: pull each layer toward the camera in the depth test (pockets more than the jersey), or
+  // they fight (flicker) from any distance
+  const off = /pocket/i.test(m.name) ? [-2, -4] : [-1, -2];
+  Object.assign(c, { polygonOffset: true, polygonOffsetFactor: off[0], polygonOffsetUnits: off[1] });
   return c;
 }
 
