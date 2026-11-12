@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { gltfLoader } from './gltf.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
+import { assetUrl } from './asset-url.js';
 
 const CANDIDATES = [
   // aero bike on the Pinarello F12 frame by jiet17 (CC-BY), built in blender/f12_bike.blend
@@ -53,7 +54,7 @@ export async function loadBikeModel() {
       const head = await fetch(c.url, { method: 'HEAD' });
       if (!head.ok) continue;
       let cfg = {};
-      try { const r = await fetch(c.cfg); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
+      try { const r = await fetch(assetUrl(c.cfg)); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
       return { gltf: await gltfLoader().loadAsync(c.url), cfg };
     } catch (e) {
       console.warn(`Bike model ${c.url} not loaded`, e);

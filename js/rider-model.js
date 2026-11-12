@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { gltfLoader } from './gltf.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
+import { assetUrl } from './asset-url.js';
 
 const SADDLE0 = { x: -0.15, y: 1.03 }; // saddle of the built-in bike the hips settings were tuned on
 
@@ -67,7 +68,7 @@ async function tryCandidates(list) {
       const head = await fetch(c.url, { method: 'HEAD' });
       if (!head.ok) continue;
       let cfg = {};
-      if (c.cfg) { try { const r = await fetch(c.cfg); if (r.ok) cfg = await r.json(); } catch { /* optional */ } }
+      if (c.cfg) { try { const r = await fetch(assetUrl(c.cfg)); if (r.ok) cfg = await r.json(); } catch { /* optional */ } }
       const gltf = await c.load(c.url, cfg);
       return { gltf, cfg };
     } catch (e) {

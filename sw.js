@@ -19,7 +19,8 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return; // intervals.icu and the like: straight through
   const heavy = /\/(assets|vendor|icons)\//.test(url.pathname);
-  e.respondWith(heavy ? savedFirst(req, e) : networkFirst(req));
+  const dev = location.hostname === 'localhost'; // a local server: a model just exported shows at once
+  e.respondWith(heavy && !dev ? savedFirst(req, e) : networkFirst(req));
 });
 
 async function networkFirst(req) {
@@ -36,7 +37,16 @@ async function networkFirst(req) {
 async function savedFirst(req, e) {
   const cache = await caches.open(CACHE);
   const saved = await cache.match(req);
-  const fresh = fetch(req).then((res) => { if (res.ok) cache.put(req, res.clone()); return res; });
+  const fresh = fetch(req).then((res) => { if (res.ok) { cache.put(req, res.clone()); dropOtherVersions(cache, req); } return res; });
   if (saved) { e.waitUntil(fresh.catch(() => {})); return saved; }
   return fresh;
+}
+
+/** A file of a new version (?v=...) replaces the saved copies of its other versions. */
+async function dropOtherVersions(cache, req) {
+  const url = new URL(req.url);
+  if (!url.searchParams.has('v')) return;
+  for (const k of await cache.keys(req, { ignoreSearch: true })) {
+    if (k.url !== req.url) await cache.delete(k);
+  }
 }

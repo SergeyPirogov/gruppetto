@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { gltfLoader } from './gltf.js';
 import { mergeVertices } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { buildModernHelmet } from './helmet.js';
+import { assetUrl } from './asset-url.js';
 
 const URL = 'assets/rider/dummy.gltf';
 const CFG_URL = 'assets/rider/dummy.json'; // optional fine-tuning, see assets/README.md
@@ -24,7 +25,7 @@ export async function loadDummyRider() {
     const head = await fetch(URL, { method: 'HEAD' });
     if (!head.ok) return null;
     let cfg = {};
-    try { const r = await fetch(CFG_URL); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
+    try { const r = await fetch(assetUrl(CFG_URL)); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
     let headModel = null;
     try { if ((await fetch(HEAD_URL, { method: 'HEAD' })).ok) headModel = await gltfLoader().loadAsync(HEAD_URL); } catch (e) { console.warn('Rider head not loaded', e); }
     return { dummy: await gltfLoader().loadAsync(URL), head: headModel, cfg };
