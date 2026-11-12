@@ -30,8 +30,8 @@
   "helmet": false,
   "glasses": false,
   "pedalTilt": [
-    12.49,
+    12.48,
     -12.93,
-    0.0
+    0.01
   ]
 }

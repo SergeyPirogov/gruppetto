@@ -485,6 +485,11 @@ def run():
     for ob in copies + [rig]:
         ob.hide_set(False); ob.select_set(True)
     bpy.context.view_layer.objects.active = rig
+    # the clip is baked with visual keying, so it already holds the whole pose; with the IK still on, the
+    # glTF exporter re-solves it while sampling and does not play the knee poles' own animation
+    for pb in rig.pose.bones:
+        for c in pb.constraints:
+            c.mute = True
     opts = dict(filepath=OUT_GLB, export_format='GLB', use_selection=True, export_apply=False,
                 export_skins=True, export_def_bones=True, export_animations=True, export_animation_mode='ACTIONS',
                 export_anim_slide_to_zero=True, export_force_sampling=True, export_morph=True, export_morph_normal=False, export_morph_animation=True,

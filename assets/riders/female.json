@@ -30,9 +30,9 @@
   "helmet": false,
   "glasses": false,
   "pedalTilt": [
-    12.68,
-    -12.93,
-    0.0
+    12.67,
+    -12.92,
+    0.01
   ],
   "bikeScale": 0.92,
   "saddleDrop": 0.066
