@@ -381,6 +381,7 @@ function initLobby() {
   bind('f-helmet', 'helmetColor', false);
   bind('f-lens', 'lensColor', false);
   bind('f-figure', 'figure', false);
+  $('f-figure').addEventListener('input', renderFigure);
   bind('f-weight', 'weight');
   bind('f-height', 'height');
   bind('f-ftp', 'ftp');
@@ -4023,6 +4024,7 @@ const KEYS = [
   [['F'], 'Full screen'],
   [['M'], 'Bigger map'],
   [['I'], 'Mini window over other apps (film, football, YouTube)'],
+  [['R'], 'Switch the rider: man / woman'],
   [['+', '−'], 'Simulator: power ±10 W'],
   [['Esc'], 'Menu: Finish and Settings'],
   [['?'], 'This list'],
@@ -4032,6 +4034,21 @@ function toggleKeysHelp(show = $('keys-help').hidden) {
   $('keys-help').hidden = !show;
 }
 $('btn-keys').onclick = () => toggleKeysHelp();
+
+/** Who rides: the man or the woman. The renderer rebuilds your rider as soon as settings.figure changes. */
+function setFigure(f) {
+  settings.figure = f === 'female' ? 'female' : 'male';
+  $('f-figure').value = settings.figure;
+  saveSettings(); renderFigure();
+}
+function renderFigure() {
+  const f = settings.figure === 'female' ? 'female' : 'male';
+  for (const b of document.querySelectorAll('#figure-pick [data-figure]')) b.classList.toggle('sel', b.dataset.figure === f);
+  $('btn-figure').textContent = tr(f === 'female' ? 'Man' : 'Woman'); // the button names who you switch to
+}
+for (const b of document.querySelectorAll('#figure-pick [data-figure]')) b.onclick = () => setFigure(b.dataset.figure);
+$('btn-figure').onclick = () => setFigure(settings.figure === 'female' ? 'male' : 'female');
+renderFigure();
 $('keys-help').addEventListener('click', (e) => { if (e.target === $('keys-help') || e.target.closest('[data-keys-close]')) toggleKeysHelp(false); });
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen?.();
@@ -4073,6 +4090,7 @@ function onRideKey(e) {
   else if (c === 'KeyF') toggleFullscreen();
   else if (c === 'KeyM') toggleMinimap();
   else if (c === 'KeyI') togglePip();
+  else if (c === 'KeyR') setFigure(settings.figure === 'female' ? 'male' : 'female');
   else if (ride.simulated && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(c)) {
     const s = $('sim-power');
     s.value = Number(s.value) + (c === 'Equal' || c === 'NumpadAdd' ? 5 : -5);

@@ -124,6 +124,11 @@
           <button data-ghost="best" title=""><b>Your best</b><small id="ghost-best"></small></button>
         </span>
       </div>
+      <!-- who rides: the man or the woman (also in the ride, R) -->
+      <div id="figure-pick" class="figure-pick" role="group" aria-label="Rider">
+        <button data-figure="male">Man</button>
+        <button data-figure="female">Woman</button>
+      </div>
       <div class="start-split">
         <button id="btn-start" class="primary big">Ride</button>
         <button id="btn-start-more" class="primary big start-more" aria-label="More ways to ride" title="More ways to ride">▾</button>
@@ -543,6 +548,7 @@
         <div class="controls">
           <button id="btn-pause" class="pill-btn">Pause</button>
           <button id="btn-finish" class="pill-btn danger">Finish</button>
+          <button id="btn-figure" class="pill-btn" title="Switch the rider (R)">Woman</button>
           <button id="btn-keys" class="pill-btn icon-btn" title="Keyboard (?)" aria-label="Keyboard (?)"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
           <button id="btn-pip" class="pill-btn icon-btn" title="Mini window over other apps (I)" aria-label="Mini window over other apps (I)" hidden><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="12" y="11.5" width="7" height="5.5" rx="1" fill="currentColor"/></svg></button>
           <button id="btn-settings" class="pill-btn icon-btn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
