@@ -312,6 +312,23 @@ export class ModelBike {
     }
   }
 
+  /**
+   * A smaller frame for a smaller rider (rider.json "bikeScale", "saddleDrop"): the whole bike is scaled
+   * about the road under the rider group's origin, so the tyres stay on the road; the saddle and its post
+   * (glTF node "Saddle") slide `saddleDrop` m down the seat tube (bike json "saddleAxis": [x, y], up the post).
+   */
+  fitRider(scale = 1, saddleDrop = 0, cfg = {}) {
+    if (saddleDrop) {
+      const s = this.root.getObjectByName('Saddle'), ax = cfg.saddleAxis || [-0.383, 0.924];
+      if (s) { s.position.x -= ax[0] * saddleDrop; s.position.y -= ax[1] * saddleDrop; }
+    }
+    if (scale !== 1) {
+      this.root.position.multiplyScalar(scale);
+      this.root.scale.multiplyScalar(scale);
+      this.wheelR *= scale;
+    }
+  }
+
   // ----- per frame -----
 
   /** Crank angle (radians, same convention as Rider3D.pose): forward pedalling turns clockwise seen from +z. */

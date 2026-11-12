@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
-  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', helmetColor: '#f2f2f2', lensColor: '#1c2230',
+  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
@@ -380,6 +380,7 @@ function initLobby() {
   bind('f-tape', 'tapeColor', false);
   bind('f-helmet', 'helmetColor', false);
   bind('f-lens', 'lensColor', false);
+  bind('f-figure', 'figure', false);
   bind('f-weight', 'weight');
   bind('f-height', 'height');
   bind('f-ftp', 'ftp');
@@ -1052,6 +1053,10 @@ const BOT_NAMES = [
   ['Yuriy', 'Юрій'], ['Maksym', 'Максим'], ['Artem', 'Артем'], ['Nazar', 'Назар'], ['Pavlo', 'Павло'], ['Ihor', 'Ігор'],
   ['Denys', 'Денис'], ['Volodymyr', 'Володимир'], ['Mykhailo', 'Михайло'], ['Danylo', 'Данило'], ['Stepan', 'Степан'], ['Kyrylo', 'Кирило'],
 ];
+const BOT_NAMES_F = [
+  ['Olena', 'Олена'], ['Iryna', 'Ірина'], ['Kateryna', 'Катерина'], ['Oksana', 'Оксана'], ['Mariia', 'Марія'], ['Yuliia', 'Юлія'],
+  ['Anna', 'Анна'], ['Sofiia', 'Софія'], ['Nataliia', 'Наталія'], ['Daryna', 'Дарина'], ['Khrystyna', 'Христина'], ['Viktoriia', 'Вікторія'],
+];
 const BOT_KITS = [
   ['#e5484d', '#ffffff'], ['#2563eb', '#facc15'], ['#8b5cf6', '#f0f0f0'], ['#f5f5f5', '#16a34a'], ['#111827', '#f97316'],
   ['#0ea5e9', '#0f172a'], ['#f59e0b', '#1f2937'], ['#14b8a6', '#ffffff'], ['#db2777', '#fde68a'], ['#65a30d', '#f8fafc'],
@@ -1060,7 +1065,8 @@ const BOT_KITS = [
 /**
  * A bunch of `n` riders around your level: their steady pace is 55-95 % of your FTP in W/kg (so on
  * a free ride some are a little slower than you, some a little faster), each with his own weight,
- * build (air drag from height and weight), cadence and kit; names and kits never repeat in a ride.
+ * build (air drag from height and weight), cadence and kit; names and kits never repeat in a ride. About a
+ * third are women (their own names and the female rider).
  */
 /**
  * Riders coming the other way along the far edge of the road, one at a time, now and then: life on the road, for the
@@ -1081,16 +1087,17 @@ function passersBy(dt) {
 function makeBots(n, { race = false } = {}) {
   const rnd = (a, b) => a + Math.random() * (b - a);
   const pick = (arr) => arr.splice(Math.floor(Math.random() * arr.length), 1)[0];
-  const names = BOT_NAMES.slice(), kits = BOT_KITS.filter(([c]) => c.toLowerCase() !== String(settings.jersey).toLowerCase());
+  const names = BOT_NAMES.slice(), namesF = BOT_NAMES_F.slice(), kits = BOT_KITS.filter(([c]) => c.toLowerCase() !== String(settings.jersey).toLowerCase());
   const ftpWkg = Math.max(1.5, settings.ftp / Math.max(40, settings.weight));
   return Array.from({ length: n }, (_, i) => {
-    const [en, uk] = pick(names), [color, stripe] = pick(kits.length ? kits : BOT_KITS.slice());
-    const weight = Math.round(rnd(60, 88)), height = Math.round(165 + (weight - 60) * 0.9 + rnd(-6, 6));
+    const female = i % 3 === 2; // about a third of the bunch are women
+    const [en, uk] = pick(female ? namesF : names), [color, stripe] = pick(kits.length ? kits : BOT_KITS.slice());
+    const weight = Math.round(female ? rnd(50, 68) : rnd(60, 88)), height = Math.round((female ? 158 : 165) + (weight - (female ? 50 : 60)) * 0.9 + rnd(-6, 6));
     // spread evenly across the range, then shuffled by the random start order
     // a ride: 55–95 % of your FTP in W/kg; a race: 82–108 %, so some of them are stronger than you
     const level = (race ? 0.82 : 0.55) + (n > 1 ? i / (n - 1) : 0.5) * (race ? 0.26 : 0.4) + rnd(-0.04, 0.04);
     return {
-      name: lang === 'uk' ? uk : en, color, stripe, weight, cda: riderCdA(height, weight),
+      name: lang === 'uk' ? uk : en, figure: female ? 'female' : 'male', color, stripe, weight, cda: riderCdA(height, weight),
       wkg: Math.round(ftpWkg * level * 10) / 10, rpm: Math.round(rnd(82, 98)), phase: rnd(0, 6.28),
       climber: race && Math.random() < 0.4, // attacks on the climbs
     };
@@ -1543,7 +1550,7 @@ function frame(now) {
     }
   }
   const riders = [
-    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane, v: ride.v },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane, v: ride.v },
     ...ride.bots,
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),

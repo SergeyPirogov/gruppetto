@@ -1,4 +1,5 @@
-"""Export the Blender-built rider (blender/rider_male.blend) to the game: assets/riders/male.glb + male.json.
+"""Export a Blender-built rider (blender/rider_<figure>.blend) to the game: assets/riders/<figure>.glb + <figure>.json
+(rider_male.blend -> male.glb, rider_female.blend -> female.glb).
 
 Run inside Blender with the .blend open (Text Editor > Run Script, or through the Blender MCP):
     exec(open('/path/to/gruppetto/tools/export_rider_blend.py').read())
@@ -13,15 +14,19 @@ What it does, without touching the saved .blend (it reverts the file at the end)
   3. Applies every modifier except the armature in the rest pose, then solves the rest shape back
      from Blender's posed mesh (match_pose) so the game's 4-bone linear skinning shows exactly what
      Blender shows; simplifies the helmet and glasses, and exports the skinned rider, its head gear and the clip as a GLB.
-  4. Writes male.json: where the model sits relative to the game's bike (bottom bracket at
+  4. Writes <figure>.json: where the model sits relative to the game's bike (bottom bracket at
      x 0, y 0.29) and the switches that make the game play the clip in step with the cranks.
+     A smaller rider sits on a smaller frame: the scene's custom properties "bikeScale" (the game scales
+     bike and rider together) and "saddleDrop" (m down the seat tube; the .blend has the saddle lowered
+     as much) go into the json.
 """
 import bpy, os, json
 import numpy as np
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(bpy.data.filepath)))
-OUT_GLB = os.path.join(REPO, 'assets', 'riders', 'male.glb')
-OUT_CFG = os.path.join(REPO, 'assets', 'riders', 'male.json')
+FIGURE = os.path.splitext(os.path.basename(bpy.data.filepath))[0].replace('rider_', '')   # 'male', 'female'
+OUT_GLB = os.path.join(REPO, 'assets', 'riders', FIGURE + '.glb')
+OUT_CFG = os.path.join(REPO, 'assets', 'riders', FIGURE + '.json')
 TMP = os.path.join(bpy.app.tempdir, 'rider_bake')
 os.makedirs(TMP, exist_ok=True)
 
@@ -29,7 +34,8 @@ RIG = 'MH_Rig'
 BODY_PARTS = ['MH_Body_v2', 'MH_Eyebrows', 'MH_Eyelashes', 'MH_Eyes', 'MH_Hair', 'MH_Jersey',
               'MH_JerseyPockets', 'MH_Shoes', 'MH_Shorts']
 CLEATS = {'Cleat.L': 'foot_l', 'Cleat.R': 'foot_r'}   # shoe cleats, parented to the foot bones
-HEAD_GEAR = ['Helmet', 'HelmetStraps', 'HelmetBuckle', 'StrapSlider_R', 'StrapSlider_L', 'Glasses']
+HEAD_GEAR = ['Helmet', 'HelmetStraps', 'HelmetBuckle', 'StrapSlider_R', 'StrapSlider_L', 'Glasses',
+             'Ponytail', 'HairTie']                 # parented to the head bone; the ones a .blend has
 DECIMATE = {'Helmet': 0.25}                         # ratio of the source mesh
 SUBSURF = {'MH_Body_v2': 1, 'MH_Jersey': 1, 'MH_JerseyPockets': 1}  # levels used for the game
 MORPH_PARTS = ['MH_Body_v2', 'MH_Jersey', 'MH_JerseyPockets', 'MH_Shorts']  # get per-frame shape keys (pockets too, or they slide on the jersey)
@@ -409,7 +415,7 @@ def pedal_tilt():
 
 
 def run():
-    assert bpy.data.filepath, 'open blender/rider_male.blend first'
+    assert bpy.data.filepath, 'open blender/rider_<figure>.blend first'
     bpy.ops.wm.save_mainfile()
     if bpy.context.object and bpy.context.object.mode != 'OBJECT':
         bpy.ops.object.mode_set(mode='OBJECT')
@@ -470,7 +476,8 @@ def run():
         match_pose(ob, O[n], rig)
     pose_morphs(list(zip(BODY_PARTS, copies)), rig)
     for n in HEAD_GEAR:
-        copies.append(gear_copy(O[n]))
+        if n in O:
+            copies.append(gear_copy(O[n]))
     sc.frame_set(FRAMES[0])
     for n, bone in CLEATS.items():
         copies.append(cleat_copy(O[n], rig, bone))
@@ -499,6 +506,9 @@ def run():
         'sleeve': False, 'sockHeight': False, 'armSlim': 1, 'helmet': False, 'glasses': False,
         'pedalTilt': pedal_tilt(),                 # the bike's pedals follow the soles, as in Blender
     }
+    for k in ('bikeScale', 'saddleDrop'):          # a smaller frame for a smaller rider
+        if k in sc:
+            cfg[k] = round(float(sc[k]), 4)
     with open(OUT_CFG, 'w') as f:
         json.dump(cfg, f, indent=2)
         f.write('\n')

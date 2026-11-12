@@ -9,8 +9,9 @@ import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
 
 const SADDLE0 = { x: -0.15, y: 1.03 }; // saddle of the built-in bike the hips settings were tuned on
 
-const CANDIDATES = [
-  { url: 'assets/riders/male.glb', cfg: 'assets/riders/male.json', load: async (u, cfg) => {
+// one per figure: assets/riders/<figure>.glb + .json (male from rider_male.blend, female from rider_female.blend)
+const candidates = (figure) => [
+  { url: `assets/riders/${figure}.glb`, cfg: `assets/riders/${figure}.json`, load: async (u, cfg) => {
     const gltf = await gltfLoader().loadAsync(u);
     await attachParts(gltf.scene, (cfg.attach || []).map((f) => `assets/riders/${f}`));
     if (cfg.hairColor) tintHair(gltf.scene, cfg.hairColor);
@@ -55,9 +56,9 @@ function tintHair(scene, hex) {
   });
 }
 
-/** Loads the rider once: { gltf, cfg }, or null when the file is missing. */
-export async function loadRiderModel() {
-  return tryCandidates(CANDIDATES);
+/** Loads one figure's rider ('male' or 'female'): { gltf, cfg }, or null when the file is missing. */
+export async function loadRiderModel(figure = 'male') {
+  return tryCandidates(candidates(figure));
 }
 
 async function tryCandidates(list) {

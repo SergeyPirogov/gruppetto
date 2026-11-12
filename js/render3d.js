@@ -81,6 +81,8 @@ export function preloadModels() {
     bike: loadBikeModel(),
     // our own rider (assets/riders/male.glb), else the dummy if you have it, else simple shapes
     rider: SHOW_RIDER ? loadRiderModel().then((m) => m || loadDummyRider()) : Promise.resolve(null),
+    // the female rider (assets/riders/female.glb): riders with figure 'female' get her, when she loaded
+    riderFemale: SHOW_RIDER ? loadRiderModel('female').catch(() => null) : Promise.resolve(null),
     nature: loadNature().catch((e) => { console.warn('Nature models unavailable, using built-in shapes', e); return null; }),
     // fans: people posed from the rider model (phones keep the simple figures: a crowd of them is heavy)
     fans: LOW ? Promise.resolve(null) : loadFanModels().catch((e) => { console.warn('Fan models unavailable, using simple figures', e); return null; }),
@@ -758,6 +760,7 @@ export class Scene3D {
     this.clock = 0;
     this.windTime = { value: 0 }; // shared by every swaying material
     this.riderModel = null;
+    this.riderModelF = null;
     this.nature = null;
     this.bikeModel = null;
     // A loading screen covers the ride until the bike, rider and scenery models have loaded (or failed)
@@ -784,9 +787,15 @@ export class Scene3D {
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the custom character on the next frame
     });
+    const riderFLoad = models.riderFemale.then((m) => {
+      if (!m) return;
+      this.riderModelF = m;
+      for (const R of this.riders.values()) this.scene.remove(R.group);
+      this.riders.clear();
+    });
     const fanLoad = models.fans.then((m) => { if (m) this.fanModels = m; });
     const ready = () => { this.modelsReady = true; };
-    Promise.allSettled([bikeLoad, riderLoad, natureLoad, fanLoad]).then(ready);
+    Promise.allSettled([bikeLoad, riderLoad, riderFLoad, natureLoad, fanLoad]).then(ready);
     setTimeout(ready, 30000); // a stalled download must not hide the riders for good
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -2689,7 +2698,7 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.helmet || ''}:${r.lens || ''}` : r.key || r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.helmet || ''}:${r.lens || ''}:${r.figure || ''}` : r.key || r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
@@ -2708,12 +2717,20 @@ export class Scene3D {
         blob.renderOrder = 1;
         R.group.add(blob);
         this.scene.add(R.group);
-        if (this.riderModel) {
-          const Model = this.riderModel.dummy ? DummyRider : ModelRider;
-          R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens });
+        const riderModel = (r.figure === 'female' && this.riderModelF) || this.riderModel;
+        if (riderModel) {
+          const Model = riderModel.dummy ? DummyRider : ModelRider;
+          R.model = new Model(riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens });
         }
         // the frame its own colour, or the jersey's
         if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
+        // a smaller rider on a smaller frame (rider json "bikeScale", "saddleDrop"): bike and rider scaled together
+        const fit = R.model?.cfg;
+        if (fit && (fit.bikeScale || fit.saddleDrop)) {
+          const k = fit.bikeScale || 1;
+          R.bike?.fitRider(k, fit.saddleDrop || 0, this.bikeModel?.cfg);
+          if (k !== 1) { R.model.root.position.multiplyScalar(k); R.model.root.scale.multiplyScalar(k); }
+        }
         // a ghost (your own earlier ride): see-through, and drawn after the solid scene
         if (r.ghost) {
           R.group.traverse((o) => {

@@ -1,0 +1,39 @@
+{
+  "asModelled": true,
+  "offset": [
+    0.0159,
+    0.0112,
+    0
+  ],
+  "rotateY": 0,
+  "clipFollowsCrank": true,
+  "kitMask": [
+    "JerseyMask",
+    "PocketsMask"
+  ],
+  "kitZip": "#1a1a1a",
+  "helmetMaterials": [
+    "Helmet main"
+  ],
+  "lensMaterials": [
+    "Glasses lens"
+  ],
+  "jerseyMaterials": [
+    "-"
+  ],
+  "shortsMaterials": [
+    "-"
+  ],
+  "sleeve": false,
+  "sockHeight": false,
+  "armSlim": 1,
+  "helmet": false,
+  "glasses": false,
+  "pedalTilt": [
+    12.68,
+    -12.93,
+    0.0
+  ],
+  "bikeScale": 0.92,
+  "saddleDrop": 0.066
+}
