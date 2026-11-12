@@ -29,8 +29,8 @@ RIG = 'MH_Rig'
 BODY_PARTS = ['MH_Body_v2', 'MH_Eyebrows', 'MH_Eyelashes', 'MH_Eyes', 'MH_Hair', 'MH_Jersey',
               'MH_JerseyPockets', 'MH_Shoes', 'MH_Shorts']
 CLEATS = {'Cleat.L': 'foot_l', 'Cleat.R': 'foot_r'}   # shoe cleats, parented to the foot bones
-HEAD_GEAR = ['Helmet', 'HelmetStraps', 'HelmetBuckle', 'StrapSlider_R', 'StrapSlider_L', 'Glasses', 'GlassesEnds']
-DECIMATE = {'Helmet': 0.25, 'Glasses': 0.06}        # ratio of the source mesh
+HEAD_GEAR = ['Helmet', 'HelmetStraps', 'HelmetBuckle', 'StrapSlider_R', 'StrapSlider_L', 'Glasses']
+DECIMATE = {'Helmet': 0.25}                         # ratio of the source mesh
 SUBSURF = {'MH_Body_v2': 1, 'MH_Jersey': 1, 'MH_JerseyPockets': 1}  # levels used for the game
 MORPH_PARTS = ['MH_Body_v2', 'MH_Jersey', 'MH_JerseyPockets', 'MH_Shorts']  # get per-frame shape keys (pockets too, or they slide on the jersey)
 TUCK = {'MH_Body_v2'}                               # skin kept inside the kit in the game (see tuck)
@@ -494,7 +494,7 @@ def run():
         'clipFollowsCrank': True,                  # clip time = crank angle (one turn = one clip)
         'kitMask': ['JerseyMask', 'PocketsMask'],  # red = jersey colour, green = accent (stripe)
         'kitZip': '#1a1a1a',
-        'helmetMaterials': ['Helmet main'], 'lensMaterials': ['Oak lens'],  # recoloured per rider
+        'helmetMaterials': ['Helmet main'], 'lensMaterials': ['Glasses lens'],  # recoloured per rider
         'jerseyMaterials': ['-'], 'shortsMaterials': ['-'],
         'sleeve': False, 'sockHeight': False, 'armSlim': 1, 'helmet': False, 'glasses': False,
         'pedalTilt': pedal_tilt(),                 # the bike's pedals follow the soles, as in Blender
