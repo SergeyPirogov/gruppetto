@@ -2867,11 +2867,16 @@ export class Scene3D {
       this._birds(dt, cx, cy, cz);
       this.cloudGroup.position.set(cx, cy, cz);
       this.cloudGroup.rotation.y += dt * 0.0012;
-      // Key light follows the heading: low, ahead and to the left, so the rider is lit from the side
-      // and their shadow falls back towards the camera, like the late-afternoon look of pixel games.
-      const ahead = this.frame(dist + 6);
-      const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
-      const fx = hx / hl, fz = hz / hl; // forward on the ground plane; left is (fz, -fx)
+      // The sun stands still over the route, as a real one: set from the heading at the start (low, ahead
+      // and to the left, so the rider is lit from the side there). It used to turn with the road, and on
+      // bends every frame redrew the shadows a little rotated: the far ones flickered right by the helmet.
+      if (this.sunRoute !== this.routeId) {
+        const a = this.frame(0), b = this.frame(6);
+        const hx = b.x - a.x, hz = b.z - a.z, hl = Math.hypot(hx, hz) || 1;
+        this.sunFwd = [hx / hl, hz / hl]; // forward on the ground plane at the start; left is (fz, -fx)
+        this.sunRoute = this.routeId;
+      }
+      const [fx, fz] = this.sunFwd;
       this.sunDirection.set(fx * 0.55 + fz * 0.62, this.atm?.sunY ?? 0.48, fz * 0.55 - fx * 0.62).normalize();
       this.csm.lightDirection.copy(this.sunDirection).negate();
       this.camera.updateMatrixWorld();
