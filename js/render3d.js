@@ -1241,6 +1241,7 @@ export class Scene3D {
     this.sunDirection = this.t.sun
       ? new THREE.Vector3(Math.cos((this.t.sun.x - 0.5) * 2), 0.16, Math.sin((this.t.sun.x - 0.5) * 2)).normalize()
       : new THREE.Vector3(-0.6, 0.5, 0.62).normalize(); // low raking sun: long shadows, readable volume on the rider
+    this.sunSeen = this.sunDirection.clone(); // where the sun is drawn in the sky (kept by the heading, see the frame loop)
     // the sun with cascaded shadow maps: crisp shadows by the rider, softer ones out to 300 m
     // (one shadow map covered only 45 m around the rider, so distant trees stood flat)
     if (this.csm) { this.csm.remove(); this.csm.dispose(); }
@@ -2885,11 +2886,17 @@ export class Scene3D {
       // change slowly, and each map is read with the matrix it was drawn with, so nothing slides
       const f = (this.shadowFrame = (this.shadowFrame || 0) + 1);
       this.csm.lights.forEach((l, i) => { if (f % [1, 2, 4][i] === 0) l.shadow.needsUpdate = true; });
-      // the sky's glow sits on the sun's side
-      this.sky.rotation.y = Math.atan2(-this.sunDirection.z, this.sunDirection.x);
+      // The sun you see (disk, its glow and the bright side of the sky) still keeps to the heading, ahead and
+      // left, just out of the picture. Put where the light is, a low morning sun came into view in bends,
+      // right over the helmet, and the high-quality glow made it a white blot.
+      const ahead = this.frame(dist + 6);
+      const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
+      const vx = hx / hl, vz = hz / hl;
+      const seen = this.sunSeen.set(vx * 0.55 + vz * 0.62, this.atm?.sunY ?? 0.48, vz * 0.55 - vx * 0.62).normalize();
+      this.sky.rotation.y = Math.atan2(-seen.z, seen.x);
       if ((this.csmTick = (this.csmTick || 0) + 1) % 20 === 0) this._csmMaterials(this.scene); // anything added since
       if (this.sunDisk) {
-        this.sunDisk.position.copy(this.sunDirection).multiplyScalar(3000).add(new THREE.Vector3(cx, cy, cz));
+        this.sunDisk.position.copy(seen).multiplyScalar(3000).add(new THREE.Vector3(cx, cy, cz));
         this.sunGlow.position.copy(this.sunDisk.position);
         this.sunDisk.lookAt(this.camera.position);
       }
