@@ -91,13 +91,14 @@ export class IntervalsClient {
     return new Set((Array.isArray(acts) ? acts : []).map((a) => a?.paired_event_id).filter((x) => x !== null && x !== undefined).map(String));
   }
 
-  async plannedWorkouts(oldest, newest) {
+  /** `ath` ({ lthr, maxHr, hrZones }) turns heart rate targets into bpm ranges (see convertHr). */
+  async plannedWorkouts(oldest, newest, ath = {}) {
     const events = (await this.request('/events', { params: { oldest, newest, category: 'WORKOUT' } })) || [];
     const stats = { total: events.length, otherSport: 0, unstructured: 0 };
     const out = [];
     for (const e of events) {
       if (e.type && !RIDE_TYPES.has(e.type)) { stats.otherSport++; continue; }
-      const w = eventToWorkout(e);
+      const w = eventToWorkout(e, ath);
       if (!w.steps.length) {
         // no structured steps (e.g. "1 h Z2" or text only): ride it as a free ride of the planned length
         const dur = Math.round(e.moving_time || e.time_target || 3600);
@@ -135,8 +136,8 @@ export class IntervalsClient {
 
 export const activityUrl = (id) => `https://intervals.icu/activities/${id}`;
 
-export function eventToWorkout(e) {
-  const steps = convertSteps(e.workout_doc?.steps || []);
+export function eventToWorkout(e, ath = {}) {
+  const steps = convertSteps(e.workout_doc?.steps || [], [], ath);
   const date = (e.start_date_local || '').slice(0, 10);
   return {
     id: `icu:${e.id}`,
@@ -151,11 +152,11 @@ export function eventToWorkout(e) {
 }
 
 /** Flatten intervals.icu workout_doc steps (with repeats) into Gruppetto steps. */
-export function convertSteps(steps, out = []) {
+export function convertSteps(steps, out = [], ath = {}) {
   for (const s of steps || []) {
     if (Array.isArray(s.steps) && s.steps.length) {
       const reps = Math.max(1, Math.round(s.reps || 1));
-      for (let i = 0; i < reps; i++) convertSteps(s.steps, out);
+      for (let i = 0; i < reps; i++) convertSteps(s.steps, out, ath);
       continue;
     }
     let dur = Math.round(s.duration || 0);
@@ -164,6 +165,8 @@ export function convertSteps(steps, out = []) {
     const step = { dur, ...convertTarget(s), text: s.text || s.description || '' };
     const cad = convertCadence(s.cadence);
     if (cad) step.cad = cad;
+    const hr = convertHr(s.hr, ath);
+    if (hr) step.hr = hr; // shown while riding, for you to hold: it never drives ERG or the trainer
     out.push(step);
   }
   return out;
@@ -176,6 +179,34 @@ function convertCadence(c) {
   if (c.start !== undefined && c.end !== undefined) return [Math.round(Math.min(c.start, c.end)), Math.round(Math.max(c.start, c.end))];
   if (c.value !== undefined) return [Math.round(c.value) - 3, Math.round(c.value) + 3];
   return null;
+}
+
+/**
+ * Heart rate target as [low, high] bpm, or null. Units: % of LTHR, % of max HR, an HR zone (from the zones' tops)
+ * or bpm; a single value gets ±3 bpm. Without the LTHR, max HR or zones a percent / zone target needs: null.
+ */
+export function convertHr(h, { lthr = 0, maxHr = 0, hrZones = null } = {}) {
+  if (!h) return null;
+  let lo, hi;
+  if (h.start !== undefined && h.end !== undefined) { lo = Math.min(h.start, h.end); hi = Math.max(h.start, h.end); }
+  else if (h.min !== undefined && h.max !== undefined) { lo = h.min; hi = h.max; }
+  else if (h.value !== undefined) { lo = hi = h.value; }
+  else return null;
+  const units = String(h.units || '').toLowerCase();
+  let r;
+  if (units.includes('zone')) {
+    if (!Array.isArray(hrZones) || hrZones.length < 2) return null;
+    const z = (n) => Math.max(1, Math.min(hrZones.length, Math.round(n)));
+    const a = z(lo), b = z(hi);
+    r = [a > 1 ? hrZones[a - 2] + 1 : 0, hrZones[b - 1]];
+  } else {
+    const base = units.includes('lthr') ? lthr : units.includes('%') ? maxHr : 1;
+    if (!(base > 0)) return null;
+    r = [lo * base / (base === 1 ? 1 : 100), hi * base / (base === 1 ? 1 : 100)];
+    if (lo === hi) r = [r[0] - 3, r[1] + 3];
+  }
+  r = r.map(Math.round);
+  return r[1] > 0 ? r : null;
 }
 
 function distanceMetres(d) {
