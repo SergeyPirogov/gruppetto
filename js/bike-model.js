@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { gltfLoader } from './gltf.js';
 import * as SkeletonUtils from '../vendor/three/addons/utils/SkeletonUtils.js';
+import { assetUrl } from './asset-url.js';
 
 const CANDIDATES = [
   // aero bike on the Pinarello F12 frame by jiet17 (CC-BY), built in blender/f12_bike.blend
@@ -53,7 +54,7 @@ export async function loadBikeModel() {
       const head = await fetch(c.url, { method: 'HEAD' });
       if (!head.ok) continue;
       let cfg = {};
-      try { const r = await fetch(c.cfg); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
+      try { const r = await fetch(assetUrl(c.cfg)); if (r.ok) cfg = await r.json(); } catch { /* optional */ }
       return { gltf: await gltfLoader().loadAsync(c.url), cfg };
     } catch (e) {
       console.warn(`Bike model ${c.url} not loaded`, e);
@@ -108,7 +109,7 @@ export class ModelBike {
     this._q = new THREE.Quaternion();
     const rigged = bone(gltf.scene, /back.?wheel/i) && bone(gltf.scene, /front.?wheel/i);
     this.wheelR = cfg.wheelRadius || WHEEL_R; // assets/bike(s)/*.json "wheelRadius": m, for rolling
-    if (rigged) this._rigged(gltf, group, color, tape, accent);
+    if (rigged) { this._rigged(gltf, group, color, tape, accent); this._chain(cfg.chain); }
     else this._static(gltf, cfg, group);
     // where the rider sits and holds on (measured once per model, in the rider group's frame)
     this.fit = model.fit ||= this._measureFit(cfg);
@@ -164,6 +165,12 @@ export class ModelBike {
       o.receiveShadow = true;
       o.frustumCulled = false;
       if (/decal/i.test(o.material?.name || '')) this.hasDecal = true;
+      // decals lie a fraction of a millimetre over the paint: pull them forward in depth so the two
+      // don't z-fight (speckles) when the bike is seen from a distance
+      if (/decal|accent/i.test(o.material?.name || '')) {
+        o.material = o.material.clone();
+        Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+      }
       if (own) {
         if (color && /^paint/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(color); }
         if (tape && /^tape/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(tape); }
@@ -207,6 +214,55 @@ export class ModelBike {
   _turn(b, angle) {
     const s = this.spin?.get(b);
     if (s) b.quaternion.copy(s.rest).multiply(this._q.setFromAxisAngle(s.axis, angle));
+  }
+
+  /**
+   * A chain that runs with the cranks (bike json "chain": { path, teeth, links }): the model's
+   * "ChainLink" node is one pair of links, laid here along the closed path through the roller centres
+   * (the bike's own space, y up) and slid along it by the crank angle, like the Chain geometry nodes
+   * in blender/f12_bike.blend.
+   */
+  _chain(cfg) {
+    const node = cfg?.path?.length > 2 && this.root.getObjectByName('ChainLink');
+    if (!node) return;
+    const pts = cfg.path.map((p) => new THREE.Vector3(...p));
+    const len = [0];
+    for (let i = 0; i < pts.length; i++) len.push(len[i] + pts[i].distanceTo(pts[(i + 1) % pts.length]));
+    const total = len[pts.length];
+    const pairs = Math.round(cfg.links / 2);
+    const meshes = [];
+    node.traverse((o) => { if (o.isMesh) meshes.push(o); });
+    const parent = node.parent;
+    node.updateMatrix();
+    const inst = meshes.map((m) => {
+      const im = new THREE.InstancedMesh(m.geometry, m.material, pairs);
+      im.castShadow = true; im.frustumCulled = false;
+      // a primitive below the node keeps its offset; the node itself sits at the bike origin
+      im.userData.local = m === node ? new THREE.Matrix4() : m.matrix.clone();
+      parent.add(im);
+      return im;
+    });
+    node.visible = false;
+    this.chain = { pts, len, total, pitch: total / cfg.links, teeth: cfg.teeth, pairs, inst,
+      m: new THREE.Matrix4(), r: new THREE.Matrix4(), p: new THREE.Vector3(), t: new THREE.Vector3() };
+  }
+
+  _chainPose(angle) {
+    const C = this.chain;
+    if (!C) return;
+    const { pts, len, total, pitch, m, r, p, t } = C;
+    const shift = (angle / (Math.PI * 2)) * C.teeth * pitch; // forward pedalling: the top run moves forward
+    for (let i = 0; i < C.pairs; i++) {
+      const s = (((i * 2 * pitch + shift) % total) + total) % total;
+      let lo = 0, hi = pts.length; // segment holding s
+      while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (len[mid] <= s) lo = mid; else hi = mid; }
+      const a = pts[lo], b = pts[(lo + 1) % pts.length];
+      p.lerpVectors(a, b, (s - len[lo]) / (len[lo + 1] - len[lo]));
+      t.subVectors(b, a);
+      m.makeRotationZ(Math.atan2(t.y, t.x)).setPosition(p);
+      for (const im of C.inst) im.setMatrixAt(i, r.multiplyMatrices(m, im.userData.local));
+    }
+    for (const im of C.inst) im.instanceMatrix.needsUpdate = true;
   }
 
   // ----- static model: scaled to the built-in bike, an optional crank part spins -----
@@ -257,6 +313,23 @@ export class ModelBike {
     }
   }
 
+  /**
+   * A smaller frame for a smaller rider (rider.json "bikeScale", "saddleDrop"): the whole bike is scaled
+   * about the road under the rider group's origin, so the tyres stay on the road; the saddle and its post
+   * (glTF node "Saddle") slide `saddleDrop` m down the seat tube (bike json "saddleAxis": [x, y], up the post).
+   */
+  fitRider(scale = 1, saddleDrop = 0, cfg = {}) {
+    if (saddleDrop) {
+      const s = this.root.getObjectByName('Saddle'), ax = cfg.saddleAxis || [-0.383, 0.924];
+      if (s) { s.position.x -= ax[0] * saddleDrop; s.position.y -= ax[1] * saddleDrop; }
+    }
+    if (scale !== 1) {
+      this.root.position.multiplyScalar(scale);
+      this.root.scale.multiplyScalar(scale);
+      this.wheelR *= scale;
+    }
+  }
+
   // ----- per frame -----
 
   /** Crank angle (radians, same convention as Rider3D.pose): forward pedalling turns clockwise seen from +z. */
@@ -265,7 +338,15 @@ export class ModelBike {
     if (!this.bones) return;
     const a = -angle;
     this._turn(this.bones.ring, a);
-    for (const p of this.bones.pedals) this._turn(p, -a); // pedals stay level while the cranks turn
+    this._chainPose(angle);
+    // pedals stay level while the cranks turn, or tilt with the rider's soles: rider.json "pedalTilt":
+    // [mean, cos, sin] degrees toe down for the drive-side pedal over the crank angle, the left one half a turn on
+    const T = this.pedalTilt;
+    this.bones.pedals.forEach((p, i) => {
+      const c = angle + i * Math.PI; // pedals = [right, left]
+      const tilt = T ? THREE.MathUtils.degToRad(T[0] + T[1] * Math.cos(c) + T[2] * Math.sin(c)) : 0;
+      this._turn(p, -a - tilt);
+    });
   }
 
   /** Distance ridden (m): the wheels of a rigged model roll forward. */

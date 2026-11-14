@@ -15,6 +15,8 @@ for f in assets/bike/bike.glb assets/rider/dummy.gltf assets/rider/dummy.bin ass
 done
 rm -rf "$out/tools" "$out/tests" "$out/node_modules" "$out/supabase" "$out/docs"
 touch "$out/.nojekyll" # serve every file as is
+# model URLs carry their version (js/asset-url.js): a new export is fetched at once, not the saved copy
+git ls-tree -r HEAD assets | awk 'BEGIN { printf "// written by tools/deploy_pages.sh\nexport default {\n" } { printf "  \"%s\": \"%s\",\n", $4, substr($3, 1, 8) } END { print "};" }' > "$out/js/asset-versions.js"
 
 cd "$out"
 git init -q -b gh-pages

@@ -5,8 +5,8 @@ import * as THREE from '../vendor/three/three.module.min.js';
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
 import { sunAt, phaseOf, placeFromZone } from './sun.js';
-import { loadRiderModel, loadCustomRiderModel, ModelRider } from './rider-model.js';
 import { loadDummyRider, DummyRider } from './dummy-rider.js';
+import { loadRiderModel, ModelRider } from './rider-model.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike, setBikeEnvironment } from './bike-model.js';
 import { t, lang } from './i18n.js';
@@ -79,8 +79,10 @@ let preloaded = null;
 export function preloadModels() {
   return preloaded ||= {
     bike: loadBikeModel(),
-    // your own assets/rider.(glb|fbx) first, then the dummy, then the bundled characters
-    rider: SHOW_RIDER ? loadCustomRiderModel().then((c) => c || loadDummyRider()).then((d) => d || loadRiderModel()) : Promise.resolve(null),
+    // our own rider (assets/riders/male.glb), else the dummy if you have it, else simple shapes
+    rider: SHOW_RIDER ? loadRiderModel().then((m) => m || loadDummyRider()) : Promise.resolve(null),
+    // the female rider (assets/riders/female.glb): riders with figure 'female' get her, when she loaded
+    riderFemale: SHOW_RIDER ? loadRiderModel('female').catch(() => null) : Promise.resolve(null),
     nature: loadNature().catch((e) => { console.warn('Nature models unavailable, using built-in shapes', e); return null; }),
     // fans: people posed from the rider model (phones keep the simple figures: a crowd of them is heavy)
     fans: LOW ? Promise.resolve(null) : loadFanModels().catch((e) => { console.warn('Fan models unavailable, using simple figures', e); return null; }),
@@ -758,6 +760,7 @@ export class Scene3D {
     this.clock = 0;
     this.windTime = { value: 0 }; // shared by every swaying material
     this.riderModel = null;
+    this.riderModelF = null;
     this.nature = null;
     this.bikeModel = null;
     // A loading screen covers the ride until the bike, rider and scenery models have loaded (or failed)
@@ -784,16 +787,22 @@ export class Scene3D {
       for (const R of this.riders.values()) this.scene.remove(R.group);
       this.riders.clear(); // rebuilt with the custom character on the next frame
     });
+    const riderFLoad = models.riderFemale.then((m) => {
+      if (!m) return;
+      this.riderModelF = m;
+      for (const R of this.riders.values()) this.scene.remove(R.group);
+      this.riders.clear();
+    });
     const fanLoad = models.fans.then((m) => { if (m) this.fanModels = m; });
     const ready = () => { this.modelsReady = true; };
-    Promise.allSettled([bikeLoad, riderLoad, natureLoad, fanLoad]).then(ready);
+    Promise.allSettled([bikeLoad, riderLoad, riderFLoad, natureLoad, fanLoad]).then(ready);
     setTimeout(ready, 30000); // a stalled download must not hide the riders for good
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
 
   /**
-   * Camera you can turn a little: drag (mouse or one finger) to orbit around your rider, wheel or
+   * Camera you can turn all the way round: drag (mouse or one finger) to orbit around your rider, wheel or
    * pinch to zoom, double-click or double-tap to go back to the chase view.
    */
   _orbitControls(canvas) {
@@ -803,13 +812,12 @@ export class Scene3D {
     const O = this.orbit;
     const pts = new Map();
     let pinch = 0, lastTap = 0;
-    // kept near the chase view: up to ~30° round to either side, higher up or a little lower, a little
-    // closer or farther — enough to see the rider from behind and three-quarters, never from in front
-    // ?freecam: all the way round, from low down to overhead, close up or far (for looking at the models)
-    const FREE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('freecam');
-    const clampZoom = (z) => (FREE ? Math.max(0.15, Math.min(3, z)) : Math.max(0.6, Math.min(1.3, z)));
-    const clampYaw = (y) => (FREE ? y : Math.max(-0.5, Math.min(0.5, y)));
-    const clampPitch = (p) => (FREE ? Math.max(-0.6, Math.min(1.2, p)) : Math.max(-0.1, Math.min(0.25, p)));
+    // all the way round the rider (front too), from road level to overhead, close up or far;
+    // the camera never goes below the road (see the orbit branch of the chase camera)
+    // not closer than 0.4: nearer, the camera's near plane (0.3 m) cuts into the rider
+    const clampZoom = (z) => Math.max(0.4, Math.min(3, z));
+    const clampYaw = (y) => y;
+    const clampPitch = (p) => Math.max(-0.6, Math.min(1.2, p));
     canvas.style.touchAction = 'none';
     canvas.style.cursor = 'grab';
     canvas.addEventListener('pointerdown', (e) => {
@@ -1233,6 +1241,7 @@ export class Scene3D {
     this.sunDirection = this.t.sun
       ? new THREE.Vector3(Math.cos((this.t.sun.x - 0.5) * 2), 0.16, Math.sin((this.t.sun.x - 0.5) * 2)).normalize()
       : new THREE.Vector3(-0.6, 0.5, 0.62).normalize(); // low raking sun: long shadows, readable volume on the rider
+    this.sunSeen = this.sunDirection.clone(); // where the sun is drawn in the sky (kept by the heading, see the frame loop)
     // the sun with cascaded shadow maps: crisp shadows by the rider, softer ones out to 300 m
     // (one shadow map covered only 45 m around the rider, so distant trees stood flat)
     if (this.csm) { this.csm.remove(); this.csm.dispose(); }
@@ -2690,7 +2699,7 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}` : r.key || r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.helmet || ''}:${r.lens || ''}:${r.figure || ''}` : r.key || r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
@@ -2709,12 +2718,20 @@ export class Scene3D {
         blob.renderOrder = 1;
         R.group.add(blob);
         this.scene.add(R.group);
-        if (this.riderModel) {
-          const Model = this.riderModel.dummy ? DummyRider : ModelRider;
-          R.model = new Model(this.riderModel, R.group, { jersey: r.color, stripe: r.stripe });
+        const riderModel = (r.figure === 'female' && this.riderModelF) || this.riderModel;
+        if (riderModel) {
+          const Model = riderModel.dummy ? DummyRider : ModelRider;
+          R.model = new Model(riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens });
         }
         // the frame its own colour, or the jersey's
         if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
+        // a smaller rider on a smaller frame (rider json "bikeScale", "saddleDrop"): bike and rider scaled together
+        const fit = R.model?.cfg;
+        if (fit && (fit.bikeScale || fit.saddleDrop)) {
+          const k = fit.bikeScale || 1;
+          R.bike?.fitRider(k, fit.saddleDrop || 0, this.bikeModel?.cfg);
+          if (k !== 1) { R.model.root.position.multiplyScalar(k); R.model.root.scale.multiplyScalar(k); }
+        }
         // a ghost (your own earlier ride): see-through, and drawn after the solid scene
         if (r.ghost) {
           R.group.traverse((o) => {
@@ -2727,7 +2744,7 @@ export class Scene3D {
             o.renderOrder = 2;
           });
         }
-        if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; } // saddle, hoods and pedals of this bike
+        if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; R.bike.pedalTilt = R.model.cfg?.pedalTilt; } // saddle, hoods and pedals of this bike; pedals tilted with the soles
         this._csmMaterials(R.group);
       }
       const d = r.dist;
@@ -2851,11 +2868,16 @@ export class Scene3D {
       this._birds(dt, cx, cy, cz);
       this.cloudGroup.position.set(cx, cy, cz);
       this.cloudGroup.rotation.y += dt * 0.0012;
-      // Key light follows the heading: low, ahead and to the left, so the rider is lit from the side
-      // and their shadow falls back towards the camera, like the late-afternoon look of pixel games.
-      const ahead = this.frame(dist + 6);
-      const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
-      const fx = hx / hl, fz = hz / hl; // forward on the ground plane; left is (fz, -fx)
+      // The sun stands still over the route, as a real one: set from the heading at the start (low, ahead
+      // and to the left, so the rider is lit from the side there). It used to turn with the road, and on
+      // bends every frame redrew the shadows a little rotated: the far ones flickered right by the helmet.
+      if (this.sunRoute !== this.routeId) {
+        const a = this.frame(0), b = this.frame(6);
+        const hx = b.x - a.x, hz = b.z - a.z, hl = Math.hypot(hx, hz) || 1;
+        this.sunFwd = [hx / hl, hz / hl]; // forward on the ground plane at the start; left is (fz, -fx)
+        this.sunRoute = this.routeId;
+      }
+      const [fx, fz] = this.sunFwd;
       this.sunDirection.set(fx * 0.55 + fz * 0.62, this.atm?.sunY ?? 0.48, fz * 0.55 - fx * 0.62).normalize();
       this.csm.lightDirection.copy(this.sunDirection).negate();
       this.camera.updateMatrixWorld();
@@ -2864,11 +2886,17 @@ export class Scene3D {
       // change slowly, and each map is read with the matrix it was drawn with, so nothing slides
       const f = (this.shadowFrame = (this.shadowFrame || 0) + 1);
       this.csm.lights.forEach((l, i) => { if (f % [1, 2, 4][i] === 0) l.shadow.needsUpdate = true; });
-      // the sky's glow sits on the sun's side
-      this.sky.rotation.y = Math.atan2(-this.sunDirection.z, this.sunDirection.x);
+      // The sun you see (disk, its glow and the bright side of the sky) still keeps to the heading, ahead and
+      // left, just out of the picture. Put where the light is, a low morning sun came into view in bends,
+      // right over the helmet, and the high-quality glow made it a white blot.
+      const ahead = this.frame(dist + 6);
+      const hx = ahead.x - me.f.x, hz = ahead.z - me.f.z, hl = Math.hypot(hx, hz) || 1;
+      const vx = hx / hl, vz = hz / hl;
+      const seen = this.sunSeen.set(vx * 0.55 + vz * 0.62, this.atm?.sunY ?? 0.48, vz * 0.55 - vx * 0.62).normalize();
+      this.sky.rotation.y = Math.atan2(-seen.z, seen.x);
       if ((this.csmTick = (this.csmTick || 0) + 1) % 20 === 0) this._csmMaterials(this.scene); // anything added since
       if (this.sunDisk) {
-        this.sunDisk.position.copy(this.sunDirection).multiplyScalar(3000).add(new THREE.Vector3(cx, cy, cz));
+        this.sunDisk.position.copy(seen).multiplyScalar(3000).add(new THREE.Vector3(cx, cy, cz));
         this.sunGlow.position.copy(this.sunDisk.position);
         this.sunDisk.lookAt(this.camera.position);
       }

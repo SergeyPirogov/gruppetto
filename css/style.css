@@ -1394,3 +1394,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .me-stats label { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
 .me-stats b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
 @media (max-width: 520px) { .me-stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* who rides: man / woman, next to Ride */
+.figure-pick { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: none; }
+.figure-pick button { border: 0; border-radius: 0; background: transparent; padding: 9px 14px; font-size: .9rem; color: var(--muted); }
+.figure-pick button.sel { background: var(--accent); color: #111; }
