@@ -907,7 +907,7 @@ function openWorkoutDetail(w) {
   const li = (s, t) => {
     const mid = scaleW(stepWatts(s, 0.5, ftp));
     const col = s.free || mid === null ? '#64748b' : zoneColor(mid / ftp);
-    return `<li><i style="background:${col}"></i><span class="t">${t === null ? '' : fmtTime(t)}</span><span class="d">${fmtDur(s.dur)}</span><span>${stepTarget(s)}${s.cad ? ` <small>· ${Array.isArray(s.cad) ? s.cad.join('–') : s.cad} ${U.rpm}</small>` : ''}${s.text ? ` <small>· ${esc(s.text)}</small>` : ''}</span></li>`;
+    return `<li><i style="background:${col}"></i><span class="t">${t === null ? '' : fmtTime(t)}</span><span class="d">${fmtDur(s.dur)}</span><span>${stepTarget(s)}${s.hr ? ` <small>· ${s.hr.join('–')} ${U.bpm}</small>` : ''}${s.cad ? ` <small>· ${Array.isArray(s.cad) ? s.cad.join('–') : s.cad} ${U.rpm}</small>` : ''}${s.text ? ` <small>· ${esc(s.text)}</small>` : ''}</span></li>`;
   };
   // a plan from intervals.icu spells its steps out in its description: the list would only say it again
   const spelled = w.source === 'intervals' && !!w.description;
@@ -1926,6 +1926,12 @@ function updateHud(cadence, hr, grade) {
     cadEl.className = cad && cadence > 0 ? (cadence >= cad[0] - 2 && cadence <= cad[1] + 2 ? 'c-ok' : 'c-warn') : '';
     $('m-cad').className = cadEl.className;
     cadEl.parentElement.hidden = !cad && !ride.workout.steps.some((s) => s.cad); // no cadence targets in this workout: no column
+    // heart rate range (intervals.icu steps planned by heart rate): shown for you to hold, it never drives the trainer
+    const hrR = t?.step?.hr, hrEl = $('wk-hr'), hrNow = Math.round(hr || 0);
+    hrEl.textContent = hrR ? `${hrR[0]}–${hrR[1]}` : '—';
+    hrEl.className = hrR && hrNow > 0 ? (hrNow >= hrR[0] && hrNow <= hrR[1] ? 'c-ok' : 'c-warn') : '';
+    $('m-hr').className = hrEl.className;
+    hrEl.parentElement.hidden = !hrR && !ride.workout.steps.some((s) => s.hr); // no heart rate ranges: no column
     const next = t && ride.workout.steps[t.index + 1];
     const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
     $('wk-next').textContent = next ? (nextW === null ? tr('free') : `${nextW} ${U.W}`) : '—';
@@ -2204,7 +2210,7 @@ function updateProgress() {
 const stepDur = (sec) => (sec >= 60 && sec % 60 === 0 ? `${sec / 60} ${U.min}` : sec < 60 ? `${sec} ${tr('s')}` : fmtTime(sec));
 /** "10 min @ 270 W", "5 min 97→151 W", "30 min 151–158 W", "5 min free" for the list. */
 function stepLabel(s) {
-  if (s.free) return `${stepDur(s.dur)} ${tr('free')}`;
+  if (s.free) return s.hr ? `${stepDur(s.dur)} ${s.hr[0]}–${s.hr[1]} ${U.bpm}` : `${stepDur(s.dur)} ${tr('free')}`;
   const band = stepBand(s);
   if (band) return `${stepDur(s.dur)} ${band[0]}–${band[1]} ${U.W}`;
   const a = scaleW(stepWatts(s, 0, settings.ftp)), b = scaleW(stepWatts(s, 1, settings.ftp));
