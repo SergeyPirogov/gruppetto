@@ -759,7 +759,15 @@ export class ModelRider {
         if ((cfg.kitMask || []).includes(m.name)) return kitMaskMaterial(m, jersey, stripe, cfg.kitZip);
         // rider.json "helmetMaterials" / "lensMaterials": the helmet shell and the sunglass lenses in
         // the rider's own colours (a lens stays a dark mirror: metallic, glossy)
-        if (helmet && (cfg.helmetMaterials || []).includes(m.name)) { const c = m.clone(); c.color = new THREE.Color(helmet); c.map = null; return c; }
+        // The shell's lacquer is a little soft (Blender's is a mirror: clearcoat 1, roughness 0): on the game's
+        // simplified helmet a mirror glint of the sun jumped from facet to facet in bends and flickered
+        if ((cfg.helmetMaterials || []).includes(m.name)) {
+          const c = m.clone();
+          if (helmet) { c.color = new THREE.Color(helmet); c.map = null; }
+          if ('clearcoat' in c) c.clearcoatRoughness = Math.max(c.clearcoatRoughness, 0.4);
+          c.roughness = Math.max(c.roughness, 0.5);
+          return c;
+        }
         if (lens && (cfg.lensMaterials || []).includes(m.name)) {
           const c = m.clone(); c.color = new THREE.Color(lens); c.map = null;
           if ('metalness' in c) Object.assign(c, { metalness: 0.5, roughness: 0.15 });
