@@ -1,0 +1,705 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gruppetto</title>
+  <meta name="description" content="Gruppetto — indoor cycling in your browser, free. Smart trainers and Zwift controllers, workouts, .zwo and intervals.icu, races and your friends' ghosts. Works offline.">
+  <!-- how a link looks in Telegram, Instagram, Facebook, X, Slack -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Gruppetto">
+  <meta property="og:title" content="Gruppetto — indoor cycling in your browser. Free.">
+  <meta property="og:description" content="Smart trainers and Zwift controllers, workouts, .zwo and intervals.icu, races and your friends' ghosts. No subscription, nothing to install.">
+  <meta property="og:url" content="https://automation-remarks.com/gruppetto/">
+  <meta property="og:image" content="https://automation-remarks.com/gruppetto/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Gruppetto: a rider on a road in the browser, with power, heart rate and cadence">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0d1422">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Gruppetto">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ===== Lobby ===== -->
+  <section id="lobby" class="screen">
+    <div class="lobby-shell">
+    <!-- the rail: where everything lives, one icon each (on phones, a row under the top bar) -->
+    <nav class="rail" aria-label="Gruppetto">
+      <a class="rail-logo home-link" href="./" data-home title="Gruppetto"><img class="mark" src="logo.svg" alt="Gruppetto"></a>
+      <button class="rail-btn on" data-home title="Ride"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-8h5l3 8M10 9l-1.5-3H6m9 3l-3 8"/></svg><span>Ride</span></button>
+      <button class="rail-btn" id="rail-workouts" data-page="workouts" title="Workouts"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 17h3V9h3v8h3V5h3v12h3v-6h3"/></svg><span>Workouts</span></button>
+      <button class="rail-btn" data-open="history" title="History"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 19V9m5 10V5m5 14v-7m5 7V8"/></svg><span>History</span></button>
+      <button class="rail-btn" data-open="progress" title="Progress"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4m8-4h3a3 3 0 0 1-3 4M12 13v4m-4 3h8"/></svg><span>Progress</span></button>
+      <button class="rail-btn" data-open="devices" title="Devices"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 7h4"/></svg><i class="rail-dot" id="rail-dev-dot"></i><span>Devices</span></button>
+      <span class="rail-grow"></span>
+      <button class="rail-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, an icon in the dock, works offline"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span>Install</span></button>
+      <button class="rail-btn rail-me" data-open="profile" id="open-profile" title="Profile"><span class="avatar" id="avatar"></span><span>Profile</span></button>
+    </nav>
+    <div class="lobby-body">
+    <header class="lobby-top">
+      <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
+      <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
+      <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
+      <button id="hdr-account" class="hdr-account" hidden></button>
+      <div class="dev-chips">
+        <button class="dev-chip" data-key="trainer" data-open="devices"><i></i>Trainer</button>
+        <button class="dev-chip" data-key="hr" data-open="devices"><i></i>Heart rate</button>
+        <button class="dev-chip" data-key="cad" data-open="devices"><i></i>Cadence</button>
+        <button class="dev-chip" data-key="ctl" data-open="devices"><i></i>Controllers</button>
+        <button class="dev-chip sim-chip" data-key="sim" data-open="devices"><i></i>Simulator</button>
+      </div>
+    </header>
+
+    <div class="lobby-cols">
+    <main class="lobby-main">
+      <div id="draft-box" class="note draft-box" hidden>
+        <span id="draft-text"></span>
+        <span class="draft-actions"><button id="draft-save" class="primary">Save ride</button><button id="draft-drop" class="ghost">Discard</button></span>
+      </div>
+        <!-- for a new rider (no rides yet), until closed: what Gruppetto gives, for one coming from Zwift -->
+        <div id="why-box" class="why-box" hidden>
+          <button class="why-close" id="why-close" aria-label="Close">✕</button>
+          <h2>Coming from Zwift?</h2>
+          <ul class="why-list">
+            <li><b>Free.</b> No subscription, no account.</li>
+            <li><b>In the browser.</b> Nothing to install; opened once, it rides offline.</li>
+            <li><b>Your workouts.</b> Zwift's .zwo files open here, and your intervals.icu plan comes in by itself.</li>
+            <li><b>Your devices.</b> Smart trainers, heart rate, Zwift Ride, Play and Click controllers.</li>
+            <li><b>With friends.</b> Send a ride as a link: they race your ghost.</li>
+            <li><b>Your rides stay yours.</b> On this device, and to intervals.icu or any app as .FIT.</li>
+          </ul>
+          <div class="why-actions"><button id="why-zwo" class="pill-btn">Import .zwo</button><button id="why-icu" class="pill-btn" data-open="icu">Connect intervals.icu</button></div>
+        </div>
+        <!-- FTP still the default guess: find yours, or type it in Profile -->
+        <div id="ftp-box" class="ftp-box" hidden>
+          <button class="why-close" id="ftp-close" aria-label="Close">✕</button>
+          <div class="ftp-text"><b id="ftp-title"></b><span>Workouts in ERG and the bots' pace go by it. A ramp test finds yours in about 20 minutes.</span></div>
+          <div class="why-actions"><button id="ftp-test" class="primary">📈 Take the FTP test</button><button id="ftp-know" class="pill-btn">I know mine</button></div>
+        </div>
+        <!-- a friend's challenge from a link: who, what to beat, and how -->
+        <div id="challenge-box" class="challenge-box" hidden>
+          <div class="ch-ghost">👻</div>
+          <div class="ch-text"><b id="ch-title"></b><span id="ch-goal"></span><small id="ch-how"></small></div>
+          <div class="ch-actions"><button id="ch-ride" class="primary">Ride now ▶</button><button id="ch-drop" class="ghost">Dismiss</button></div>
+        </div>
+
+
+      <!-- the rider at a glance: form, this week, level -->
+      <button id="week-box" class="week-box" hidden></button>
+
+      <section class="lobby-modes" id="sec-modes">
+        <div id="plan-box" class="plan-box" hidden>
+          <h2>Plan <small>intervals.icu</small></h2>
+          <div id="plan-list" class="options mode-list plan-list"></div>
+        </div>
+        <h2>Mode</h2>
+        <div id="mode-list" class="options mode-list"></div>
+      </section>
+
+      <section class="lobby-routes" id="sec-routes">
+        <h2>Routes</h2>
+        <p id="osm-attr" class="hint osm-attr" hidden>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
+        <div id="lobby-msg" class="lobby-msg" hidden></div>
+        <div id="route-board" class="route-board" hidden></div>
+        <div id="route-list" class="route-list"></div>
+        <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" hidden>
+      </section>
+    </main>
+    </div>
+    <!-- what is picked and Ride, always at the bottom of the screen -->
+    <div class="ride-box">
+      <div id="ride-summary" class="ride-summary"></div>
+      <!-- shadow ride: a ghost of an earlier ride on this route rides with you -->
+      <div id="ghost-box" class="ghost-box ghost-bar" hidden title="Shadow ride: race a ghost of your earlier ride on this route">
+        <span class="ghost-opts">
+          <button data-ghost="off"><b>Off</b><small>ride on your own</small></button>
+          <button data-ghost="last"><b>Last ride</b><small id="ghost-last"></small></button>
+          <button data-ghost="best" title=""><b>Your best</b><small id="ghost-best"></small></button>
+        </span>
+      </div>
+      <!-- who rides: the man or the woman (also in the ride, R) -->
+      <div id="figure-pick" class="figure-pick" role="group" aria-label="Rider">
+        <button data-figure="male">Man</button>
+        <button data-figure="female">Woman</button>
+      </div>
+      <div class="start-split">
+        <button id="btn-start" class="primary big">Ride</button>
+        <button id="btn-start-more" class="primary big start-more" aria-label="More ways to ride" title="More ways to ride">▾</button>
+        <div id="start-menu" class="start-menu" hidden>
+          <button id="start-watch"><b>📺 Watch &amp; ride</b><small>In a mini window over a film or the match; the 3D road is not loaded</small></button>
+        </div>
+      </div>
+    </div>
+    </div>
+    </div>
+
+    <div id="wk-menu" class="wk-menu" hidden>
+      <div class="drawer-bg" data-wk-close></div>
+      <div class="wk-menu-panel">
+        <div class="wk-menu-head"><h2>Workouts</h2><span class="wk-menu-tools"><button id="wk-new" class="pill-btn">+ New workout</button><button id="wk-import" class="pill-btn">Import .zwo</button><input id="wk-import-file" type="file" accept=".zwo,.xml" multiple hidden></span><button class="drawer-close" data-wk-close aria-label="Close">✕</button></div>
+        <div id="wk-menu-list" class="options wk-menu-list"></div>
+      </div>
+    </div>
+
+    <!-- the workout builder (#36): blocks stacked into a workout -->
+    <div id="wk-builder" class="wk-menu wk-detail" hidden>
+      <div class="drawer-bg" data-wb-close></div>
+      <div class="wk-menu-panel wkd-panel wb-panel">
+        <div class="wk-menu-head"><h2>Workout builder</h2><button class="drawer-close" data-wb-close aria-label="Close">✕</button></div>
+        <div class="wb-meta"><label>Name <input id="wb-name" maxlength="60"></label><label>Notes <input id="wb-desc" maxlength="200" placeholder="What it is for, how to ride it"></label></div>
+        <canvas id="wb-chart" class="wkd-chart"></canvas>
+        <div id="wb-stats" class="wb-stats"></div>
+        <ol id="wb-blocks" class="wb-blocks"></ol>
+        <div id="wb-add" class="wb-add"></div>
+        <div class="wkd-actions"><button class="pill-btn" data-wb-close>Cancel</button><button id="wb-save" class="primary wkd-ride">Save workout</button></div>
+      </div>
+    </div>
+
+    <!-- one workout, on its own page: read it, then ride it -->
+    <div id="wk-detail" class="wk-menu wk-detail" hidden>
+      <div class="drawer-bg" data-wkd-close></div>
+      <div class="wk-menu-panel wkd-panel">
+        <div class="wk-menu-head"><button class="wkd-back" data-wkd-close>‹ <span>Back</span></button><button class="drawer-close" data-wkd-close aria-label="Close">✕</button></div>
+        <div id="wkd-tag"></div>
+        <h2 id="wkd-name"></h2>
+        <div id="wkd-stats" class="wkd-stats"></div>
+        <canvas id="wkd-chart" class="wkd-chart"></canvas>
+        <div id="wkd-axis" class="wkd-axis"></div>
+        <div id="wkd-notes" class="wkd-notes"></div>
+        <h3 class="wkd-h" id="wkd-steps-h">Intervals</h3>
+        <ol id="wkd-steps" class="wkd-steps"></ol>
+        <div class="wkd-actions">
+          <button id="wkd-delete" class="pill-btn wkd-del" hidden>Delete</button>
+          <button id="wkd-edit" class="pill-btn" hidden>Edit</button>
+          <button id="wkd-zwo" class="pill-btn" hidden title="For Zwift and other apps">Download .zwo</button>
+          <button id="wkd-select" class="pill-btn" hidden>Select</button>
+          <button id="wkd-ride" class="primary wkd-ride">Ride this workout ▶</button>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- settings drawer: over the lobby, and over the ride too -->
+  <div id="drawer" class="drawer" hidden>
+    <div class="drawer-bg" data-close></div>
+    <div class="drawer-panel">
+      <div class="drawer-tabs">
+        <button data-open="devices">Devices</button>
+        <button data-open="profile">Profile</button>
+        <button data-open="history">History</button>
+        <button data-open="progress">Progress</button>
+        <button class="drawer-close" data-close aria-label="Close">✕</button>
+      </div>
+      <div class="card" data-panel="devices">
+        <h2>Devices</h2>
+        <p id="bt-warning" class="warn" hidden>This browser does not support Bluetooth. Use Chrome or Edge on a computer or Android, or the simulator mode.</p>
+        <div id="autoconnect-hint" class="note" hidden>
+          <b>Connect automatically next time</b>
+          <p>This browser asks you to pick each sensor every time. To have the trainer, heart rate monitor and controllers connect by themselves when the page opens:</p>
+          <ol>
+            <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
+            <li>Set it to <b>Enabled</b> and restart Chrome</li>
+            <li>Connect each sensor here once more</li>
+          </ol>
+          <button id="copy-flag" class="ghost">Copy the address</button>
+        </div>
+        <div class="device">
+          <div><b>Smart trainer / power meter</b><small id="trainer-status">not connected</small></div>
+          <button id="btn-trainer">Connect</button>
+        </div>
+        <div class="device">
+          <div><b>Heart rate monitor</b><small id="hr-status">not connected</small></div>
+          <button id="btn-hr">Connect</button>
+        </div>
+        <div class="device">
+          <div><b>Cadence sensor</b><small id="cad-status">not connected</small></div>
+          <button id="btn-cad">Connect</button>
+        </div>
+        <div class="device">
+          <div><b>Zwift Ride / Play / Click controllers</b><small id="ctl-status">not connected</small>
+            <details class="btn-map"><summary>Buttons</summary>
+              <table>
+                <tr><td>Shift up / down (both sides), ▲ ▼</td><td>Gear + / − (in ERG: intensity ±1 %)</td></tr>
+                <tr><td>Paddles (brake levers)</td><td>Change lane: left / right</td></tr>
+                <tr><td>◀ ▶</td><td>Workout: intensity ∓5 %, free ride: climb difficulty ∓10 %</td></tr>
+                <tr><td>A</td><td>ERG on/off (free ride: hold your power)</td></tr>
+                <tr><td>B</td><td>Pause / resume</td></tr>
+                <tr><td>Y</td><td>Camera</td></tr>
+                <tr><td>Z</td><td>Skip interval (free ride: new lap)</td></tr>
+                <tr><td>Power-up left</td><td>Pacer on/off</td></tr>
+                <tr><td>Power-up right</td><td>Hide / show the HUD</td></tr>
+              </table>
+            </details>
+          </div>
+          <div class="btns">
+            <button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button>
+            <button id="btn-ctl">Connect</button>
+          </div>
+        </div>
+        <div class="device">
+          <div><b>OpenBikeControl</b><small id="obc-status">not connected</small><small class="hint-sm">Any controller via the BikeControl app</small></div>
+          <button id="btn-obc">Connect</button>
+        </div>
+        <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
+        <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
+      </div>
+      <!-- Profile: three tabs (Me, Connections, Settings); a card shows on the tab its data-ptab names -->
+      <nav class="card ptabs" data-panel="profile" aria-label="Profile">
+        <button data-ptab-go="me">Rider</button><button data-ptab-go="links">Connections</button><button data-ptab-go="settings">Settings</button>
+      </nav>
+      <div class="card me-hero" id="me-hero" data-panel="profile" data-ptab="me"></div>
+      <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
+      <div class="card" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
+        <h2>Account &amp; leaderboards</h2>
+        <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps in the tables with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
+        <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
+        <div id="social-in" hidden>
+          <p class="muted" id="social-who"></p>
+          <label class="check"><input type="checkbox" id="f-social-public"> Show me in the tables</label>
+          <div class="row icu-row">
+            <button id="btn-social-edit">Name in the tables…</button>
+            <button id="btn-social-out" class="ghost">Sign out</button>
+            <button id="btn-social-delete" class="ghost">Delete account</button>
+          </div>
+        </div>
+        <p class="muted" id="social-status"></p>
+        <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="me">
+        <h2>Details</h2>
+        <div class="fields">
+          <label>Your name <input id="f-name" maxlength="16"></label>
+          <div class="fields-3">
+            <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
+            <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
+            <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
+          </div>
+          <small class="hint time-hint ftp-hint">Don't know your FTP? <button id="f-ftp-test" class="link-btn">📈 Take the ramp test</button> (about 20 minutes, to failure)</small>
+          <label>W′ (anaerobic reserve), kJ <input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"></label>
+          <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
+
+          <h3 class="fields-head">Look</h3>
+          <label>Rider figure <select id="f-figure"><option value="male">Man</option><option value="female">Woman</option></select></label>
+          <label>Jersey color <input id="f-jersey" type="color"></label>
+          <label>Accent color <input id="f-stripe" type="color" title="Stripe and decals"></label>
+          <label>Bike color <input id="f-bike" type="color" title="The frame"></label>
+          <label>Bar tape color <input id="f-tape" type="color" title="Handlebar tape"></label>
+          <label>Helmet color <input id="f-helmet" type="color" title="The helmet shell"></label>
+          <label>Lens color <input id="f-lens" type="color" title="Sunglasses lenses"></label>
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>Ride</h2>
+        <div class="fields">
+          <label>3D style
+            <select id="f-style">
+              <option value="cartoon">Cartoon</option>
+              <option value="pixel">Pixel (retro)</option>
+            </select>
+          </label>
+          <label>Mini window (I)
+            <select id="f-pip">
+              <option value="sharp">Sharp window (Chrome shows the site's address over it)</option>
+              <option value="clean">Clean, no address bar (drawn as a video, a little softer)</option>
+            </select>
+          </label>
+          <label class="check wide"><input type="checkbox" id="f-overlay"> Mac overlay: the numbers in Gruppetto HUD, a see-through panel over everything (the app runs on this Mac)</label>
+          <small id="hud-get" class="hint time-hint" hidden><a href="https://github.com/SergeyPirogov/gruppetto/releases/latest/download/Gruppetto-HUD.zip">⬇ Download Gruppetto HUD for Mac</a> · macOS 13+. The first time: System Settings → Privacy &amp; Security → Open Anyway.</small>
+          <label>Graphics
+            <select id="f-quality">
+              <option value="auto">Auto (by this device)</option>
+              <option value="low">Low: fast on any laptop</option>
+              <option value="medium">Medium</option>
+              <option value="high">High: glow and colour finish</option>
+            </select>
+          </label>
+          <label>Camera
+            <select id="f-camera">
+              <option value="chase">1 · Chase</option>
+              <option value="eyes">2 · Rider's eyes</option>
+              <option value="iso">3 · Isometric</option>
+              <option value="side">4 · Over the shoulder</option>
+              <option value="front">5 · From the front</option>
+            </select>
+          </label>
+          <label>Time of day
+            <select id="f-time">
+              <option value="midday">Midday</option>
+              <option value="morning">Morning</option>
+              <option value="evening">Evening (golden hour)</option>
+              <option value="night">Night</option>
+              <option value="auto">By the sun</option>
+            </select>
+          </label>
+          <label>Weather
+            <select id="f-weather">
+              <option value="clear">Clear</option>
+              <option value="fog">Fog</option>
+              <option value="rain">Rain</option>
+              <option value="changeable">Changeable: rain comes and goes</option>
+            </select>
+          </label>
+          <small id="f-time-hint" class="hint time-hint" hidden></small>
+          <label>Wind in races
+            <select id="f-wind">
+              <option value="off">Calm</option>
+              <option value="light">Light breeze</option>
+              <option value="moderate">Moderate wind</option>
+              <option value="strong">Strong wind</option>
+            </select>
+          </label>
+          <label>Riders in the bunch
+            <select id="f-bots">
+              <option value="0">None</option><option value="3">3</option><option value="5">5</option><option value="8">8</option>
+            </select>
+          </label>
+          <label class="check wide"><input type="checkbox" id="f-attacks"> Attacks in a free ride: now and then a rider goes clear of the bunch, most often on a climb; chase or let him go</label>
+          <label class="wide">Climb difficulty <span id="diff-val" class="range-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
+
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>Gears</h2>
+        <div class="fields">
+          <div class="fields-3 fields-gears">
+          <label>Virtual gears
+            <select id="f-shift">
+              <option value="wheel">Like Zwift</option>
+              <option value="grade">Via grade</option>
+            </select>
+          </label>
+            <label>Chainring
+              <select id="f-chainring">
+                <option value="34">34</option><option value="36">36</option><option value="39">39</option>
+                <option value="42">42</option><option value="46">46</option><option value="50">50</option>
+                <option value="52">52</option><option value="53">53</option>
+              </select>
+            </label>
+            <label>Rear cog
+              <select id="f-cog">
+                <option value="11">11</option><option value="12">12</option><option value="13">13</option>
+                <option value="14">14</option><option value="15">15</option><option value="16">16</option>
+                <option value="17">17</option><option value="19">19</option><option value="21">21</option>
+                <option value="23">23</option><option value="25">25</option><option value="28">28</option>
+              </select>
+            </label>
+          </div>
+          <p class="muted fields-note wide">The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.</p>
+
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>Pacer</h2>
+        <div class="fields">
+          <label class="check wide"><input type="checkbox" id="f-pacer"> Workout pacer: a virtual partner riding the target power</label>
+          <label class="check wide"><input type="checkbox" id="f-free-pacer"> Free-ride pacer: rides at a set W/kg and waits at the foot of climbs</label>
+          <label>Pacer name <input id="f-pacer-name" maxlength="16" placeholder="Pacer"></label>
+          <label>Free-ride pacer, W/kg <input id="f-free-wkg" type="number" min="0.5" max="7" step="0.1"></label>
+
+        </div>
+      </div>
+      <div class="card" data-panel="profile" data-ptab="settings">
+        <h2>App</h2>
+        <div class="fields">
+          <label>Language <select id="f-lang"></select></label>
+          <h3 class="fields-head">Sound</h3>
+          <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
+
+          <h3 class="fields-head">Privacy</h3>
+          <label class="check wide"><input type="checkbox" id="f-stats"> Send anonymous usage stats: which features are used, never your name, data or place</label>
+        </div>
+      </div>
+      <div class="card" id="icu-card" data-panel="profile" data-ptab="links">
+      <h2>intervals.icu</h2>
+      <p class="muted">Pull planned workouts from your calendar and upload completed rides automatically.
+        Find your API key in intervals.icu → Settings → Developer Settings.</p>
+      <div class="fields">
+        <label>API key <input id="f-icu-key" type="password" autocomplete="off" spellcheck="false"></label>
+        <label>Athlete ID <input id="f-icu-athlete" placeholder="optional, e.g. i123456" spellcheck="false"></label>
+      </div>
+      <label class="check"><input type="checkbox" id="f-icu-upload"> Upload the ride to intervals.icu when finished</label>
+      <div class="row icu-row">
+        <button id="btn-icu">Connect</button>
+        <button id="btn-icu-forget" hidden>Forget key</button>
+        <span id="icu-status" class="muted"></span>
+      </div>
+    </div>
+      <div class="card" id="strava-card" data-panel="profile" data-ptab="links">
+        <h2>Strava</h2>
+        <p class="muted">Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto asks only to upload, it reads nothing of yours.</p>
+        <label class="check"><input type="checkbox" id="f-strava-upload"> Upload the ride to Strava when finished</label>
+        <div class="row icu-row">
+          <button id="btn-strava">Connect Strava</button>
+          <button id="btn-strava-forget" hidden>Disconnect</button>
+          <span id="strava-status" class="muted"></span>
+        </div>
+      </div>
+      <div class="card" data-panel="history">
+        <h2>Ride history</h2>
+        <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
+        <div class="hist-backup" id="hist-backup" hidden><button id="btn-backup" class="ghost">⬇ Download all rides (.zip)</button><small class="hint">every ride as .FIT, a backup or a move to another app</small></div>
+        <div id="history-all" class="hist-list"></div>
+      </div>
+      <!-- level, badges, form and the power curve: their own tab; History keeps to the list of rides -->
+      <div class="card" data-panel="progress" hidden>
+        <div id="progress-box" class="progress-box" hidden></div>
+        <p id="progress-empty" class="muted">No rides yet. Your level and badges start with your first ride.</p>
+        <div id="fitness-box" class="fitness" hidden>
+          <div class="sum-chart-head"><h2>Form <small id="fit-src" hidden>intervals.icu</small></h2><span class="legend"><i class="lg-fit"></i>Fitness <i class="lg-fat"></i>Fatigue <i class="lg-form"></i>Form</span></div>
+          <div id="fit-nums" class="fit-nums"></div>
+          <canvas id="fit-chart"></canvas>
+        </div>
+        <div id="power-curve-box" class="power-curve" hidden>
+          <div class="sum-chart-head"><h2>Power curve</h2><span class="legend"><i class="lg-power"></i>All time <i class="lg-cad"></i>Last 6 weeks</span></div>
+          <canvas id="pc-chart"></canvas>
+          <div id="pc-table" class="pc-table"></div>
+          <div id="pc-ftp" class="ftp-tip" hidden></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Ride ===== -->
+  <section id="ride" class="screen" hidden>
+    <canvas id="scene"></canvas>
+    <!-- the mini window is open: the road rests, the ride goes on -->
+    <div id="pip-rest" class="pip-rest" hidden><b>Riding in the mini window</b><small>The road is paused to keep your computer cool. The ride goes on.</small><button id="pip-show-road" class="pill-btn">Show the road</button></div>
+
+    <div class="hud-left">
+      <div class="board">
+        <div class="stat power"><svg viewBox="0 0 24 24" class="ic bolt"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><div class="st-body"><label>Power <span id="m-zone" class="zone-tag">Z1</span></label><div class="st-val"><b id="m-power">0</b><span>W</span></div></div><small class="pw-side"><span id="m-ftp-pct">0% FTP</span><span id="m-wkg">0.0 W/kg</span></small></div>
+        <div class="stat hr"><svg viewBox="0 0 24 24" class="ic heart"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg><div class="st-body"><label>HR <span id="m-hr-zone" class="zone-tag" hidden></span></label><div class="st-val"><b id="m-hr">—</b><span>bpm</span></div></div><small id="m-hr-avg"></small></div>
+        <div class="stat cad"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="12" r="8"/><path d="M12 12 16 8M12 4v2M20 12h-2"/></svg><div class="st-body"><label>Cadence</label><div class="st-val"><b id="m-cad">0</b><span>rpm</span></div></div><small id="m-cad-avg"></small></div>
+        <div class="stat wbal" title="W′bal: the anaerobic reserve above FTP"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M21 10v4"/><path d="M6 10v4M9 10v4"/></svg><div class="st-body"><label>W′bal</label><div class="st-val"><b id="m-wbal">20.0</b><span>kJ</span></div><i class="wbal-bar"></i></div><small id="m-wbal-warn">100%</small></div>
+      </div>
+      <div id="wk-intensity" class="board intensity" hidden>
+        <button id="wk-int-down" class="pill-btn" aria-label="Decrease intensity">−</button>
+        <span><i class="int-label">Intensity</i> <b id="wk-int">100%</b></span>
+        <button id="wk-int-up" class="pill-btn" aria-label="Increase intensity">+</button>
+        <div class="int-toggles">
+          <button id="wk-erg-btn" class="pill-btn pacer-btn erg-btn on" title="ERG on/off (E)">ERG</button>
+          <button id="wk-pacer-btn" class="pill-btn pacer-btn" title="Pacer on/off (P)">Pacer</button>
+        </div>
+      </div>
+      <!-- the workout's intervals, as in Zwift: done (★ on target), the current one filling up, what's next -->
+      <div id="wk-steps" class="board wk-steps" hidden>
+        <div class="ws-head"><span id="ws-finish"></span><span id="ws-stars" class="ws-stars"></span></div>
+        <ol id="ws-list"></ol>
+      </div>
+    </div>
+
+    <div class="hud-center">
+      <div class="topbar">
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><b id="m-speed">0.0</b><span>km/h</span></div>
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b></div>
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>km</span></div>
+        <!-- the wind: the arrow points the way it blows (up = with you, down = in your face) -->
+        <div id="wind-cell" class="tb-cell wind-cell" hidden><svg viewBox="0 0 24 24" class="ic stroke wind-ic"><g id="wind-arrow"><path d="M12 20V4M6 10l6-6 6 6"/></g></svg><b id="m-wind">0</b><span>km/h</span></div>
+      </div>
+      <!-- a device the ride started with dropped: always in sight, opens Devices over the ride -->
+      <button id="btn-dev-lost" class="pill-btn dev-lost" hidden title="Reconnect without stopping the ride"></button>
+      <div id="draft-tag" class="draft-tag" hidden></div>
+      <div id="seg-panel" class="seg-panel" hidden>
+        <div class="seg-head"><b id="seg-name"></b><span id="seg-left"></span></div>
+        <div class="seg-row"><b id="seg-time">0:00</b><span id="seg-pace"></span><small id="seg-best"></small></div>
+        <div class="seg-track"><div id="seg-fill"></div></div>
+      </div>
+      <div id="workout-panel" class="workout" hidden>
+        <div class="wk-title"><b id="wk-name"></b><span id="wk-pacer" class="pacer-tag" hidden></span><span id="wk-pct"></span></div>
+        <div class="wk-head">
+          <div><label id="wk-target-label">Target, W</label><b id="wk-target">0</b> <small id="wk-diff"></small></div>
+          <div><label>Interval</label><b id="wk-left">0:00</b></div>
+          <div><label>Cadence</label><b id="wk-cad">—</b></div>
+          <div><label>Next</label><b id="wk-next">—</b></div>
+        </div>
+        <canvas id="wk-chart"></canvas>
+      </div>
+    </div>
+
+    <div class="hud-right">
+      <div class="board">
+        <div class="stat grade-st"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 18 21 6M15 6h6v6"/></svg><div class="st-body"><label>Grade</label><div class="st-val"><b id="grade">0.0%</b></div></div><small id="grade-next" class="grade-next"></small></div>
+        <div class="stat gear"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M20.13 10.94 L22.16 11.08 L22.16 12.92 L20.13 13.06 L19.57 15.14 L21.26 16.29 L20.34 17.87 L18.51 16.99 L16.99 18.51 L17.87 20.34 L16.29 21.26 L15.14 19.57 L13.06 20.13 L12.92 22.16 L11.08 22.16 L10.94 20.13 L8.86 19.57 L7.71 21.26 L6.13 20.34 L7.01 18.51 L5.49 16.99 L3.66 17.87 L2.74 16.29 L4.43 15.14 L3.87 13.06 L1.84 12.92 L1.84 11.08 L3.87 10.94 L4.43 8.86 L2.74 7.71 L3.66 6.13 L5.49 7.01 L7.01 5.49 L6.13 3.66 L7.71 2.74 L8.86 4.43 L10.94 3.87 L11.08 1.84 L12.92 1.84 L13.06 3.87 L15.14 4.43 L16.29 2.74 L17.87 3.66 L16.99 5.49 L18.51 7.01 L20.34 6.13 L21.26 7.71 L19.57 8.86 Z"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1.4"/></svg><div class="st-body"><label id="m-gear-label">Gear</label><div class="st-val"><b id="m-gear">12</b><span id="m-gear-unit">/24</span></div></div></div>
+        <div class="stat climb"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M2 20 9 8l4 6 3-4 6 10z"/></svg><div class="st-body"><label>Climbed</label><div class="st-val"><b id="m-gain">0</b><span>m</span></div></div></div>
+      </div>
+      <div class="board minimap" id="minimap-box" title="Bigger map (M)"><canvas id="minimap"></canvas><button id="minimap-size" class="mm-size" aria-label="Bigger map (M)">⤢</button></div>
+      <div id="race-board" class="board race-board" hidden>
+        <div class="race-head"><b id="race-pos">1/6</b><span id="race-info"></span></div>
+        <div id="race-rows"></div>
+      </div>
+      <div id="ahead" class="board ahead" hidden>
+        <div class="ahead-head">Ahead · within 10 s</div>
+        <div id="ahead-rows"></div>
+      </div>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="bottom-main">
+      <div class="bottom-row">
+      <div class="bottom-left">
+        <div class="controls">
+          <button id="btn-pause" class="pill-btn">Pause</button>
+          <button id="btn-finish" class="pill-btn danger">Finish</button>
+          <button id="btn-figure" class="pill-btn" title="Switch the rider (R)">Woman</button>
+          <button id="btn-keys" class="pill-btn icon-btn" title="Keyboard (?)" aria-label="Keyboard (?)"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
+          <button id="btn-pip" class="pill-btn icon-btn" title="Mini window over other apps (I)" aria-label="Mini window over other apps (I)" hidden><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="12" y="11.5" width="7" height="5.5" rx="1" fill="currentColor"/></svg></button>
+          <button id="btn-settings" class="pill-btn icon-btn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
+        </div>
+      </div>
+      <div id="sim-ctl" class="pill sim" hidden>
+        <label>Simulator <b id="sim-val">150</b> W</label>
+        <input id="sim-power" type="range" min="0" max="600" step="5" value="150">
+      </div>
+      </div>
+      <!-- the ride so far, like Zwift: power as bars coloured by zone, heart rate as a line -->
+      <canvas id="trace" class="trace"></canvas>
+      </div>
+      <div class="progress">
+        <div id="progress-label" class="progress-label">Lap 1</div>
+        <canvas id="profile"></canvas>
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+      </div>
+    </div>
+    <div id="ghost-tag" class="ghost-mini" hidden></div>
+    <div id="countdown" class="countdown" hidden></div>
+    <div id="paused" class="paused" hidden>PAUSED</div>
+    <div id="keys-help" class="keys-help" hidden>
+      <div class="keys-panel">
+        <div class="wk-menu-head"><h2>Keyboard</h2><button class="drawer-close" data-keys-close aria-label="Close">✕</button></div>
+        <dl id="keys-list"></dl>
+      </div>
+    </div>
+    <div id="toast" class="toast" hidden></div>
+  </section>
+
+  <!-- ===== Summary ===== -->
+  <section id="summary" class="screen" hidden>
+    <header class="lobby-top">
+      <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
+      <div class="sum-title"><small id="sum-kicker">Ride complete</small><b id="sum-name"></b></div>
+    </header>
+    <main class="sum-main">
+      <div id="sum-hero" class="sum-hero"></div>
+      <div class="sum-chart card">
+        <div class="sum-chart-head"><h2>Power &amp; heart rate</h2><span class="legend"><i class="lg-power"></i>Power <span id="lg-plan" hidden><i class="lg-plan"></i>Plan</span> <i class="lg-hr"></i>Heart rate <i class="lg-wbal"></i>W′bal <span id="lg-cad" hidden><i class="lg-cad"></i>Cadence</span></span></div>
+        <div class="chart-wrap">
+          <canvas id="sum-chart"></canvas>
+          <!-- the values under the pointer: a line and a card -->
+          <i id="sum-hover-line" class="hover-line" hidden></i>
+          <div id="sum-hover" class="chart-tip" hidden></div>
+        </div>
+      </div>
+      <div id="sum-stats" class="stats"></div>
+      <div id="sum-prs" class="sum-prs" hidden></div>
+      <div id="sum-earned" class="sum-prs sum-earned" hidden></div>
+      <div id="sum-ftp" class="ftp-tip" hidden></div>
+      <div id="sum-race" class="card sum-race" hidden>
+        <div class="sum-chart-head"><h2>Race results</h2><span id="sum-race-place" class="race-place"></span></div>
+        <table><tbody id="sum-race-rows"></tbody></table>
+        <p class="hint">* still riding: the time at their speed</p>
+      </div>
+      <div id="sum-intervals" class="card sum-intervals" hidden>
+        <div class="sum-chart-head"><h2>Intervals</h2><span id="sum-int-score" class="int-score"></span></div>
+        <table>
+          <thead><tr><th>#</th><th>Time</th><th>Target, W</th><th>Power, W</th><th>Δ</th><th>HR</th><th>rpm</th></tr></thead>
+          <tbody id="sum-int-rows"></tbody>
+        </table>
+      </div>
+      <div id="sum-zones" class="sum-zones" hidden>
+        <div class="card"><h2>Time in power zones</h2><div id="sum-zones-power" class="zbars"></div></div>
+        <div class="card" id="sum-zones-hr-box"><h2>Time in heart rate zones</h2><div id="sum-zones-hr" class="zbars"></div></div>
+      </div>
+      <div id="sum-segments" class="card sum-segments" hidden>
+        <h2>Laps &amp; climbs</h2>
+        <table><tbody id="sum-seg-rows"></tbody></table>
+        <p id="sum-social" class="sum-social" hidden><span id="sum-social-text" class="hint"></span><button id="btn-social-cta" class="pill-btn"></button></p>
+      </div>
+      <div class="sum-actions">
+        <button id="btn-download" class="primary">Download .FIT</button>
+        <button id="btn-download-tcx">.TCX</button>
+        <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
+        <button id="btn-strava-upload" hidden>Upload to Strava</button>
+        <button id="btn-delete-ride" class="ghost" hidden>Delete ride</button>
+        <button id="btn-challenge" hidden title="A link: your friend rides against your ghost">Challenge a friend 👻</button>
+        <button id="btn-card">Share card</button>
+        <button id="btn-again" class="ghost">Back to lobby</button>
+      </div>
+      <label class="check sum-icu" id="sum-icu" hidden><input type="checkbox" id="sum-icu-auto"> <span>Upload the ride to intervals.icu</span> <small id="sum-icu-count"></small></label>
+      <label class="check sum-icu" id="sum-strava" hidden><input type="checkbox" id="sum-strava-auto"> <span>Upload the ride to Strava</span> <small id="sum-strava-count"></small></label>
+      <p id="icu-upload-status" class="hint" hidden></p>
+      <p id="strava-upload-status" class="hint" hidden></p>
+      <p class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
+    </main>
+  </section>
+
+      <!-- before the start: sensors that are not ready yet -->
+    <div id="preflight" class="wk-menu" hidden>
+      <div class="drawer-bg"></div>
+      <div class="wk-menu-panel preflight-panel">
+        <div class="wk-menu-head"><h2>Sensors</h2></div>
+        <p class="muted">Waiting for every sensor. The ride starts by itself once they all have a tick.</p>
+        <ul id="preflight-list" class="preflight-list"></ul>
+        <div class="wkd-actions"><button id="preflight-cancel" class="pill-btn">Back</button><button id="preflight-go" class="primary wkd-ride">Ride anyway</button></div>
+      </div>
+    </div>
+
+    <!-- a picture of the ride to share (#52) -->
+    <div id="card-view" class="wk-menu" hidden>
+      <div class="drawer-bg" data-card-close></div>
+      <div class="wk-menu-panel card-panel">
+        <div class="wk-menu-head"><h2>Share your ride</h2><button class="drawer-close" data-card-close aria-label="Close">✕</button></div>
+        <div class="card-formats"><button class="pill-btn" data-card-format="story">Story 9:16</button><button class="pill-btn" data-card-format="post">Post 4:5</button></div>
+        <canvas id="card-canvas" width="1080" height="1920"></canvas>
+        <div class="wkd-actions"><button id="card-download" class="pill-btn">Download PNG</button><button id="card-share" class="primary wkd-ride">Share…</button></div>
+      </div>
+    </div>
+
+    <!-- the first sign-in: how you show in the tables -->
+    <div id="social-setup" class="wk-menu" hidden>
+      <div class="drawer-bg" data-ss-close></div>
+      <div class="wk-menu-panel social-setup-panel">
+        <div class="wk-menu-head"><h2>You in the tables</h2><button class="drawer-close" data-ss-close aria-label="Close">✕</button></div>
+        <div class="fields">
+          <label>Name in the tables <input id="ss-name" maxlength="24" autocomplete="nickname"></label>
+          <label>Country <select id="ss-country"></select></label>
+          <label>Gender, for the filter <select id="ss-gender"><option value="">Rather not say</option><option value="f">Female</option><option value="m">Male</option></select></label>
+        </div>
+        <label class="check"><input type="checkbox" id="ss-public" checked> Show me in the tables</label>
+        <p class="hint">Others see your name, country, times and W/kg; never your weight. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+        <p id="ss-error" class="hint c-bad"></p>
+        <div class="wkd-actions"><button id="ss-save" class="primary wkd-ride">Save</button></div>
+      </div>
+    </div>
+
+    <!-- a leaderboard: a lap, climb or sprint of a built-in route -->
+    <div id="lb-view" class="wk-menu" hidden>
+      <div class="drawer-bg" data-lb-close></div>
+      <div class="wk-menu-panel lb-panel">
+        <div class="wk-menu-head"><h2 id="lb-title">Leaderboards</h2><button class="drawer-close" data-lb-close aria-label="Close">✕</button></div>
+        <div class="lb-top"><select id="lb-seg" aria-label="Segment"></select><small id="lb-count" class="muted"></small></div>
+        <div class="lb-filters">
+          <div class="lb-chips" id="lb-period"><button class="pill-btn sel" data-v="all">All time</button><button class="pill-btn" data-v="month">This month</button><button class="pill-btn" data-v="week">This week</button></div>
+          <div class="lb-chips" id="lb-gender"><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
+          <div class="lb-chips" id="lb-cat"><button class="pill-btn sel" data-v="">All</button><button class="pill-btn" data-v="A">A</button><button class="pill-btn" data-v="B">B</button><button class="pill-btn" data-v="C">C</button><button class="pill-btn" data-v="D">D</button></div>
+        </div>
+        <div class="lb-scroll">
+          <table class="lb-table"><thead><tr><th>#</th><th></th><th>Rider</th><th>Time</th><th>W/kg</th><th>HR</th><th>Date</th></tr></thead><tbody id="lb-rows"></tbody></table>
+        </div>
+        <p id="lb-empty" class="hint" hidden>No times here yet: be the first.</p>
+        <p id="lb-cta" class="hint" hidden><button id="lb-signin" class="pill-btn">Sign in with Google</button> to put your times here</p>
+        <p class="hint">Categories by FTP per kilo: A from 4.0, B 3.2–4.0, C 2.5–3.2, D below 2.5 W/kg. «?»: no heart rate, or close to the limit of the possible.</p>
+      </div>
+    </div>
+
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

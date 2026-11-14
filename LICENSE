@@ -1,0 +1,24 @@
+Gruppetto
+Copyright (c) 2026 Serhii Pirohov. All rights reserved.
+
+This software and its source code, design, graphics, text and other materials (the "Software") are
+proprietary. They are made visible in this repository for viewing only.
+
+Without the prior written permission of the copyright holder, you may not:
+  - copy, reproduce or download the Software, in whole or in part, other than as needed to view it
+    on GitHub or to use the official hosted version at https://automation-remarks.com/gruppetto/;
+  - modify, adapt, translate or create derivative works based on the Software;
+  - distribute, publish, sublicense, sell, rent or otherwise make the Software available to others;
+  - host or run the Software, or any copy or derivative of it, as a service or website;
+  - use the Software, in whole or in part, in any other product or project.
+
+Using the official hosted version for your own training is permitted.
+
+Third-party components keep their own licences and are not covered by this notice: three.js
+(vendor/three, MIT licence) and the models and textures listed in assets/CREDITS.md (CC0 1.0).
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. IN NO EVENT
+SHALL THE COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM THE
+SOFTWARE OR ITS USE.
+
+For permission requests, contact the copyright holder through https://github.com/SergeyPirogov.
