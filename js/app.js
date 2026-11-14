@@ -3297,7 +3297,7 @@ async function connectIntervals({ quiet = false } = {}) {
     const athlete = await client.athlete();
     const today = new Date();
     const week = new Date(today.getTime() + 6 * 86400000);
-    icuWorkouts = await client.plannedWorkouts(localDate(today), localDate(week));
+    icuWorkouts = await client.plannedWorkouts(localDate(today), localDate(week), { lthr: athlete.lthr, maxHr: athlete.maxHr, hrZones: athlete.hrZones });
     // a workout already ridden today (here, in Zwift, on a Garmin: any activity paired with it) is not offered again
     const done = await client.doneEventIds(localDate(today), localDate(today)).catch(() => new Set());
     const stats = icuWorkouts.stats;

@@ -305,6 +305,26 @@ test('Spoken durations in English', () => {
   assert.equal(spokenDuration(90), '1 minute 30 seconds');
 });
 
+test('intervals.icu heart rate ranges', () => {
+  const ath = { lthr: 162, maxHr: 190, hrZones: [130, 146, 156, 165, 175, 190] };
+  const s = convertSteps([
+    { duration: 3600, hr: { start: 78, end: 83, units: '%lthr' }, cadence: { min: 85, max: 90, units: 'rpm' } },
+    { duration: 600, hr: { value: 70, units: '%hr' } },
+    { duration: 600, hr: { value: 2, units: 'hr_zone' } },
+    { duration: 600, hr: { min: 120, max: 130, units: 'bpm' } },
+    { duration: 600, power: { value: 60, units: '%ftp' }, hr: { start: 78, end: 83, units: '%lthr' } },
+  ], [], ath);
+  assert.deepEqual(s[0].hr, [126, 134]);           // 78–83 % of 162
+  assert.equal(s[0].free, true);                   // shown only: no ERG
+  assert.deepEqual(s[0].cad, [85, 90]);
+  assert.deepEqual(s[1].hr, [130, 136]);           // 70 % of 190 = 133 ± 3
+  assert.deepEqual(s[2].hr, [131, 146]);           // Z2: above Z1's top up to its own
+  assert.deepEqual(s[3].hr, [120, 130]);
+  assert.equal(stepWatts(s[4], 0, 200), 120);      // power still drives ERG
+  assert.deepEqual(s[4].hr, [126, 134]);
+  assert.equal(convertSteps([{ duration: 60, hr: { value: 80, units: '%lthr' } }])[0].hr, undefined); // no LTHR
+});
+
 test('intervals.icu cadence targets', () => {
   const s = convertSteps([
     { duration: 60, power: { value: 90, units: '%ftp' }, cadence: { value: 95, units: 'rpm' } },
