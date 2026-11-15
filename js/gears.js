@@ -32,3 +32,13 @@ export function virtualWheelMm(gear, chainring, cog = COG_TEETH) {
 export function gearGradeOffset(gear) {
   return (ratioOf(gear) / ratioOf(DEFAULT_GEAR) - 1) * 4;
 }
+
+/**
+ * What the trainer gets for a gear in each shift mode: a wheel circumference (mm) to send, or null for none,
+ * and an extra grade (%). 'off' = gears on the bike: the real wheel, nothing added.
+ */
+export function shiftPlan(mode, gear, chainring, cog = COG_TEETH) {
+  if (mode === 'off') return { wheelMm: BASE_WHEEL_MM, gradeOffset: 0 };
+  if (mode === 'grade') return { wheelMm: null, gradeOffset: gearGradeOffset(gear) };
+  return { wheelMm: virtualWheelMm(gear, chainring, cog), gradeOffset: 0 };
+}

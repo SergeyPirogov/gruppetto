@@ -174,7 +174,7 @@ test('13 routes, each with an existing theme and distinct name', () => {
   for (const r of routes) assert.ok(THEMES[r.theme], `${r.id} theme ${r.theme}`);
 });
 
-import { GEAR_RATIOS, virtualWheelMm, gearGradeOffset, ratioOf } from '../js/gears.js';
+import { GEAR_RATIOS, virtualWheelMm, gearGradeOffset, ratioOf, shiftPlan } from '../js/gears.js';
 
 test('Virtual gears for Zwift Cog', () => {
   assert.equal(GEAR_RATIOS.length, 24);
@@ -188,6 +188,14 @@ test('Virtual gears for Zwift Cog', () => {
   assert.ok(gearGradeOffset(24) > 0 && gearGradeOffset(1) < 0);
   assert.equal(ratioOf(99), 5.49);
   assert.deepEqual(wahoo.wheelCircumference(2096), [0x48, 0xe0, 0x51]); // 20960
+});
+
+test('Shift modes: gears on the bike get the real wheel and no extra grade, whatever the chainring', () => {
+  // a 50 × 11–28 bike with «50» typed in: still the real wheel, not a third smaller
+  for (const gear of [1, 12, 24]) assert.deepEqual(shiftPlan('off', gear, 50, 14), { wheelMm: 2096, gradeOffset: 0 });
+  assert.deepEqual(shiftPlan('wheel', 20, 34), { wheelMm: virtualWheelMm(20, 34), gradeOffset: 0 });
+  assert.deepEqual(shiftPlan('grade', 20, 34), { wheelMm: null, gradeOffset: gearGradeOffset(20) });
+  assert.ok(virtualWheelMm(12, 50) < 1500); // why «off» exists: the Cog maths on a real chainring shrinks the wheel
 });
 
 import { Sampler } from '../js/sampler.js';
