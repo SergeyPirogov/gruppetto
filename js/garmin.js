@@ -8,6 +8,12 @@ const FN = SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/garmin` : '';
 const KEY = 'gruppetto.garmin';
 
 export const garminOn = () => !!FN;
+
+/** Whether the Garmin function is deployed and answers this page (a preflight-style OPTIONS call). */
+export async function garminAvailable() {
+  if (!FN) return false;
+  try { const r = await fetch(FN, { method: 'OPTIONS' }); return r.ok; } catch { return false; }
+}
 export const garminActivityUrl = (id) => `https://connect.garmin.com/modern/activity/${id}`;
 
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } };

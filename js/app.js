@@ -19,7 +19,7 @@ import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
 import { bunchPower, BUNCH } from './bunch.js';
 import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl, STRAVA_STATE } from './strava.js';
-import { GarminClient, garminOn, garminActivityUrl } from './garmin.js';
+import { GarminClient, garminOn, garminAvailable, garminActivityUrl } from './garmin.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
@@ -3649,10 +3649,12 @@ async function uploadToStrava() {
 let garminClient = null;
 let garminMfa = null; // Garmin's code step: the state to send back with the code
 
-function initGarmin() {
+async function initGarmin() {
   if (!garminOn()) return;
-  $('garmin-card').hidden = false;
   garminClient = GarminClient.saved();
+  // the card shows once the function answers (it is deployed apart from the page)
+  if (!garminClient && !(await garminAvailable())) return;
+  $('garmin-card').hidden = false;
   $('f-garmin-upload').checked = settings.garminUpload;
   $('f-garmin-upload').onchange = () => { settings.garminUpload = $('f-garmin-upload').checked; saveSettings(); };
   $('garmin-login').onsubmit = async (ev) => {
