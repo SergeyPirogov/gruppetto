@@ -1018,3 +1018,17 @@ test('race bunch: together on the flat, split by a climb', async () => {
   assert.ok(flatMax < 15, `the bunch holds on the flat (spread ${flatMax.toFixed(1)} m)`);
   assert.ok(spread() > 40, `the climb splits it (spread ${spread().toFixed(1)} m)`);
 });
+
+import { gradeColor, gradeRuns } from '../js/grade-color.js';
+test('grade colours: stops, blend, clamp', () => {
+  assert.equal(gradeColor(0), 'rgb(34,197,94)');
+  assert.equal(gradeColor(9), 'rgb(220,38,38)');
+  assert.equal(gradeColor(20), 'rgb(220,38,38)');
+  assert.equal(gradeColor(-10), 'rgb(59,130,246)');
+  assert.equal(gradeColor(4.5), 'rgb(242,147,15)'); // halfway 3 % -> 6 %, rounded
+});
+test('grade runs sample the route every 25 m', () => {
+  const r = routes[0], runs = gradeRuns(r, 0, 100);
+  assert.deepEqual(runs.map((x) => x.d), [0, 25, 50, 75, 100]);
+  assert.equal(runs[1].color, gradeColor(r.gradeAt(25) * 100));
+});
