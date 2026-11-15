@@ -27,10 +27,19 @@ export function gradeColor(gradePct) {
  * `window` (m) averages the grade over that much road round each point, so a long route squeezed into a few
  * hundred pixels shows its climbs as patches rather than flickering stripes; 0 uses the road's own grade.
  */
+const cache = new WeakMap(); // route -> Map(key -> runs): the map and profile redraw every frame
+
 export function gradeRuns(route, from, to, step = 25, window = 0) {
+  window = window > 20 ? Math.round(window / 10) * 10 : 0;
+  let byKey = cache.get(route);
+  if (!byKey) cache.set(route, (byKey = new Map()));
+  const key = `${from}|${to}|${step}|${window}`;
+  if (byKey.has(key)) return byKey.get(key);
+  if (byKey.size > 16) byKey.clear();
   const grade = (d) => (window > 20 ? (route.elevAt(d + window / 2) - route.elevAt(d - window / 2)) / window : route.gradeAt(d));
   const out = [];
   for (let d = from; d < to; d += step) out.push({ d, color: gradeColor(grade(d) * 100) });
   out.push({ d: to, color: gradeColor(grade(to) * 100) });
+  byKey.set(key, out);
   return out;
 }

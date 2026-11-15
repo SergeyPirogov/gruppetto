@@ -31,6 +31,7 @@ import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
+import { gradeRuns } from './grade-color.js';
 import { themeFor } from './themes.js';
 import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
 import { nextWeather } from './atmo-blend.js';
@@ -1309,7 +1310,8 @@ async function startRide(opts) {
   $('wk-steps').hidden = !workout;
   $('race-board').hidden = !racing;
   $('countdown').hidden = !racing;
-  $('minimap-box').classList.toggle('big', !!settings.bigMap); $('minimap-size').textContent = settings.bigMap ? '⤡' : '⤢'; // as you left it
+  $('minimap-box').classList.toggle('big', !!settings.bigMap); mapZoomLabel(); // as you left it
+  hidePanel('map', !!settings.hideMap); hidePanel('profile', !!settings.hideProfile);
   ride.stepStats = [];
   $('wk-pacer-btn').classList.toggle('on', settings.pacer === true);
   $('wk-erg-btn').classList.add('on'); // every workout starts in ERG
@@ -2067,14 +2069,36 @@ function routeShape(route) {
   return shape;
 }
 
-/** The minimap grows into a big map and back (click it, or M). */
+/** The minimap grows into a big map and back (click it, the Nearby/Route button, or M). */
 function toggleMinimap(big = !$('minimap-box').classList.contains('big')) {
+  if ($('minimap-box').classList.contains('collapsed')) return;
   $('minimap-box').classList.toggle('big', big);
-  $('minimap-size').textContent = big ? '⤡' : '⤢';
   settings.bigMap = big; saveSettings();
+  mapZoomLabel();
   if (ride) drawMinimap();
 }
+/** The zoom button says which map you see: round you, or the whole route. */
+function mapZoomLabel() { $('minimap-size').textContent = tr($('minimap-box').classList.contains('big') ? 'Route' : 'Nearby'); }
 $('minimap-box').addEventListener('click', () => toggleMinimap());
+/** Fold the minimap or the profile away to its "+" button, and back; remembered for the next ride. */
+function hidePanel(which, hide) {
+  const box = $(which === 'map' ? 'minimap-box' : 'profile-box'), btn = $(which === 'map' ? 'minimap-hide' : 'profile-hide');
+  box.classList.toggle('collapsed', hide);
+  btn.textContent = hide ? '+' : '−';
+  btn.title = tr(hide ? 'Show' : 'Hide'); btn.setAttribute('aria-label', btn.title);
+  if (hide) box.classList.remove('big');
+  else if (which === 'map') box.classList.toggle('big', !!settings.bigMap);
+}
+for (const which of ['map', 'profile']) {
+  $(which === 'map' ? 'minimap-hide' : 'profile-hide').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const key = which === 'map' ? 'hideMap' : 'hideProfile';
+    settings[key] = !settings[key]; saveSettings();
+    hidePanel(which, settings[key]);
+    if (ride && which === 'map') drawMinimap();
+  });
+}
+$('minimap-size').addEventListener('click', (e) => { e.stopPropagation(); toggleMinimap(); });
 
 function drawMinimap() {
   const canvas = $('minimap');
@@ -2120,11 +2144,27 @@ function drawMinimap() {
     const [ex, ey] = at(to, false); g.lineTo(ex, ey);
     g.strokeStyle = color; g.lineWidth = width; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
   };
-  line(0, L, 'rgba(255,255,255,.18)', big ? 9 : 6);
-  line(0, L, 'rgba(232,237,245,.75)', big ? 3.2 : 2.2);
-  for (const c of route.climbs) {
-    if (c.start + c.length <= L) line(c.start, c.start + c.length, '#f97316', 3);
-    else { line(c.start, L, '#f97316', 3); line(0, c.start + c.length - L, '#f97316', 3); } // over the start line
+  line(0, L, 'rgba(0,0,0,.45)', big ? 9 : 7);
+  // the road in the colour of its grade (as on the profile below)
+  const runs = gradeRuns(route, 0, L, 25, 4 / k);
+  g.lineWidth = big ? 4 : 3.2; g.lineCap = 'round';
+  for (let i = 0; i + 1 < runs.length; i++) {
+    const [ax, ay] = at(runs[i].d, false), [bx, by] = at(runs[i + 1].d, false);
+    if (Math.max(ax, bx) < -10 || Math.min(ax, bx) > W + 10 || Math.max(ay, by) < -10 || Math.min(ay, by) > H + 10) continue; // off the map
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.strokeStyle = runs[i].color; g.stroke();
+  }
+  // timed segments: a short tick across the road at start and finish, the kind beside the start
+  const tickAt = (d) => {
+    const [px, py] = at(d), [qx, qy] = at(d + 8), nx = -(qy - py), ny = qx - px, n = Math.hypot(nx, ny) || 1;
+    g.beginPath(); g.moveTo(px - (nx / n) * 5, py - (ny / n) * 5); g.lineTo(px + (nx / n) * 5, py + (ny / n) * 5);
+    g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
+    return [px + (nx / n) * 12, py + (ny / n) * 12];
+  };
+  g.font = '11px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff';
+  for (const c of [...route.climbs, ...(route.sprints || []).map((x) => ({ ...x, sprint: true }))]) {
+    const [lx, ly] = tickAt(c.start);
+    tickAt(c.start + c.length);
+    g.fillText(c.sprint ? '\u26A1' : '\u26F0', lx, ly);
   }
   // start (and finish of a point-to-point route)
   const flag = (d, color) => { const [px, py] = at(d); g.fillStyle = color; g.fillRect(px - 3, py - 3, 6, 6); g.strokeStyle = '#111'; g.lineWidth = 1; g.strokeRect(px - 3, py - 3, 6, 6); };
@@ -4079,7 +4119,7 @@ const KEYS = [
   [['C'], 'Next camera'],
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
-  [['M'], 'Bigger map'],
+  [['M'], 'Map zoom'],
   [['I'], 'Mini window over other apps (film, football, YouTube)'],
   [['R'], 'Switch the rider: man / woman'],
   [['+', '−'], 'Simulator: power ±10 W'],
