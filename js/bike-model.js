@@ -177,6 +177,13 @@ export class ModelBike {
         if (accent && /^accent/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(accent); }
         // reflections: without them gloss, clear coat and metal render flat black (Blender previews with an HDRI)
         if (ENV && o.material.envMap !== ENV) { o.material.envMap = ENV; o.material.envMapIntensity = 0.9; o.material.needsUpdate = true; }
+        // the pedal axle is bare between crank and pedal and its material has no metallicFactor (glTF reads
+        // 1.0): a light, polished, fully metal tube turning with the pedal flashes the sky seen from behind
+        if (/^pedalaxle/i.test(o.material.name)) {
+          o.material = o.material.clone();
+          o.material.color.setScalar(0.12);
+          Object.assign(o.material, { metalness: 0.6, roughness: 0.55, envMapIntensity: 0.3 });
+        }
         return;
       }
       o.geometry = o.geometry.clone(); // own vertex colours per rider
