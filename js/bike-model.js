@@ -169,7 +169,10 @@ export class ModelBike {
       // don't z-fight (speckles) when the bike is seen from a distance
       if (/decal|accent/i.test(o.material?.name || '')) {
         o.material = o.material.clone();
-        Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+        // the wheel decals (Accent) stand 0.4 mm off the rim, already clear in depth: a slope-scaled offset
+        // pulls them through the tyre's edge when the rim is seen edge-on from behind, and they flicker as it turns
+        const wheel = /accent/i.test(o.material.name);
+        Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: wheel ? 0 : -2, polygonOffsetUnits: wheel ? -1 : -4 });
       }
       if (own) {
         if (color && /^paint/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(color); }
