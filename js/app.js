@@ -24,9 +24,9 @@ import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js'
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
-import { averages, rideItems, categoryOf } from './social-core.js';
+import { averages, rideItems, categoryOf, stampChanged } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
-import { initSocialUi, socialSettingsSaved, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { initSocialUi, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -553,7 +553,23 @@ function alertBox(msg) {
 // your own workouts: imported from .zwo files or made in the builder (#28, #36)
 const MY_KEY = 'gruppetto.workouts';
 let myWorkouts = (() => { try { return JSON.parse(localStorage.getItem(MY_KEY) || '[]'); } catch { return []; } })();
-const saveMyWorkouts = () => { try { localStorage.setItem(MY_KEY, JSON.stringify(myWorkouts)); } catch { /* storage full or blocked */ } };
+// signed in, they follow you to every device: each carries when it last changed, a deleted one when it went
+const readJson = (key, empty) => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? empty; } catch { return empty; } };
+const writeJson = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage full or blocked */ } };
+const MY_DEL_KEY = 'gruppetto.workouts.deleted';
+let myWorkoutsDeleted = readJson(MY_DEL_KEY, {});
+const seenWorkouts = new Map();
+stampChanged(myWorkouts, seenWorkouts);
+const writeMyWorkouts = () => writeJson(MY_KEY, myWorkouts);
+const saveMyWorkouts = () => {
+  const gone = new Set(seenWorkouts.keys());
+  for (const w of myWorkouts) gone.delete(w.id);
+  for (const id of gone) { myWorkoutsDeleted[id] = Date.now(); seenWorkouts.delete(id); }
+  if (gone.size) writeJson(MY_DEL_KEY, myWorkoutsDeleted);
+  stampChanged(myWorkouts, seenWorkouts);
+  writeMyWorkouts();
+  socialDataChanged();
+};
 const allWorkouts = () => [...icuWorkouts, ...myWorkouts, ...workouts];
 
 /** Today's and tomorrow's workouts from the intervals.icu calendar, right in the lobby. */
@@ -2497,13 +2513,25 @@ function finishRide() {
 // ---------- Ride history (#19) ----------
 // The last 100 rides, kept on this device: the summary, laps and climbs, and power / heart rate every
 // 5 s for the chart (the full second-by-second record is only kept until the next ride).
-const HISTORY_KEY = 'gruppetto.history';
+const HISTORY_KEY = 'gruppetto.history', HISTORY_DEL_KEY = 'gruppetto.history.deleted';
 let history = (() => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } })();
-const saveHistory = () => {
+let historyDeleted = readJson(HISTORY_DEL_KEY, {}); // rides deleted here: id → when, so they go from your other devices too
+const seenHistory = new Map();
+stampChanged(history, seenHistory);
+const writeHistory = () => {
   for (;;) {
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); return; } catch { if (history.length <= 1) return; history.pop(); } // full: drop the oldest
   }
 };
+const saveHistory = () => { stampChanged(history, seenHistory); writeHistory(); socialDataChanged(); };
+/** A ride deleted by you (not one that just fell off the end of the list). */
+function forgetRide(id) {
+  history = history.filter((e) => e.id !== id);
+  historyDeleted[id] = Date.now();
+  writeJson(HISTORY_DEL_KEY, historyDeleted);
+  deleteRide(id);
+  saveHistory();
+}
 
 /** Training stress: hours × intensity factor² × 100, with NP (or average power) against FTP. */
 function tss(sum, ftp) {
@@ -3759,9 +3787,7 @@ for (const a of document.querySelectorAll('[data-home]')) a.addEventListener('cl
 $('btn-delete-ride').onclick = () => {
   const b = $('btn-delete-ride');
   if (b.textContent !== tr('Tap again to delete')) { b.textContent = tr('Tap again to delete'); return; }
-  history = history.filter((e) => e.id !== b.dataset.id);
-  deleteRide(b.dataset.id);
-  saveHistory();
+  forgetRide(b.dataset.id);
   renderHistory();
   $('summary').hidden = true; $('lobby').hidden = false;
 };
@@ -4172,6 +4198,17 @@ initSocialUi({
   settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,
   getProgress: () => progress, setProgress: (p) => { progress = p; saveProgress(); },
   saveSettingsRaw: writeSettings, saveRecords,
+  // full sync: your own workouts and the ride history, written here without sending them straight back
+  getWorkouts: () => myWorkouts, workoutsDeleted: () => myWorkoutsDeleted,
+  setWorkouts: (list, deleted) => {
+    myWorkouts = list; myWorkoutsDeleted = deleted; writeJson(MY_DEL_KEY, deleted);
+    seenWorkouts.clear(); stampChanged(myWorkouts, seenWorkouts); writeMyWorkouts(); renderModes();
+  },
+  getHistory: () => history, historyDeleted: () => historyDeleted,
+  setHistory: (list, removed) => {
+    for (const id of removed) deleteRide(id);
+    history = list; seenHistory.clear(); stampChanged(history, seenHistory); writeHistory(); renderHistory(); renderProgress();
+  },
   currentRoute: () => routes.find((x) => x.id === settings.routeId) || routes[0],
   routeOfSegment: (seg) => routes.find((x) => !x.custom && seg.startsWith(`${x.id}-`) && (seg === `${x.id}-lap` || [...x.climbs, ...(x.sprints || [])].some((c) => c.id === seg))),
   refresh: () => { refreshProfileForm(); updateSummary(); renderProgress(); renderFtpBox(); },
