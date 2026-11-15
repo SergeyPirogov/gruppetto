@@ -484,6 +484,47 @@ function makeJersey(root, bones, sleeve, skinMat, accentMat) {
  * matrices are not reliable. Bones are matched by name for the same reason. Clones share
  * geometry, so each geometry is changed only once.
  */
+/**
+ * Smaller shoes (rider.json "shoeScale": [x, y, z] in the foot bone's axes, or one number): each shoe shrinks
+ * toward its cleat, which sits on the pedal, so the sole stays where it is and the shoe just looks lighter;
+ * the collar round the ankle keeps its size.
+ * Works in the bind pose (the foot bone's own space); the geometry is shared between riders, so once.
+ */
+function scaleShoes(root, k) {
+  const s = Array.isArray(k) ? k : [k, k, k];
+  const cleat = {};
+  root.traverse((o) => { const m = /cleat_([lr])$/i.exec(o.name); if (m && /^foot_/i.test(o.parent?.name || '')) cleat[m[1].toLowerCase()] = o.position.clone(); });
+  if (!cleat.l || !cleat.r) return;
+  const v = new THREE.Vector3();
+  root.traverse((o) => {
+    if (!o.isSkinnedMesh || !/shoe/i.test(o.name) || o.geometry.userData.shoeScaled) return;
+    const sk = o.skeleton, { position: P, skinIndex: SI, skinWeight: SW } = o.geometry.attributes;
+    const side = new Map(); // bone index → 'l' | 'r' for the feet and toes
+    sk.bones.forEach((b, i) => { const m = /^(foot|ball|toe)s?_([lr])$/i.exec(b.name); if (m) side.set(i, m[2].toLowerCase()); });
+    const foot = { l: sk.bones.findIndex((b) => /^foot_l$/i.test(b.name)), r: sk.bones.findIndex((b) => /^foot_r$/i.test(b.name)) };
+    if (foot.l < 0 || foot.r < 0) return;
+    // mesh (bind) space → foot bone space and back
+    const to = { l: sk.boneInverses[foot.l].clone().multiply(o.bindMatrix), r: sk.boneInverses[foot.r].clone().multiply(o.bindMatrix) };
+    const from = { l: to.l.clone().invert(), r: to.r.clone().invert() };
+    for (let i = 0; i < P.count; i++) {
+      let wl = 0, wr = 0;
+      for (let c = 0; c < 4; c++) { const sd = side.get(SI.getComponent(i, c)); if (sd === 'l') wl += SW.getComponent(i, c); else if (sd === 'r') wr += SW.getComponent(i, c); }
+      if (wl + wr <= 0) continue;
+      const sd = wl >= wr ? 'l' : 'r', a = cleat[sd];
+      v.fromBufferAttribute(P, i).applyMatrix4(to[sd]);
+      // the bone runs from the ankle (0) toward the toes (+y): the collar round the ankle keeps its size so the
+      // sock still meets it, the shoe shrinks more and more toward the ball of the foot and the toes
+      const f = THREE.MathUtils.smoothstep(v.y, 0, a.y);
+      const k = (j) => 1 + (s[j] - 1) * f;
+      v.set(a.x + (v.x - a.x) * k(0), a.y + (v.y - a.y) * k(1), a.z + (v.z - a.z) * k(2)).applyMatrix4(from[sd]);
+      P.setXYZ(i, v.x, v.y, v.z);
+    }
+    P.needsUpdate = true;
+    o.geometry.computeBoundingSphere();
+    o.geometry.userData.shoeScaled = true;
+  });
+}
+
 function slimArms(root, bones, k) {
   const segs = [];
   for (const sd of ['l', 'r']) {
@@ -840,6 +881,7 @@ export class ModelRider {
     if (cfg.bodySlim && cfg.bodySlim < 1) slimTorso(this.root, this.bones, cfg.bodySlim); // rider.json "bodySlim": torso and shoulders
     if (cfg.legSlim && cfg.legSlim < 1) slimLegs(this.root, this.bones, cfg.legSlim);
     if (cfg.neckSlim && cfg.neckSlim < 1) slimNeck(this.root, this.bones, cfg.neckSlim);
+    if (cfg.shoeScale) scaleShoes(this.root, cfg.shoeScale);
     // short cycling socks (rider.json: "sockHeight", 0 = ankle .. 1 = knee; false keeps the model's socks)
     // bare skin where clothing is cut down (colour sampled from the body texture once it loads)
     this.skinMat = new THREE.MeshStandardMaterial({ color: '#c08a68', roughness: 0.7 });
