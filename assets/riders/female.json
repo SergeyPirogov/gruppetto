@@ -35,5 +35,6 @@
     0.01
   ],
   "bikeScale": 0.92,
-  "saddleDrop": 0.066
+  "saddleDrop": 0.066,
+  "shoeScale": 0.85
 }

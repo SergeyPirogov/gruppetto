@@ -169,7 +169,10 @@ export class ModelBike {
       // don't z-fight (speckles) when the bike is seen from a distance
       if (/decal|accent/i.test(o.material?.name || '')) {
         o.material = o.material.clone();
-        Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+        // the wheel decals (Accent) stand 0.4 mm off the rim, already clear in depth: a slope-scaled offset
+        // pulls them through the tyre's edge when the rim is seen edge-on from behind, and they flicker as it turns
+        const wheel = /accent/i.test(o.material.name);
+        Object.assign(o.material, { polygonOffset: true, polygonOffsetFactor: wheel ? 0 : -2, polygonOffsetUnits: wheel ? -1 : -4 });
       }
       if (own) {
         if (color && /^paint/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(color); }
@@ -177,6 +180,13 @@ export class ModelBike {
         if (accent && /^accent/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(accent); }
         // reflections: without them gloss, clear coat and metal render flat black (Blender previews with an HDRI)
         if (ENV && o.material.envMap !== ENV) { o.material.envMap = ENV; o.material.envMapIntensity = 0.9; o.material.needsUpdate = true; }
+        // the pedal axle is bare between crank and pedal and its material has no metallicFactor (glTF reads
+        // 1.0): a light, polished, fully metal tube turning with the pedal flashes the sky seen from behind
+        if (/^pedalaxle/i.test(o.material.name)) {
+          o.material = o.material.clone();
+          o.material.color.setScalar(0.12);
+          Object.assign(o.material, { metalness: 0.6, roughness: 0.55, envMapIntensity: 0.3 });
+        }
         return;
       }
       o.geometry = o.geometry.clone(); // own vertex colours per rider
