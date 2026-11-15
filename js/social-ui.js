@@ -4,11 +4,8 @@
 // without a project (social-config.js) init returns at once and none of it shows.
 import {
   socialOn, initSocial, currentUser, onUser, signIn, signOut, loadProfile, saveProfile, queueAdd, queued, sendResults, leaderboard, deleteAccount,
-  loadActivities, saveActivities,
 } from './social.js';
-import {
-  SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
-} from './social-core.js';
+import { SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf } from './social-core.js';
 
 let ctx = null;
 let profileRow = null; // my row in profiles, once read
@@ -182,44 +179,11 @@ export function sync({ send = false } = {}) {
     profileRow = row;
     renderCard();
     const merged = mergeData(localData(), row.data);
-    merged.workouts = syncWorkouts(row.data?.workouts);
     apply(merged);
     if (!sameData(merged, row.data)) await saveProfile({ data: merged });
-    await syncRides();
     if (send) await flush();
   })().finally(() => { syncing = null; });
   return syncing;
-}
-
-const unionDeleted = (a, b) => { const out = { ...(a || {}) }; for (const [id, t] of Object.entries(b || {})) if (!(out[id] >= t)) out[id] = t; return out; };
-
-/** Your own workouts, here and in the account's data, as one; this device takes the result. */
-function syncWorkouts(remote) {
-  const deleted = unionDeleted(ctx.workoutsDeleted(), remote?.deleted);
-  const m = mergeById(ctx.getWorkouts(), remote?.list || [], { deleted });
-  if (m.removed.length || !sameData(m.items, ctx.getWorkouts()) || !sameData(deleted, ctx.workoutsDeleted())) ctx.setWorkouts(m.items, deleted);
-  return workoutsData(m.items, deleted);
-}
-
-/** The ride history, here and in the activities table, as one: new rides both ways, deletions both ways. */
-async function syncRides() {
-  const rows = await loadActivities();
-  if (!rows) return; // the table is not in the project yet (0002_activities.sql)
-  const remoteDeleted = {}, remote = [];
-  for (const r of rows) {
-    if (r.deleted) remoteDeleted[r.id] = r.changed_at || 0;
-    else if (r.entry) remote.push({ ...r.entry, updatedAt: r.changed_at || r.entry.updatedAt || 0 });
-  }
-  const localDeleted = ctx.historyDeleted();
-  const m = mergeById(ctx.getHistory(), remote, { deleted: unionDeleted(localDeleted, remoteDeleted) });
-  const items = m.items.sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 100); // this device keeps the latest 100
-  if (m.removed.length || !sameData(items.map((x) => x.id), ctx.getHistory().map((x) => x.id)) || items.some((x, i) => x !== ctx.getHistory()[i])) {
-    ctx.setHistory(items, m.removed);
-  }
-  // up: rides the table lacks or holds older, and deletions it has not heard of
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const gone = Object.fromEntries(Object.entries(localDeleted).filter(([id, t]) => { const r = byId.get(id); return !r || !r.deleted || (r.changed_at || 0) < t; }));
-  await saveActivities(activityRows(m.push, gone));
 }
 
 function openSetup({ first = false } = {}) {
@@ -242,7 +206,7 @@ async function saveSetup() {
     profileRow = { ...profileRow, ...(await saveProfile(fields)) };
     $('social-setup').hidden = true;
     renderCard();
-    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); sync().catch(() => {}); }
+    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); }
   } catch (e) { $('ss-error').textContent = e.message; }
 }
 
@@ -255,13 +219,6 @@ export function socialSettingsSaved() {
   ctx.settings.settingsUpdatedAt = Date.now();
   ctx.saveSettingsRaw();
   if (!currentUser()) return;
-  clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
-}
-
-/** After the ride history or your workouts change here: up to the account in 3 s. */
-export function socialDataChanged() {
-  if (!on() || !currentUser()) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
 }

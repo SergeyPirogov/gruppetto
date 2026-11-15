@@ -442,21 +442,6 @@
           <span id="strava-status" class="muted"></span>
         </div>
       </div>
-      <div class="card" id="garmin-card" data-panel="profile" data-ptab="links" hidden>
-        <h2>Garmin Connect</h2>
-        <p class="muted">Finished rides go to Garmin Connect as a FIT file. Garmin has no upload API for apps like this one, so Gruppetto signs in the way Garmin's own app does: your password goes to Garmin once and is not kept, the sign-in stays in this browser.</p>
-        <label class="check"><input type="checkbox" id="f-garmin-upload"> Upload the ride to Garmin Connect when finished</label>
-        <form id="garmin-login" class="row icu-row garmin-login">
-          <input id="f-garmin-email" type="email" placeholder="Garmin email" autocomplete="username" required>
-          <input id="f-garmin-password" type="password" placeholder="Password" autocomplete="current-password" required>
-          <input id="f-garmin-code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code from Garmin" hidden>
-          <button id="btn-garmin" type="submit">Connect Garmin</button>
-        </form>
-        <div class="row icu-row">
-          <button id="btn-garmin-forget" hidden>Disconnect</button>
-          <span id="garmin-status" class="muted"></span>
-        </div>
-      </div>
       <div class="card" data-panel="history">
         <h2>Ride history</h2>
         <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
@@ -653,7 +638,6 @@
         <button id="btn-download-tcx">.TCX</button>
         <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
         <button id="btn-strava-upload" hidden>Upload to Strava</button>
-        <button id="btn-garmin-upload" hidden>Upload to Garmin</button>
         <button id="btn-delete-ride" class="ghost" hidden>Delete ride</button>
         <button id="btn-challenge" hidden title="A link: your friend rides against your ghost">Challenge a friend 👻</button>
         <button id="btn-card">Share card</button>
@@ -661,10 +645,8 @@
       </div>
       <label class="check sum-icu" id="sum-icu" hidden><input type="checkbox" id="sum-icu-auto"> <span>Upload the ride to intervals.icu</span> <small id="sum-icu-count"></small></label>
       <label class="check sum-icu" id="sum-strava" hidden><input type="checkbox" id="sum-strava-auto"> <span>Upload the ride to Strava</span> <small id="sum-strava-count"></small></label>
-      <label class="check sum-icu" id="sum-garmin" hidden><input type="checkbox" id="sum-garmin-auto"> <span>Upload the ride to Garmin Connect</span> <small id="sum-garmin-count"></small></label>
       <p id="icu-upload-status" class="hint" hidden></p>
       <p id="strava-upload-status" class="hint" hidden></p>
-      <p id="garmin-upload-status" class="hint" hidden></p>
       <p class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
     </main>
   </section>

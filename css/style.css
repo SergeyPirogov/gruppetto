@@ -51,7 +51,7 @@ button.ok { background: #1f6f43; border-color: #2b8f58; }
 .warn { background: #3a2a10; color: #ffcf7a; padding: 8px 10px; border-radius: 8px; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .fields label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: .9rem; }
-input[type=number], input[type=password], input[type=email], input:not([type]), select {
+input[type=number], input[type=password], input:not([type]), select {
   font: inherit; color: var(--text); background: #0f1522; border: 1px solid var(--line);
   border-radius: 8px; padding: 8px 10px;
 }
@@ -1418,7 +1418,3 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .figure-pick { display: inline-flex; gap: 0; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; flex: none; }
 .figure-pick button { border: 0; border-radius: 0; background: transparent; padding: 9px 14px; font-size: .9rem; color: var(--muted); }
 .figure-pick button.sel { background: var(--accent); color: #111; }
-/* Garmin sign-in: email, password (and the code) and the button in one row that wraps */
-.garmin-login { flex-wrap: wrap; }
-.garmin-login input { flex: 1 1 180px; min-width: 0; width: auto; }
-.garmin-login[hidden] { display: none; }
