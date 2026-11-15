@@ -85,30 +85,6 @@ export async function saveProfile(fields) {
   return ok(await c.from('profiles').upsert({ id: user.id, ...fields }).select('display_name,country,gender,public,updated_at').single());
 }
 
-// ---------- Rides (full sync) ----------
-
-/** My rides in the account: [{ id, entry, deleted, changed_at }], deletions included. Null when the table is not there yet. */
-export async function loadActivities() {
-  if (!user) return [];
-  const c = await client();
-  const out = [];
-  for (let from = 0; ; from += 500) {
-    const { data, error } = await c.from('activities').select('id,entry,deleted,changed_at').order('id').range(from, from + 499);
-    if (error) { if (/activities/.test(error.message) && /(exist|schema cache)/.test(error.message)) return null; throw new Error(error.message); }
-    out.push(...(data || []));
-    if (!data || data.length < 500) return out;
-  }
-}
-
-/** Writes rides (rows from activityRows), mine. */
-export async function saveActivities(rows) {
-  if (!user || !rows.length) return;
-  const c = await client();
-  for (let i = 0; i < rows.length; i += 100) {
-    ok(await c.from('activities').upsert(rows.slice(i, i + 100).map((r) => ({ user_id: user.id, ...r })), { onConflict: 'user_id,id' }));
-  }
-}
-
 // ---------- Results ----------
 
 const readQueue = () => { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; } };
