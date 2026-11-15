@@ -19,6 +19,7 @@ import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
 import { bunchPower, BUNCH } from './bunch.js';
 import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl, STRAVA_STATE } from './strava.js';
+import { GarminClient, garminOn, garminActivityUrl } from './garmin.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
@@ -44,7 +45,7 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
+  icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
   intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
@@ -432,6 +433,7 @@ function initLobby() {
   updateDeviceUI();
   initIntervals();
   initStrava();
+  initGarmin();
 }
 
 /** The route cards in groups: flat, hilly, mountain, and the routes you imported. */
@@ -2811,6 +2813,15 @@ function showSummary(e, { live = false } = {}) {
   };
   const canUpload = (rec) => !!(rec && icuClient && sum && sum.duration >= 60);
   const canStrava = (rec) => !!(rec && stravaClient && sum && sum.duration >= 60);
+  const canGarmin = (rec) => !!(rec && garminClient && sum && sum.duration >= 60);
+  const garminUi = (can) => {
+    $('btn-garmin-upload').hidden = !can;
+    $('btn-garmin-upload').disabled = false;
+    $('btn-garmin-upload').textContent = live ? tr('Upload to Garmin') : tr('Send to Garmin');
+    const st = $('garmin-upload-status');
+    st.hidden = !e.garminId;
+    if (e.garminId) st.innerHTML = e.garminId === true ? tr('On Garmin Connect ✓') : `${tr('On Garmin Connect ✓')} · <a href="${garminActivityUrl(e.garminId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+  };
   const stravaUi = (can) => {
     $('btn-strava-upload').hidden = !can;
     $('btn-strava-upload').disabled = false;
@@ -2822,11 +2833,12 @@ function showSummary(e, { live = false } = {}) {
   files(live);
   uploadUi(live && canUpload(recorder));
   stravaUi(live && canStrava(recorder) && !e.stravaId);
+  garminUi(live && canGarmin(recorder) && !e.garminId);
   $('btn-delete-ride').hidden = live;
   $('btn-delete-ride').dataset.id = e.id;
   $('btn-delete-ride').textContent = tr('Delete ride');
-  if (live) { scheduleUpload('icu', canUpload(recorder)); scheduleUpload('strava', canStrava(recorder) && !e.stravaId); return; }
-  scheduleUpload('icu', false); scheduleUpload('strava', false);
+  if (live) { scheduleUpload('icu', canUpload(recorder)); scheduleUpload('strava', canStrava(recorder) && !e.stravaId); scheduleUpload('garmin', canGarmin(recorder) && !e.garminId); return; }
+  scheduleUpload('icu', false); scheduleUpload('strava', false); scheduleUpload('garmin', false);
   getRide(e.id).then((r) => {
     if (!r || shown.entry !== e) return;
     const rec = new Recorder();
@@ -2835,6 +2847,7 @@ function showSummary(e, { live = false } = {}) {
     files(true);
     uploadUi(canUpload(rec) && !e.uploadedId);
     stravaUi(canStrava(rec) && !e.stravaId);
+    garminUi(canGarmin(rec) && !e.garminId);
   });
 }
 /** The ride on the summary screen: its history entry and, when kept, its full record. */
@@ -3475,6 +3488,7 @@ function forgetIntervals() {
 const AUTO_UPLOAD = {
   icu: { wrap: 'sum-icu', box: 'sum-icu-auto', count: 'sum-icu-count', key: 'icuUpload', profile: 'f-icu-upload', run: () => uploadToIntervals(), done: () => shown.entry?.uploadedId || lastRide?.uploadedId },
   strava: { wrap: 'sum-strava', box: 'sum-strava-auto', count: 'sum-strava-count', key: 'stravaUpload', profile: 'f-strava-upload', run: () => uploadToStrava(), done: () => shown.entry?.stravaId },
+  garmin: { wrap: 'sum-garmin', box: 'sum-garmin-auto', count: 'sum-garmin-count', key: 'garminUpload', profile: 'f-garmin-upload', run: () => uploadToGarmin(), done: () => shown.entry?.garminId },
 };
 const uploadTimers = {};
 function stopUploadTimer(kind) {
@@ -3628,6 +3642,82 @@ async function uploadToStrava() {
     status.textContent = tr('Upload failed: {error}', { error: err.message });
     btn.disabled = false;
     btn.textContent = tr('Try again');
+  }
+}
+
+// ---------- Garmin Connect ----------
+let garminClient = null;
+let garminMfa = null; // Garmin's code step: the state to send back with the code
+
+function initGarmin() {
+  if (!garminOn()) return;
+  $('garmin-card').hidden = false;
+  garminClient = GarminClient.saved();
+  $('f-garmin-upload').checked = settings.garminUpload;
+  $('f-garmin-upload').onchange = () => { settings.garminUpload = $('f-garmin-upload').checked; saveSettings(); };
+  $('garmin-login').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const btn = $('btn-garmin'), st = $('garmin-status');
+    btn.disabled = true;
+    st.textContent = tr('Connecting to Garmin…');
+    try {
+      let got;
+      if (garminMfa) got = await GarminClient.verify(garminMfa, $('f-garmin-code').value);
+      else got = await GarminClient.connect($('f-garmin-email').value.trim(), $('f-garmin-password').value);
+      if (got.mfa) {
+        garminMfa = got.mfa;
+        $('f-garmin-code').hidden = false; $('f-garmin-code').required = true; $('f-garmin-code').focus();
+        st.textContent = tr('Garmin sent you a code: type it in');
+        btn.textContent = tr('Confirm');
+        return;
+      }
+      garminClient = got; garminMfa = null;
+      $('f-garmin-password').value = ''; $('f-garmin-code').value = '';
+      track('garmin', 'connected');
+      renderGarmin();
+      toast(tr('Garmin connected'));
+    } catch (err) {
+      track('garmin', 'failed');
+      st.textContent = tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') });
+    } finally { btn.disabled = false; }
+  };
+  $('btn-garmin-forget').onclick = () => { track('garmin', 'forget'); garminClient?.forget(); garminClient = null; renderGarmin(); };
+  $('btn-garmin-upload').onclick = uploadToGarmin;
+  renderGarmin();
+}
+
+function renderGarmin() {
+  garminMfa = null;
+  $('garmin-login').hidden = !!garminClient;
+  $('f-garmin-code').hidden = true; $('f-garmin-code').required = false;
+  $('btn-garmin').textContent = tr('Connect Garmin');
+  $('btn-garmin-forget').hidden = !garminClient;
+  $('garmin-status').textContent = garminClient ? (garminClient.name ? tr('Connected: {name}', { name: garminClient.name }) : tr('Connected')) : '';
+}
+
+async function uploadToGarmin() {
+  stopUploadTimer('garmin');
+  const e = shown.entry, rec = shown.rec;
+  if (!garminClient || !e?.summary || !rec || e.garminId) return;
+  const status = $('garmin-upload-status'), btn = $('btn-garmin-upload');
+  status.hidden = false;
+  status.textContent = tr('Uploading to Garmin Connect…');
+  btn.disabled = true;
+  try {
+    const { activityId, duplicate } = await garminClient.upload(rec.toFIT(), { filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit` });
+    e.garminId = activityId || true;
+    if (history.includes(e)) saveHistory();
+    track('garmin', duplicate ? 'duplicate' : 'uploaded');
+    const label = duplicate ? tr('Already on Garmin Connect') : tr('On Garmin Connect ✓');
+    status.innerHTML = activityId ? `${label} · <a href="${garminActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>` : label;
+    btn.hidden = true;
+    $('sum-garmin').hidden = true;
+  } catch (err) {
+    track('garmin', 'failed');
+    status.textContent = tr('Upload failed: {error}', { error: err.message });
+    btn.disabled = false;
+    btn.textContent = tr('Try again');
+    if (/connect again/.test(err.message)) { garminClient?.forget(); garminClient = null; renderGarmin(); }
   }
 }
 

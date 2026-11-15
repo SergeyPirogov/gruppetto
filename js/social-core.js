@@ -9,7 +9,7 @@ export const SYNC_FIELDS = ['name', 'weight', 'height', 'ftp', 'wPrimeKj', 'maxH
   // the rider's kit and figure, and how you like to ride (not this screen's graphics, sound or camera)
   'tapeColor', 'helmetColor', 'lensColor', 'figure', 'difficulty', 'chainring', 'cog', 'shiftMode', 'intensity',
   'pacer', 'pacerName', 'freePacer', 'freePacerWkg', 'bots', 'attacks', 'ghost', 'style', 'timeOfDay', 'weather', 'wind',
-  'icuUpload', 'stravaUpload'];
+  'icuUpload', 'stravaUpload', 'garminUpload'];
 
 /** The synced settings out of all of them (lang lives apart from the settings, so it comes in on its own). */
 export function profileFields(settings, lang) {
