@@ -43,3 +43,9 @@ export function gradeRuns(route, from, to, step = 25, window = 0) {
   byKey.set(key, out);
   return out;
 }
+
+/** Where a timed segment starts and ends along the route (m): one that ends on the line ends at L, not at 0. */
+export function segmentSpan(route, c) {
+  const end = c.start + c.length;
+  return [route.wrap(c.start), end > route.length ? route.wrap(end) : Math.min(end, route.length)];
+}

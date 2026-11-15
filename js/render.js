@@ -3,7 +3,7 @@
 // procedurally once into offscreen canvases and cached.
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
-import { gradeRuns } from './grade-color.js';
+import { gradeRuns, segmentSpan } from './grade-color.js';
 
 const DRAW = 240;            // segments drawn ahead
 const ROAD_W = 3.6;          // half road width, m
@@ -653,8 +653,9 @@ export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22
   const tick = (d) => { const x = xOf(d), y = yOf(route.elevAt(d)); ctx.beginPath(); ctx.moveTo(x, y - 2 * dpr); ctx.lineTo(x, y - 10 * dpr); ctx.stroke(); return [x, y]; };
   const segs = [...(route.climbs || []), ...(route.sprints || []).map((s) => ({ ...s, sprint: true }))];
   for (const c of segs) {
-    const [x, y] = tick(route.wrap(c.start));
-    tick(route.wrap(c.start + c.length));
+    const [a, b] = segmentSpan(route, c);
+    const [x, y] = tick(a);
+    tick(b);
     ctx.fillText(c.sprint ? '\u26A1' : '\u26F0', x, Math.max(top, y - 10 * dpr));
   }
   // the part already ridden, darker

@@ -1037,3 +1037,10 @@ test('grade runs can average the grade over a window', () => {
   assert.notEqual(gradeColor(r.gradeAt(200) * 100), gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100)); // a spot where it matters
   assert.equal(p.color, gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100));
 });
+test('segment ticks: a segment ending on the line ends at the right edge, one over it wraps', async () => {
+  const { segmentSpan } = await import('../js/grade-color.js');
+  const v = routes.find((x) => x.id === 'velodrome');
+  assert.deepEqual(segmentSpan(v, v.sprints[0]), [250, 500]);
+  const r = routes.find((x) => x.id === 'rolling');
+  assert.deepEqual(segmentSpan(r, { start: r.length - 100, length: 300 }), [r.length - 100, 200]);
+});
