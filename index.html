@@ -394,6 +394,7 @@
             </label>
           </div>
           <p id="gears-note" class="muted fields-note wide">The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.</p>
+          <label class="check wide"><input type="checkbox" id="f-shift-buttons"> Shift buttons on the screen: + and − on the right, to tap with a finger (with a mouse they show with the menu)</label>
           <p id="gears-note-off" class="muted fields-note wide" hidden>A cassette and a derailleur on the bike: shift there, as on the road. The trainer gets the real wheel size; the buttons change gears only in a workout (intensity).</p>
 
         </div>
@@ -589,6 +590,11 @@
         <div class="wk-menu-head"><h2>Keyboard</h2><button class="drawer-close" data-keys-close aria-label="Close">✕</button></div>
         <dl id="keys-list"></dl>
       </div>
+    </div>
+    <!-- virtual shifting with a finger: one cog on the cassette (or a Zwift Cog) and no controller -->
+    <div id="shifters" class="shifters" hidden>
+      <button id="shift-up" class="shift-btn" aria-label="Harder gear (↑)" title="Harder gear (↑)">+</button>
+      <button id="shift-down" class="shift-btn" aria-label="Easier gear (↓)" title="Easier gear (↓)">−</button>
     </div>
     <div id="toast" class="toast" hidden></div>
   </section>

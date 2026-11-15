@@ -267,6 +267,8 @@ export const UK = {
   'The gear your chain stays in: the buttons shift virtual gears on top of it.': 'Передача, у якій стоїть ланцюг: кнопки перемикають віртуальні передачі поверх неї.',
   'Like Zwift': 'Як у Zwift', 'Via grade': 'Через нахил', 'Off — I shift on the bike': 'Вимкнено — перемикаю на велосипеді',
   'A cassette and a derailleur on the bike: shift there, as on the road. The trainer gets the real wheel size; the buttons change gears only in a workout (intensity).': 'Касета й перемикач на велосипеді: перемикай там, як на дорозі. Тренажер отримує справжній розмір колеса; кнопки працюють лише в тренуванні (інтенсивність).',
+  'Harder gear (↑)': 'Важча передача (↑)', 'Easier gear (↓)': 'Легша передача (↓)',
+  'Shift buttons on the screen: + and − on the right, to tap with a finger (with a mouse they show with the menu)': 'Кнопки перемикання на екрані: + і − справа, тиснути пальцем (з мишею з’являються разом із меню)',
   'Gears are on your bike (Profile → Gears)': 'Передачі — на велосипеді (Профіль → Передачі)',
   'The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.': 'Передача, у якій стоїть ланцюг (Zwift Cog: 14); кнопки перемикають віртуальні передачі поверх неї. «Через нахил» для тренажерів, що не приймають розмір колеса.',
   'Bigger map': 'Більша мапа', 'Bigger map (M)': 'Більша мапа (M)',
