@@ -22,10 +22,15 @@ export function gradeColor(gradePct) {
   return `rgb(${a.map((v, k) => Math.round(v + (b[k] - v) * t)).join(',')})`;
 }
 
-/** Points every `step` m from `from` to `to` (both included), each with the colour of the grade there. */
-export function gradeRuns(route, from, to, step = 25) {
+/**
+ * Points every `step` m from `from` to `to` (both included), each with the colour of the grade there.
+ * `window` (m) averages the grade over that much road round each point, so a long route squeezed into a few
+ * hundred pixels shows its climbs as patches rather than flickering stripes; 0 uses the road's own grade.
+ */
+export function gradeRuns(route, from, to, step = 25, window = 0) {
+  const grade = (d) => (window > 20 ? (route.elevAt(d + window / 2) - route.elevAt(d - window / 2)) / window : route.gradeAt(d));
   const out = [];
-  for (let d = from; d < to; d += step) out.push({ d, color: gradeColor(route.gradeAt(d) * 100) });
-  out.push({ d: to, color: gradeColor(route.gradeAt(to) * 100) });
+  for (let d = from; d < to; d += step) out.push({ d, color: gradeColor(grade(d) * 100) });
+  out.push({ d: to, color: gradeColor(grade(to) * 100) });
   return out;
 }

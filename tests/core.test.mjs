@@ -1032,3 +1032,8 @@ test('grade runs sample the route every 25 m', () => {
   assert.deepEqual(runs.map((x) => x.d), [0, 25, 50, 75, 100]);
   assert.equal(runs[1].color, gradeColor(r.gradeAt(25) * 100));
 });
+test('grade runs can average the grade over a window', () => {
+  const r = routes.find((x) => x.id === 'rolling'), [p] = gradeRuns(r, 200, 200, 25, 200);
+  assert.notEqual(gradeColor(r.gradeAt(200) * 100), gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100)); // a spot where it matters
+  assert.equal(p.color, gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100));
+});

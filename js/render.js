@@ -3,6 +3,7 @@
 // procedurally once into offscreen canvases and cached.
 import { SEG } from './routes.js';
 import { themeFor } from './themes.js';
+import { gradeRuns } from './grade-color.js';
 
 const DRAW = 240;            // segments drawn ahead
 const ROAD_W = 3.6;          // half road width, m
@@ -611,56 +612,64 @@ function hexToRgb(hex) {
   return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
 }
 
-/** Elevation profile with rider markers. */
-const SEG_STEP = 25; // m, resolution of the climb lines on the profile
+/** Elevation profile coloured by grade, with timed segments ticked and rider markers. */
+const SEG_STEP = 25; // m, resolution of the grade colours on the profile
 
 export function drawProfile(canvas, route, riders, fill = 'rgba(255,255,255,0.22)', scale = 0) {
+  if (!canvas.clientWidth) return; // collapsed or hidden
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = canvas.clientWidth * dpr;
   canvas.height = canvas.clientHeight * dpr;
   const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height;
+  const W = canvas.width, H = canvas.height, L = route.length;
   ctx.clearRect(0, 0, W, H);
-  const pad = 6 * dpr;
+  const pad = 6 * dpr, top = 14 * dpr; // room above the line for the segment ticks
   // scale: metres for the full height, shared by the route cards so a flat route looks flat and a
   // pass looks like a pass (otherwise every profile is stretched to fill its box)
   const range = Math.max(scale || 30, route.maxElev - route.minElev);
-  const yOf = (e) => H - pad - ((e - route.minElev) / range) * (H - pad * 2);
-  const n = route.segments.length;
+  const yOf = (e) => H - pad - ((e - route.minElev) / range) * (H - pad - top);
+  const xOf = (d) => (d / L) * W;
+  // colours averaged over ~4 px of road, so a long route does not flicker
+  const runs = gradeRuns(route, 0, L, SEG_STEP, (L / canvas.clientWidth) * 4);
+  // the area under the line, in the grade colours, see-through
+  const grad = ctx.createLinearGradient(0, 0, W, 0);
+  for (const r of runs) grad.addColorStop(r.d / L, r.color);
   ctx.beginPath();
   ctx.moveTo(0, H);
-  for (let i = 0; i <= n; i += 2) ctx.lineTo((i / n) * W, yOf(route.segments[i % n].elev));
+  for (const r of runs) ctx.lineTo(xOf(r.d), yOf(route.elevAt(r.d)));
   ctx.lineTo(W, H);
   ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.fill();
-  // timed climbs: an orange line along the top of each
-  ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2.5 * dpr; ctx.lineCap = 'round';
-  for (const c of route.climbs || []) {
-    ctx.beginPath();
-    for (let d = 0; d <= c.length; d += SEG_STEP) {
-      const at = route.wrap(c.start + d), x = (at / route.length) * W;
-      if (d && at < SEG_STEP) { ctx.stroke(); ctx.beginPath(); }
-      d ? ctx.lineTo(x, yOf(route.elevAt(at))) : ctx.moveTo(x, yOf(route.elevAt(at)));
-    }
-    ctx.stroke();
+  ctx.globalAlpha = 0.55; ctx.fillStyle = grad; ctx.fill(); ctx.globalAlpha = 1;
+  // the line on top, each piece in the colour of its grade
+  ctx.lineWidth = 2 * dpr; ctx.lineCap = 'round';
+  for (let i = 0; i + 1 < runs.length; i++) {
+    const a = runs[i], b = runs[i + 1];
+    ctx.beginPath(); ctx.moveTo(xOf(a.d), yOf(route.elevAt(a.d))); ctx.lineTo(xOf(b.d), yOf(route.elevAt(b.d)));
+    ctx.strokeStyle = a.color; ctx.stroke();
   }
-  // sprints: a green line along the road
-  ctx.strokeStyle = '#22c55e';
-  for (const s of route.sprints || []) {
-    ctx.beginPath();
-    for (let d = 0; d <= s.length; d += SEG_STEP) {
-      const at = route.wrap(s.start + d), x = (at / route.length) * W;
-      d ? ctx.lineTo(x, yOf(route.elevAt(at))) : ctx.moveTo(x, yOf(route.elevAt(at)));
-    }
-    ctx.stroke();
+  // timed segments: thin ticks at start and finish, the kind over the start
+  ctx.strokeStyle = 'rgba(255,255,255,.8)'; ctx.lineWidth = dpr; ctx.fillStyle = '#fff';
+  ctx.font = `${10 * dpr}px system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  const tick = (d) => { const x = xOf(d), y = yOf(route.elevAt(d)); ctx.beginPath(); ctx.moveTo(x, y - 2 * dpr); ctx.lineTo(x, y - 10 * dpr); ctx.stroke(); return [x, y]; };
+  const segs = [...(route.climbs || []), ...(route.sprints || []).map((s) => ({ ...s, sprint: true }))];
+  for (const c of segs) {
+    const [x, y] = tick(route.wrap(c.start));
+    tick(route.wrap(c.start + c.length));
+    ctx.fillText(c.sprint ? '\u26A1' : '\u26F0', x, Math.max(top, y - 10 * dpr));
+  }
+  // the part already ridden, darker
+  const me = riders.find((r) => r.self);
+  if (me) {
+    const d = route.oneWay ? Math.max(0, Math.min(L, me.dist)) : route.wrap(me.dist);
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0, 0, xOf(d), H);
   }
   for (const r of riders) {
-    const d = route.wrap(r.dist);
-    const px = pad + (d / route.length) * (W - pad * 2);
+    const d = route.oneWay ? Math.max(0, Math.min(L, r.dist)) : route.wrap(r.dist);
+    const px = Math.max(pad, Math.min(W - pad, xOf(d))), py = yOf(route.elevAt(d));
+    if (r.self) { ctx.strokeStyle = r.color; ctx.lineWidth = dpr; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, H); ctx.stroke(); }
     ctx.fillStyle = r.color;
     ctx.beginPath();
-    ctx.arc(px, yOf(route.elevAt(d)), (r.self ? 5 : 3.5) * dpr, 0, Math.PI * 2);
+    ctx.arc(px, py, (r.self ? 5 : 3.5) * dpr, 0, Math.PI * 2);
     ctx.fill();
     if (r.self) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * dpr; ctx.stroke(); }
   }
