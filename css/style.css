@@ -121,9 +121,26 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .wk-head label { display: block; font-size: .68rem; color: #c9d4e3; text-transform: uppercase; letter-spacing: .05em; }
 .wk-head b { font-size: 1.35rem; }
 #wk-chart { width: 100%; height: 36px; display: block; }
-#wk-target { font-size: 2rem; transition: color .3s; }
-#wk-target .wk-of { font-size: .55em; color: #c9d4e3; font-weight: 600; }
-#wk-diff { font-size: .85rem; font-weight: 700; margin-left: 4px; }
+.wk-head small { font-size: .75rem; color: #c9d4e3; font-weight: 600; }
+/* the number you hold right now (watts, or heart rate in a step planned by heart rate) and where it sits on its target */
+.wk-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+.wk-now { display: flex; align-items: baseline; gap: 6px; flex: none; font-variant-numeric: tabular-nums; }
+.wk-now .ic { width: 18px; height: 18px; align-self: center; }
+.wk-now b { font-size: 2.1rem; line-height: 1; transition: color .3s; }
+.wk-now span { font-size: .78rem; color: #c9d4e3; font-weight: 600; }
+.wk-scale { flex: 1; min-width: 0; }
+.wk-scale[hidden] { display: none; }
+.wk-track { position: relative; height: 12px; border-radius: 6px; background: rgba(255, 255, 255, .12); }
+.wk-track i { position: absolute; top: 0; bottom: 0; }
+.wk-band { border-radius: 6px; }
+.wk-band.warn { background: rgba(251, 191, 36, .25); }
+.wk-band.ok { background: rgba(74, 222, 128, .45); box-shadow: inset 0 0 0 1px #4ade80; }
+.wk-mid { width: 1px; top: 2px !important; bottom: 2px !important; background: rgba(255, 255, 255, .6); }
+.wk-mark { width: 4px; margin-left: -2px; top: -4px !important; bottom: -4px !important; border-radius: 2px; background: #fff; transition: left .5s; }
+.wk-track i[hidden] { display: none; }
+.wk-ticks { position: relative; height: 13px; margin-top: 3px; font-size: .68rem; color: #c9d4e3; font-variant-numeric: tabular-nums; }
+.wk-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+#wk-c { color: #e8edf5; font-weight: 700; }
 .c-ok { color: #4ade80 !important; }
 .c-warn { color: #fbbf24 !important; }
 .c-bad { color: #f87171 !important; }
@@ -844,7 +861,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   #ride .wk-head { margin-bottom: 3px; }
   #ride .wk-head label { font-size: .5rem; }
   #ride .wk-head b { font-size: .95rem; }
-  #ride .wk-head #wk-target { font-size: 1.35rem; }
+  #ride .wk-hero { gap: 10px; margin-bottom: 4px; }
+  #ride .wk-now b { font-size: 1.35rem; }
+  #ride .wk-head small { font-size: .6rem; }
   #ride #wk-chart { height: 22px; }
   #ride .topbar .tb-cell { padding: 2px 4px; }
   #ride .topbar .tb-cell b { font-size: .95rem; }

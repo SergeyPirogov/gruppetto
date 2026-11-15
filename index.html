@@ -514,11 +514,21 @@
       </div>
       <div id="workout-panel" class="workout" hidden>
         <div class="wk-title"><b id="wk-name"></b><span id="wk-pacer" class="pacer-tag" hidden></span><span id="wk-pct"></span></div>
+        <div class="wk-hero">
+          <div class="wk-now">
+            <svg id="wk-ic-bolt" viewBox="0 0 24 24" class="ic bolt" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>
+            <svg id="wk-ic-heart" viewBox="0 0 24 24" class="ic heart" aria-hidden="true" hidden><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 5 6.6 5c2 0 3.4 1.1 5.4 3 2-1.9 3.4-3 5.4-3C20.8 5 23 8.3 21.5 11.8 19.5 16.4 12 21 12 21z"/></svg>
+            <b id="wk-now">0</b><span id="wk-unit"></span>
+          </div>
+          <div id="wk-scale" class="wk-scale">
+            <div class="wk-track"><i id="wk-band-warn" class="wk-band warn"></i><i id="wk-band-ok" class="wk-band ok"></i><i id="wk-mid" class="wk-mid"></i><i id="wk-mark" class="wk-mark"></i></div>
+            <div class="wk-ticks"><span id="wk-lo"></span><span id="wk-c"></span><span id="wk-hi"></span></div>
+          </div>
+        </div>
         <div class="wk-head">
-          <div><label id="wk-target-label">Target, W</label><b id="wk-target">0</b> <small id="wk-diff"></small></div>
+          <div><label id="wk-other-label">Heart rate</label><b id="wk-other">—</b> <small id="wk-other-sub"></small></div>
           <div><label>Interval</label><b id="wk-left">0:00</b></div>
-          <div><label>Heart rate</label><b id="wk-hr">—</b></div>
-          <div><label>Cadence</label><b id="wk-cad">—</b></div>
+          <div><label>Cadence</label><b id="wk-cad">—</b> <small id="wk-cad-sub"></small></div>
           <div><label>Next</label><b id="wk-next">—</b></div>
         </div>
         <canvas id="wk-chart"></canvas>

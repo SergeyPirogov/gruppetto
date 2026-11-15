@@ -1895,18 +1895,49 @@ function updateHud(cadence, hr, grade) {
 
   if (ride.workout) {
     const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
-    const target = ride.workoutDone ? null : ride.target;
-    const tEl = $('wk-target');
-    tEl.textContent = ride.workoutDone ? '—' : target ?? tr('free');
+    const done = ride.workoutDone, target = done ? null : ride.target;
     // compliance: green within ±5 %, amber within ±10 %, red beyond
     const dev = target ? (p3 - target) / target : 0;
     const cls = !target ? '' : Math.abs(dev) <= 0.05 ? 'c-ok' : Math.abs(dev) <= 0.1 ? 'c-warn' : 'c-bad';
-    tEl.className = cls;
     $('m-power').className = cls;
-    // ERG off: you hold the target yourself, so your power stands beside it ("152 / 155")
-    const byFeel = ride.ergOff && target && !ride.workoutDone;
-    if (byFeel) tEl.innerHTML = `${Math.round(p3)}<span class="wk-of"> / ${target}</span>`;
-    $('wk-target-label').textContent = byFeel ? tr('Power / target, W') : tr('Target, W');
+    // heart rate range (intervals.icu steps planned by heart rate): shown for you to hold, it never drives the trainer
+    const hrR = done ? null : t?.step?.hr;
+    const hrCls = hrR && hrNow > 0 ? (hrNow < hrR[0] ? 'c-warn' : hrNow > hrR[1] ? 'c-bad' : 'c-ok') : '';
+    $('m-hr').className = hrCls;
+    // the big number is what you hold in this step: your watts against the target, or, in a step planned by
+    // heart rate with free power, your heart rate against its range; a scale shows where it sits
+    const byHr = !target && !!hrR;
+    $('wk-ic-bolt').toggleAttribute('hidden', byHr); // an <svg> has no .hidden property
+    $('wk-ic-heart').toggleAttribute('hidden', !byHr);
+    const nowEl = $('wk-now');
+    nowEl.textContent = done ? '—' : byHr ? (hrNow || '—') : Math.round(p3);
+    nowEl.className = byHr ? hrCls : cls;
+    $('wk-unit').textContent = done ? '' : byHr ? U.bpm : target ? `/ ${target} ${U.W}` : `${U.W} · ${tr('free')}`;
+    const scale = (lo, hi, min, span, mid, warn) => {
+      const at = (v) => `${Math.max(0, Math.min(100, ((v - min) / span) * 100))}%`;
+      const band = (el, a, b) => { el.hidden = a === null; if (a !== null) { el.style.left = at(a); el.style.width = `${((b - a) / span) * 100}%`; } };
+      band($('wk-band-ok'), lo, hi);
+      band($('wk-band-warn'), warn ? warn[0] : null, warn?.[1]);
+      $('wk-mid').hidden = mid === null;
+      if (mid !== null) $('wk-mid').style.left = at(mid);
+      const now = byHr ? hrNow : p3;
+      $('wk-mark').hidden = !(now > 0);
+      $('wk-mark').style.left = at(now);
+      $('wk-lo').textContent = lo; $('wk-lo').style.left = at(lo);
+      $('wk-hi').textContent = hi; $('wk-hi').style.left = at(hi);
+      $('wk-c').style.left = at(mid ?? (lo + hi) / 2);
+    };
+    $('wk-scale').hidden = done || (!target && !hrR);
+    if (byHr) { // the range in the middle third of the bar, at least 40 bpm across
+      const span = Math.max(40, (hrR[1] - hrR[0]) * 3);
+      scale(hrR[0], hrR[1], (hrR[0] + hrR[1] - span) / 2, span, null, null);
+      $('wk-c').textContent = '';
+    } else if (target) { // target ±20 % across the bar: green ±5 %, amber ±10 %
+      scale(Math.round(target * 0.95), Math.round(target * 1.05), target * 0.8, target * 0.4, target, [target * 0.9, target * 1.1]);
+      const d = Math.round(p3 - target);
+      $('wk-c').textContent = ride.ergFactor < 1 ? `ERG ${Math.round(ride.ergFactor * 100)}%` : `${d >= 0 ? '+' : '−'}${Math.abs(d)}`;
+    }
+    wkTargetTxt = done ? '—' : target ? String(target) : hrR ? `${hrR[0]}–${hrR[1]}` : tr('free');
     const P = ride.pacer;
     $('wk-pacer').hidden = !pacerOn();
     if (pacerOn()) {
@@ -1915,26 +1946,25 @@ function updateHud(cadence, hr, grade) {
       const behindS = -gap / Math.max(ride.v, 3); // seconds behind him: 25 m is 2 s at 45 km/h but 5 s at 18
       $('wk-pacer').className = `pacer-tag ${behindS <= 3 ? 'c-ok' : behindS <= 10 ? 'c-warn' : 'c-bad'}`;
     }
-    $('wk-diff').textContent = target ? `${p3 - target >= 0 ? '+' : '−'}${Math.abs(Math.round(p3 - target))}` : '';
-    $('wk-diff').className = cls;
-    if (byFeel) $('wk-diff').textContent = ''; // the two numbers already say it
-    else if (ride.ergFactor < 1 && target) $('wk-diff').textContent = `ERG ${Math.round(ride.ergFactor * 100)}%`;
-    $('wk-left').textContent = t ? fmtTime(ride.workoutDone ? 0 : t.remaining - 1) : '0:00';
-    const cad = t?.step?.cad;
+    $('wk-left').textContent = t ? fmtTime(done ? 0 : t.remaining - 1) : '0:00';
+    // the other number: your watts when heart rate leads, else your heart rate (and its range, if planned)
+    const oEl = $('wk-other');
+    $('wk-other-label').textContent = byHr ? tr('Power, W') : tr('Heart rate');
+    oEl.textContent = byHr ? Math.round(p3) : hrNow || '—';
+    oEl.className = byHr ? '' : hrCls;
+    $('wk-other-sub').textContent = !byHr && hrR ? `${hrR[0]}–${hrR[1]}` : '';
+    oEl.parentElement.hidden = !byHr && !hrNow && !hrR;
+    const cad = done ? null : t?.step?.cad;
     const cadEl = $('wk-cad');
-    cadEl.textContent = cad ? `${cad[0]}–${cad[1]}` : '—';
+    cadEl.textContent = cadence > 0 ? Math.round(cadence) : '—';
+    $('wk-cad-sub').textContent = cad ? `${cad[0]}–${cad[1]}` : '';
+    wkCadTxt = cad ? `${cad[0]}–${cad[1]}` : '';
     cadEl.className = cad && cadence > 0 ? (cadence >= cad[0] - 2 && cadence <= cad[1] + 2 ? 'c-ok' : 'c-warn') : '';
     $('m-cad').className = cadEl.className;
     cadEl.parentElement.hidden = !cad && !ride.workout.steps.some((s) => s.cad); // no cadence targets in this workout: no column
-    // heart rate range (intervals.icu steps planned by heart rate): shown for you to hold, it never drives the trainer
-    const hrR = t?.step?.hr, hrEl = $('wk-hr'), hrNow = Math.round(hr || 0);
-    hrEl.textContent = hrR ? `${hrR[0]}–${hrR[1]}` : '—';
-    hrEl.className = hrR && hrNow > 0 ? (hrNow >= hrR[0] && hrNow <= hrR[1] ? 'c-ok' : 'c-warn') : '';
-    $('m-hr').className = hrEl.className;
-    hrEl.parentElement.hidden = !hrR && !ride.workout.steps.some((s) => s.hr); // no heart rate ranges: no column
     const next = t && ride.workout.steps[t.index + 1];
     const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
-    $('wk-next').textContent = next ? (nextW === null ? tr('free') : `${nextW} ${U.W}`) : '—';
+    $('wk-next').textContent = !next ? '—' : nextW !== null ? `${nextW} ${U.W}` : next.hr ? `${next.hr[0]}–${next.hr[1]} ${U.bpm}` : tr('free');
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
@@ -1943,6 +1973,7 @@ function updateHud(cadence, hr, grade) {
 }
 
 // ---------- The mini window over other apps (picture-in-picture) ----------
+let wkTargetTxt = '', wkCadTxt = ''; // the workout targets as the board shows them, for the mini window
 /** What the mini window shows: the same numbers as the board, already formatted. */
 function pipState(p3, zone, hrNow, zs) {
   const hz = zs && hrNow > 0 ? (zs.find((x) => hrNow < x.upTo) || zs[zs.length - 1]) : null;
@@ -1954,8 +1985,8 @@ function pipState(p3, zone, hrNow, zs) {
     zone: `Z${zone.z}`, zoneColor: zone.color, wkg: `${(p3 / settings.weight).toFixed(1)} ${U.wkg} · ${$('m-ftp-pct').textContent}`,
     hr: $('m-hr').textContent, hrAvg: $('m-hr-avg').textContent, hrZone: hz ? `Z${hz.z}` : '', hrZoneColor: hz?.color,
     cad: $('m-cad').textContent, cadCls: $('m-cad').className, cadAvg: $('m-cad-avg').textContent,
-    cadTarget: wk && $('wk-cad').textContent !== '—' ? `→ ${$('wk-cad').textContent}` : '',
-    workout: wk, target: $('wk-target').textContent, left: $('wk-left').textContent, next: $('wk-next').textContent,
+    cadTarget: wk && wkCadTxt ? `→ ${wkCadTxt}` : '',
+    workout: wk, target: wkTargetTxt, left: $('wk-left').textContent, next: $('wk-next').textContent,
     ...(() => { const t = wk ? targetAt(ride.workout, ride.workoutT, settings.ftp) : null; return t ? { stepF: 1 - t.remaining / Math.max(1, t.step.dur), stepLeft: t.remaining } : {}; })(),
     time: $('m-time').textContent, speed: $('m-speed').textContent, dist: $('m-dist').textContent,
     grade: $('grade').textContent, gradeColor: $('grade').style.color,
@@ -2317,6 +2348,26 @@ function drawWorkoutChart(canvas, w, t) {
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const total = totalDuration(w);
+  // planned by heart rate only (free power throughout): each step's height and colour from its heart rate range
+  if (w.steps.every((s) => s.free) && w.steps.some((s) => s.hr)) {
+    const his = w.steps.filter((s) => s.hr), zs = hrZones();
+    const top = Math.max(...his.map((s) => s.hr[1])) * 1.03, base = Math.min(...his.map((s) => s.hr[0])) * 0.75;
+    const y = (v) => H - ((v - base) / (top - base)) * H;
+    let x0 = 0;
+    for (const s of w.steps) {
+      const x1 = x0 + s.dur, X0 = (x0 / total) * W, DX = ((x1 - x0) / total) * W;
+      const mid = s.hr ? (s.hr[0] + s.hr[1]) / 2 : 0;
+      ctx.fillStyle = s.hr && zs ? (zs.find((z) => mid < z.upTo) || zs[zs.length - 1]).color : s.hr ? '#4a9e64' : '#64748b';
+      ctx.globalAlpha = t >= 0 && x1 <= t ? 0.45 : 1;
+      const lo = s.hr ? y(s.hr[0]) : H * 0.7;
+      ctx.fillRect(X0, lo, DX, H - lo);
+      if (s.hr) { ctx.globalAlpha *= 0.5; ctx.fillRect(X0, y(s.hr[1]), DX, lo - y(s.hr[1])); }
+      x0 = x1;
+    }
+    ctx.globalAlpha = 1;
+    if (t >= 0) { ctx.fillStyle = '#fff'; ctx.fillRect(Math.min(W - 2 * dpr, (t / total) * W), 0, 2 * dpr, H); }
+    return;
+  }
   const ftp = settings.ftp;
   const wattsOf = (s, f) => scaleW(stepWatts(s, f, ftp)) ?? ftp * 0.5;
   const topOf = (s) => (s.rangeW ? scaleW(s.rangeW[1]) : s.range ? scaleW(Math.round(s.range[1] * ftp)) : 0);
