@@ -699,6 +699,8 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 #ride .stat .grade-next { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; color: #9fb0c6; font-size: .66rem; white-space: nowrap; line-height: 1.2; }
 .grade-next b { font-weight: 700; font-size: .74rem; }
 .lobby-msg.info { background: rgba(47, 212, 240, .1); border-color: rgba(47, 212, 240, .45); }
+.lobby-msg .imp-step { display: block; margin-top: 4px; color: var(--muted); font-size: .92em; }
+.lobby-msg .imp-step .link-btn { margin-left: 6px; }
 .osm-attr { display: block; margin-top: 6px; font-size: .72rem; opacity: .75; }
 .osm-attr a { color: inherit; }
 /* settings during a ride: history opens the summary screen, so it stays in the lobby */
@@ -1428,3 +1430,33 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .garmin-login { flex-wrap: wrap; }
 .garmin-login input { flex: 1 1 180px; min-width: 0; width: auto; }
 .garmin-login[hidden] { display: none; }
+
+/* the garage (js/garage.js): the turntable on the left, the colours on the right; stacked on a phone */
+.garage { position: fixed; inset: 0; z-index: 60; display: grid; grid-template-columns: 1fr minmax(300px, 380px); background: radial-gradient(ellipse at 40% 45%, #26324a 0%, #121826 60%, #0a0e16 100%); }
+.garage[hidden] { display: none; }
+.garage-stage { position: relative; min-height: 0; min-width: 0; }
+.garage-stage canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.garage-stage canvas:active { cursor: grabbing; }
+.garage-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); pointer-events: none; }
+.garage-loading[hidden] { display: none; }
+.garage-views { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 6px; }
+.garage-views .pill-btn { white-space: nowrap; }
+@media (max-width: 760px) { .garage-views { bottom: 10px; gap: 4px; } .garage-views .pill-btn { padding: 5px 10px; font-size: .8rem; } }
+.garage-views .pill-btn.sel { background: var(--accent); border-color: var(--accent); }
+.garage-hint { position: absolute; left: 16px; top: 14px; color: var(--muted); }
+.garage-side { background: var(--bg); border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.garage-side .fields { grid-template-columns: 1fr 1fr; }
+.garage-side .fields > label:has(select) { grid-column: 1 / -1; }
+.garage-kits { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.garage-kit { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border-radius: 10px; background: #0f1522; border: 1px solid var(--line); color: var(--text); font-size: .8rem; cursor: pointer; }
+.garage-kit:hover, .garage-kit.sel { border-color: var(--accent); }
+.garage-kit i, .garage-swatches { display: flex; }
+.garage-kit i b, .garage-swatches b { width: 14px; height: 22px; display: block; }
+.garage-kit i b:first-child, .garage-swatches b:first-child { border-radius: 6px 0 0 6px; }
+.garage-kit i b:last-child, .garage-swatches b:last-child { border-radius: 0 6px 6px 0; }
+.garage-open { display: flex; align-items: center; gap: 12px; text-align: left; padding: 12px 14px; }
+.garage-open small { display: block; color: var(--muted); font-weight: 400; }
+@media (max-width: 760px) {
+  .garage { grid-template-columns: 1fr; grid-template-rows: 46vh 1fr; }
+  .garage-side { border-left: 0; border-top: 1px solid var(--line); }
+}

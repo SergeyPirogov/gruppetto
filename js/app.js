@@ -517,15 +517,39 @@ async function importGpx(ev) {
     const start = $('btn-start'), startText = start.textContent;
     start.disabled = true; start.textContent = tr('Importing GPX…');
     restoreStart = () => { start.disabled = false; start.textContent = startText; };
-    let tiles = '…', map = '…';
-    const show = () => infoBox(`${tr('Importing {name}', { name: track.name || file.name })}: ${tr('terrain')} ${tiles} · ${tr('map')} ${map}`);
+    // what the import waits for, said plainly: the heights come in tiles (a count), the map is one query to a
+    // public server that may take a minute or more (a clock, which server, and a way to go on without it)
+    const t0 = performance.now(), skip = new AbortController();
+    let tiles = '…', mapState = 'wait', server = 1, servers = 1;
+    const show = () => {
+      const sec = Math.round((performance.now() - t0) / 1000);
+      const map = mapState === 'ok' ? '✓' : mapState === 'skip' ? tr('skipped, simple scenery') : mapState === 'off' ? tr('unavailable, simple scenery')
+        : `${tr('waiting for the server')}${servers > 1 && server > 1 ? ` (${tr('{i} of {n}', { i: server, n: servers })})` : ''}, ${sec} ${tr('s')}`;
+      const el = $('lobby-msg');
+      el.innerHTML = `<b>${esc(tr('Importing {name}', { name: track.name || file.name }))}</b>`
+        + `<span class="imp-step">${esc(tr('Heights'))}: ${esc(tiles)}</span>`
+        + `<span class="imp-step">${esc(tr('Buildings, woods and water from the map'))}: ${esc(map)}`
+        + `${mapState === 'wait' ? ` <button class="link-btn" id="imp-skip">${esc(tr('Go on without the map'))}</button>` : ''}</span>`;
+      el.hidden = false; el.classList.add('info'); clearTimeout(alertBox.t);
+      const b = $('imp-skip');
+      if (b) b.onclick = () => { mapState = 'skip'; skip.abort(); show(); };
+    };
     show();
-    const [elevation, osm] = await Promise.all([
-      loadTerrain(track.points, { onProgress: (done, total) => { tiles = `${done}/${total}`; show(); } })
-        .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); return null; }),
-      fetchOsm(track.points).then((d) => { map = '✓'; show(); return d; })
-        .catch((err) => { console.info('Map data unavailable, generic scenery', err); map = '—'; show(); return null; }),
-    ]);
+    const clock = setInterval(() => { if (mapState === 'wait') show(); }, 1000);
+    let elevation, osm;
+    try {
+      [elevation, osm] = await Promise.all([
+        loadTerrain(track.points, { onProgress: (done, total) => { tiles = done >= total ? `✓ ${total}/${total}` : `${done}/${total}`; show(); } })
+          .then((e) => { if (tiles === '…') { tiles = '✓'; show(); } return e; })
+          .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); tiles = tr('from the file'); show(); return null; }),
+        fetchOsm(track.points, { signal: skip.signal, onTry: (i, n) => { server = i; servers = n; show(); } })
+          .then((d) => { mapState = 'ok'; show(); return d; })
+          .catch((err) => { console.info('Map data unavailable, generic scenery', err); if (mapState !== 'skip') mapState = 'off'; show(); return null; }),
+      ]);
+    } finally { clearInterval(clock); }
+    // building the road and its scenery holds the page a moment: say so, and let the message paint first
+    $('lobby-msg').insertAdjacentHTML('beforeend', `<span class="imp-step">${esc(tr('Building the road…'))}</span>`);
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
     const def = routeFromTrack(track, file.name, { elevation, osm });
     $('lobby-msg').hidden = true;
     const route = new Route(def);
@@ -4308,7 +4332,7 @@ $('btn-keys').onclick = () => toggleKeysHelp();
 function setFigure(f) {
   settings.figure = f === 'female' ? 'female' : 'male';
   $('f-figure').value = settings.figure;
-  saveSettings(); renderFigure();
+  saveSettings(); renderFigure(); renderGarageBits();
 }
 function renderFigure() {
   const f = settings.figure === 'female' ? 'female' : 'male';
@@ -4318,6 +4342,101 @@ function renderFigure() {
 for (const b of document.querySelectorAll('#figure-pick [data-figure]')) b.onclick = () => setFigure(b.dataset.figure);
 $('btn-figure').onclick = () => setFigure(settings.figure === 'female' ? 'male' : 'female');
 renderFigure();
+// ----- the garage: your rider on a turntable beside the colour pickers (js/garage.js) -----
+// the pickers live in the garage; their ids and bindings are the same as when they sat in the profile
+const LOOK_KEYS = { 'f-jersey': 'jersey', 'f-stripe': 'stripe', 'f-bike': 'bikeColor', 'f-tape': 'tapeColor', 'f-decal': 'decalColor', 'f-helmet': 'helmetColor', 'f-lens': 'lensColor' };
+const lookNow = () => ({
+  jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null,
+  decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male',
+});
+/** Ready-made kits: jersey, accent, frame, bar tape, wheel decals, helmet, lenses. */
+const GARAGE_KITS = [
+  ['Gruppetto', ['#16a0a8', '#ff8a1f', '#16a0a8', '#141416', '#ff8a1f', '#f2f2f2', '#1c2230']],
+  ['Blue & yellow', ['#0057b7', '#ffd500', '#0057b7', '#ffd500', '#ffd500', '#ffd500', '#1c2230']],
+  ['Night', ['#15171d', '#2fd4f0', '#1a1d24', '#15171d', '#2fd4f0', '#1a1d24', '#2fd4f0']],
+  ['Sunrise', ['#ff7a1a', '#ffd23f', '#f4f4f4', '#ff7a1a', '#ff7a1a', '#ffffff', '#ff4d2e']],
+  ['Forest', ['#2f6b3a', '#e8d9a8', '#2a2f2a', '#e8d9a8', '#e8d9a8', '#2f6b3a', '#3a2a14']],
+  ['Ice', ['#e8f1f8', '#2b6cb0', '#ffffff', '#ffffff', '#2b6cb0', '#e8f1f8', '#6fb7ff']],
+];
+const swatches = (c) => c.map((x) => `<b style="background:${esc(x)}"></b>`).join('');
+/** Sets the pickers as if you had picked each colour: the same path saves, syncs and repaints. */
+function applyLook(colors) {
+  Object.keys(LOOK_KEYS).forEach((id, i) => {
+    const el = $(id);
+    if (!colors[i] || el.value === colors[i]) return;
+    el.value = colors[i];
+    el.dispatchEvent(new Event('input'));
+  });
+}
+function surpriseLook() {
+  const hex = (h, s, l) => { // HSL (degrees, 0..1, 0..1) to #rrggbb
+    const f = (n) => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0'); };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const h = Math.random() * 360, jersey = hex(h, 0.55 + Math.random() * 0.3, 0.32 + Math.random() * 0.25);
+  const accent = hex((h + 150 + Math.random() * 60) % 360, 0.85, 0.55);
+  const dark = '#18191e', white = '#f2f2f2';
+  applyLook([jersey, accent, pick([jersey, dark, white]), pick([dark, accent, white]), accent, pick([white, jersey, dark]), pick(['#1c2230', accent, '#3a2a14'])]);
+}
+function renderGarageBits() {
+  const L = lookNow();
+  const sw = $('garage-swatches');
+  if (sw) sw.innerHTML = swatches([L.jersey, L.stripe, L.bike || L.jersey]);
+  const now = Object.values(LOOK_KEYS).map((k, i) => (i === 2 ? settings.bikeColor || settings.jersey : i === 4 ? settings.decalColor || settings.stripe : settings[k]).toLowerCase());
+  for (const b of document.querySelectorAll('#garage-kits [data-kit]')) b.classList.toggle('sel', GARAGE_KITS[b.dataset.kit][1].every((c, i) => c === now[i]));
+  garage?.setLook(L);
+}
+let garage = null;
+async function openGarage() {
+  const box = $('garage');
+  box.hidden = false;
+  $('garage-loading').hidden = !!garage?.rider;
+  try {
+    if (!garage) {
+      const { Garage } = await import('./garage.js');
+      garage = new Garage($('garage-canvas'));
+      garage.onReady = () => { $('garage-loading').hidden = true; };
+      garage.setSpin(garageSpin);
+    }
+    renderGarageBits();
+    if (!box.hidden) garage.start();
+  } catch (e) {
+    console.warn('Garage unavailable', e);
+    $('garage-loading').textContent = tr('3D graphics are not available in this browser — using 2D');
+  }
+}
+function closeGarage() {
+  $('garage').hidden = true;
+  garage?.stop();
+}
+$('garage-kits').innerHTML = GARAGE_KITS.map(([name, c], i) => `<button class="garage-kit" data-kit="${i}"><i>${swatches(c.slice(0, 3))}</i>${esc(tr(name))}</button>`).join('');
+$('garage-kits').addEventListener('click', (e) => { const b = e.target.closest('[data-kit]'); if (b) applyLook(GARAGE_KITS[b.dataset.kit][1]); });
+$('garage-random').onclick = surpriseLook;
+// the turntable: turning or held still, as you left it last time
+const SPIN_KEY = 'gruppetto.garageSpin';
+let garageSpin = (() => { try { return localStorage.getItem(SPIN_KEY) !== '0'; } catch { return true; } })();
+function renderSpin() {
+  $('garage-spin').textContent = garageSpin ? tr('⏸ Stop') : tr('▶ Turn');
+  $('garage-spin').setAttribute('aria-pressed', String(garageSpin));
+  garage?.setSpin(garageSpin);
+}
+$('garage-spin').onclick = () => { garageSpin = !garageSpin; try { localStorage.setItem(SPIN_KEY, garageSpin ? '1' : '0'); } catch { /* private mode */ } renderSpin(); };
+renderSpin();
+$('btn-garage').onclick = openGarage;
+$('rail-garage').onclick = openGarage;
+$('garage').addEventListener('click', (e) => { if (e.target.closest('[data-garage-close], #garage-done')) closeGarage(); });
+$('garage-views').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-gview]');
+  if (!b) return;
+  for (const x of $('garage-views').querySelectorAll('[data-gview]')) x.classList.toggle('sel', x === b);
+  garage?.setView(b.dataset.gview);
+});
+// Escape closes the garage first (and only it: the drawer under it stays open)
+window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !$('garage').hidden) { e.stopImmediatePropagation(); closeGarage(); } }, true);
+// after the field's own handler has stored the colour (that one is bound later, in the profile's setup)
+for (const id of [...Object.keys(LOOK_KEYS), 'f-figure']) $(id).addEventListener('input', () => queueMicrotask(renderGarageBits));
+renderGarageBits();
 $('keys-help').addEventListener('click', (e) => { if (e.target === $('keys-help') || e.target.closest('[data-keys-close]')) toggleKeysHelp(false); });
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen?.();
@@ -4330,7 +4449,7 @@ function onRideKey(e) {
   if (!ride && !$('wk-detail').hidden && e.code === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); $('wkd-ride').click(); return; }
   if (!ride) return;
   // settings open, or typing in a field: the keys belong to them, not to the ride
-  if (!$('drawer').hidden || e.target.closest?.('input, select, textarea')) return;
+  if (!$('drawer').hidden || !$('garage').hidden || e.target.closest?.('input, select, textarea')) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const c = e.code;
   if (c === 'Escape') {
