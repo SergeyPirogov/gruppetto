@@ -69,7 +69,7 @@ export const UK = {
   "Sharp window (Chrome shows the site's address over it)": 'Чітке вікно (Chrome показує над ним адресу сайту)',
   'Clean, no address bar (drawn as a video, a little softer)': 'Чисте, без адресного рядка (як відео, трохи м’якше)', 'Details': 'Дані', 'Connections': 'Підключення', 'Look': 'Вигляд', 'App': 'Застосунок', 'Your profile': 'Твій профіль', 'Category': 'Категорія', 'Weight': 'Вага', 'kg': 'кг',
   'Rider': 'Райдер', 'Ride': 'Заїзд', 'Gears': 'Передачі', 'Accent color': 'Колір акценту', 'Stripe and decals': 'Смуга й наліпки',
-  'Bike color': 'Колір рами', 'The frame': 'Рама й вилка', 'Bar tape color': 'Колір обмотки', 'Handlebar tape': 'Обмотка керма',
+  'Bike color': 'Колір рами', 'The frame': 'Рама й вилка', 'Bar tape color': 'Колір обмотки', 'Handlebar tape': 'Обмотка керма', 'Wheel decal color': 'Колір наліпок на колесах', 'The lettering on the rims': 'Написи на ободах',
   'Rider figure': 'Фігура райдера', 'Rider': 'Райдер', 'Switch the rider (R)': 'Змінити райдера (R)', 'Switch the rider: man / woman': 'Змінити райдера: чоловік / жінка', 'Man': 'Чоловік', 'Woman': 'Жінка',
   'Helmet color': 'Колір шолома', 'The helmet shell': 'Оболонка шолома', 'Lens color': 'Колір лінз', 'Sunglasses lenses': 'Лінзи окулярів',
   'Sound': 'Звук', 'Free-ride pacer: rides at a set W/kg and waits at the foot of climbs': 'Пейсер у вільній їзді: їде на заданих Вт/кг і чекає біля підніжжя підйомів',

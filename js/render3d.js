@@ -2888,7 +2888,7 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.helmet || ''}:${r.lens || ''}:${r.figure || ''}` : r.key || r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.decal || ''}:${r.helmet || ''}:${r.lens || ''}:${r.figure || ''}` : r.key || r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
@@ -2913,7 +2913,7 @@ export class Scene3D {
           R.model = new Model(riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens });
         }
         // the frame its own colour, or the jersey's
-        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
+        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.decal || r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
         // a smaller rider on a smaller frame (rider json "bikeScale", "saddleDrop"): bike and rider scaled together
         const fit = R.model?.cfg;
         if (fit && (fit.bikeScale || fit.saddleDrop)) {
