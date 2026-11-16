@@ -183,7 +183,12 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
 .bottom-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .bottom-row { position: relative; display: flex; align-items: flex-end; gap: 12px; min-height: 36px; } /* the simulator and ghost tag sit above the strip */
 .trace { width: 100%; height: 54px; display: block; background: var(--pill); border-radius: 12px; }
-#profile { width: 100%; height: 54px; background: var(--pill); border-radius: 12px; display: block; }
+.profile-box { position: relative; width: 100%; }
+#profile { width: 100%; height: 54px; background: var(--pill); border: 1px solid var(--pill-line); border-radius: 12px; display: block; }
+.hud-hide { position: absolute; top: 5px; right: 5px; z-index: 2; width: 22px; height: 22px; padding: 0; border-radius: 50%; font-size: 15px; line-height: 1; background: rgba(15, 22, 34, .75); border: 1px solid var(--pill-line); color: #fff; cursor: pointer; }
+.profile-box.collapsed { width: auto; align-self: flex-end; }
+.profile-box.collapsed #profile { display: none; }
+.profile-box.collapsed .hud-hide { position: static; display: block; }
 .controls { display: flex; gap: 6px; }
 .pill-btn {
   background: var(--pill); border: 1px solid var(--pill-line); border-radius: 12px; color: #fff;
@@ -252,7 +257,7 @@ input[type=color] { width: 100%; height: 38px; padding: 3px; background: #0f1522
   .progress-label { font-size: .7rem; padding: 2px 8px; }
   .bottom-row { position: fixed; left: 8px; right: 8px; top: calc(max(8px, env(safe-area-inset-top, 0px)) + 112px); bottom: auto; min-height: 0; align-items: center; } /* on a tap: under the boards, over the sky, clear of every number */
   #ride.show-controls .hud-bottom { z-index: 20; } /* over the workout panel while they are out */
-  #profile { display: none; }
+  #profile, .profile-box .hud-hide { display: none; } /* no profile on a phone, so nothing to fold */
   .trace { height: 38px; border-radius: 8px; }
 
   #ride.show-controls #sim-ctl { transform: none; }
@@ -761,8 +766,9 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .board.minimap { position: relative; align-self: stretch; height: 140px; padding: 0; cursor: zoom-in; }
 /* the bigger map: wide and tall, over the boards below it */
 .board.minimap.big { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: 96px; width: min(480px, 40vw); height: min(420px, 56vh); z-index: 6; cursor: zoom-out; }
-.mm-size { position: absolute; top: 6px; right: 6px; z-index: 2; width: 26px; height: 26px; padding: 0; border-radius: 8px; font-size: 15px; line-height: 1; background: rgba(15, 22, 34, .7); border: 1px solid var(--pill-line); color: #fff; }
-.board.minimap.big .mm-size { font-size: 13px; }
+.mm-size { position: absolute; top: 6px; left: 6px; z-index: 2; height: 24px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 600; line-height: 1; background: rgba(15, 22, 34, .7); border: 1px solid var(--pill-line); color: #fff; }
+.board.minimap.collapsed { align-self: flex-end; width: 34px; min-width: 34px; height: 34px; cursor: default; }
+.board.minimap.collapsed canvas, .board.minimap.collapsed .mm-size { display: none; }
 #minimap { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); display: block; }
 @media (max-width: 760px) { .board.minimap { display: none; } }
 

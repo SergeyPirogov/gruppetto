@@ -269,7 +269,7 @@ export const UK = {
   'A cassette and a derailleur on the bike: shift there, as on the road. The trainer gets the real wheel size; the buttons change gears only in a workout (intensity).': 'Касета й перемикач на велосипеді: перемикай там, як на дорозі. Тренажер отримує справжній розмір колеса; кнопки працюють лише в тренуванні (інтенсивність).',
   'Gears are on your bike (Profile → Gears)': 'Передачі — на велосипеді (Профіль → Передачі)',
   'The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.': 'Передача, у якій стоїть ланцюг (Zwift Cog: 14); кнопки перемикають віртуальні передачі поверх неї. «Через нахил» для тренажерів, що не приймають розмір колеса.',
-  'Bigger map': 'Більша мапа', 'Bigger map (M)': 'Більша мапа (M)',
+  'Map zoom': 'Масштаб мапи', 'Map zoom (M)': 'Масштаб мапи (M)', 'Nearby': 'Поруч', 'Hide': 'Сховати', 'Show': 'Показати',
   'Mini window over other apps (I)': 'Міні-вікно поверх інших застосунків (I)',
   'Mini window over other apps (film, football, YouTube)': 'Міні-вікно поверх інших застосунків (кіно, футбол, YouTube)',
   'This browser cannot show a mini window over other apps': 'Цей браузер не вміє показувати міні-вікно поверх інших застосунків',
