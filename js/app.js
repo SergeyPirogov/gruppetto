@@ -51,7 +51,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -407,6 +407,8 @@ function initLobby() {
   };
   $('f-shift').addEventListener('input', gearFields);
   gearFields();
+  $('f-shift-buttons').checked = settings.shiftButtons !== false;
+  $('f-shift-buttons').onchange = () => { settings.shiftButtons = $('f-shift-buttons').checked; saveSettings(); if (ride) updateGear(); };
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
   bind('f-time', 'timeOfDay', false);
@@ -4285,6 +4287,31 @@ function shift(dir) {
   updateGear();
 }
 
+/** The on-screen shifters: a tap is one gear; held, they keep shifting (as a held key does). */
+function holdToShift(btn, dir) {
+  let timer = 0;
+  const stop = () => {
+    clearTimeout(timer); timer = 0; btn.classList.remove('pressed');
+    window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); window.removeEventListener('blur', stop);
+  };
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return; // a right click is not a shift
+    e.preventDefault(); e.stopPropagation(); // not a drag of the camera
+    stop();
+    btn.classList.add('pressed');
+    shift(dir);
+    // let go anywhere (the finger may slide off the button): the shifting stops
+    window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop); window.addEventListener('blur', stop);
+    let n = 0;
+    const again = (ms) => { timer = setTimeout(() => { shift(dir); if (++n < GEARS) again(180); else stop(); }, ms); };
+    again(450);
+  });
+  btn.addEventListener('click', (e) => e.stopPropagation());
+  btn.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is not a menu
+}
+holdToShift($('shift-up'), +1);
+holdToShift($('shift-down'), -1);
+
 function steer(dir) {
   if (!ride) return;
   ride.laneTarget = Math.max(-2.4, Math.min(2.4, ride.laneTarget + dir * 1.2));
@@ -4304,7 +4331,9 @@ function updateGear() {
   if (!ride) return;
   const inErg = inErgStep(), hold = inHold();
   // gears on the bike: nothing to show in a free ride (the cell is back for ERG, where the shifters move the target)
-  document.querySelector('.stat.gear').hidden = ride.shiftMode === 'off' && !inErg && !hold;
+  const nothingToShift = ride.shiftMode === 'off' && !inErg && !hold;
+  document.querySelector('.stat.gear').hidden = nothingToShift;
+  $('shifters').hidden = nothingToShift || settings.shiftButtons === false;
   $('m-gear-label').textContent = inErg || hold ? 'ERG' : tr('Gear');
   $('m-gear').textContent = hold ? ride.hold : inErg ? settings.intensity : ride.gear; // what the shifters move
   $('m-gear-unit').textContent = hold ? U.W : inErg ? '%' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
@@ -4325,7 +4354,7 @@ function hideControls() {
 }
 $('ride').addEventListener('mousemove', () => showControls());
 $('ride').addEventListener('touchstart', () => showControls(4000), { passive: true });
-for (const el of [document.querySelector('#ride .controls'), $('sim-ctl')]) {
+for (const el of [document.querySelector('#ride .controls'), $('sim-ctl'), $('shifters')]) {
   el.addEventListener('mouseenter', () => { controlsPinned = true; showControls(0); });
   el.addEventListener('mouseleave', () => { controlsPinned = false; showControls(); });
   // touch: kept out while a finger is on them (dragging the slider), then a few seconds more

@@ -1516,3 +1516,16 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   .gr-row { grid-template-columns: 52px 1fr; }
   .gr-acts { grid-column: 1 / -1; justify-content: flex-start; }
 }
+
+/* virtual shifting on the screen: two big round buttons at the right edge, halfway down */
+.shifters { position: absolute; right: max(12px, env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); z-index: 15; display: flex; flex-direction: column; gap: 14px; }
+.shift-btn { width: 64px; height: 64px; padding: 0; border-radius: 50%; font-size: 34px; line-height: 1; font-weight: 700; background: rgba(12, 16, 26, .62); border: 1px solid rgba(255, 255, 255, .22); color: #fff; backdrop-filter: blur(6px); touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+.shift-btn:hover { background: rgba(39, 50, 73, .8); }
+.shift-btn:active, .shift-btn.pressed { background: var(--accent); border-color: var(--accent); color: #1a1205; transform: scale(.94); }
+/* with a mouse they come and go with the menu, as Pause and Finish do */
+@media (pointer: fine) {
+  #ride .shifters { opacity: 0; pointer-events: none; transition: opacity .25s ease; }
+  #ride.show-controls .shifters { opacity: 1; pointer-events: auto; }
+}
+@media (max-width: 760px) { .shift-btn { width: 56px; height: 56px; font-size: 30px; } .shifters { top: 58%; } }
+#ride.hud-hidden .shifters { display: none; }
