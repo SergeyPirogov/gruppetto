@@ -1052,3 +1052,19 @@ test('standing: no cadence uses power only', () => {
 test('standing: no power never stands', () => {
   assert.equal(runStand({}, { power: null, ftp: 250, cadence: 60 }, 2), false);
 });
+
+import { readFileSync, statSync } from 'node:fs';
+test('rider assets: both clips and the rock', () => {
+  for (const f of ['male', 'female']) {
+    const glb = readFileSync(new URL(`../assets/riders/${f}.glb`, import.meta.url));
+    const len = glb.readUInt32LE(12), gltf = JSON.parse(glb.subarray(20, 20 + len).toString('utf8'));
+    const names = gltf.animations.map((a) => a.name);
+    assert.ok(names.includes('pedal_cycle') && names.includes('stand_cycle'), `${f}: ${names}`);
+    const cfg = JSON.parse(readFileSync(new URL(`../assets/riders/${f}.json`, import.meta.url), 'utf8'));
+    assert.equal(cfg.standRock?.length, 17, f);
+    assert.ok(cfg.standRock.every((v) => Number.isFinite(v) && Math.abs(v) <= 0.2), f);
+    assert.ok(Number.isFinite(cfg.standRockPivot), f);
+    assert.equal(cfg.standPedalTilt?.length, 3, f);
+    assert.ok(statSync(new URL(`../assets/riders/${f}.glb`, import.meta.url)).size <= 10.2e6, `${f} too big`);
+  }
+});
