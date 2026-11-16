@@ -521,18 +521,22 @@ async function importGpx(ev) {
     // public server that may take a minute or more (a clock, which server, and a way to go on without it)
     const t0 = performance.now(), skip = new AbortController();
     let tiles = '…', mapState = 'wait', server = 1, servers = 1;
+    let building = false;
     const show = () => {
       const sec = Math.round((performance.now() - t0) / 1000);
-      const map = mapState === 'ok' ? '✓' : mapState === 'skip' ? tr('skipped, simple scenery') : mapState === 'off' ? tr('unavailable, simple scenery')
-        : `${tr('waiting for the server')}${servers > 1 && server > 1 ? ` (${tr('{i} of {n}', { i: server, n: servers })})` : ''}, ${sec} ${tr('s')}`;
+      // one row per step: a spinner while it runs, a tick when done, a dash when it went without
+      const heights = tiles === '…' ? ['run', tr('Heights'), ''] : tiles === tr('from the file') ? ['off', tr('Heights'), tiles] : [/✓/.test(tiles) ? 'ok' : 'run', tr('Heights'), tiles.replace('✓ ', '')];
+      const map = [mapState === 'ok' ? 'ok' : mapState === 'wait' ? 'run' : 'off', tr('Buildings, woods and water from the map'),
+        mapState === 'ok' ? '' : mapState === 'skip' ? tr('skipped, simple scenery') : mapState === 'off' ? tr('unavailable, simple scenery')
+          : `${servers > 1 && server > 1 ? `${tr('server {i} of {n}', { i: server, n: servers })} · ` : ''}${sec} ${tr('s')}`];
+      const rows = [heights, map, ...(building ? [['run', tr('Building the road…'), '']] : [])];
       const el = $('lobby-msg');
-      el.innerHTML = `<b>${esc(tr('Importing {name}', { name: track.name || file.name }))}</b>`
-        + `<span class="imp-step">${esc(tr('Heights'))}: ${esc(tiles)}</span>`
-        + `<span class="imp-step">${esc(tr('Buildings, woods and water from the map'))}: ${esc(map)}`
-        + `${mapState === 'wait' ? ` <button class="link-btn" id="imp-skip">${esc(tr('Go on without the map'))}</button>` : ''}</span>`;
+      el.innerHTML = `<div class="imp"><div class="imp-main"><b class="imp-title">${esc(tr('Importing {name}', { name: track.name || file.name }))}</b>`
+        + `<ul class="imp-steps">${rows.map(([st, what, more]) => `<li class="imp-${st}"><i aria-hidden="true"></i><span>${esc(what)}</span>${more ? `<small>${esc(more)}</small>` : ''}</li>`).join('')}</ul></div>`
+        + `${mapState === 'wait' ? `<button class="pill-btn imp-skip" id="imp-skip" title="${esc(tr('The road, heights and bends stay real; buildings, woods and water are made up'))}">${esc(tr('Skip the map'))}</button>` : ''}</div>`;
       el.hidden = false; el.classList.add('info'); clearTimeout(alertBox.t);
-      const b = $('imp-skip');
-      if (b) b.onclick = () => { mapState = 'skip'; skip.abort(); show(); };
+      const btn = $('imp-skip');
+      if (btn) btn.onclick = () => { mapState = 'skip'; skip.abort(); show(); };
     };
     show();
     const clock = setInterval(() => { if (mapState === 'wait') show(); }, 1000);
@@ -548,7 +552,7 @@ async function importGpx(ev) {
       ]);
     } finally { clearInterval(clock); }
     // building the road and its scenery holds the page a moment: say so, and let the message paint first
-    $('lobby-msg').insertAdjacentHTML('beforeend', `<span class="imp-step">${esc(tr('Building the road…'))}</span>`);
+    building = true; show();
     await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
     const def = routeFromTrack(track, file.name, { elevation, osm });
     $('lobby-msg').hidden = true;
