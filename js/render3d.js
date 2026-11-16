@@ -93,6 +93,7 @@ const TUNNEL_R = 4.6, TUNNEL_WALL = 3.2, TUNNEL_HILL = 11; // a tunnel: half its
 const HOUSE_TINTS = ['#ffffff', '#fff0d6', '#e6eeff', '#ffe0d0', '#eaf5df', '#fff7c8'].map((c) => new THREE.Color(c));
 const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || (LOW ? 1 : 2); // ?csm=3 to compare
 const CSM_FAR = LOW ? 120 : 240;
+const RIDER_FILL = 0.6; // of the sky's fill on the riders (see _riderFill)
 const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
 let preloaded = null;
 /** Starts the bike, rider and scenery downloads once, from the lobby, so the ride starts with them ready. */
@@ -1733,6 +1734,33 @@ export class Scene3D {
   }
 
   /** Hook every lit material under `root` into the cascaded shadows (keeping its own shader tweaks). */
+  /**
+   * Less of the sky's fill on the riders and their bikes (`this.riderFill.value` of it). Outdoors the hemisphere
+   * light is bright and the ground under it green: it filled the kit's shaded side, so a colour came out light
+   * and flat (a violet jersey read lavender), while in the garage, with little fill, the same kit is deep and
+   * shaped. Only the riders' shaders: the land keeps its light.
+   */
+  _riderFill(root) {
+    const U = this.riderFill ||= { value: RIDER_FILL };
+    this.fillDone ||= new WeakSet();
+    root.traverse((o) => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (this.fillDone.has(m) || !m.isMeshStandardMaterial) continue;
+        this.fillDone.add(m);
+        const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey ? m.customProgramCacheKey() : '';
+        m.onBeforeCompile = function (sh, r) {
+          if (prev) prev.call(this, sh, r);
+          sh.uniforms.riderFill = U;
+          sh.fragmentShader = 'uniform float riderFill;\n' + sh.fragmentShader.replace('#include <lights_fragment_end>',
+            '#include <lights_fragment_end>\n  reflectedLight.indirectDiffuse *= riderFill;');
+        };
+        m.customProgramCacheKey = () => `${prevKey}|fill`;
+        m.needsUpdate = true;
+      }
+    });
+  }
+
   _csmMaterials(root) {
     if (!this.csm) return;
     root.traverse((o) => {
@@ -3087,6 +3115,7 @@ export class Scene3D {
           });
         }
         if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; R.bike.pedalTilt = R.model.cfg?.pedalTilt; } // saddle, hoods and pedals of this bike; pedals tilted with the soles
+        this._riderFill(R.group);
         this._csmMaterials(R.group);
       }
       const d = r.dist;
