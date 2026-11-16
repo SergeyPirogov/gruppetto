@@ -33,7 +33,7 @@ const CAM_FOV = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48, far: 55, ba
 const SMALL_PLANTS = ['tuft', 'sunflowers', 'lupine', 'tallgrass', 'plant', 'flowers3'];
 const SMALL_AHEAD = 450;
 /** Where the render scale this device settled on is kept between rides. */
-const SCALE_KEY = 'gruppetto.renderScale';
+const SCALE_KEY = 'gruppetto.renderScale', FLOOR_KEY = 'gruppetto.renderFloor';
 const TV_SHOTS = ['front', 'heli', 'post', 'beside', 'far', 'wheel', 'side'];
 /** The views from behind, m: how far back, how high, how far to the right; the point looked at, ahead and its height; easing (a lagging car). */
 const REAR = {
@@ -783,7 +783,11 @@ export class Scene3D {
     if (typeof window !== 'undefined' && new URLSearchParams(location.search).has('debug')) window.__scene3d = this; // for inspecting in devtools
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, powerPreference: 'high-performance' });
     ANISO.value = Math.min(LOW ? 2 : 8, this.renderer.capabilities.getMaxAnisotropy()); // textures stay sharp seen aslant (the road above all)
-    try { const k = Number(localStorage.getItem(SCALE_KEY)); if (k >= 0.5 && k <= 1) this.quality = k; } catch { /* private mode */ } // the scale this device settled on last time
+    try { // the scale this device settled on last time, and the one below which fewer pixels bought it nothing
+      const k = Number(localStorage.getItem(SCALE_KEY)), fl = Number(localStorage.getItem(FLOOR_KEY));
+      if (k >= 0.5 && k <= 1) this.quality = k;
+      if (fl >= 0.5 && fl <= 1) this.qFloor = fl;
+    } catch { /* private mode */ }
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -952,13 +956,26 @@ export class Scene3D {
    */
   _adaptQuality(dt) {
     // Each step rebuilds the picture's buffers: a 60-70 ms jerk. So a step needs the same verdict twice
-    // running down (4 s) and three times up (6 s), and the scale found is kept for this device: the next ride
-    // starts there, and steps are left to the first ride or two.
+    // running down (4 s) and three times up (6 s), a step down has to pay for itself, and the scale found (and
+    // the floor) are kept for this device: the next ride starts there, and steps are left to the first ride.
     if (!dt || this.warming) return;
     this.qAcc = (this.qAcc || 0) + dt; this.qN = (this.qN || 0) + 1;
     if (this.qAcc < 2) return;
     const avg = this.qAcc / this.qN; this.qAcc = 0; this.qN = 0;
-    const verdict = avg > 0.021 ? -1 : avg < 0.0135 ? 1 : 0;
+    if (this.qSkip) { this.qSkip = false; return; } // the window with the rebuild in it says nothing
+    // a step down that bought less than 7 % (the trees and shadows cost it, not the pixels): back up, and no
+    // lower than that from now on: sharpness for nothing is no trade
+    const T = this.qTrial;
+    if (T) {
+      this.qTrial = null;
+      if (avg > T.avg * 0.93) {
+        this.qFloor = T.from; this.quality = T.from; this.qRun = 0;
+        try { localStorage.setItem(SCALE_KEY, String(T.from)); localStorage.setItem(FLOOR_KEY, String(T.from)); } catch { /* private mode */ }
+        this.resize();
+        return;
+      }
+    }
+    const verdict = avg > 0.021 ? (this.quality ?? 1) > (this.qFloor ?? 0) + 1e-3 ? -1 : 0 : avg < 0.0135 ? 1 : 0;
     this.qRun = verdict && verdict === this.qLast ? (this.qRun || 0) + 1 : verdict ? 1 : 0;
     this.qLast = verdict;
     if (!verdict || this.qRun < (verdict < 0 ? 2 : 3)) return;
@@ -966,6 +983,8 @@ export class Scene3D {
     const next = verdict < 0 ? Math.max(LOW ? 0.5 : 0.6, q - 0.1) : Math.min(1, q + 0.1);
     this.qRun = 0;
     if (Math.abs(next - q) < 1e-3) return;
+    if (next < q) this.qTrial = { from: q, avg };
+    this.qSkip = true;
     this.quality = next;
     try { localStorage.setItem(SCALE_KEY, String(next)); } catch { /* private mode */ }
     this.resize();
