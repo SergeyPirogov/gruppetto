@@ -25,6 +25,11 @@ const AHEAD = LOW ? 4 : 7, BEHIND = 1;   // chunks kept around the rider (200 m 
 const ROAD_HALF = 3.6;         // m
 const TURN = 2.5;              // curvature exaggeration relative to the 2D renderer
 const V_EXAG = 1.5;            // vertical exaggeration
+/** Each camera view and its field of view, degrees. 'tv' cuts between the TV_SHOTS. */
+const CAM_FOV = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48, far: 55, back: 70, post: 40, heli: 38, tv: 48, beside: 45, wheel: 70 };
+const TV_SHOTS = ['front', 'heli', 'post', 'beside', 'far', 'wheel', 'side'];
+/** The views drawn by _moreCam. */
+const CAM_MORE = new Set(['far', 'back', 'post', 'heli', 'beside', 'wheel']);
 /** Offset along a SEG-long arc whose heading turns from h0 to h1, at fraction t of it. */
 function arc(h0, h1, t) {
   const dh = h1 - h0;
@@ -927,11 +932,98 @@ export class Scene3D {
    * 'side' (over the shoulder: behind and to the left) or 'front' (ahead of the rider, looking back, like a TV motorbike).
    */
   setCamera(mode) {
-    this.camMode = ['eyes', 'iso', 'side', 'front'].includes(mode) ? mode : 'chase';
-    this.camera.fov = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48 }[this.camMode];
+    this.camMode = CAM_FOV[mode] ? mode : 'chase';
+    this._tv = null;
+    this._post = null;
+    this._heli = undefined;
+    this._heliPos = null;
+    this._isoHeading = undefined;
+    this._setFov(CAM_FOV[this.camMode]);
+  }
+
+  _setFov(fov) {
+    if (Math.abs(this.camera.fov - fov) < 0.02) return;
+    this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
     this.csm?.updateFrustums();
-    this._isoHeading = undefined;
+  }
+
+  /**
+   * The views after the first five, and the TV director's own shots:
+   * 'far' (high and far behind: the bunch around you), 'back' (your eyes, looking back down the road),
+   * 'post' (a camera standing on the verge: you ride up to it and past it, then it waits further on),
+   * 'heli' (a helicopter circling slowly high above), 'beside' (a camera on the verge, level with you)
+   * and 'wheel' (low behind the back wheel, looking up the road past you).
+   */
+  _moreCam(cm, me, dist, dt) {
+    const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
+    const cx = Math.cos(ch), cz = Math.sin(ch), rx = me.f.rx, rz = me.f.rz;
+    const px = me.f.x + rx * me.lane, pz = me.f.z + rz * me.lane, py = me.f.y;
+    const C = this.camera;
+    if (cm === 'far') {
+      const BACK = 11, ahead = this.frame(dist + 14);
+      C.position.set(px - cx * BACK, this._roadY(dist - BACK) + 4.2, pz - cz * BACK);
+      C.lookAt(px + cx * 14, ahead.y + 0.3, pz + cz * 14);
+    } else if (cm === 'back') {
+      const behind = this.frame(dist - 22);
+      C.position.set(px - cx * 0.1, py + 1.6, pz - cz * 0.1);
+      C.lookAt(behind.x + behind.rx * me.lane, behind.y + 1.1, behind.z + behind.rz * me.lane);
+    } else if (cm === 'beside') {
+      // level with you on the verge, inside the fence, on the side of the road with more room, a step ahead
+      const AHEAD = 1.2, at = (me.lane > 0 ? -1 : 1) * (ROAD_HALF + 0.6), f = this.frame(dist + AHEAD);
+      C.position.set(f.x + f.rx * at, f.y + 1.4, f.z + f.rz * at);
+      C.lookAt(px + cx * 1.5, py + 0.95, pz + cz * 1.5);
+    } else if (cm === 'wheel') {
+      // a little camera low behind the back wheel, a bit to the left: the wheel and legs fill the bottom of the picture
+      const BACK = 1.7, ahead = this.frame(dist + 8);
+      C.position.set(px - cx * BACK - rx * 0.35, this._roadY(dist - BACK) + 0.42, pz - cz * BACK - rz * 0.35);
+      C.lookAt(px + cx * 8, ahead.y + 0.9, pz + cz * 8);
+    } else if (cm === 'post') {
+      // a camera on a stand by the road, 40–60 m ahead; once you are well past it, the next one goes up further on
+      let P = this._post;
+      if (!P || dist > P.d + 25 || dist < P.d - 120) {
+        const side = P ? -P.side : (Math.random() < 0.5 ? -1 : 1);
+        const d = dist + 40 + Math.random() * 20, f = this.frame(d);
+        P = this._post = { d, side, x: f.x + f.rx * side * (ROAD_HALF + 0.7), y: f.y + 2.6, z: f.z + f.rz * side * (ROAD_HALF + 0.7) }; // on the verge, inside the fence, over the fans' heads
+      }
+      C.position.set(P.x, P.y, P.z);
+      C.lookAt(px, py + 1.0, pz);
+      // a zoom lens: the rider stays about the same size as they come up to the camera
+      const L = Math.hypot(P.x - px, P.y - py, P.z - pz);
+      this._setFov(Math.max(14, Math.min(60, THREE.MathUtils.radToDeg(2 * Math.atan(2.6 / Math.max(1, L))))));
+    } else if (cm === 'heli') {
+      // high above, slowly circling round the rider
+      this._heli = this._heli === undefined ? ch + Math.PI + 0.7 : this._heli + dt * 0.07;
+      const a = this._heli, R = 34, H = 26;
+      const target = new THREE.Vector3(px + cx * 4, py + 1, pz + cz * 4);
+      const want = new THREE.Vector3(target.x + Math.cos(a) * R, py + H, target.z + Math.sin(a) * R);
+      // eased, so a bend doesn't swing the helicopter round
+      if (!this._heliPos || this._heliPos.distanceTo(want) > 60) this._heliPos = want.clone();
+      else this._heliPos.lerp(want, Math.min(1, dt * 1.5));
+      C.position.copy(this._heliPos);
+      C.lookAt(target);
+      this._setFov(CAM_FOV.heli);
+    }
+  }
+
+  /**
+   * The TV director (camera 0): picks a shot, holds it for a while, then cuts to another, never the same twice
+   * in a row. A roadside shot lasts until the rider has gone past the camera.
+   */
+  _tvShot(dt, dist) {
+    const T = this._tv ??= { shot: null, left: 0, next: 0 };
+    T.left -= dt;
+    const passed = T.shot === 'post' && this._post && dist > this._post.d + 22;
+    if (T.shot && T.left > 0 && !passed) return T.shot;
+    if (T.shot === 'post' && !passed && T.left > -6) return T.shot; // let the rider go by before cutting
+    const pool = TV_SHOTS.filter(s => s !== T.shot);
+    T.shot = pool[Math.floor(Math.random() * pool.length)];
+    T.left = 6 + Math.random() * 6;
+    this._post = null;
+    this._heli = undefined;
+    this._heliPos = null;
+    this._chaseH = undefined;
+    return T.shot;
   }
 
   /** The wind, m/s: grass, plants and trees sway harder and faster with it. */
@@ -1060,7 +1152,8 @@ export class Scene3D {
    * No tremble: on a screen it read as the picture jumping. The isometric view is left as it is.
    */
   _speedFeel(dt, dist) {
-    if (!dt || this.camMode === 'iso') return;
+    const cm = this._cm ?? this.camMode;
+    if (!dt || cm === 'iso' || cm === 'post' || cm === 'heli') return; // these set their own (a zoom lens)
     // the speed from the distance and the real time between frames (the frame's dt is capped, the distance is not)
     const now = performance.now(), last = this._feelAt;
     this._feelAt = { t: now, d: dist };
@@ -1068,7 +1161,7 @@ export class Scene3D {
     const v = Math.max(0, Math.min(30, (dist - last.d) / ((now - last.t) / 1000))); // m/s
     this.vSmooth = (this.vSmooth ?? v) + (v - (this.vSmooth ?? v)) * Math.min(1, dt * 1.5);
     const k = Math.min(1, Math.max(0, (this.vSmooth - 4) / 11)); // from 15 to 55 km/h
-    const base = { chase: 62, eyes: 72, side: 58, front: 48 }[this.camMode] ?? 62;
+    const base = CAM_FOV[cm] ?? 62;
     const fov = base + k * k * 9;
     if (Math.abs(this.camera.fov - fov) > 0.02) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
   }
@@ -2751,7 +2844,8 @@ export class Scene3D {
       // phones draw riders within 150 m only: further up the road they are a few pixels, and each is ~110k triangles
       const visible = Math.abs(d - dist) < (LOW && !r.self ? 150 : CHUNK * SEG * AHEAD);
       // a ghost just behind you rides through the chase camera: hidden there (its gap is shown over your head)
-      const inCamera = (r.ghost && this.camMode === 'chase' && d < dist - 0.8 && d > dist - 7) || (r.self && this.camMode === 'eyes'); // your own eyes: no you
+      const cm = this._cm ?? this.camMode;
+      const inCamera = (r.ghost && cm === 'chase' && d < dist - 0.8 && d > dist - 7) || (r.self && (cm === 'eyes' || cm === 'back')); // your own eyes: no you
       R.group.visible = visible && this.modelsReady && !inCamera;
       // name tags only for riders near you: far up the road they pile up into an unreadable stack
       if (R.labelSprite) R.labelSprite.visible = Math.abs(d - dist) < LABEL_RANGE;
@@ -2803,10 +2897,12 @@ export class Scene3D {
     });
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
-    // chase camera
-    if (me && this.camMode === 'iso') {
+    // the camera: the chosen view, or on the TV director's (0) the shot it is on now
+    const cm = this._cm = this.camMode === 'tv' && me ? this._tvShot(dt, dist) : this.camMode;
+    if (this.camMode === 'tv' && cm !== 'post' && cm !== 'heli') this._setFov(CAM_FOV[cm]);
+    if (me && cm === 'iso') {
       // isometric-style view: high, from behind and to the side, narrow field of view (model-like look)
-      const target = this.frame(dist + (this.camMode === 'side' ? 4 : 3));
+      const target = this.frame(dist + 3);
       const h = this._isoHeading = this._isoHeading === undefined ? target.h : this._isoHeading + (target.h - this._isoHeading) * 0.04;
       const fx = Math.cos(h), fz = Math.sin(h), rx = -Math.sin(h), rz = Math.cos(h);
       // iso: behind-and-side; side: almost square to the road, rider crosses the screen left to right
@@ -2816,15 +2912,15 @@ export class Scene3D {
       const tx = target.x + target.rx * me.lane, tz = target.z + target.rz * me.lane, ty = target.y + 0.8;
       this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
       this.camera.lookAt(tx, ty, tz);
-    } else if (me && (this.camMode === 'eyes' || this.camMode === 'front' || this.camMode === 'side')) {
+    } else if (me && (cm === 'eyes' || cm === 'front' || cm === 'side')) {
       const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
       const px = me.f.x + me.f.rx * me.lane, pz = me.f.z + me.f.rz * me.lane, cx = Math.cos(ch), cz = Math.sin(ch);
-      if (this.camMode === 'eyes') {
+      if (cm === 'eyes') {
         // the rider's own eyes: just above the bars, looking down the road
         const ahead = this.frame(dist + 25);
         this.camera.position.set(px + cx * 0.25, me.f.y + 1.62, pz + cz * 0.25);
         this.camera.lookAt(px + cx * 25, ahead.y + 1.2, pz + cz * 25);
-      } else if (this.camMode === 'side') {
+      } else if (cm === 'side') {
         // over the shoulder: behind and to the left, the rider in the right of the picture, looking down the road
         const BACK = 5, LEFT = 1.9, ahead = this.frame(dist + 30);
         const lx = -me.f.rx * LEFT, lz = -me.f.rz * LEFT; // left of the rider (rx/rz points right)
@@ -2836,6 +2932,9 @@ export class Scene3D {
         this.camera.position.set(px + cx * AHEAD - me.f.rx * 1.2, front.y + 1.5, pz + cz * AHEAD - me.f.rz * 1.2);
         this.camera.lookAt(px, me.f.y + 1.0, pz);
       }
+      this.camPos = this.camera.position.clone();
+    } else if (me && CAM_MORE.has(cm)) {
+      this._moreCam(cm, me, dist, dt);
       this.camPos = this.camera.position.clone();
     } else if (me) {
       // behind the rider along the way it faces, a little late into a bend (as a following motorbike

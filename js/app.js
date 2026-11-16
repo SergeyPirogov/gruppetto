@@ -50,7 +50,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -1579,7 +1579,9 @@ function crowdLevel() {
 function frame(now) {
   if (!ride) return;
   advance(now);
-  if (settings.sound) { if (ride.paused) crowdOff(); else crowd(crowdLevel()); }
+  // the fans on the climbs: not with the sound or the fans off, on a pause, or while you watch something else
+  // with the numbers in the mini window or the Mac overlay (the road isn't drawn then, and the cheering got over a film)
+  if (settings.sound && settings.crowd !== false && !ride.paused && !pipOpen() && !overlayOn()) crowd(crowdLevel()); else crowdOff();
   if (ride.race) {
     const c = ride.race.countdown, el = $('countdown');
     const txt = ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
@@ -3926,6 +3928,8 @@ $('f-sound').onchange = () => {
   saveSettings();
   if (settings.sound) { unlockAudio(); beep(880, 0.1); }
 };
+$('f-crowd').checked = settings.crowd !== false;
+$('f-crowd').onchange = () => { settings.crowd = $('f-crowd').checked; saveSettings(); };
 $('btn-download-tcx').onclick = () => download('tcx');
 $('btn-again').onclick = () => { flushUpload(); $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
 // The Gruppetto mark goes home: from the summary to the lobby (as «Ride again»), on the lobby it closes what is open
@@ -4024,16 +4028,19 @@ function manualLap() {
   toast(tr('Split {n}: {time} · {km} km · {w} W', { n: ride.splits.length, time: fmtTime(t), km: (d / 1000).toFixed(2), w: avg }));
 }
 
-/** The camera views, in the order of keys 1–5. */
-const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front'];
-const CAMERA_NAMES = { chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front' };
+/** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots). */
+const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv'];
+const CAMERA_NAMES = {
+  chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front',
+  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: by the road', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast',
+};
 function setCameraView(mode) {
   if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
   settings.camera = mode;
   saveSettings();
   scene?.setCamera?.(mode);
   $('f-camera').value = mode;
-  toast(`${CAMERAS.indexOf(mode) + 1} · ${tr(CAMERA_NAMES[mode])}`);
+  toast(`${(CAMERAS.indexOf(mode) + 1) % 10} · ${tr(CAMERA_NAMES[mode])}`);
 }
 /** The next camera view (C, or Y on the Zwift Ride). */
 function nextCamera() {
@@ -4275,6 +4282,8 @@ const KEYS = [
   [['N'], 'Skip the interval (free ride: new lap)'],
   [['P'], 'Pacer on / off'],
   [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · over the shoulder · front'],
+  [['6', '–', '9'], 'Camera: far behind · looking back · by the road · helicopter'],
+  [['0'], 'Camera: TV broadcast, cutting between shots'],
   [['C'], 'Next camera'],
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
@@ -4341,7 +4350,7 @@ function onRideKey(e) {
   else if (c === 'KeyP') { if (ride.pacer) togglePacer(); }
   else if (c === 'KeyE') toggleErg();
   else if (c === 'KeyC') nextCamera();
-  else if (/^(Digit|Numpad)[1-5]$/.test(c)) setCameraView(CAMERAS[Number(c.slice(-1)) - 1]);
+  else if (/^(Digit|Numpad)[0-9]$/.test(c)) setCameraView(CAMERAS[(Number(c.slice(-1)) + 9) % 10]);
   else if (c === 'KeyH') runIntent('hud');
   else if (c === 'KeyF') toggleFullscreen();
   else if (c === 'KeyM') toggleMinimap();
