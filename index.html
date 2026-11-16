@@ -38,6 +38,7 @@
       <button class="rail-btn" data-open="history" title="History"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 19V9m5 10V5m5 14v-7m5 7V8"/></svg><span>History</span></button>
       <button class="rail-btn" data-open="progress" title="Progress"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4m8-4h3a3 3 0 0 1-3 4M12 13v4m-4 3h8"/></svg><span>Progress</span></button>
       <button class="rail-btn" data-open="devices" title="Devices"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 7h4"/></svg><i class="rail-dot" id="rail-dev-dot"></i><span>Devices</span></button>
+      <button class="rail-btn" id="rail-garage" title="Garage"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 20V9l9-5 9 5v11M7 20v-7h10v7M7 16h10"/></svg><span>Garage</span></button>
       <span class="rail-grow"></span>
       <button class="rail-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, an icon in the dock, works offline"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span>Install</span></button>
       <button class="rail-btn rail-me" data-open="profile" id="open-profile" title="Profile"><span class="avatar" id="avatar"></span><span>Profile</span></button>
@@ -47,6 +48,8 @@
       <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
       <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
       <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
+      <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Oblast against oblast: kilometres and climbing">🇺🇦 <span>Ratings of Ukraine</span></button>
+      <button id="hdr-group" class="hdr-account hdr-ua" hidden title="Ride together at a set time, live on the road">👥 <span>Group rides</span></button>
       <button id="hdr-account" class="hdr-account" hidden></button>
       <div class="dev-chips">
         <button class="dev-chip" data-key="trainer" data-open="devices"><i></i>Trainer</button>
@@ -287,13 +290,7 @@
           <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
 
           <h3 class="fields-head">Look</h3>
-          <label>Rider figure <select id="f-figure"><option value="male">Man</option><option value="female">Woman</option></select></label>
-          <label>Jersey color <input id="f-jersey" type="color"></label>
-          <label>Accent color <input id="f-stripe" type="color" title="Stripe and decals"></label>
-          <label>Bike color <input id="f-bike" type="color" title="The frame"></label>
-          <label>Bar tape color <input id="f-tape" type="color" title="Handlebar tape"></label>
-          <label>Helmet color <input id="f-helmet" type="color" title="The helmet shell"></label>
-          <label>Lens color <input id="f-lens" type="color" title="Sunglasses lenses"></label>
+          <button id="btn-garage" class="garage-open wide"><span class="garage-swatches" id="garage-swatches"></span><span><b>Garage</b><small>Kit, bike and helmet colours, on a turntable</small></span></button>
         </div>
       </div>
       <div class="card" data-panel="profile" data-ptab="settings">
@@ -328,6 +325,18 @@
               <option value="iso">3 · Isometric</option>
               <option value="side">4 · Over the shoulder</option>
               <option value="front">5 · From the front</option>
+              <option value="far">6 · Far behind</option>
+              <option value="back">7 · Looking back</option>
+              <option value="post">8 · By the road</option>
+              <option value="heli">9 · Helicopter</option>
+              <option value="tv">0 · TV broadcast</option>
+              <option value="top">From above</option>
+              <option value="drone">Drone</option>
+              <option value="tight">Close behind</option>
+              <option value="high">High behind</option>
+              <option value="offset">Behind, to the right</option>
+              <option value="long">Long lens</option>
+              <option value="car">Team car</option>
             </select>
           </label>
           <label>Time of day
@@ -414,6 +423,7 @@
           <label>Language <select id="f-lang"></select></label>
           <h3 class="fields-head">Sound</h3>
           <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
+          <label class="check wide"><input type="checkbox" id="f-crowd"> Fans cheering on the climbs (never with the mini window or the Mac overlay)</label>
 
           <h3 class="fields-head">Privacy</h3>
           <label class="check wide"><input type="checkbox" id="f-stats"> Send anonymous usage stats: which features are used, never your name, data or place</label>
@@ -442,6 +452,21 @@
           <button id="btn-strava">Connect Strava</button>
           <button id="btn-strava-forget" hidden>Disconnect</button>
           <span id="strava-status" class="muted"></span>
+        </div>
+      </div>
+      <div class="card" id="garmin-card" data-panel="profile" data-ptab="links" hidden>
+        <h2>Garmin Connect</h2>
+        <p class="muted">Finished rides go to Garmin Connect as a FIT file. Garmin has no upload API for apps like this one, so Gruppetto signs in the way Garmin's own app does: your password goes to Garmin once and is not kept, the sign-in stays in this browser.</p>
+        <label class="check"><input type="checkbox" id="f-garmin-upload"> Upload the ride to Garmin Connect when finished</label>
+        <form id="garmin-login" class="row icu-row garmin-login">
+          <input id="f-garmin-email" type="email" placeholder="Garmin email" autocomplete="username" required>
+          <input id="f-garmin-password" type="password" placeholder="Password" autocomplete="current-password" required>
+          <input id="f-garmin-code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code from Garmin" hidden>
+          <button id="btn-garmin" type="submit">Connect Garmin</button>
+        </form>
+        <div class="row icu-row">
+          <button id="btn-garmin-forget" hidden>Disconnect</button>
+          <span id="garmin-status" class="muted"></span>
         </div>
       </div>
       <div class="card" data-panel="history">
@@ -543,7 +568,7 @@
         <div class="stat gear"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M20.13 10.94 L22.16 11.08 L22.16 12.92 L20.13 13.06 L19.57 15.14 L21.26 16.29 L20.34 17.87 L18.51 16.99 L16.99 18.51 L17.87 20.34 L16.29 21.26 L15.14 19.57 L13.06 20.13 L12.92 22.16 L11.08 22.16 L10.94 20.13 L8.86 19.57 L7.71 21.26 L6.13 20.34 L7.01 18.51 L5.49 16.99 L3.66 17.87 L2.74 16.29 L4.43 15.14 L3.87 13.06 L1.84 12.92 L1.84 11.08 L3.87 10.94 L4.43 8.86 L2.74 7.71 L3.66 6.13 L5.49 7.01 L7.01 5.49 L6.13 3.66 L7.71 2.74 L8.86 4.43 L10.94 3.87 L11.08 1.84 L12.92 1.84 L13.06 3.87 L15.14 4.43 L16.29 2.74 L17.87 3.66 L16.99 5.49 L18.51 7.01 L20.34 6.13 L21.26 7.71 L19.57 8.86 Z"/><circle cx="12" cy="12" r="4.6"/><circle cx="12" cy="12" r="1.4"/></svg><div class="st-body"><label id="m-gear-label">Gear</label><div class="st-val"><b id="m-gear">12</b><span id="m-gear-unit">/24</span></div></div></div>
         <div class="stat climb"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M2 20 9 8l4 6 3-4 6 10z"/></svg><div class="st-body"><label>Climbed</label><div class="st-val"><b id="m-gain">0</b><span>m</span></div></div></div>
       </div>
-      <div class="board minimap" id="minimap-box" title="Bigger map (M)"><canvas id="minimap"></canvas><button id="minimap-size" class="mm-size" aria-label="Bigger map (M)">⤢</button></div>
+      <div class="board minimap" id="minimap-box" title="Map zoom (M)"><canvas id="minimap"></canvas><button id="minimap-size" class="mm-size" title="Map zoom (M)">Nearby</button><button id="minimap-hide" class="hud-hide" title="Hide" aria-label="Hide">−</button></div>
       <div id="race-board" class="board race-board" hidden>
         <div class="race-head"><b id="race-pos">1/6</b><span id="race-info"></span></div>
         <div id="race-rows"></div>
@@ -577,7 +602,7 @@
       </div>
       <div class="progress">
         <div id="progress-label" class="progress-label">Lap 1</div>
-        <canvas id="profile"></canvas>
+        <div class="profile-box" id="profile-box"><canvas id="profile"></canvas><button id="profile-hide" class="hud-hide" title="Hide" aria-label="Hide">−</button></div>
         <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
       </div>
     </div>
@@ -640,6 +665,7 @@
         <button id="btn-download-tcx">.TCX</button>
         <button id="btn-icu-upload" hidden>Upload to intervals.icu</button>
         <button id="btn-strava-upload" hidden>Upload to Strava</button>
+        <button id="btn-garmin-upload" hidden>Upload to Garmin</button>
         <button id="btn-delete-ride" class="ghost" hidden>Delete ride</button>
         <button id="btn-challenge" hidden title="A link: your friend rides against your ghost">Challenge a friend 👻</button>
         <button id="btn-card">Share card</button>
@@ -647,8 +673,10 @@
       </div>
       <label class="check sum-icu" id="sum-icu" hidden><input type="checkbox" id="sum-icu-auto"> <span>Upload the ride to intervals.icu</span> <small id="sum-icu-count"></small></label>
       <label class="check sum-icu" id="sum-strava" hidden><input type="checkbox" id="sum-strava-auto"> <span>Upload the ride to Strava</span> <small id="sum-strava-count"></small></label>
+      <label class="check sum-icu" id="sum-garmin" hidden><input type="checkbox" id="sum-garmin-auto"> <span>Upload the ride to Garmin Connect</span> <small id="sum-garmin-count"></small></label>
       <p id="icu-upload-status" class="hint" hidden></p>
       <p id="strava-upload-status" class="hint" hidden></p>
+      <p id="garmin-upload-status" class="hint" hidden></p>
       <p class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
     </main>
   </section>
@@ -683,6 +711,7 @@
         <div class="fields">
           <label>Name in the tables <input id="ss-name" maxlength="24" autocomplete="nickname"></label>
           <label>Country <select id="ss-country"></select></label>
+          <label id="ss-region-box" hidden>Oblast, for the ratings of Ukraine <select id="ss-region"></select></label>
           <label>Gender, for the filter <select id="ss-gender"><option value="">Rather not say</option><option value="f">Female</option><option value="m">Male</option></select></label>
         </div>
         <label class="check"><input type="checkbox" id="ss-public" checked> Show me in the tables</label>
@@ -710,6 +739,80 @@
         <p id="lb-cta" class="hint" hidden><button id="lb-signin" class="pill-btn">Sign in with Google</button> to put your times here</p>
         <p class="hint">Categories by FTP per kilo: A from 4.0, B 3.2–4.0, C 2.5–3.2, D below 2.5 W/kg. «?»: no heart rate, or close to the limit of the possible.</p>
       </div>
+    </div>
+
+    <!-- the ratings across Ukraine (0003_regions.sql): oblast against oblast, rider against rider -->
+    <div id="ua-view" class="wk-menu" hidden>
+      <div class="drawer-bg" data-ua-close></div>
+      <div class="wk-menu-panel lb-panel">
+        <div class="wk-menu-head"><h2>Ratings of Ukraine</h2><button class="drawer-close" data-ua-close aria-label="Close">✕</button></div>
+        <div class="lb-filters">
+          <div class="lb-chips" id="ua-tab"><button class="pill-btn sel" data-v="regions">Oblasts</button><button class="pill-btn" data-v="riders">Riders</button></div>
+          <div class="lb-chips" id="ua-period"><button class="pill-btn sel" data-v="week">This week</button><button class="pill-btn" data-v="month">This month</button><button class="pill-btn" data-v="all">All time</button></div>
+          <div class="lb-chips" id="ua-metric"><button class="pill-btn sel" data-v="km">Kilometres</button><button class="pill-btn" data-v="climb">Climbing</button></div>
+          <div class="lb-chips" id="ua-gender" hidden><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
+          <select id="ua-region" aria-label="Oblast" hidden></select>
+        </div>
+        <div class="lb-scroll">
+          <table class="lb-table ua-table"><thead id="ua-head"></thead><tbody id="ua-rows"></tbody></table>
+        </div>
+        <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to put your oblast on the board.</p>
+        <p id="ua-cta" class="hint" hidden></p>
+        <p class="hint">Rides on a trainer of riders signed in, each by the oblast in their profile. The simulator does not count.</p>
+      </div>
+    </div>
+
+    <!-- group rides (#84, js/group.js): the calendar, joining, and a new ride -->
+    <div id="gr-view" class="wk-menu" hidden>
+      <div class="drawer-bg" data-gr-close></div>
+      <div class="wk-menu-panel lb-panel gr-panel">
+        <div class="wk-menu-head"><h2>Group rides</h2><button class="drawer-close" data-gr-close aria-label="Close">✕</button></div>
+        <p id="gr-cta" class="hint" hidden></p>
+        <ul id="gr-list" class="gr-list"></ul>
+        <p id="gr-empty" class="hint" hidden>No group rides planned yet: set one up and send the link to your friends.</p>
+        <details id="gr-new" class="gr-new">
+          <summary>+ New group ride</summary>
+          <form id="gr-form" class="gr-form">
+            <label class="gr-wide">Title<input id="gr-title" maxlength="80" required placeholder="Evening spin"></label>
+            <label class="gr-wide">Route<select id="gr-route"></select></label>
+            <label>Date<input id="gr-date" type="date" required></label>
+            <label>Time<input id="gr-time" type="time" required></label>
+            <button id="gr-create" class="primary gr-wide" type="submit">Set up the ride</button>
+            <p id="gr-err" class="hint gr-wide" hidden></p>
+          </form>
+        </details>
+        <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together: you see each other live on the road, and ride in each other's shelter. Signed in, on a trainer or in the simulator.</p>
+      </div>
+    </div>
+
+    <!-- the garage (js/garage.js): your rider on a turntable beside the colour pickers -->
+    <div id="garage" class="garage" hidden role="dialog" aria-label="Garage">
+      <div class="garage-stage">
+        <canvas id="garage-canvas"></canvas>
+        <div class="garage-loading" id="garage-loading">Loading the rider…</div>
+        <div class="garage-views" id="garage-views"><button data-gview="side" class="pill-btn sel">Side</button><button data-gview="front" class="pill-btn">Front</button><button data-gview="back" class="pill-btn">From behind</button><button data-gview="head" class="pill-btn">Helmet</button><button id="garage-spin" class="pill-btn" aria-pressed="true" title="Stop or start the turntable and the pedalling">⏸ Stop</button></div>
+        <small class="garage-hint">Drag to turn, scroll to zoom</small>
+      </div>
+      <aside class="garage-side">
+        <div class="wk-menu-head"><h2>Garage</h2><button class="drawer-close" data-garage-close aria-label="Close">✕</button></div>
+        <h3 class="fields-head">Kits</h3>
+        <div class="garage-kits" id="garage-kits"></div>
+        <button id="garage-random" class="ghost">🎲 Surprise me</button>
+        <div class="fields">
+          <h3 class="fields-head">Rider</h3>
+          <label>Rider figure <select id="f-figure"><option value="male">Man</option><option value="female">Woman</option></select></label>
+          <label>Jersey color <input id="f-jersey" type="color"></label>
+          <label>Accent color <input id="f-stripe" type="color" title="Stripe and decals"></label>
+          <h3 class="fields-head">Bike</h3>
+          <label>Bike color <input id="f-bike" type="color" title="The frame"></label>
+          <label>Bar tape color <input id="f-tape" type="color" title="Handlebar tape"></label>
+          <label>Wheel decal color <input id="f-decal" type="color" title="The lettering on the rims"></label>
+          <h3 class="fields-head">Helmet</h3>
+          <label>Helmet color <input id="f-helmet" type="color" title="The helmet shell"></label>
+          <label>Lens color <input id="f-lens" type="color" title="Sunglasses lenses"></label>
+        </div>
+        <button id="garage-done" class="primary">Done</button>
+      </aside>
     </div>
 
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>

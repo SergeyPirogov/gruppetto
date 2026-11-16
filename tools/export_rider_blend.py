@@ -20,8 +20,11 @@ What it does, without touching the saved .blend (it reverts the file at the end)
      bike and rider together) and "saddleDrop" (m down the seat tube; the .blend has the saddle lowered
      as much) go into the json.
 """
-import bpy, os, json
+import bpy, os, json, sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)) if '__file__' in globals() else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(bpy.data.filepath))), 'tools'))
+import stand_pose as SP                             # the standing pose kept in the .blend (tools/stand_pose.py)
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(bpy.data.filepath)))
 FIGURE = os.path.splitext(os.path.basename(bpy.data.filepath))[0].replace('rider_', '')   # 'male', 'female'
@@ -44,6 +47,7 @@ KIT_OVER_SKIN = ['MH_Jersey', 'MH_Shorts']
 TUCK_GAP = 0.0015                                   # skin at least 1.5 mm under the cloth
 TUCK_REACH = 0.012                                  # only skin within 12 mm of the cloth
 MORPH_STEP = 2                                     # a key every 2nd frame of the clip, blended between
+STAND_MORPH_STEP = 4                               # the standing clip: every 4th frame (keeps the GLB under ~10 MB)
 MORPH_EPS = 0.0003                                  # deltas under 0.3 mm dropped (sparse in the GLB)
 FRAMES = (1, 17)                                    # one crank turn (ChainRing keyed 0..2pi over 1..17)
 BIKE_BB = (0.0, 0.29)                               # bottom bracket in the game's rider group (x, y)
@@ -216,34 +220,38 @@ def match_pose(ob, src, rig):
         ob.data.update()
 
 
-def pose_morphs(copies, rig):
-    """Per-frame corrections as shape keys, keyed into the "pedal_cycle" action.
+def pose_morphs(copies, rig, act, prefix='f', first=False, step=None):
+    """Per-frame corrections as shape keys, keyed into `act` ("pedal_cycle", or "stand_cycle" with prefix 's').
 
     match_pose makes the game exact in one pose only; as the legs go round, linear skinning drifts
     from Blender's preserve volume (the seat and the hips most). For every MORPH_STEP-th frame of the
     clip the rest shape is solved again and stored as a shape key that is on (1) at that frame and
     off at its neighbours, so the game blends the right shape in between. Small deltas are zeroed,
-    so the exporter can write them as sparse accessors.
+    so the exporter can write them as sparse accessors. `first`: also key the clip's first frame (the
+    standing clip, whose first frame is not the rest shape).
     """
-    act = rig.animation_data.action
-    frames = list(range(FRAMES[0], FRAMES[1] + 1, MORPH_STEP))
+    frames = list(range(FRAMES[0], FRAMES[1] + 1, step or MORPH_STEP))
     if frames[-1] != FRAMES[1]:
         frames.append(FRAMES[1])
+    slots = {}
     for src_name, ob in copies:
         if src_name not in MORPH_PARTS:
             continue
         src = O[src_name]
         base = np.array([tuple(v.co) for v in ob.data.vertices])
-        ob.shape_key_add(name='Basis', from_mix=False)
+        if not ob.data.shape_keys:
+            ob.shape_key_add(name='Basis', from_mix=False)
+        else:
+            base = np.array([tuple(p.co) for p in ob.data.shape_keys.key_blocks[0].data])
         keys = []
-        for f in frames[1:]:
+        for f in (frames if first else frames[1:]):
             sc.frame_set(f)
             out = solve_rest(ob, src, rig)
             if out is None:
                 break
             d = out - base
             d[np.linalg.norm(d, axis=1) < MORPH_EPS] = 0
-            kb = ob.shape_key_add(name='f%02d' % f, from_mix=False)
+            kb = ob.shape_key_add(name='%s%02d' % (prefix, f), from_mix=False)
             kb.data.foreach_set('co', (base + d).ravel())
             kb.slider_min, kb.slider_max = 0.0, 1.0
             keys.append((f, kb))
@@ -255,16 +263,19 @@ def pose_morphs(copies, rig):
         ad.action = act
         slot = act.slots.new(id_type='KEY', name=ob.name)
         ad.action_slot = slot
-        for i, (f, kb) in enumerate(keys):
-            prev = frames[i]                                   # neighbour frames: the key is 0 there
-            nxt = frames[i + 2] if i + 2 < len(frames) else None
-            for fr, val in ((prev, 0.0), (f, 1.0)) + (((nxt, 0.0),) if nxt else ()):
+        for f, kb in keys:
+            j = frames.index(f)                                # neighbour frames: the key is 0 there
+            prev = frames[j - 1] if j > 0 else None
+            nxt = frames[j + 1] if j + 1 < len(frames) else None
+            for fr, val in ((((prev, 0.0),) if prev is not None else ()) + ((f, 1.0),) + (((nxt, 0.0),) if nxt is not None else ())):
                 kb.value = val
                 kb.keyframe_insert('value', frame=fr)
         kb.value = 0.0
+        slots[ob.name] = slot
         for fc in act_fcurves(act, slot):
             for kp in fc.keyframe_points:
                 kp.interpolation = 'LINEAR'
+    return slots
 
 
 def act_fcurves(act, slot):
@@ -421,6 +432,9 @@ def run():
         bpy.ops.object.mode_set(mode='OBJECT')
     rig = O[RIG]
     sc.frame_set(FRAMES[0])
+    # the pose as saved, to start the standing bake from the same place as the seated one
+    saved = {pb.name: (tuple(pb.location), pb.rotation_mode, tuple(pb.rotation_quaternion), tuple(pb.rotation_euler), tuple(pb.scale))
+             for pb in rig.pose.bones}
 
     # 1. textures
     set_engine_cycles()
@@ -459,7 +473,42 @@ def run():
                      clear_constraints=False, use_current_action=False, bake_types={'POSE'})
     bpy.ops.object.mode_set(mode='OBJECT')
     rig.animation_data.action.name = 'pedal_cycle'
+    pedal_act = rig.animation_data.action
     sc.frame_set(FRAMES[0])
+    seat_tilt = pedal_tilt()
+
+    # 2b. the standing clip: the same crank turn out of the saddle (tools/stand_pose.py), the rider rolled
+    # against the bike's rock; baked the same way into "stand_cycle"
+    stand_act, stand_tilt, rock = None, None, None
+    if 'standPose' in rig:
+        for pb in rig.pose.bones:
+            loc, mode, q, e, scl = saved[pb.name]
+            pb.location, pb.rotation_mode, pb.rotation_quaternion, pb.rotation_euler, pb.scale = loc, mode, q, e, scl
+        src = bpy.data.actions.new('stand_src')
+        rig.animation_data.action = src
+        k = json.loads(rig['standRock'])
+        rock = []
+        for f in range(FRAMES[0], FRAMES[1] + 1):
+            sc.frame_set(f)
+            SP.apply_pose(True)
+            rock.append(round(SP.rock_at(k['amp'], k['phase'], SP.crank_angle()), 4))
+            for n in SP.POSE_BONES:
+                rig.pose.bones[n].keyframe_insert('location', frame=f)
+                rig.pose.bones[n].keyframe_insert('rotation_quaternion', frame=f)
+        bpy.ops.object.mode_set(mode='POSE')
+        bpy.ops.pose.select_all(action='SELECT')
+        bpy.ops.nla.bake(frame_start=FRAMES[0], frame_end=FRAMES[1], only_selected=True, visual_keying=True,
+                         clear_constraints=False, use_current_action=False, bake_types={'POSE'})
+        bpy.ops.object.mode_set(mode='OBJECT')
+        stand_act = rig.animation_data.action
+        stand_act.name = 'stand_cycle'
+        stand_act.use_fake_user = True
+        sc.frame_set(FRAMES[0])
+        stand_tilt = pedal_tilt()
+        bpy.data.actions.remove(src)
+        rig.animation_data.action = pedal_act
+        pedal_act.use_fake_user = True
+        sc.frame_set(FRAMES[0])
 
     # 3. export copies
     rig.data.pose_position = 'REST'
@@ -474,7 +523,29 @@ def run():
     bpy.context.view_layer.update()
     for n, ob in zip(BODY_PARTS, copies):
         match_pose(ob, O[n], rig)
-    pose_morphs(list(zip(BODY_PARTS, copies)), rig)
+    pedal_slots = pose_morphs(list(zip(BODY_PARTS, copies)), rig, pedal_act)
+    if stand_act:
+        rig.animation_data.action = stand_act
+        stand_slots = pose_morphs(list(zip(BODY_PARTS, copies)), rig, stand_act, prefix='s', first=True, step=STAND_MORPH_STEP)
+        rig.animation_data.action = pedal_act
+        # the shape keys back on the seated clip, every key off: the GLB's default weights are what a model shows
+        # before (or without) a clip, and the standing clip's first key left at 1 lifted the seated rider off the saddle
+        for ob in copies:
+            key = ob.data.shape_keys if ob.type == 'MESH' else None
+            if not key:
+                continue
+            if ob.name in pedal_slots:
+                key.animation_data.action = pedal_act
+                key.animation_data.action_slot = pedal_slots[ob.name]
+            if ob.name in stand_slots:
+                # a muted NLA strip keeps the standing slot in use, or the glTF exporter drops its morph tracks
+                track = key.animation_data.nla_tracks.new()
+                track.name, track.mute = 'stand_cycle', True
+                strip = track.strips.new('stand_cycle', int(stand_act.frame_range[0]), stand_act)
+                strip.action_slot = stand_slots[ob.name]
+            for kb in key.key_blocks[1:]:
+                kb.value = 0.0
+        sc.frame_set(FRAMES[0])
     for n in HEAD_GEAR:
         if n in O:
             copies.append(gear_copy(O[n]))
@@ -509,8 +580,12 @@ def run():
         'helmetMaterials': ['Helmet main'], 'lensMaterials': ['Glasses lens'],  # recoloured per rider
         'jerseyMaterials': ['-'], 'shortsMaterials': ['-'],
         'sleeve': False, 'sockHeight': False, 'armSlim': 1, 'helmet': False, 'glasses': False,
-        'pedalTilt': pedal_tilt(),                 # the bike's pedals follow the soles, as in Blender
+        'pedalTilt': seat_tilt,                    # the bike's pedals follow the soles, as in Blender
     }
+    if stand_act:
+        cfg['standPedalTilt'] = stand_tilt           # the same, out of the saddle
+        cfg['standRock'] = rock                      # the bike's roll (radians, + = leans right) at frames 1..17
+        cfg['standRockPivot'] = cfg['offset'][1]     # the tyre contact line (Blender's ground) in the game's group
     for k in ('bikeScale', 'saddleDrop'):          # a smaller frame for a smaller rider
         if k in sc:
             cfg[k] = round(float(sc[k]), 4)

@@ -392,6 +392,42 @@ test('GPX track: point-to-point route with smoothed elevation, bends and a finis
   assert.throws(() => routeFromTrack({ name: '', points: pts.slice(0, 50) }), /shorter than 1 km/);
 });
 
+test('GPX track: the road built from its turns stays on the track (city corners, out and back)', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  // 20 corners of 90° every 200-400 m, with GPS jitter, and a 300 m spur ridden out and back
+  const m = 1 / 111320, lat0 = 48.45, lon0 = 24.55, k = Math.cos(lat0 * Math.PI / 180);
+  const xy = [[0, 0]];
+  let h = 0, x = 0, y = 0;
+  const go = (len) => { for (let d = 0; d < len; d += 10) { x += Math.cos(h) * 10; y += Math.sin(h) * 10; xy.push([x, y]); } };
+  for (let i = 0; i < 20; i++) {
+    go(200 + (i % 3) * 100);
+    if (i === 7) { const back = xy.slice(-31, -1).reverse(); go(300); xy.push(...back.map(([a, b]) => [a + 2, b + 2])); [x, y] = xy[xy.length - 1]; h += Math.PI; }
+    h += (i % 4 === 3 ? -1 : 1) * Math.PI / 2;
+  }
+  const pts = xy.map(([a, b], i) => ({ lat: lat0 + (b + Math.sin(i * 7.3) * 1.5) * m, lon: lon0 + (a + Math.cos(i * 5.1) * 1.5) * m / k, ele: 100 }));
+  const def = routeFromTrack({ name: 'City', points: pts });
+  // the renderer's road: heading += curve * TURN / SEG per 5 m segment, each segment an arc
+  const SEG = 5, TURN = 2.5, M = [];
+  for (let i = 0; i < def.map.length; i += 2) M.push([def.map[i], def.map[i + 1]]);
+  let rh = -def.startHeading, rx = M[0][0], rz = M[0][1], worst = 0;
+  const errs = [];
+  for (const c of def.curve) {
+    let best = Infinity;
+    for (let i = 0; i < M.length - 1; i++) {
+      const [ax, az] = M[i], vx = M[i + 1][0] - ax, vz = M[i + 1][1] - az, L = vx * vx + vz * vz || 1;
+      const t = Math.max(0, Math.min(1, ((rx - ax) * vx + (rz - az) * vz) / L));
+      best = Math.min(best, Math.hypot(rx - ax - vx * t, rz - az - vz * t));
+    }
+    errs.push(best); worst = Math.max(worst, best);
+    const h1 = rh + (c * TURN) / SEG, a = h1 - rh;
+    if (Math.abs(a) < 1e-6) { rx += Math.cos(rh) * SEG; rz += Math.sin(rh) * SEG; } else { rx += (SEG / a) * (Math.sin(h1) - Math.sin(rh)); rz -= (SEG / a) * (Math.cos(h1) - Math.cos(rh)); }
+    rh = h1;
+  }
+  errs.sort((a, b) => a - b);
+  assert.ok(errs[errs.length >> 1] < 3, `median ${errs[errs.length >> 1]}`);
+  assert.ok(worst < 30, `worst ${worst}`); // the top of the U-turn: no tighter than a 12 m radius
+});
+
 test('route groups: flat, hilly and mountain', () => {
   const g = Object.fromEntries(routes.map((r) => [r.id, r.group]));
   assert.equal(g.lakes, 'flat');
@@ -1097,4 +1133,97 @@ test('FIT and TCX carry the GPS track (official Garmin decoder)', () => {
   const b = new Decoder(Stream.fromByteArray(Array.from(bare.toFIT()))).read();
   assert.equal(b.messages.recordMesgs[5].positionLat, undefined);
   assert.doesNotMatch(bare.toTCX(), /Position/);
+});
+
+import { standStep } from '../js/standing.js';
+const runStand = (state, input, seconds) => { let up = false; for (let t = 0; t < seconds - 1e-9; t += 0.1) up = standStep(state, input, 0.1); return up; };
+test('standing: a surge stands after 0.4 s', () => {
+  assert.equal(runStand({}, { power: 300, ftp: 250, cadence: 95 }, 0.3), false);
+  assert.equal(runStand({}, { power: 300, ftp: 250, cadence: 95 }, 0.5), true);
+});
+test('standing: a grind stands', () => {
+  assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 65 }, 0.5), true);
+  assert.equal(runStand({}, { power: 100, ftp: 250, cadence: 65 }, 2), false); // under half of FTP: soft-pedalling
+});
+test('standing: sits after 0.8 s of easy riding', () => {
+  assert.equal(runStand({ up: true }, { power: 200, ftp: 250, cadence: 90 }, 0.7), true);
+  assert.equal(runStand({ up: true }, { power: 200, ftp: 250, cadence: 90 }, 0.9), false);
+});
+test('standing: no bobbing at the edge', () => {
+  for (const start of [true, false]) {
+    const s = { up: start };
+    for (let i = 0; i < 100; i++) { // 0.1 s steps, the power switching every 3 steps (0.3 s)
+      const power = Math.floor(i / 3) % 2 ? 310 : 290;
+      assert.equal(standStep(s, { power, ftp: 250, cadence: 90 }, 0.1), start, `step ${i} start=${start}`);
+    }
+  }
+});
+test('standing: coasting sits down', () => {
+  assert.equal(runStand({ up: true }, { power: 0, ftp: 250, cadence: 0 }, 0.9), false);
+});
+test('standing: no cadence uses power only', () => {
+  assert.equal(runStand({}, { power: 320, ftp: 250, cadence: null }, 0.5), true);
+  assert.equal(runStand({ up: true }, { power: 150, ftp: 250, cadence: null }, 0.9), false);
+});
+test('standing: no power never stands', () => {
+  assert.equal(runStand({}, { power: null, ftp: 250, cadence: 60 }, 2), false);
+});
+
+import { readFileSync, statSync } from 'node:fs';
+test('rider assets: both clips and the rock', () => {
+  for (const f of ['male', 'female']) {
+    const glb = readFileSync(new URL(`../assets/riders/${f}.glb`, import.meta.url));
+    const len = glb.readUInt32LE(12), gltf = JSON.parse(glb.subarray(20, 20 + len).toString('utf8'));
+    const names = gltf.animations.map((a) => a.name);
+    assert.ok(names.includes('pedal_cycle') && names.includes('stand_cycle'), `${f}: ${names}`);
+    const cfg = JSON.parse(readFileSync(new URL(`../assets/riders/${f}.json`, import.meta.url), 'utf8'));
+    assert.equal(cfg.standRock?.length, 17, f);
+    assert.ok(cfg.standRock.every((v) => Number.isFinite(v) && Math.abs(v) <= 0.2), f);
+    assert.ok(Number.isFinite(cfg.standRockPivot), f);
+    assert.equal(cfg.standPedalTilt?.length, 3, f);
+    assert.ok(statSync(new URL(`../assets/riders/${f}.glb`, import.meta.url)).size <= 10.2e6, `${f} too big`);
+    // seated by default: no corrective shape key on unless a clip turns it on (s01 at 1 lifted the seated rider off the saddle)
+    for (const m of gltf.meshes) (m.weights || []).forEach((w, i) => assert.equal(w, 0, `${f} ${m.name} ${m.extras?.targetNames?.[i]} default ${w}`));
+    // and each clip still drives its own keys
+    for (const name of ['pedal_cycle', 'stand_cycle']) {
+      const a = gltf.animations.find((x) => x.name === name);
+      assert.ok(a.channels.some((c) => c.target.path === 'weights'), `${f} ${name} has no shape key tracks`);
+    }
+  }
+});
+test('standing: a surge at a stalled cadence stays up (a trainer reading 0 rpm when slow)', () => {
+  const s = {};
+  for (let i = 0; i < 60; i++) { const up = standStep(s, { power: 320, ftp: 250, cadence: 0 }, 0.1); if (i >= 4) assert.equal(up, true, `step ${i}`); }
+});
+test('standing: soft-pedalling after a grind sits down', () => {
+  assert.equal(runStand({ up: true }, { power: 80, ftp: 250, cadence: 55 }, 0.9), false);
+});
+test('standing: a grind right at the power floor does not bob', () => {
+  const s = { up: true };
+  for (let i = 0; i < 100; i++) assert.equal(standStep(s, { power: (i % 6 < 3) ? 120 : 130, ftp: 250, cadence: 65 }, 0.1), true, `step ${i}`);
+});
+import { gradeColor, gradeRuns } from '../js/grade-color.js';
+test('grade colours: stops, blend, clamp', () => {
+  assert.equal(gradeColor(0), 'rgb(34,197,94)');
+  assert.equal(gradeColor(9), 'rgb(220,38,38)');
+  assert.equal(gradeColor(20), 'rgb(220,38,38)');
+  assert.equal(gradeColor(-10), 'rgb(59,130,246)');
+  assert.equal(gradeColor(4.5), 'rgb(242,147,15)'); // halfway 3 % -> 6 %, rounded
+});
+test('grade runs sample the route every 25 m', () => {
+  const r = routes[0], runs = gradeRuns(r, 0, 100);
+  assert.deepEqual(runs.map((x) => x.d), [0, 25, 50, 75, 100]);
+  assert.equal(runs[1].color, gradeColor(r.gradeAt(25) * 100));
+});
+test('grade runs can average the grade over a window', () => {
+  const r = routes.find((x) => x.id === 'rolling'), [p] = gradeRuns(r, 200, 200, 25, 200);
+  assert.notEqual(gradeColor(r.gradeAt(200) * 100), gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100)); // a spot where it matters
+  assert.equal(p.color, gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100));
+});
+test('segment ticks: a segment ending on the line ends at the right edge, one over it wraps', async () => {
+  const { segmentSpan } = await import('../js/grade-color.js');
+  const v = routes.find((x) => x.id === 'velodrome');
+  assert.deepEqual(segmentSpan(v, v.sprints[0]), [250, 500]);
+  const r = routes.find((x) => x.id === 'rolling');
+  assert.deepEqual(segmentSpan(r, { start: r.length - 100, length: 300 }), [r.length - 100, 200]);
 });

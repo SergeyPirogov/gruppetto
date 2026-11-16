@@ -4,8 +4,13 @@
 // without a project (social-config.js) init returns at once and none of it shows.
 import {
   socialOn, initSocial, currentUser, onUser, signIn, signOut, loadProfile, saveProfile, queueAdd, queued, sendResults, leaderboard, deleteAccount,
+  loadActivities, saveActivities, sendRides, regionBoard, riderBoard, groupRides, createGroupRide, cancelGroupRide, joinGroupRide, groupLive,
 } from './social.js';
-import { SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf } from './social-core.js';
+import { rideWindow } from './group.js';
+import {
+  SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
+  REGIONS, regionName,
+} from './social-core.js';
 
 let ctx = null;
 let profileRow = null; // my row in profiles, once read
@@ -51,6 +56,10 @@ export async function initSocialUi(c) {
     if (profileRow) c.toast(tr('Signed in: {name}', { name: profileRow.display_name }));
   }
   renderRoute();
+  // a group ride's link (#group=<id>), or one you were about to join before signing in
+  const linked = /^#group=([0-9a-f-]{36})$/i.exec(location.hash)?.[1] || sessionStorage.getItem(GR_PENDING);
+  sessionStorage.removeItem(GR_PENDING);
+  if (linked) { if (location.hash) history.replaceState(null, '', location.pathname + location.search); openGroups(linked); }
 }
 
 function status(text) { const el = $('social-status'); if (el) el.textContent = text || ''; }
@@ -77,6 +86,29 @@ function buildUi() {
   const countries = COUNTRIES.map((cc) => [cc, names?.of(cc) || cc]).sort((a, b) => a[1].localeCompare(b[1], ctx.locale));
   $('ss-country').innerHTML = `<option value="">${tr('Not shown')}</option>${countries.map(([cc, n]) => `<option value="${cc}">${flagOf(cc)} ${ctx.esc(n)}</option>`).join('')}`;
   $('ss-save').onclick = saveSetup;
+  const regions = REGIONS.map(([code]) => [code, regionName(code, ctx.lang)]).sort((a, b) => a[1].localeCompare(b[1], ctx.locale));
+  $('ss-region').innerHTML = `<option value="">${tr('Not shown')}</option>${regions.map(([c, n]) => `<option value="${c}">${ctx.esc(n)}</option>`).join('')}`;
+  $('ss-country').onchange = () => { $('ss-region-box').hidden = $('ss-country').value !== 'UA'; };
+  // the ratings across Ukraine
+  $('ua-region').innerHTML = `<option value="">${tr('All of Ukraine')}</option>${regions.map(([c, n]) => `<option value="${c}">${ctx.esc(n)}</option>`).join('')}`;
+  $('hdr-ua').hidden = false;
+  $('hdr-ua').onclick = () => { ctx.track('social', 'ua-board'); openUa(); };
+  for (const el of document.querySelectorAll('[data-ua-close]')) el.onclick = () => { $('ua-view').hidden = true; };
+  for (const id of ['ua-tab', 'ua-period', 'ua-metric', 'ua-gender']) {
+    $(id).onclick = (ev) => {
+      const b = ev.target.closest('[data-v]');
+      if (!b) return;
+      for (const x of $(id).querySelectorAll('[data-v]')) x.classList.toggle('sel', x === b);
+      renderUa();
+    };
+  }
+  $('ua-region').onchange = renderUa;
+  // group rides
+  $('hdr-group').hidden = false;
+  $('hdr-group').onclick = () => { ctx.track('social', 'group-list'); openGroups(); };
+  for (const el of document.querySelectorAll('[data-gr-close]')) el.onclick = () => { $('gr-view').hidden = true; };
+  $('gr-list').onclick = groupAction;
+  $('gr-form').onsubmit = groupCreate;
   // the table
   for (const el of document.querySelectorAll('[data-lb-close]')) el.onclick = () => { $('lb-view').hidden = true; };
   $('lb-signin').onclick = () => signIn(redirect()).catch((e) => status(e.message));
@@ -179,16 +211,51 @@ export function sync({ send = false } = {}) {
     profileRow = row;
     renderCard();
     const merged = mergeData(localData(), row.data);
+    merged.workouts = syncWorkouts(row.data?.workouts);
     apply(merged);
     if (!sameData(merged, row.data)) await saveProfile({ data: merged });
+    await syncRides();
     if (send) await flush();
   })().finally(() => { syncing = null; });
   return syncing;
 }
 
+const unionDeleted = (a, b) => { const out = { ...(a || {}) }; for (const [id, t] of Object.entries(b || {})) if (!(out[id] >= t)) out[id] = t; return out; };
+
+/** Your own workouts, here and in the account's data, as one; this device takes the result. */
+function syncWorkouts(remote) {
+  const deleted = unionDeleted(ctx.workoutsDeleted(), remote?.deleted);
+  const m = mergeById(ctx.getWorkouts(), remote?.list || [], { deleted });
+  if (m.removed.length || !sameData(m.items, ctx.getWorkouts()) || !sameData(deleted, ctx.workoutsDeleted())) ctx.setWorkouts(m.items, deleted);
+  return workoutsData(m.items, deleted);
+}
+
+/** The ride history, here and in the activities table, as one: new rides both ways, deletions both ways. */
+async function syncRides() {
+  const rows = await loadActivities();
+  if (!rows) return; // the table is not in the project yet (0002_activities.sql)
+  const remoteDeleted = {}, remote = [];
+  for (const r of rows) {
+    if (r.deleted) remoteDeleted[r.id] = r.changed_at || 0;
+    else if (r.entry) remote.push({ ...r.entry, updatedAt: r.changed_at || r.entry.updatedAt || 0 });
+  }
+  const localDeleted = ctx.historyDeleted();
+  const m = mergeById(ctx.getHistory(), remote, { deleted: unionDeleted(localDeleted, remoteDeleted) });
+  const items = m.items.sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 100); // this device keeps the latest 100
+  if (m.removed.length || !sameData(items.map((x) => x.id), ctx.getHistory().map((x) => x.id)) || items.some((x, i) => x !== ctx.getHistory()[i])) {
+    ctx.setHistory(items, m.removed);
+  }
+  // up: rides the table lacks or holds older, and deletions it has not heard of
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const gone = Object.fromEntries(Object.entries(localDeleted).filter(([id, t]) => { const r = byId.get(id); return !r || !r.deleted || (r.changed_at || 0) < t; }));
+  await saveActivities(activityRows(m.push, gone));
+}
+
 function openSetup({ first = false } = {}) {
   $('ss-name').value = profileRow?.display_name || (ctx.settings.name && ctx.settings.name !== 'Me' ? ctx.settings.name : '') || currentUser()?.user_metadata?.full_name?.slice(0, 24) || '';
   $('ss-country').value = profileRow?.country || '';
+  $('ss-region').value = profileRow?.region || '';
+  $('ss-region-box').hidden = $('ss-country').value !== 'UA';
   $('ss-gender').value = profileRow?.gender || '';
   $('ss-public').checked = profileRow ? profileRow.public !== false : true;
   $('social-setup').dataset.first = first ? '1' : '';
@@ -199,14 +266,16 @@ function openSetup({ first = false } = {}) {
 async function saveSetup() {
   const name = $('ss-name').value.trim().slice(0, 24);
   if (!name) { $('ss-name').focus(); return; }
-  const fields = { display_name: name, country: $('ss-country').value || null, gender: $('ss-gender').value || null, public: $('ss-public').checked };
+  const country = $('ss-country').value || null;
+  const fields = { display_name: name, country, gender: $('ss-gender').value || null, public: $('ss-public').checked };
+  if (country === 'UA' || profileRow?.region) fields.region = country === 'UA' ? $('ss-region').value || null : null;
   const first = $('social-setup').dataset.first === '1';
   try {
     if (first) fields.data = mergeData(localData(), null);
     profileRow = { ...profileRow, ...(await saveProfile(fields)) };
     $('social-setup').hidden = true;
     renderCard();
-    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); }
+    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); sync().catch(() => {}); }
   } catch (e) { $('ss-error').textContent = e.message; }
 }
 
@@ -223,12 +292,20 @@ export function socialSettingsSaved() {
   syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
 }
 
+/** After the ride history or your workouts change here: up to the account in 3 s. */
+export function socialDataChanged() {
+  if (!on() || !currentUser()) return;
+  clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
+}
+
 // ---------- Results ----------
 
 /** The results waiting, sent; their places noted for the finish screen. */
 async function flush(items = []) {
   if (!profileRow) { queueAdd(items); return []; } // the first sign-in's window first: the profile must exist
   const answers = await sendResults(items);
+  if ((await sendRides()).some((r) => r?.status === 'saved')) uaCache.clear();
   for (const { item, result } of answers) if (result) results.set(`${item.segment_id}|${item.time_s}`, result);
   const saved = answers.filter((a) => a.result?.status === 'saved');
   if (saved.length) { ctx.track('social-submit', saved.length > 9 ? '10+' : String(saved.length)); boards.clear(); leaders.clear(); }
@@ -239,8 +316,10 @@ async function flush(items = []) {
  * After a ride (items: its results that may go in the tables). Signed in: they go now (or wait for the
  * network) and the finish screen shows the places; signed out: the finish screen asks you to sign in.
  */
-export async function socialAfterRide(items, { firstName, simulated = false, timed = false } = {}) {
+export async function socialAfterRide(items, { firstName, simulated = false, timed = false, ride = null } = {}) {
   if (!on()) return;
+  // the ride's kilometres and climbing for the ratings across Ukraine: now, or with the first sync after signing in
+  if (ride) sendRides(ride).then((r) => { if (r.some((x) => x?.status === 'saved')) uaCache.clear(); }).catch(() => {});
   const cta = $('sum-social');
   cta.hidden = true;
   results = new Map();
@@ -372,6 +451,189 @@ export function socialSegStart(route, climb) {
 export function socialSegLeader(climbId) {
   const l = on() && leaders.get(climbId);
   return l ? ` · 👑 ${tr('{time} this week, {cat}', { time: ctx.fmtTime(l.time), cat: myCategory() })}` : '';
+}
+
+// ---------- Ratings across Ukraine ----------
+
+const uaCache = new Map(); // filters -> { at, data }, a minute
+const uaPick = (id) => $(id).querySelector('.sel')?.dataset.v || '';
+
+/** Oblast against oblast, or rider against rider, by kilometres or climbing. */
+export function openUa() {
+  if (!on()) return;
+  $('ua-view').hidden = false;
+  if (profileRow?.region && !$('ua-region').dataset.set) { $('ua-region').value = ''; $('ua-region').dataset.set = '1'; }
+  renderUa();
+}
+
+async function renderUa() {
+  const tab = uaPick('ua-tab') || 'regions', period = uaPick('ua-period') || 'week', metric = uaPick('ua-metric') || 'km';
+  const riders = tab === 'riders', region = riders ? $('ua-region').value || null : null, gender = riders ? uaPick('ua-gender') || null : null;
+  $('ua-gender').hidden = !riders;
+  $('ua-region').hidden = !riders;
+  const km = (x) => `${Number(x).toLocaleString(ctx.locale, { maximumFractionDigits: 0 })} ${tr('km')}`;
+  const up = (x) => `${Number(x).toLocaleString(ctx.locale)} ${tr('m')}`;
+  $('ua-head').innerHTML = riders
+    ? `<tr><th>#</th><th>${tr('Rider')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Rides')}</th></tr>`
+    : `<tr><th>#</th><th>${tr('Oblast')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
+  const body = $('ua-rows');
+  body.innerHTML = `<tr><td colspan="5" class="muted">${tr('Loading…')}</td></tr>`;
+  $('ua-empty').hidden = true;
+  // who is not on the board yet, and why
+  const u = currentUser();
+  $('ua-cta').hidden = !!(u && profileRow?.region);
+  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to put your kilometres on the board of your oblast')}`
+    : `<button class="link-btn" data-ua-setup>${tr('Pick your oblast')}</button> ${tr('to ride for it')}`;
+  const si = $('ua-cta').querySelector('[data-ua-signin]'), su = $('ua-cta').querySelector('[data-ua-setup]');
+  if (si) si.onclick = () => signIn(redirect()).catch((e) => status(e.message));
+  if (su) su.onclick = () => openSetup();
+  const key = [tab, period, metric, region, gender, u?.id].join('|');
+  try {
+    let hit = uaCache.get(key);
+    if (!hit || Date.now() - hit.at > 60000) {
+      hit = { at: Date.now(), data: riders ? await riderBoard({ period, metric, region, gender }) : await regionBoard({ period, metric }) };
+      uaCache.set(key, hit);
+    }
+    if (key !== [uaPick('ua-tab') || 'regions', uaPick('ua-period') || 'week', uaPick('ua-metric') || 'km', riders ? $('ua-region').value || null : null, riders ? uaPick('ua-gender') || null : null, currentUser()?.id].join('|')) return; // another filter picked meanwhile
+    const rows = riders ? hit.data.rows : hit.data;
+    $('ua-empty').hidden = !!rows.length;
+    if (riders) {
+      body.innerHTML = withGaps(rows).map((r) => (r.gap ? '<tr class="lb-gap"><td colspan="5">⋯</td></tr>'
+        : `<tr class="${r.me ? 'me' : ''}"><td>${r.place}</td><td>${ctx.esc(r.display_name)}${r.region ? ` <small class="muted">${ctx.esc(regionName(r.region, ctx.lang))}</small>` : ''}</td>`
+          + `<td class="${metric === 'km' ? 'on' : ''}">${km(r.distance_km)}</td><td class="${metric === 'climb' ? 'on' : ''}">${up(r.climb_m)}</td><td>${r.rides}</td></tr>`)).join('');
+    } else {
+      const top = Math.max(1, ...rows.map((r) => Number(metric === 'climb' ? r.climb_m : r.distance_km)));
+      const mine = profileRow?.region;
+      body.innerHTML = rows.map((r) => `<tr class="${r.region === mine ? 'me' : ''}"><td>${r.place}</td>`
+        + `<td>${ctx.esc(regionName(r.region, ctx.lang))}<i class="ua-bar" style="width:${Math.max(4, Math.round((Number(metric === 'climb' ? r.climb_m : r.distance_km) / top) * 100))}%"></i></td>`
+        + `<td class="${metric === 'km' ? 'on' : ''}">${km(r.distance_km)}</td><td class="${metric === 'climb' ? 'on' : ''}">${up(r.climb_m)}</td><td>${r.riders}</td></tr>`).join('');
+    }
+  } catch (e) {
+    uaCache.delete(key);
+    body.innerHTML = `<tr><td colspan="5" class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</td></tr>`;
+  }
+}
+
+// ---------- Group rides (#84) ----------
+const GR_PENDING = 'gruppetto.groupOpen';
+let grRows = [];
+let grFocus = null; // the ride a link opened, shown first and marked
+let grTimer = null;
+
+/** Riding a group ride together: the live channel (social.js groupLive). */
+export const groupChannel = (id, onPacket) => groupLive(id, onPacket);
+
+/** The calendar: what is planned, joining, riding, and a new ride. */
+export function openGroups(focus = null) {
+  if (!on()) return;
+  if (focus) grFocus = focus;
+  $('gr-view').hidden = false;
+  const u = currentUser();
+  $('gr-cta').hidden = !!u;
+  $('gr-cta').innerHTML = `<button class="pill-btn" data-gr-signin>${tr('Sign in with Google')}</button> ${tr('to join group rides and set them up')}`;
+  $('gr-cta').querySelector('[data-gr-signin]').onclick = () => signIn(redirect()).catch((e) => status(e.message));
+  // the form: the routes you can ride together (built in: a GPX of your own is only on your device), from the next hour
+  const list = ctx.routes(), cur = ctx.currentRoute();
+  $('gr-route').innerHTML = list.map((r) => `<option value="${ctx.esc(r.id)}">${ctx.esc(r.name)}</option>`).join('');
+  $('gr-route').value = list.some((r) => r.id === cur?.id) ? cur.id : list[0]?.id || '';
+  if (!$('gr-date').value) {
+    const t = new Date(Date.now() + 3600e3); t.setMinutes(0, 0, 0);
+    const pad = (n) => String(n).padStart(2, '0');
+    $('gr-date').value = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+    $('gr-time').value = `${pad(t.getHours())}:00`;
+  }
+  loadGroups();
+  clearInterval(grTimer); // the «starts in» and the Ride buttons keep up with the clock while the calendar is open
+  grTimer = setInterval(() => { if ($('gr-view').hidden) clearInterval(grTimer); else renderGroups(); }, 15000);
+}
+
+async function loadGroups() {
+  if (!grRows.length) $('gr-list').innerHTML = `<li class="muted">${tr('Loading…')}</li>`;
+  try { grRows = await groupRides(); } catch (e) {
+    $('gr-list').innerHTML = `<li class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</li>`;
+    return;
+  }
+  renderGroups();
+  const f = grFocus && $('gr-list').querySelector(`[data-row="${grFocus}"]`);
+  f?.scrollIntoView({ block: 'nearest' });
+}
+
+const inTime = (s) => (s < 3600 ? tr('{n} min', { n: Math.max(1, Math.ceil(s / 60)) }) : s < 86400 ? tr('{n} h', { n: Math.round(s / 3600) }) : tr('{n} d', { n: Math.round(s / 86400) }));
+
+function renderGroups() {
+  const now = Date.now(), rows = grRows.filter((g) => rideWindow(Date.parse(g.starts_at), now).state !== 'over');
+  $('gr-empty').hidden = !!rows.length;
+  $('gr-list').innerHTML = rows.map((g) => {
+    const w = rideWindow(Date.parse(g.starts_at), now), d = new Date(g.starts_at);
+    const route = ctx.routes().find((r) => r.id === g.route_id);
+    const day = d.toLocaleDateString(ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' });
+    const time = d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' });
+    const state = w.state === 'live' ? `<span class="gr-tag live">${tr('Riding now')}</span>`
+      : w.state === 'open' ? `<span class="gr-tag open">${tr('On the line: starts in {t}', { t: inTime(w.in) })}</span>`
+        : `<span class="gr-tag">${tr('in {t}', { t: inTime(w.in) })}</span>`;
+    const can = route && w.state !== 'later';
+    const acts = [
+      can ? `<button class="primary gr-ride" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
+        : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
+          : `<button class="pill-btn" data-act="join" data-id="${g.id}">${tr('Join')}</button>`,
+      `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to send it to friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
+      g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Call off')}</button>` : '',
+    ].join('');
+    return `<li class="gr-row${g.id === grFocus ? ' focus' : ''}${w.state !== 'later' ? ' soon' : ''}" data-row="${g.id}">`
+      + `<div class="gr-when"><b>${ctx.esc(time)}</b><small>${ctx.esc(day)}</small></div>`
+      + `<div class="gr-what"><b>${ctx.esc(g.title)}</b>`
+      + `<small>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))} · ${ctx.esc(g.host_name || tr('a rider'))} · 👥 ${g.riders}</small>${state}</div>`
+      + `<div class="gr-acts">${acts}</div></li>`;
+  }).join('');
+}
+
+/** A tap on a ride's button: the link, joining or leaving, calling it off, riding. Signed out: to Google first. */
+async function groupAction(ev) {
+  const b = ev.target.closest('[data-act]'), g = b && grRows.find((x) => x.id === b.dataset.id);
+  if (!g) return;
+  const act = b.dataset.act;
+  if (act === 'link') {
+    const url = `${location.origin}${location.pathname}#group=${g.id}`;
+    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Link copied: send it to your friends')); } catch { ctx.toast(url); }
+    ctx.track('social', 'group-link');
+    return;
+  }
+  if (!currentUser()) { sessionStorage.setItem(GR_PENDING, g.id); signIn(redirect()).catch((e) => status(e.message)); return; }
+  if (!profileRow) { openSetup(); return; }
+  try {
+    if (act === 'join' || act === 'leave') { await joinGroupRide(g.id, act === 'join'); ctx.track('social', `group-${act}`); await loadGroups(); }
+    if (act === 'cancel') {
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Tap again to call it off'); return; }
+      await cancelGroupRide(g.id); ctx.track('social', 'group-cancel'); await loadGroups();
+    }
+    if (act === 'ride') {
+      if (!g.joined) await joinGroupRide(g.id, true).catch(() => {});
+      $('gr-view').hidden = true;
+      ctx.track('social', 'group-ride');
+      ctx.startGroupRide({ id: g.id, title: g.title, routeId: g.route_id, startsAt: Date.parse(g.starts_at), me: { id: currentUser().id, name: profileRow.display_name || ctx.settings.name || tr('Rider') } });
+    }
+  } catch (e) { ctx.toast(e.message); }
+}
+
+async function groupCreate(ev) {
+  ev.preventDefault();
+  const err = $('gr-err');
+  err.hidden = true;
+  if (!currentUser()) { signIn(redirect()).catch((e) => status(e.message)); return; }
+  if (!profileRow) { openSetup(); return; }
+  const startsAt = new Date(`${$('gr-date').value}T${$('gr-time').value}`);
+  if (!(startsAt.getTime() > Date.now() - 60e3)) { err.textContent = tr('Pick a time to come'); err.hidden = false; return; }
+  $('gr-create').disabled = true;
+  try {
+    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt });
+    ctx.track('social', 'group-create');
+    $('gr-title').value = '';
+    $('gr-new').open = false;
+    grFocus = id;
+    await loadGroups();
+    const url = `${location.origin}${location.pathname}#group=${id}`;
+    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Group ride set up. Link copied: send it to your friends')); } catch { ctx.toast(tr('Group ride set up')); }
+  } catch (e) { err.textContent = e.message; err.hidden = false; } finally { $('gr-create').disabled = false; }
 }
 
 // every country with a flag, by ISO 3166 code
