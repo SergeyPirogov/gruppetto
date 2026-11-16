@@ -1159,6 +1159,7 @@ function makeBots(n, { race = false } = {}) {
       name: lang === 'uk' ? uk : en, figure: female ? 'female' : 'male', color, stripe, weight, cda: riderCdA(height, weight),
       wkg: Math.round(ftpWkg * level * 10) / 10, rpm: Math.round(rnd(82, 98)), phase: rnd(0, 6.28),
       climber: race && Math.random() < 0.4, // attacks on the climbs
+      passAfter: rnd(2, 5), // s on a wheel before pulling out to pass: some wait, some go at once
     };
   }).sort(() => Math.random() - 0.5);
 }
