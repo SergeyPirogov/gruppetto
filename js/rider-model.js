@@ -750,10 +750,22 @@ function buildGlasses(fit, colors = {}) {
  * green = the accent (stripe) colour, neither = the zip ("kitZip"). Every rider gets their own colours
  * from the same texture.
  */
+/**
+ * The kit mask as a mask, not a colour: one copy per source texture, shared by every rider. A copy each made
+ * the graphics card take the same 2048² image again for every rider who came into the ride (~30 ms: a jerk
+ * each time a rider passed you).
+ */
+const MASKS = new WeakMap();
+function maskTexture(tex) {
+  let t = MASKS.get(tex);
+  if (!t) { t = tex.clone(); t.colorSpace = THREE.NoColorSpace; t.needsUpdate = true; MASKS.set(tex, t); }
+  return t;
+}
+
 function kitMaskMaterial(m, jersey, stripe, zip) {
   const c = m.clone();
   c.color = new THREE.Color('#ffffff');
-  if (c.map) { c.map = c.map.clone(); c.map.colorSpace = THREE.NoColorSpace; c.map.needsUpdate = true; } // a mask, not a colour
+  if (c.map) c.map = maskTexture(c.map);
   const uniforms = {
     kitMain: { value: new THREE.Color(jersey || '#1f6fd6') },
     // the pockets' seams are green in the mask too: paint them the jersey colour, not the accent
