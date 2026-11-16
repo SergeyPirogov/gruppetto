@@ -1033,8 +1033,9 @@ export class Scene3D {
       C.position.set(px - cx * 0.1, py + 1.6, pz - cz * 0.1);
       C.lookAt(behind.x + behind.rx * me.lane, behind.y + 1.1, behind.z + behind.rz * me.lane);
     } else if (cm === 'beside') {
-      // level with you on the verge, inside the fence, on the side of the road with more room, a step ahead
-      const AHEAD = 1.2, at = (me.lane > 0 ? -1 : 1) * (ROAD_HALF + 0.6), f = this.frame(dist + AHEAD);
+      // level with you at the road's edge, on the side with more room, a step ahead. Not on the verge: by the
+      // climbs and sprints the fans stand there (3.95-4.2 m out), and the camera ended up inside a head
+      const AHEAD = 1.2, at = (me.lane > 0 ? -1 : 1) * (ROAD_HALF - 0.3), f = this.frame(dist + AHEAD);
       C.position.set(f.x + f.rx * at, f.y + 1.4, f.z + f.rz * at);
       C.lookAt(px + cx * 1.5, py + 0.95, pz + cz * 1.5);
     } else if (cm === 'wheel') {
@@ -2611,12 +2612,14 @@ export class Scene3D {
         geo.setAttribute('aSkin', new THREE.InstancedBufferAttribute(skin, 3));
         geo.setAttribute('aHair', new THREE.InstancedBufferAttribute(hair, 3));
         const im = new THREE.InstancedMesh(geo, this._fanMaterial(), list.length);
+        im.userData.fan = true;
         list.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
         im.castShadow = true; im.frustumCulled = false;
         group.add(im);
       });
     } else if (fans.length) {
       const im = new THREE.InstancedMesh(M.body, M.mat, fans.length);
+      im.userData.fan = true;
       fans.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
       im.castShadow = true; im.frustumCulled = false;
       group.add(im);
