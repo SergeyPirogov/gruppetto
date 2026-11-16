@@ -2,7 +2,7 @@
 import { encodeActivity } from './fit.js';
 
 export class Recorder {
-  constructor() { this.reset(); }
+  constructor() { this.reset(); this.position = null; } // position: distance (m) → [lat, lon], set per ride (geo.js)
 
   reset() {
     this.samples = [];
@@ -17,7 +17,7 @@ export class Recorder {
   }
 
   toFIT() {
-    return encodeActivity(this.samples, { start: this.startTime || new Date(), lapStarts: this.lapStarts, normalizedPower });
+    return encodeActivity(this.samples, { start: this.startTime || new Date(), lapStarts: this.lapStarts, normalizedPower, position: this.position });
   }
 
   add(sample) {
@@ -55,7 +55,8 @@ export class Recorder {
     const iso = (sec) => new Date(start.getTime() + sec * 1000).toISOString();
     const pts = this.samples.map((x, i) => `
           <Trackpoint>
-            <Time>${iso(i)}</Time>
+            <Time>${iso(i)}</Time>${this.position ? (() => { const [la, lo] = this.position(x.distance); return `
+            <Position><LatitudeDegrees>${la.toFixed(7)}</LatitudeDegrees><LongitudeDegrees>${lo.toFixed(7)}</LongitudeDegrees></Position>`; })() : ''}
             <AltitudeMeters>${x.altitude.toFixed(1)}</AltitudeMeters>
             <DistanceMeters>${x.distance.toFixed(1)}</DistanceMeters>${x.heartRate ? `
             <HeartRateBpm><Value>${Math.round(x.heartRate)}</Value></HeartRateBpm>` : ''}

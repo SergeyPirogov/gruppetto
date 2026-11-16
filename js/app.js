@@ -32,6 +32,7 @@ import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
+import { routeShape, positionFor } from './geo.js';
 import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
 import { nextWeather } from './atmo-blend.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
@@ -1170,6 +1171,8 @@ async function ensureScene() {
   sceneKind = want;
 }
 const recorder = new Recorder();
+/** The GPS track for a ride on this route (by id), when the route is still here. */
+const positionOf = (routeId) => positionFor(routes.find((r) => r.id === routeId));
 
 // ---------- Wind (#50) ----------
 const WIND_SPEED = { off: 0, light: 3, moderate: 6, strong: 9 }; // m/s: 11, 22, 32 km/h
@@ -1306,6 +1309,7 @@ async function startRide(opts) {
   trainer.riderWeight = settings.weight + 8;
   trainer.resetMode();
   recorder.reset();
+  recorder.position = positionFor(route); // the GPS track in the FIT: the real road, or the route's place in the ocean
   updateGear();
   $('lobby').hidden = true;
   if ($('drawer').classList.contains('as-page')) $('drawer').hidden = true; // a lobby page (Devices…) stays in the lobby
@@ -2044,38 +2048,6 @@ $('pip-show-road').onclick = async () => {
 };
 
 // ---------- Minimap ----------
-const MAP_TURN = 2.5; // the 3D renderer's curvature factor: the map has the same bends as the road you see
-const shapes = new WeakMap();
-/**
- * The road from above: { pts (x right, y down), step (m between points) }. An imported route has its
- * real shape (north up); a built-in one is drawn from the bends the 3D world is built from.
- */
-function routeShape(route) {
-  if (shapes.has(route)) return shapes.get(route);
-  if (route.map?.length >= 4) {
-    const pts = [];
-    for (let i = 0; i < route.map.length; i += 2) pts.push([route.map[i], route.map[i + 1]]);
-    const shape = { pts, step: SEG * 10 };
-    shapes.set(route, shape);
-    return shape;
-  }
-  const n = route.segments.length, pts = [];
-  let x = 0, y = 0, h = 0;
-  for (let i = 0; i <= n; i++) {
-    if (i % 4 === 0 || i === n) pts.push([x, y]);
-    const seg = route.segAt(i);
-    x += Math.cos(h) * SEG; y += Math.sin(h) * SEG;
-    h += (seg.curve * MAP_TURN) / SEG;
-  }
-  if (route.startHeading !== undefined) { // the track began heading this way on the map
-    const a = route.startHeading, c = Math.cos(a), s = Math.sin(a);
-    for (const p of pts) { const [px, py] = p; p[0] = px * c + py * s; p[1] = -px * s + py * c; }
-  }
-  const shape = { pts, step: SEG * 4 };
-  shapes.set(route, shape);
-  return shape;
-}
-
 /** The minimap grows into a big map and back (click it, or M). */
 function toggleMinimap(big = !$('minimap-box').classList.contains('big')) {
   $('minimap-box').classList.toggle('big', big);
@@ -2450,7 +2422,7 @@ async function offerDraft() {
   box.hidden = false;
   $('draft-save').onclick = async () => {
     const rec = new Recorder();
-    rec.samples = d.samples; rec.startTime = new Date(d.start); rec.lapStarts = d.lapStarts || [0];
+    rec.samples = d.samples; rec.startTime = new Date(d.start); rec.lapStarts = d.lapStarts || [0]; rec.position = positionOf(d.meta?.routeId);
     const m = d.meta, full = allWorkouts().find((x) => x.id === m.workout?.id);
     const r = {
       workout: full || m.workout, intensity: m.intensity, route: routes.find((x) => x.id === m.routeId) || { id: m.routeId, name: m.routeName },
@@ -2811,7 +2783,7 @@ function showSummary(e, { live = false } = {}) {
   getRide(e.id).then((r) => {
     if (!r || shown.entry !== e) return;
     const rec = new Recorder();
-    rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0];
+    rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0]; rec.position = positionOf(e.routeId);
     shown.rec = rec;
     files(true);
     uploadUi(canUpload(rec) && !e.uploadedId);
@@ -3319,7 +3291,7 @@ async function downloadAllRides() {
       const r = await getRide(e.id);
       if (!r?.samples?.length) { missing++; continue; }
       const rec = new Recorder();
-      rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0];
+      rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0]; rec.position = positionOf(e.routeId);
       files.push({ name: `${rideFileName(rec.startTime, rideTitle(e))}.fit`, data: rec.toFIT(), date: rec.startTime });
     }
     track('backup', !files.length ? 'empty' : files.length < 10 ? '1-9' : files.length < 30 ? '10-29' : '30+');
@@ -3597,6 +3569,7 @@ async function uploadToStrava() {
       description: `${e.routeName} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`,
       externalId: `gruppetto-${e.id}`,
       filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit`,
+      gps: !!rec.position,
     });
     e.stravaId = activityId;
     if (history.includes(e)) saveHistory();
