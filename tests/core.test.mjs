@@ -1027,6 +1027,73 @@ test('race bunch: together on the flat, split by a climb', async () => {
   assert.ok(spread() > 40, `the climb splits it (spread ${spread().toFixed(1)} m)`);
 });
 
+import { standStep } from '../js/standing.js';
+const runStand = (state, input, seconds) => { let up = false; for (let t = 0; t < seconds - 1e-9; t += 0.1) up = standStep(state, input, 0.1); return up; };
+test('standing: a surge stands after 0.4 s', () => {
+  assert.equal(runStand({}, { power: 300, ftp: 250, cadence: 95 }, 0.3), false);
+  assert.equal(runStand({}, { power: 300, ftp: 250, cadence: 95 }, 0.5), true);
+});
+test('standing: a grind stands', () => {
+  assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 65 }, 0.5), true);
+  assert.equal(runStand({}, { power: 100, ftp: 250, cadence: 65 }, 2), false); // under half of FTP: soft-pedalling
+});
+test('standing: sits after 0.8 s of easy riding', () => {
+  assert.equal(runStand({ up: true }, { power: 200, ftp: 250, cadence: 90 }, 0.7), true);
+  assert.equal(runStand({ up: true }, { power: 200, ftp: 250, cadence: 90 }, 0.9), false);
+});
+test('standing: no bobbing at the edge', () => {
+  for (const start of [true, false]) {
+    const s = { up: start };
+    for (let i = 0; i < 100; i++) { // 0.1 s steps, the power switching every 3 steps (0.3 s)
+      const power = Math.floor(i / 3) % 2 ? 310 : 290;
+      assert.equal(standStep(s, { power, ftp: 250, cadence: 90 }, 0.1), start, `step ${i} start=${start}`);
+    }
+  }
+});
+test('standing: coasting sits down', () => {
+  assert.equal(runStand({ up: true }, { power: 0, ftp: 250, cadence: 0 }, 0.9), false);
+});
+test('standing: no cadence uses power only', () => {
+  assert.equal(runStand({}, { power: 320, ftp: 250, cadence: null }, 0.5), true);
+  assert.equal(runStand({ up: true }, { power: 150, ftp: 250, cadence: null }, 0.9), false);
+});
+test('standing: no power never stands', () => {
+  assert.equal(runStand({}, { power: null, ftp: 250, cadence: 60 }, 2), false);
+});
+
+import { readFileSync, statSync } from 'node:fs';
+test('rider assets: both clips and the rock', () => {
+  for (const f of ['male', 'female']) {
+    const glb = readFileSync(new URL(`../assets/riders/${f}.glb`, import.meta.url));
+    const len = glb.readUInt32LE(12), gltf = JSON.parse(glb.subarray(20, 20 + len).toString('utf8'));
+    const names = gltf.animations.map((a) => a.name);
+    assert.ok(names.includes('pedal_cycle') && names.includes('stand_cycle'), `${f}: ${names}`);
+    const cfg = JSON.parse(readFileSync(new URL(`../assets/riders/${f}.json`, import.meta.url), 'utf8'));
+    assert.equal(cfg.standRock?.length, 17, f);
+    assert.ok(cfg.standRock.every((v) => Number.isFinite(v) && Math.abs(v) <= 0.2), f);
+    assert.ok(Number.isFinite(cfg.standRockPivot), f);
+    assert.equal(cfg.standPedalTilt?.length, 3, f);
+    assert.ok(statSync(new URL(`../assets/riders/${f}.glb`, import.meta.url)).size <= 10.2e6, `${f} too big`);
+    // seated by default: no corrective shape key on unless a clip turns it on (s01 at 1 lifted the seated rider off the saddle)
+    for (const m of gltf.meshes) (m.weights || []).forEach((w, i) => assert.equal(w, 0, `${f} ${m.name} ${m.extras?.targetNames?.[i]} default ${w}`));
+    // and each clip still drives its own keys
+    for (const name of ['pedal_cycle', 'stand_cycle']) {
+      const a = gltf.animations.find((x) => x.name === name);
+      assert.ok(a.channels.some((c) => c.target.path === 'weights'), `${f} ${name} has no shape key tracks`);
+    }
+  }
+});
+test('standing: a surge at a stalled cadence stays up (a trainer reading 0 rpm when slow)', () => {
+  const s = {};
+  for (let i = 0; i < 60; i++) { const up = standStep(s, { power: 320, ftp: 250, cadence: 0 }, 0.1); if (i >= 4) assert.equal(up, true, `step ${i}`); }
+});
+test('standing: soft-pedalling after a grind sits down', () => {
+  assert.equal(runStand({ up: true }, { power: 80, ftp: 250, cadence: 55 }, 0.9), false);
+});
+test('standing: a grind right at the power floor does not bob', () => {
+  const s = { up: true };
+  for (let i = 0; i < 100; i++) assert.equal(standStep(s, { power: (i % 6 < 3) ? 120 : 130, ftp: 250, cadence: 65 }, 0.1), true, `step ${i}`);
+});
 import { gradeColor, gradeRuns } from '../js/grade-color.js';
 test('grade colours: stops, blend, clamp', () => {
   assert.equal(gradeColor(0), 'rgb(34,197,94)');

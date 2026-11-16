@@ -32,6 +32,7 @@ import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
+import { standStep } from './standing.js';
 import { gradeRuns } from './grade-color.js';
 import { themeFor } from './themes.js';
 import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
@@ -1436,12 +1437,19 @@ function advance(now = performance.now()) {
     // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
     ride.pedal = animCadence < 5 ? levelPedals(ride.pedal, dt) : ride.pedal + (animCadence / 60) * Math.PI * 2 * dt;
+    // out of the saddle on a surge or a slow grind: power eased over ~1 s, as the HUD shows it; cadence
+    // only when something measures it (a trainer that reports none must not look like coasting)
+    ride.standPow = (ride.standPow ?? power) + (power - (ride.standPow ?? power)) * Math.min(1, dt);
+    const cadKnown = ride.simulated || trainer.sendsCadence || cadenceSensor.connected;
+    ride.stand = standStep(ride.standState ||= {}, { power: ride.standPow, ftp: settings.ftp, cadence: cadKnown ? cadence : null }, dt);
     ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt, ride) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
     ride.lane = keepApart(ride, ride.lane, [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])]);
     if (ride.ghost) {
       const G = ride.ghost, before = G.dist;
       G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
-      G.power = G.entry.chart.pw[Math.min(G.entry.chart.pw.length - 1, Math.floor((ride.elapsed + dt) / G.entry.chart.every))] || 0;
+      const gi = Math.min(G.entry.chart.pw.length - 1, Math.floor((ride.elapsed + dt) / G.entry.chart.every));
+      G.power = G.entry.chart.pw[gi] || 0;
+      G.stand = standStep(G.standState ||= {}, { power: G.power, ftp: settings.ftp, cadence: G.entry.chart.cd ? G.entry.chart.cd[gi] ?? null : null }, dt);
       G.pedal += ((G.dist > before ? 88 : 0) / 60) * Math.PI * 2 * dt;
     }
     if (ride.climbGhost && ride.seg) {
@@ -1462,6 +1470,8 @@ function advance(now = performance.now()) {
       if (!P.free && target && Math.abs(power - target) <= target * 0.05) P.dist += (ride.dist - P.dist) * Math.min(1, dt / 20);
       const pc = liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5);
       P.pedal = pc < 5 ? levelPedals(P.pedal, dt) : P.pedal + (pc / 60) * Math.PI * 2 * dt;
+      // the workout pacer rides your FTP's targets; the free pacer holds his own steady power, so that is his FTP
+      P.stand = standStep(P.standState ||= {}, { power: pw, ftp: P.free ? pw : settings.ftp, cadence: pc }, dt);
       // rides beside you, on the side with more room; switches sides only well past the centre line
       P.side = ride.lane > 0.6 ? -1 : ride.lane < -0.6 ? 1 : (P.side || (ride.lane > 0 ? -1 : 1));
       P.lane = easeLane(P.lane, ride.lane + 1.4 * P.side, dt, P);
@@ -1518,6 +1528,7 @@ function advance(now = performance.now()) {
       }
       const bc = liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.phase * 3);
       b.pedal = bc < 5 ? levelPedals(b.pedal, dt) : b.pedal + (bc / 60) * Math.PI * 2 * dt;
+      b.stand = standStep(b.standState ||= {}, { power: b.power, ftp: b.wkg * b.weight, cadence: bc }, dt); // his steady pace stands in for FTP
     }
     ride.elapsed += dt;
     ride.secAcc += dt;
@@ -1579,7 +1590,7 @@ function frame(now) {
     }
   }
   const riders = [
-    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane, v: ride.v },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, stand: !!ride.stand, self: true, name: settings.name, lane: ride.lane, v: ride.v },
     ...ride.bots,
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),
