@@ -3087,7 +3087,9 @@ export class Scene3D {
       // the near cascade every frame, the middle one every 2nd, the far one every 4th: far shadows
       // change slowly, and each map is read with the matrix it was drawn with, so nothing slides
       const f = (this.shadowFrame = (this.shadowFrame || 0) + 1);
-      this.csm.lights.forEach((l, i) => { if (f % [1, 2, 4][i] === 0) l.shadow.needsUpdate = true; });
+      // staggered, so no frame draws all three (it did every 4th: an uneven beat of heavy and light frames):
+      // the middle one on odd frames, the far one on every 4th even one
+      this.csm.lights.forEach((l, i) => { if (i === 0 || (i === 1 && f % 2 === 1) || (i === 2 && f % 4 === 2)) l.shadow.needsUpdate = true; });
       // The sun you see (disk, its glow and the bright side of the sky) still keeps to the heading, ahead and
       // left, just out of the picture. Put where the light is, a low morning sun came into view in bends,
       // right over the helmet, and the high-quality glow made it a white blot.
