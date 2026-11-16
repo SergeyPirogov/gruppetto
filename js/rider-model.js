@@ -909,13 +909,24 @@ export class ModelRider {
     if (cfg.offset) this.root.position.set(...cfg.offset);
 
     // a cycling clip, but not exercise clips such as Mixamo's "Bicycle Crunch" (a floor exercise)
-    const clip = gltf.animations.find((a) => /cycl|bike|pedal|ride/i.test(a.name) && !/crunch|sit.?up|exercise|kick/i.test(a.name));
+    // (a baked rider also has "stand_cycle": the same crank turn out of the saddle, crossfaded in by pose())
+    const clip = gltf.animations.find((a) => a.name === 'pedal_cycle')
+      || gltf.animations.find((a) => /cycl|bike|pedal|ride/i.test(a.name) && !/crunch|sit.?up|exercise|kick|stand/i.test(a.name));
     if (clip) {
       this.mixer = new THREE.AnimationMixer(this.root);
       this.action = this.mixer.clipAction(clip);
       this.action.play();
       this.clipCadence = cfg.clipCadence || 90;
+      const stand = gltf.animations.find((a) => a.name === 'stand_cycle');
+      if (stand && cfg.clipFollowsCrank && Array.isArray(cfg.standRock)) {
+        this.standAction = this.mixer.clipAction(stand);
+        this.standAction.setEffectiveWeight(0);
+        this.standAction.play();
+      }
     }
+    /** Out of the saddle is possible: the model has a standing clip played in step with the cranks. */
+    this.canStand = !!this.standAction;
+    this._tilt = [0, 0, 0];
     // helmet: built to the measured skull and parented to the head bone, so it follows every pose;
     // the model's own hair is hidden so it can't poke through
     this.headTop = findHeadTop(this.bones.head, this.root);
@@ -956,7 +967,52 @@ export class ModelRider {
     this._placed = true;
   }
 
-  pose(angle, dtSeconds = 0, cadence = 90) {
+  /** The bike's roll out of the saddle (radians, + = leans right) at crank angle `angle`, from the baked clip. */
+  rockAt(angle) {
+    const R = this.cfg.standRock;
+    if (!R) return 0;
+    const n = R.length - 1, turn = Math.PI * 2;
+    const x = ((((angle % turn) + turn) % turn) / turn) * n, i = Math.min(n - 1, Math.floor(x)), t = x - i;
+    return R[i] + (R[i + 1] - R[i]) * t;
+  }
+
+  /** How the pedals tilt with the soles, seated and standing blended by `stand` ([mean, cos, sin] degrees). */
+  pedalTiltAt(stand) {
+    const a = this.cfg.pedalTilt, b = this.cfg.standPedalTilt;
+    if (!a || !b || !stand) return a;
+    for (let k = 0; k < 3; k++) this._tilt[k] = a[k] + (b[k] - a[k]) * stand;
+    return this._tilt;
+  }
+
+  /**
+   * Halfway between sitting and standing: blending the two clips' bone rotations would lift the feet off the
+   * pedals (up to 2 cm at the middle), so each ankle is put where the two clips' ankles blend to, and the leg
+   * solved to it (two bones, the knee bending as the blend has it); the foot turns as the clips' feet blend.
+   */
+  _blendLegs(s) {
+    const legs = ['l', 'r'].map((side) => this.bones[side]).filter((B) => B.upperLeg && B.lowerLeg && B.foot);
+    const take = () => { this.root.updateMatrixWorld(true); return legs.map((B) => ({ ankle: wp(B.foot), q: B.foot.getWorldQuaternion(new THREE.Quaternion()) })); };
+    this.action.setEffectiveWeight(1); this.standAction.setEffectiveWeight(0); this.mixer.update(0);
+    const sit = take();
+    this.action.setEffectiveWeight(0); this.standAction.setEffectiveWeight(1); this.mixer.update(0);
+    const up = take();
+    this.action.setEffectiveWeight(1 - s); this.standAction.setEffectiveWeight(s); this.mixer.update(0);
+    this.root.updateMatrixWorld(true);
+    legs.forEach((B, i) => {
+      const hip = wp(B.upperLeg), knee = wp(B.lowerLeg), ankle = wp(B.foot);
+      const target = sit[i].ankle.clone().lerp(up[i].ankle, s);
+      const bend = knee.clone().sub(hip.clone().add(ankle).multiplyScalar(0.5)); // the way the knee points now
+      const k = solveJoint(hip, target, hip.distanceTo(knee), knee.distanceTo(ankle), bend);
+      aim(B.upperLeg, B.lowerLeg, k);
+      aim(B.lowerLeg, B.foot, target);
+      const q = sit[i].q.clone().slerp(up[i].q, s);
+      B.foot.parent.getWorldQuaternion(_q3);
+      B.foot.quaternion.copy(_q3.invert().multiply(q));
+      B.foot.updateMatrixWorld(true);
+    });
+  }
+
+  pose(angle, dtSeconds = 0, cadence = 90, stand = 0) {
     if (this.skinMat && !this._skinDone && (this._skinTries = (this._skinTries || 0) + 1) % 30 === 1) {
       try {
         const c = sampleSkin(this.root, this.bones);
@@ -969,6 +1025,14 @@ export class ModelRider {
       // one clip = one crank turn, so the feet stay on the pedals at any cadence
       const T = this.action.getClip().duration, turn = Math.PI * 2;
       this.action.time = ((((angle % turn) + turn) % turn) / turn) * T;
+      if (this.standAction) {
+        // both clips at the same point of the crank turn, so the feet stay on the pedals through the blend
+        const s = Math.max(0, Math.min(1, stand));
+        this.standAction.time = this.action.time;
+        if (s > 0.001 && s < 0.999) { this._blendLegs(s); return; }
+        this.action.setEffectiveWeight(1 - s);
+        this.standAction.setEffectiveWeight(s);
+      }
       this.mixer.update(0);
       return;
     }

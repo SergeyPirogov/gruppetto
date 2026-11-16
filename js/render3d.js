@@ -2781,7 +2781,13 @@ export class Scene3D {
       const leanTo = back * Math.max(-0.35, Math.min(0.35, Math.atan(((R.speed || 0) ** 2 * curv) / 9.81)));
       R.lean = (R.lean || 0) + (leanTo - (R.lean || 0)) * Math.min(1, dt * 4);
       if (R.lastD === undefined || d !== R.lastD) { R.lastD = d; R.lastLane = lane; R.lastMoveT = now; }
-      R.group.rotation.set(LEAN_SIGN * R.lean, -(head + (R.yaw || 0)) + (r.oncoming ? Math.PI : 0), slope, 'YXZ');
+      // out of the saddle: eased in and out over half a second; the bike rocks under the rider (the clip is baked
+      // in the bike's frame, so rolling the group puts the bike over and the rider back near upright)
+      R.self = !!r.self;
+      const standTo = R.model?.canStand ? (this.forceStand ?? (r.stand ? 1 : 0)) : 0; // forceStand: 0/1 from devtools (?debug), for measuring
+      R.standW = (R.standW || 0) + Math.max(-dt / 0.5, Math.min(dt / 0.5, standTo - (R.standW || 0)));
+      const rock = R.standW ? R.standW * R.model.rockAt(r.pedal || 0) : 0;
+      R.group.rotation.set(LEAN_SIGN * R.lean + rock, -(head + (R.yaw || 0)) + (r.oncoming ? Math.PI : 0), slope, 'YXZ');
       R.pose(r.pedal || 0);
       R.roll?.(d);
       R.bike?.pose(r.pedal || 0);
@@ -2790,7 +2796,8 @@ export class Scene3D {
         const now = performance.now(), dt = R.lastT ? (now - R.lastT) / 1000 : 0;
         const cadence = dt > 0 ? (((r.pedal || 0) - (R.lastPedal || 0)) / dt) * 60 / (Math.PI * 2) : 0;
         R.lastT = now; R.lastPedal = r.pedal || 0;
-        R.model.pose(r.pedal || 0, dt, cadence);
+        R.model.pose(r.pedal || 0, dt, cadence, R.standW);
+        if (R.bike && R.model.cfg?.standPedalTilt) R.bike.pedalTilt = R.model.pedalTiltAt(R.standW);
       }
       if (r.self) me = { f, lane, R, head: head + (R.yaw || 0) };
     });
