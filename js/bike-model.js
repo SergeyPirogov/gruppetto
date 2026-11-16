@@ -211,6 +211,10 @@ export class ModelBike {
         // what the decals lie on: the frame's paint, the rim (after the colours: a clone drops onBeforeCompile)
         if (/decal/i.test(o.material.name)) decalFade(o.material, color || under.paint || '#808080');
         if (/^accent/i.test(o.material.name)) decalFade(o.material, under.rim || '#202020');
+        // the rim's lacquer was a perfect mirror (clear coat roughness 0): on the rounded edge by the tyre the sun
+        // and the bright sky came back as a white dot a pixel or two wide, which sparkled as the bike leant into
+        // a bend. A satin coat, as carbon rims mostly are: the sheen stays, the dot goes
+        if (/^s5_rim/i.test(o.material.name) && o.material.isMeshPhysicalMaterial) Object.assign(o.material, { clearcoat: 0.5, clearcoatRoughness: 0.25 });
         // reflections: without them gloss, clear coat and metal render flat black (Blender previews with an HDRI)
         if (ENV && o.material.envMap !== ENV) { o.material.envMap = ENV; o.material.envMapIntensity = 0.9; o.material.needsUpdate = true; }
         // the pedal axle is bare between crank and pedal and its material has no metallicFactor (glTF reads
