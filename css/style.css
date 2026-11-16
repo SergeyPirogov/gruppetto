@@ -1460,3 +1460,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   .garage { grid-template-columns: 1fr; grid-template-rows: 46vh 1fr; }
   .garage-side { border-left: 0; border-top: 1px solid var(--line); }
 }
+/* the ratings across Ukraine: a quiet button beside the account's */
+.hdr-ua { background: #182132; color: var(--text); border-color: var(--line); }
+.hdr-ua:hover { background: #223049; }
+.ua-table td:nth-child(3), .ua-table td:nth-child(4) { white-space: nowrap; }
+.ua-table td:nth-child(2) { white-space: normal; font-weight: 600; }
+.ua-table .ua-bar { display: block; height: 4px; margin-top: 4px; border-radius: 2px; background: linear-gradient(90deg, #0057b7, #ffd500); }
+#ua-region { width: auto; }
+.ua-table td:nth-child(4) { font-weight: 400; }
+.ua-table td.on { font-weight: 700; }

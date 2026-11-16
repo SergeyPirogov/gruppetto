@@ -265,3 +265,25 @@ test('social: your workouts go up with their deletions; rides become table rows'
     { id: 'r0', ridden_at: null, entry: null, deleted: true, changed_at: 9 },
   ]);
 });
+
+test('ratings across Ukraine: a ride counts from a trainer only, 5 min and 1 km at least; every oblast has a name', async () => {
+  const { rideTotal, REGIONS, regionName } = await import('../js/social-core.js');
+  const entry = { id: 'r9', date: '2026-11-16T09:00:00Z', summary: { duration: 3600.4, distance: 30123.6, elevationGain: 412.7, avgPower: 201 } };
+  assert.deepEqual(rideTotal(entry, { weight: 72, client: 'test' }), {
+    ride_id: 'r9', ridden_at: '2026-11-16T09:00:00Z', distance_m: 30124, climb_m: 413, duration_s: 3600, avg_power: 201, weight_kg: 72, client: 'test',
+  });
+  assert.equal(rideTotal(entry, { simulated: true, weight: 72 }), null);
+  assert.equal(rideTotal({ ...entry, summary: { ...entry.summary, duration: 200 } }, { weight: 72 }), null);
+  assert.equal(rideTotal({ ...entry, summary: { ...entry.summary, distance: 400 } }, { weight: 72 }), null);
+  assert.equal(rideTotal({ ...entry, summary: { ...entry.summary, avgPower: 0 } }, { weight: 72 }), null);
+  assert.equal(REGIONS.length, 27);
+  assert.equal(new Set(REGIONS.map((r) => r[0])).size, 27);
+  assert.equal(regionName('UA-71', 'uk'), 'Черкаська');
+  assert.equal(regionName('UA-71'), 'Cherkasy');
+  assert.equal(regionName('UA-99', 'uk'), '');
+  // the same oblasts as the server's check
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync(new URL('../supabase/migrations/0003_regions.sql', import.meta.url), 'utf8');
+  const check = sql.slice(sql.indexOf('profiles_region_check check'), sql.indexOf('create or replace view'));
+  assert.deepEqual([...check.matchAll(/'(UA-\d\d)'/g)].map((m) => m[1]).sort(), REGIONS.map((r) => r[0]).sort());
+});
