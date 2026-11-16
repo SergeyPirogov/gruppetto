@@ -23,3 +23,12 @@ run < supabase/migrations/0001_social.sql
 run < supabase/migrations/0003_regions.sql
 run < supabase/migrations/0003_regions.sql # applies twice: safe to paste again
 run < supabase/tests/regions_test.sql
+# group rides (#84), on a fresh database
+run <<'SQL'
+drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
+SQL
+run < supabase/tests/auth_stub.sql
+run < supabase/migrations/0001_social.sql
+run < supabase/migrations/0004_group_rides.sql
+run < supabase/migrations/0004_group_rides.sql # applies twice: safe to paste again
+run < supabase/tests/group_rides_test.sql

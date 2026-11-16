@@ -199,6 +199,36 @@ export async function riderBoard({ period = 'week', metric = 'km', region = null
   return { total: rows[0]?.total ?? 0, rows };
 }
 
+/** The group rides' calendar (#84): [{ id, title, route_id, starts_at, host_name, mine, riders, joined }], soonest first. */
+export async function groupRides(days = 14) {
+  const c = await client();
+  return ok(await c.rpc('group_ride_list', { days })) || [];
+}
+/** A new group ride you host (and have joined): its id. */
+export async function createGroupRide({ title, routeId, startsAt }) {
+  const c = await client();
+  return ok(await c.rpc('create_group_ride', { p_title: title, p_route: routeId, p_starts: new Date(startsAt).toISOString() }));
+}
+export async function cancelGroupRide(id) { ok(await (await client()).rpc('cancel_group_ride', { p_id: id })); }
+export async function joinGroupRide(id, on = true) { ok(await (await client()).rpc('join_group_ride', { p_id: id, p_on: on })); }
+
+/**
+ * Riding a group ride together: a Realtime broadcast channel of its own, where each rider's packet (group.js)
+ * goes to the others. { send(packet), leave() }; onPacket gets the others' packets (never your own).
+ */
+export async function groupLive(id, onPacket) {
+  const c = await client();
+  const ch = c.channel(`group:${id}`, { config: { broadcast: { self: false } } });
+  ch.on('broadcast', { event: 'pos' }, (m) => onPacket(m.payload));
+  let joined = false;
+  ch.subscribe((s) => { joined = s === 'SUBSCRIBED'; });
+  return {
+    get joined() { return joined; },
+    send: (p) => { if (joined) ch.send({ type: 'broadcast', event: 'pos', payload: p }).catch(() => {}); },
+    leave: () => { joined = false; c.removeChannel(ch).catch(() => {}); },
+  };
+}
+
 /** The account and every result in it, gone; signed out here. What is on this device stays. */
 export async function deleteAccount() {
   const c = await client();

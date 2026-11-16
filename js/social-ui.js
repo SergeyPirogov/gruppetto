@@ -4,8 +4,9 @@
 // without a project (social-config.js) init returns at once and none of it shows.
 import {
   socialOn, initSocial, currentUser, onUser, signIn, signOut, loadProfile, saveProfile, queueAdd, queued, sendResults, leaderboard, deleteAccount,
-  loadActivities, saveActivities, sendRides, regionBoard, riderBoard,
+  loadActivities, saveActivities, sendRides, regionBoard, riderBoard, groupRides, createGroupRide, cancelGroupRide, joinGroupRide, groupLive,
 } from './social.js';
+import { rideWindow } from './group.js';
 import {
   SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
   REGIONS, regionName,
@@ -55,6 +56,10 @@ export async function initSocialUi(c) {
     if (profileRow) c.toast(tr('Signed in: {name}', { name: profileRow.display_name }));
   }
   renderRoute();
+  // a group ride's link (#group=<id>), or one you were about to join before signing in
+  const linked = /^#group=([0-9a-f-]{36})$/i.exec(location.hash)?.[1] || sessionStorage.getItem(GR_PENDING);
+  sessionStorage.removeItem(GR_PENDING);
+  if (linked) { if (location.hash) history.replaceState(null, '', location.pathname + location.search); openGroups(linked); }
 }
 
 function status(text) { const el = $('social-status'); if (el) el.textContent = text || ''; }
@@ -98,6 +103,12 @@ function buildUi() {
     };
   }
   $('ua-region').onchange = renderUa;
+  // group rides
+  $('hdr-group').hidden = false;
+  $('hdr-group').onclick = () => { ctx.track('social', 'group-list'); openGroups(); };
+  for (const el of document.querySelectorAll('[data-gr-close]')) el.onclick = () => { $('gr-view').hidden = true; };
+  $('gr-list').onclick = groupAction;
+  $('gr-form').onsubmit = groupCreate;
   // the table
   for (const el of document.querySelectorAll('[data-lb-close]')) el.onclick = () => { $('lb-view').hidden = true; };
   $('lb-signin').onclick = () => signIn(redirect()).catch((e) => status(e.message));
@@ -501,6 +512,128 @@ async function renderUa() {
     uaCache.delete(key);
     body.innerHTML = `<tr><td colspan="5" class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</td></tr>`;
   }
+}
+
+// ---------- Group rides (#84) ----------
+const GR_PENDING = 'gruppetto.groupOpen';
+let grRows = [];
+let grFocus = null; // the ride a link opened, shown first and marked
+let grTimer = null;
+
+/** Riding a group ride together: the live channel (social.js groupLive). */
+export const groupChannel = (id, onPacket) => groupLive(id, onPacket);
+
+/** The calendar: what is planned, joining, riding, and a new ride. */
+export function openGroups(focus = null) {
+  if (!on()) return;
+  if (focus) grFocus = focus;
+  $('gr-view').hidden = false;
+  const u = currentUser();
+  $('gr-cta').hidden = !!u;
+  $('gr-cta').innerHTML = `<button class="pill-btn" data-gr-signin>${tr('Sign in with Google')}</button> ${tr('to join group rides and set them up')}`;
+  $('gr-cta').querySelector('[data-gr-signin]').onclick = () => signIn(redirect()).catch((e) => status(e.message));
+  // the form: the routes you can ride together (built in: a GPX of your own is only on your device), from the next hour
+  const list = ctx.routes(), cur = ctx.currentRoute();
+  $('gr-route').innerHTML = list.map((r) => `<option value="${ctx.esc(r.id)}">${ctx.esc(r.name)}</option>`).join('');
+  $('gr-route').value = list.some((r) => r.id === cur?.id) ? cur.id : list[0]?.id || '';
+  if (!$('gr-date').value) {
+    const t = new Date(Date.now() + 3600e3); t.setMinutes(0, 0, 0);
+    const pad = (n) => String(n).padStart(2, '0');
+    $('gr-date').value = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+    $('gr-time').value = `${pad(t.getHours())}:00`;
+  }
+  loadGroups();
+  clearInterval(grTimer); // the «starts in» and the Ride buttons keep up with the clock while the calendar is open
+  grTimer = setInterval(() => { if ($('gr-view').hidden) clearInterval(grTimer); else renderGroups(); }, 15000);
+}
+
+async function loadGroups() {
+  if (!grRows.length) $('gr-list').innerHTML = `<li class="muted">${tr('Loading…')}</li>`;
+  try { grRows = await groupRides(); } catch (e) {
+    $('gr-list').innerHTML = `<li class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</li>`;
+    return;
+  }
+  renderGroups();
+  const f = grFocus && $('gr-list').querySelector(`[data-row="${grFocus}"]`);
+  f?.scrollIntoView({ block: 'nearest' });
+}
+
+const inTime = (s) => (s < 3600 ? tr('{n} min', { n: Math.max(1, Math.ceil(s / 60)) }) : s < 86400 ? tr('{n} h', { n: Math.round(s / 3600) }) : tr('{n} d', { n: Math.round(s / 86400) }));
+
+function renderGroups() {
+  const now = Date.now(), rows = grRows.filter((g) => rideWindow(Date.parse(g.starts_at), now).state !== 'over');
+  $('gr-empty').hidden = !!rows.length;
+  $('gr-list').innerHTML = rows.map((g) => {
+    const w = rideWindow(Date.parse(g.starts_at), now), d = new Date(g.starts_at);
+    const route = ctx.routes().find((r) => r.id === g.route_id);
+    const day = d.toLocaleDateString(ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' });
+    const time = d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' });
+    const state = w.state === 'live' ? `<span class="gr-tag live">${tr('Riding now')}</span>`
+      : w.state === 'open' ? `<span class="gr-tag open">${tr('On the line: starts in {t}', { t: inTime(w.in) })}</span>`
+        : `<span class="gr-tag">${tr('in {t}', { t: inTime(w.in) })}</span>`;
+    const can = route && w.state !== 'later';
+    const acts = [
+      can ? `<button class="primary gr-ride" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
+        : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
+          : `<button class="pill-btn" data-act="join" data-id="${g.id}">${tr('Join')}</button>`,
+      `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to send it to friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
+      g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Call off')}</button>` : '',
+    ].join('');
+    return `<li class="gr-row${g.id === grFocus ? ' focus' : ''}${w.state !== 'later' ? ' soon' : ''}" data-row="${g.id}">`
+      + `<div class="gr-when"><b>${ctx.esc(time)}</b><small>${ctx.esc(day)}</small></div>`
+      + `<div class="gr-what"><b>${ctx.esc(g.title)}</b>`
+      + `<small>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))} · ${ctx.esc(g.host_name || tr('a rider'))} · 👥 ${g.riders}</small>${state}</div>`
+      + `<div class="gr-acts">${acts}</div></li>`;
+  }).join('');
+}
+
+/** A tap on a ride's button: the link, joining or leaving, calling it off, riding. Signed out: to Google first. */
+async function groupAction(ev) {
+  const b = ev.target.closest('[data-act]'), g = b && grRows.find((x) => x.id === b.dataset.id);
+  if (!g) return;
+  const act = b.dataset.act;
+  if (act === 'link') {
+    const url = `${location.origin}${location.pathname}#group=${g.id}`;
+    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Link copied: send it to your friends')); } catch { ctx.toast(url); }
+    ctx.track('social', 'group-link');
+    return;
+  }
+  if (!currentUser()) { sessionStorage.setItem(GR_PENDING, g.id); signIn(redirect()).catch((e) => status(e.message)); return; }
+  if (!profileRow) { openSetup(); return; }
+  try {
+    if (act === 'join' || act === 'leave') { await joinGroupRide(g.id, act === 'join'); ctx.track('social', `group-${act}`); await loadGroups(); }
+    if (act === 'cancel') {
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Tap again to call it off'); return; }
+      await cancelGroupRide(g.id); ctx.track('social', 'group-cancel'); await loadGroups();
+    }
+    if (act === 'ride') {
+      if (!g.joined) await joinGroupRide(g.id, true).catch(() => {});
+      $('gr-view').hidden = true;
+      ctx.track('social', 'group-ride');
+      ctx.startGroupRide({ id: g.id, title: g.title, routeId: g.route_id, startsAt: Date.parse(g.starts_at), me: { id: currentUser().id, name: profileRow.display_name || ctx.settings.name || tr('Rider') } });
+    }
+  } catch (e) { ctx.toast(e.message); }
+}
+
+async function groupCreate(ev) {
+  ev.preventDefault();
+  const err = $('gr-err');
+  err.hidden = true;
+  if (!currentUser()) { signIn(redirect()).catch((e) => status(e.message)); return; }
+  if (!profileRow) { openSetup(); return; }
+  const startsAt = new Date(`${$('gr-date').value}T${$('gr-time').value}`);
+  if (!(startsAt.getTime() > Date.now() - 60e3)) { err.textContent = tr('Pick a time to come'); err.hidden = false; return; }
+  $('gr-create').disabled = true;
+  try {
+    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt });
+    ctx.track('social', 'group-create');
+    $('gr-title').value = '';
+    $('gr-new').open = false;
+    grFocus = id;
+    await loadGroups();
+    const url = `${location.origin}${location.pathname}#group=${id}`;
+    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Group ride set up. Link copied: send it to your friends')); } catch { ctx.toast(tr('Group ride set up')); }
+  } catch (e) { err.textContent = e.message; err.hidden = false; } finally { $('gr-create').disabled = false; }
 }
 
 // every country with a flag, by ISO 3166 code
