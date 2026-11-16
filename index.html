@@ -374,16 +374,17 @@
             <select id="f-shift">
               <option value="wheel">Like Zwift</option>
               <option value="grade">Via grade</option>
+              <option value="off">Off — I shift on the bike</option>
             </select>
           </label>
-            <label>Chainring
+            <label class="gear-teeth">Chainring
               <select id="f-chainring">
                 <option value="34">34</option><option value="36">36</option><option value="39">39</option>
                 <option value="42">42</option><option value="46">46</option><option value="50">50</option>
                 <option value="52">52</option><option value="53">53</option>
               </select>
             </label>
-            <label>Rear cog
+            <label class="gear-teeth">Rear cog
               <select id="f-cog">
                 <option value="11">11</option><option value="12">12</option><option value="13">13</option>
                 <option value="14">14</option><option value="15">15</option><option value="16">16</option>
@@ -392,7 +393,8 @@
               </select>
             </label>
           </div>
-          <p class="muted fields-note wide">The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.</p>
+          <p id="gears-note" class="muted fields-note wide">The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.</p>
+          <p id="gears-note-off" class="muted fields-note wide" hidden>A cassette and a derailleur on the bike: shift there, as on the road. The trainer gets the real wheel size; the buttons change gears only in a workout (intensity).</p>
 
         </div>
       </div>
