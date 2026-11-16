@@ -35,7 +35,7 @@ export const UK = {
   'Drag to turn, scroll to zoom': 'Тягни, щоб повернути, колесо — наблизити', 'Kits': 'Готові форми', '🎲 Surprise me': '🎲 Здивуй мене',
   'Rider': 'Райдер', 'Bike': 'Байк', 'Done': 'Готово', 'Blue & yellow': 'Синьо-жовта', 'Night': 'Ніч', 'Sunrise': 'Світанок', 'Forest': 'Ліс', 'Ice': 'Лід',
   'Heights': 'Висоти', 'Buildings, woods and water from the map': 'Будинки, ліси й вода з карти', 'waiting for the server': 'чекаю на сервер',
-  '{i} of {n}': '{i} з {n}', 'Go on without the map': 'Далі без карти', 'skipped, simple scenery': 'пропущено, простий краєвид',
+  '{i} of {n}': '{i} з {n}', 'Skip the map': 'Пропустити карту', 'server {i} of {n}': 'сервер {i} з {n}', 'The road, heights and bends stay real; buildings, woods and water are made up': 'Дорога, висоти й повороти лишаються справжні; будинки, ліси й вода — вигадані', 'skipped, simple scenery': 'пропущено, простий краєвид',
   'unavailable, simple scenery': 'недоступна, простий краєвид', 'from the file': 'з файлу', 'Building the road…': 'Будую дорогу…',
   'Loading terrain and map…': 'Завантажую рельєф і карту…', 'map ✓': 'карта ✓',
   'Loading terrain…': 'Завантажую рельєф…', 'Loading terrain… {done}/{total}': 'Завантажую рельєф… {done}/{total}',

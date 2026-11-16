@@ -93,7 +93,7 @@ const TUNNEL_R = 4.6, TUNNEL_WALL = 3.2, TUNNEL_HILL = 11; // a tunnel: half its
 const HOUSE_TINTS = ['#ffffff', '#fff0d6', '#e6eeff', '#ffe0d0', '#eaf5df', '#fff7c8'].map((c) => new THREE.Color(c));
 const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || (LOW ? 1 : 2); // ?csm=3 to compare
 const CSM_FAR = LOW ? 120 : 240;
-const RIDER_FILL = 0.6; // of the sky's fill on the riders (see _riderFill)
+const RIDER_FILL = 0.95; // of the sky's fill on the riders (see _riderFill)
 const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
 let preloaded = null;
 /** Starts the bike, rider and scenery downloads once, from the lobby, so the ride starts with them ready. */
