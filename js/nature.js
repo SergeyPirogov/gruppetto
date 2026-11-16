@@ -3,7 +3,7 @@
 // variant is split into parts by material (bark, leaves...) so the scene can draw thousands of
 // copies with one InstancedMesh per part. Without the files the scene keeps its built-in shapes.
 import * as THREE from 'three';
-import { gltfLoader } from './gltf.js';
+import { gltfLoader, ANISO } from './gltf.js';
 
 const DIR = 'assets/nature/';
 
@@ -90,7 +90,7 @@ export async function loadNature() {
   for (const [name, m] of Object.entries(NATURE_MATERIALS)) {
     const t = texLoader.load(`${DIR}textures/${m.map}`);
     t.colorSpace = THREE.SRGBColorSpace;
-    t.anisotropy = 4;
+    t.anisotropy = ANISO.value;
     textures[name] = t;
   }
   const types = {};

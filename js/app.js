@@ -19,23 +19,27 @@ import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
 import { bunchPower, BUNCH } from './bunch.js';
 import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl, STRAVA_STATE } from './strava.js';
+import { GarminClient, garminOn, garminAvailable, garminActivityUrl } from './garmin.js';
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
-import { averages, rideItems, categoryOf } from './social-core.js';
+import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
-import { initSocialUi, socialSettingsSaved, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { initSocialUi, groupChannel, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
+import { standStep } from './standing.js';
+import { gradeRuns } from './grade-color.js';
 import { themeFor } from './themes.js';
 import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
 import { nextWeather } from './atmo-blend.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
 import { PASS_AFTER, heldBy, pickLane } from './passing.js';
+import { Mates, packet as groupPacket } from './group.js';
 
 const $ = (id) => document.getElementById(id);
 // units in the interface language
@@ -44,10 +48,10 @@ const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm')
 // ---------- Settings ----------
 const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
-  icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
+  icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
-  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, shiftButtons: true, sound: true, voice: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
+  intensity: 100, shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -63,6 +67,7 @@ if (!settings.pacerOffByDefault) {
 if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__ride', { get: () => ride });
   Object.defineProperty(window, '__scene', { get: () => scene });
+  window.__groupRide = (g) => startRide({ group: g }); // a group ride without an account (the browser tests)
   window.__pretendTrainer = false; // true: a simulator ride counts as a real one for the leaderboards (the browser tests)
   window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async () => null }; renderModes(); }; // try the plan box and uploads without an account
 }
@@ -378,6 +383,8 @@ function initLobby() {
   bind('f-bike', 'bikeColor', false);
   $('f-bike').value = settings.bikeColor || settings.jersey; // until one is picked, the frame wears the jersey's colour
   bind('f-tape', 'tapeColor', false);
+  bind('f-decal', 'decalColor', false);
+  $('f-decal').value = settings.decalColor || settings.stripe; // until one is picked, the wheel lettering wears the accent
   bind('f-helmet', 'helmetColor', false);
   bind('f-lens', 'lensColor', false);
   bind('f-figure', 'figure', false);
@@ -442,6 +449,7 @@ function initLobby() {
   updateDeviceUI();
   initIntervals();
   initStrava();
+  initGarmin();
 }
 
 /** The route cards in groups: flat, hilly, mountain, and the routes you imported. */
@@ -513,15 +521,43 @@ async function importGpx(ev) {
     const start = $('btn-start'), startText = start.textContent;
     start.disabled = true; start.textContent = tr('Importing GPX…');
     restoreStart = () => { start.disabled = false; start.textContent = startText; };
-    let tiles = '…', map = '…';
-    const show = () => infoBox(`${tr('Importing {name}', { name: track.name || file.name })}: ${tr('terrain')} ${tiles} · ${tr('map')} ${map}`);
+    // what the import waits for, said plainly: the heights come in tiles (a count), the map is one query to a
+    // public server that may take a minute or more (a clock, which server, and a way to go on without it)
+    const t0 = performance.now(), skip = new AbortController();
+    let tiles = '…', mapState = 'wait', server = 1, servers = 1;
+    let building = false;
+    const show = () => {
+      const sec = Math.round((performance.now() - t0) / 1000);
+      // one row per step: a spinner while it runs, a tick when done, a dash when it went without
+      const heights = tiles === '…' ? ['run', tr('Heights'), ''] : tiles === tr('from the file') ? ['off', tr('Heights'), tiles] : [/✓/.test(tiles) ? 'ok' : 'run', tr('Heights'), tiles.replace('✓ ', '')];
+      const map = [mapState === 'ok' ? 'ok' : mapState === 'wait' ? 'run' : 'off', tr('Buildings, woods and water from the map'),
+        mapState === 'ok' ? '' : mapState === 'skip' ? tr('skipped, simple scenery') : mapState === 'off' ? tr('unavailable, simple scenery')
+          : `${servers > 1 && server > 1 ? `${tr('server {i} of {n}', { i: server, n: servers })} · ` : ''}${sec} ${tr('s')}`];
+      const rows = [heights, map, ...(building ? [['run', tr('Building the road…'), '']] : [])];
+      const el = $('lobby-msg');
+      el.innerHTML = `<div class="imp"><div class="imp-main"><b class="imp-title">${esc(tr('Importing {name}', { name: track.name || file.name }))}</b>`
+        + `<ul class="imp-steps">${rows.map(([st, what, more]) => `<li class="imp-${st}"><i aria-hidden="true"></i><span>${esc(what)}</span>${more ? `<small>${esc(more)}</small>` : ''}</li>`).join('')}</ul></div>`
+        + `${mapState === 'wait' ? `<button class="pill-btn imp-skip" id="imp-skip" title="${esc(tr('The road, heights and bends stay real; buildings, woods and water are made up'))}">${esc(tr('Skip the map'))}</button>` : ''}</div>`;
+      el.hidden = false; el.classList.add('info'); clearTimeout(alertBox.t);
+      const btn = $('imp-skip');
+      if (btn) btn.onclick = () => { mapState = 'skip'; skip.abort(); show(); };
+    };
     show();
-    const [elevation, osm] = await Promise.all([
-      loadTerrain(track.points, { onProgress: (done, total) => { tiles = `${done}/${total}`; show(); } })
-        .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); return null; }),
-      fetchOsm(track.points).then((d) => { map = '✓'; show(); return d; })
-        .catch((err) => { console.info('Map data unavailable, generic scenery', err); map = '—'; show(); return null; }),
-    ]);
+    const clock = setInterval(() => { if (mapState === 'wait') show(); }, 1000);
+    let elevation, osm;
+    try {
+      [elevation, osm] = await Promise.all([
+        loadTerrain(track.points, { onProgress: (done, total) => { tiles = done >= total ? `✓ ${total}/${total}` : `${done}/${total}`; show(); } })
+          .then((e) => { if (tiles === '…') { tiles = '✓'; show(); } return e; })
+          .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); tiles = tr('from the file'); show(); return null; }),
+        fetchOsm(track.points, { signal: skip.signal, onTry: (i, n) => { server = i; servers = n; show(); } })
+          .then((d) => { mapState = 'ok'; show(); return d; })
+          .catch((err) => { console.info('Map data unavailable, generic scenery', err); if (mapState !== 'skip') mapState = 'off'; show(); return null; }),
+      ]);
+    } finally { clearInterval(clock); }
+    // building the road and its scenery holds the page a moment: say so, and let the message paint first
+    building = true; show();
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
     const def = routeFromTrack(track, file.name, { elevation, osm });
     $('lobby-msg').hidden = true;
     const route = new Route(def);
@@ -563,7 +599,23 @@ function alertBox(msg) {
 // your own workouts: imported from .zwo files or made in the builder (#28, #36)
 const MY_KEY = 'gruppetto.workouts';
 let myWorkouts = (() => { try { return JSON.parse(localStorage.getItem(MY_KEY) || '[]'); } catch { return []; } })();
-const saveMyWorkouts = () => { try { localStorage.setItem(MY_KEY, JSON.stringify(myWorkouts)); } catch { /* storage full or blocked */ } };
+// signed in, they follow you to every device: each carries when it last changed, a deleted one when it went
+const readJson = (key, empty) => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? empty; } catch { return empty; } };
+const writeJson = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage full or blocked */ } };
+const MY_DEL_KEY = 'gruppetto.workouts.deleted';
+let myWorkoutsDeleted = readJson(MY_DEL_KEY, {});
+const seenWorkouts = new Map();
+stampChanged(myWorkouts, seenWorkouts);
+const writeMyWorkouts = () => writeJson(MY_KEY, myWorkouts);
+const saveMyWorkouts = () => {
+  const gone = new Set(seenWorkouts.keys());
+  for (const w of myWorkouts) gone.delete(w.id);
+  for (const id of gone) { myWorkoutsDeleted[id] = Date.now(); seenWorkouts.delete(id); }
+  if (gone.size) writeJson(MY_DEL_KEY, myWorkoutsDeleted);
+  stampChanged(myWorkouts, seenWorkouts);
+  writeMyWorkouts();
+  socialDataChanged();
+};
 const allWorkouts = () => [...icuWorkouts, ...myWorkouts, ...workouts];
 
 /** Today's and tomorrow's workouts from the intervals.icu calendar, right in the lobby. */
@@ -1111,6 +1163,7 @@ function makeBots(n, { race = false } = {}) {
       name: lang === 'uk' ? uk : en, figure: female ? 'female' : 'male', color, stripe, weight, cda: riderCdA(height, weight),
       wkg: Math.round(ftpWkg * level * 10) / 10, rpm: Math.round(rnd(82, 98)), phase: rnd(0, 6.28),
       climber: race && Math.random() < 0.4, // attacks on the climbs
+      passAfter: rnd(2, 5), // s on a wheel before pulling out to pass: some wait, some go at once
     };
   }).sort(() => Math.random() - 0.5);
 }
@@ -1267,10 +1320,12 @@ async function startRide(opts) {
   const wentFull = watching ? false : installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
   if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); if (pipAsk) closePip(); return; }
   if (await wentFull) rideFullscreen = true;
-  const route = routes.find((r) => r.id === settings.routeId) || routes[0];
-  const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
+  // a group ride (#84): its route, a free ride with the others live instead of the bots, held on the line till the start
+  const group = opts?.group || null;
+  const route = (group && routes.find((r) => r.id === group.routeId)) || routes.find((r) => r.id === settings.routeId) || routes[0];
+  const workout = group ? null : allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
-  const racing = settings.mode === 'race';
+  const racing = !group && settings.mode === 'race';
   const laps = route.oneWay ? 1 : Math.max(1, settings.raceLaps || 1);
   ride = {
     route, workout, simulated,
@@ -1287,16 +1342,24 @@ async function startRide(opts) {
         const lane = [-2.0, -0.4, 2.0][i % 3], home = lane;
         return { ...b, dist: -1.6 - Math.floor(i / 3) * 1.9, v: 0, pedal: i, lane, home, laneTarget: lane, line: BUNCH.lines[i % 2] };
       })
-      : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
+      : group ? [] : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     race: racing ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
-    attacks: !racing && !workout && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
+    attacks: !racing && !workout && !group && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
-    ghost: racing ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
+    ghost: racing || group ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
-    pacer: racing ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
+    pacer: racing || group ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
   if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
-  track('ride-start', [racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
+  if (group) {
+    // on the line, a place of your own: four across, rows 1.9 m apart, picked by your account (the others' differ)
+    const slot = [...String(group.me.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 12;
+    ride.lane = ride.laneTarget = ride.laneHome = [-1.8, -0.6, 0.6, 1.8][slot % 4];
+    ride.dist = -Math.floor(slot / 4) * 1.9;
+    ride.group = { id: group.id, title: group.title, t0: group.startsAt, go: Date.now() >= group.startsAt, me: group.me, mates: new Mates(group.me.id), live: null, sentAt: 0 };
+    groupChannel(group.id, (p) => ride?.group?.mates.receive(p, Date.now())).then((live) => { if (ride?.group?.id === group.id) ride.group.live = live; else live.leave(); }).catch((e) => toast(e.message));
+  }
+  track('ride-start', [group ? 'group' : racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   // on the grid in the first row with the bunch, the front wheel just behind the line (the bike is ~1.7 m long)
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; ride.dist = -1.6; }
@@ -1318,8 +1381,9 @@ async function startRide(opts) {
   $('wk-intensity').hidden = !workout;
   $('wk-steps').hidden = !workout;
   $('race-board').hidden = !racing;
-  $('countdown').hidden = !racing;
-  $('minimap-box').classList.toggle('big', !!settings.bigMap); $('minimap-size').textContent = settings.bigMap ? '⤡' : '⤢'; // as you left it
+  $('countdown').hidden = !racing && !group;
+  $('minimap-box').classList.toggle('big', !!settings.bigMap); mapZoomLabel(); // as you left it
+  hidePanel('map', !!settings.hideMap); hidePanel('profile', !!settings.hideProfile);
   ride.stepStats = [];
   $('wk-pacer-btn').classList.toggle('on', settings.pacer === true);
   $('wk-erg-btn').classList.add('on'); // every workout starts in ERG
@@ -1386,6 +1450,11 @@ function advance(now = performance.now()) {
     if (ride.race.countdown <= 0) { ride.race.go = true; ride.race.t0 = ride.elapsed; cueBeep(1320, 0.45); }
     left = 0;
   }
+  if (ride.group && !ride.group.go) { // a group ride: on the line till the time it starts, the clock waiting too
+    if (Date.now() >= ride.group.t0) { ride.group.go = true; cueBeep(1320, 0.45); } else { t += left * 1000; left = 0; }
+  }
+  groupSend();
+  const mates = ride.group ? ride.group.mates.list(Date.now()) : [];
   updateWind();
   const W = ride.wind || { head: 0, cross: 0 };
   while (left > 1e-6) {
@@ -1395,7 +1464,7 @@ function advance(now = performance.now()) {
     const cadence = cadenceAt(t, power);
     const grade = route.gradeAt(ride.dist);
     // drafting: the shelter of the riders ahead (deeper in a bunch), and a little from one close behind
-    const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
+    const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...mates];
     ride.draft = packDraft(pack.map((o) => ({ gap: o.dist - ride.dist, sideways: o.lane - ride.lane })), W.cross);
     ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft), wind: W.head });
     // your speed on your own, out of the wind shadow: faster than the wheel ahead -> you come past it,
@@ -1418,12 +1487,19 @@ function advance(now = performance.now()) {
     // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
     const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
     ride.pedal = animCadence < 5 ? levelPedals(ride.pedal, dt) : ride.pedal + (animCadence / 60) * Math.PI * 2 * dt;
+    // out of the saddle on a surge or a slow grind: power eased over ~1 s, as the HUD shows it; cadence
+    // only when something measures it (a trainer that reports none must not look like coasting)
+    ride.standPow = (ride.standPow ?? power) + (power - (ride.standPow ?? power)) * Math.min(1, dt);
+    const cadKnown = ride.simulated || trainer.sendsCadence || cadenceSensor.connected;
+    ride.stand = standStep(ride.standState ||= {}, { power: ride.standPow, ftp: settings.ftp, cadence: cadKnown ? cadence : null }, dt);
     ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt, ride) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
     ride.lane = keepApart(ride, ride.lane, [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])]);
     if (ride.ghost) {
       const G = ride.ghost, before = G.dist;
       G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
-      G.power = G.entry.chart.pw[Math.min(G.entry.chart.pw.length - 1, Math.floor((ride.elapsed + dt) / G.entry.chart.every))] || 0;
+      const gi = Math.min(G.entry.chart.pw.length - 1, Math.floor((ride.elapsed + dt) / G.entry.chart.every));
+      G.power = G.entry.chart.pw[gi] || 0;
+      G.stand = standStep(G.standState ||= {}, { power: G.power, ftp: settings.ftp, cadence: G.entry.chart.cd ? G.entry.chart.cd[gi] ?? null : null }, dt);
       G.pedal += ((G.dist > before ? 88 : 0) / 60) * Math.PI * 2 * dt;
     }
     if (ride.climbGhost && ride.seg) {
@@ -1444,6 +1520,8 @@ function advance(now = performance.now()) {
       if (!P.free && target && Math.abs(power - target) <= target * 0.05) P.dist += (ride.dist - P.dist) * Math.min(1, dt / 20);
       const pc = liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5);
       P.pedal = pc < 5 ? levelPedals(P.pedal, dt) : P.pedal + (pc / 60) * Math.PI * 2 * dt;
+      // the workout pacer rides your FTP's targets; the free pacer holds his own steady power, so that is his FTP
+      P.stand = standStep(P.standState ||= {}, { power: pw, ftp: P.free ? pw : settings.ftp, cadence: pc }, dt);
       // rides beside you, on the side with more room; switches sides only well past the centre line
       P.side = ride.lane > 0.6 ? -1 : ride.lane < -0.6 ? 1 : (P.side || (ride.lane > 0 ? -1 : 1));
       P.lane = easeLane(P.lane, ride.lane + 1.4 * P.side, dt, P);
@@ -1451,7 +1529,7 @@ function advance(now = performance.now()) {
     // overtaking: a rider closing on someone in the same lane swings out to a free one, then back
     if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
       ride.laneCheck = 0;
-      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, heldFor: ride.heldFor, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
+      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, heldFor: ride.heldFor, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...mates];
       const inBunch = ride.race && ride.race.go && ride.elapsed - (ride.race.t0 ?? 0) > 8;
       for (const b of ride.bots) {
         const lane = pickLane(b, solid, inBunch && b.line != null ? b.line : b.home);
@@ -1500,6 +1578,7 @@ function advance(now = performance.now()) {
       }
       const bc = liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.phase * 3);
       b.pedal = bc < 5 ? levelPedals(b.pedal, dt) : b.pedal + (bc / 60) * Math.PI * 2 * dt;
+      b.stand = standStep(b.standState ||= {}, { power: b.power, ftp: b.wkg * b.weight, cadence: bc }, dt); // his steady pace stands in for FTP
     }
     ride.elapsed += dt;
     ride.secAcc += dt;
@@ -1550,23 +1629,28 @@ function crowdLevel() {
 function frame(now) {
   if (!ride) return;
   advance(now);
-  if (settings.sound) { if (ride.paused) crowdOff(); else crowd(crowdLevel()); }
-  if (ride.race) {
-    const c = ride.race.countdown, el = $('countdown');
-    const txt = ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
+  // the fans on the climbs: not with the sound or the fans off, on a pause, or while you watch something else
+  // with the numbers in the mini window or the Mac overlay (the road isn't drawn then, and the cheering got over a film)
+  if (settings.sound && settings.crowd !== false && !ride.paused && !pipOpen() && !overlayOn()) crowd(crowdLevel()); else crowdOff();
+  if (ride.race || ride.group) {
+    const G = ride.group, c = G ? (G.t0 - Date.now()) / 1000 : ride.race.countdown, el = $('countdown');
+    const txt = G ? (G.go ? (Date.now() - G.t0 < 1500 ? tr('GO!') : '') : c > 3 ? tr('Group start in {t}', { t: fmtTime(Math.ceil(c)) }) : String(Math.ceil(c)))
+      : ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
+    el.classList.toggle('wait', !!G && !G.go && c > 3);
     if (el.textContent !== txt) {
       el.textContent = txt; el.hidden = !txt;
-      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+      el.classList.remove('pop'); void el.offsetWidth; if (!el.classList.contains('wait')) el.classList.add('pop'); // the wait's clock ticks quietly
       if (/^[123]$/.test(txt)) cueBeep(880, 0.15);
     }
   }
   const riders = [
-    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, self: true, name: settings.name, lane: ride.lane, v: ride.v },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, stand: !!ride.stand, self: true, name: settings.name, lane: ride.lane, v: ride.v },
     ...ride.bots,
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),
     ...(ride.climbGhost ? [ride.climbGhost] : []),
     ...(ride.passers || []),
+    ...(ride.group ? ride.group.mates.list(Date.now()) : []),
   ];
   // the mini window is open: the 3D road is not drawn (nobody looks at it, and the video you watch keeps the
   // graphics card); the ride goes on, and the road comes back the moment the mini window closes
@@ -2078,14 +2162,36 @@ function routeShape(route) {
   return shape;
 }
 
-/** The minimap grows into a big map and back (click it, or M). */
+/** The minimap grows into a big map and back (click it, the Nearby/Route button, or M). */
 function toggleMinimap(big = !$('minimap-box').classList.contains('big')) {
+  if ($('minimap-box').classList.contains('collapsed')) return;
   $('minimap-box').classList.toggle('big', big);
-  $('minimap-size').textContent = big ? '⤡' : '⤢';
   settings.bigMap = big; saveSettings();
+  mapZoomLabel();
   if (ride) drawMinimap();
 }
+/** The zoom button says which map you see: round you, or the whole route. */
+function mapZoomLabel() { $('minimap-size').textContent = tr($('minimap-box').classList.contains('big') ? 'Route' : 'Nearby'); }
 $('minimap-box').addEventListener('click', () => toggleMinimap());
+/** Fold the minimap or the profile away to its "+" button, and back; remembered for the next ride. */
+function hidePanel(which, hide) {
+  const box = $(which === 'map' ? 'minimap-box' : 'profile-box'), btn = $(which === 'map' ? 'minimap-hide' : 'profile-hide');
+  box.classList.toggle('collapsed', hide);
+  btn.textContent = hide ? '+' : '−';
+  btn.title = tr(hide ? 'Show' : 'Hide'); btn.setAttribute('aria-label', btn.title);
+  if (hide) box.classList.remove('big');
+  else if (which === 'map') box.classList.toggle('big', !!settings.bigMap);
+}
+for (const which of ['map', 'profile']) {
+  $(which === 'map' ? 'minimap-hide' : 'profile-hide').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const key = which === 'map' ? 'hideMap' : 'hideProfile';
+    settings[key] = !settings[key]; saveSettings();
+    hidePanel(which, settings[key]);
+    if (ride && which === 'map') drawMinimap();
+  });
+}
+$('minimap-size').addEventListener('click', (e) => { e.stopPropagation(); toggleMinimap(); });
 
 function drawMinimap() {
   const canvas = $('minimap');
@@ -2131,11 +2237,27 @@ function drawMinimap() {
     const [ex, ey] = at(to, false); g.lineTo(ex, ey);
     g.strokeStyle = color; g.lineWidth = width; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
   };
-  line(0, L, 'rgba(255,255,255,.18)', big ? 9 : 6);
-  line(0, L, 'rgba(232,237,245,.75)', big ? 3.2 : 2.2);
-  for (const c of route.climbs) {
-    if (c.start + c.length <= L) line(c.start, c.start + c.length, '#f97316', 3);
-    else { line(c.start, L, '#f97316', 3); line(0, c.start + c.length - L, '#f97316', 3); } // over the start line
+  line(0, L, 'rgba(0,0,0,.45)', big ? 9 : 7);
+  // the road in the colour of its grade (as on the profile below)
+  const runs = gradeRuns(route, 0, L, 25, 4 / k);
+  g.lineWidth = big ? 4 : 3.2; g.lineCap = 'round';
+  for (let i = 0; i + 1 < runs.length; i++) {
+    const [ax, ay] = at(runs[i].d, false), [bx, by] = at(runs[i + 1].d, false);
+    if (Math.max(ax, bx) < -10 || Math.min(ax, bx) > W + 10 || Math.max(ay, by) < -10 || Math.min(ay, by) > H + 10) continue; // off the map
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.strokeStyle = runs[i].color; g.stroke();
+  }
+  // timed segments: a short tick across the road at start and finish, the kind beside the start
+  const tickAt = (d) => {
+    const [px, py] = at(d), [qx, qy] = at(d + 8), nx = -(qy - py), ny = qx - px, n = Math.hypot(nx, ny) || 1;
+    g.beginPath(); g.moveTo(px - (nx / n) * 5, py - (ny / n) * 5); g.lineTo(px + (nx / n) * 5, py + (ny / n) * 5);
+    g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
+    return [px + (nx / n) * 12, py + (ny / n) * 12];
+  };
+  g.font = '11px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff';
+  for (const c of [...route.climbs, ...(route.sprints || []).map((x) => ({ ...x, sprint: true }))]) {
+    const [lx, ly] = tickAt(c.start);
+    tickAt(c.start + c.length);
+    g.fillText(c.sprint ? '\u26A1' : '\u26F0', lx, ly);
   }
   // start (and finish of a point-to-point route)
   const flag = (d, color) => { const [px, py] = at(d); g.fillStyle = color; g.fillRect(px - 3, py - 3, 6, 6); g.strokeStyle = '#111'; g.lineWidth = 1; g.strokeRect(px - 3, py - 3, 6, 6); };
@@ -2491,6 +2613,7 @@ function finishRide() {
   });
   const socialSim = ride.simulated && !window.__pretendTrainer;
   const socialTimed = !ride.route.custom && (ride.lapEfforts.length + ride.efforts.length) > 0;
+  ride.group?.live?.leave();
   const socialFirst = ride.efforts.find((x) => socialItems.some((i) => i.segment_id === x.segId))?.name.replace(/^\S+\s/, '') || ride.route.name;
   ride = null;
   if (trainer.connected && trainer.controllable) {
@@ -2502,19 +2625,33 @@ function finishRide() {
   deleteDraft();
   $('ride').hidden = true;
   showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
-  socialAfterRide(socialItems, { firstName: socialFirst, simulated: socialSim, timed: socialTimed });
+  // the kilometres and climbing for the ratings across Ukraine (a ride on a trainer, kept in the history)
+  const socialRide = entry ? rideTotal(entry, { simulated: socialSim, weight: settings.weight, client: SOCIAL_CLIENT }) : null;
+  socialAfterRide(socialItems, { firstName: socialFirst, simulated: socialSim, timed: socialTimed, ride: socialRide });
 }
 
 // ---------- Ride history (#19) ----------
 // The last 100 rides, kept on this device: the summary, laps and climbs, and power / heart rate every
 // 5 s for the chart (the full second-by-second record is only kept until the next ride).
-const HISTORY_KEY = 'gruppetto.history';
+const HISTORY_KEY = 'gruppetto.history', HISTORY_DEL_KEY = 'gruppetto.history.deleted';
 let history = (() => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } })();
-const saveHistory = () => {
+let historyDeleted = readJson(HISTORY_DEL_KEY, {}); // rides deleted here: id → when, so they go from your other devices too
+const seenHistory = new Map();
+stampChanged(history, seenHistory);
+const writeHistory = () => {
   for (;;) {
     try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); return; } catch { if (history.length <= 1) return; history.pop(); } // full: drop the oldest
   }
 };
+const saveHistory = () => { stampChanged(history, seenHistory); writeHistory(); socialDataChanged(); };
+/** A ride deleted by you (not one that just fell off the end of the list). */
+function forgetRide(id) {
+  history = history.filter((e) => e.id !== id);
+  historyDeleted[id] = Date.now();
+  writeJson(HISTORY_DEL_KEY, historyDeleted);
+  deleteRide(id);
+  saveHistory();
+}
 
 /** Training stress: hours × intensity factor² × 100, with NP (or average power) against FTP. */
 function tss(sum, ftp) {
@@ -2794,6 +2931,15 @@ function showSummary(e, { live = false } = {}) {
   };
   const canUpload = (rec) => !!(rec && icuClient && sum && sum.duration >= 60);
   const canStrava = (rec) => !!(rec && stravaClient && sum && sum.duration >= 60);
+  const canGarmin = (rec) => !!(rec && garminClient && sum && sum.duration >= 60);
+  const garminUi = (can) => {
+    $('btn-garmin-upload').hidden = !can;
+    $('btn-garmin-upload').disabled = false;
+    $('btn-garmin-upload').textContent = live ? tr('Upload to Garmin') : tr('Send to Garmin');
+    const st = $('garmin-upload-status');
+    st.hidden = !e.garminId;
+    if (e.garminId) st.innerHTML = e.garminId === true ? tr('On Garmin Connect ✓') : `${tr('On Garmin Connect ✓')} · <a href="${garminActivityUrl(e.garminId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+  };
   const stravaUi = (can) => {
     $('btn-strava-upload').hidden = !can;
     $('btn-strava-upload').disabled = false;
@@ -2805,11 +2951,12 @@ function showSummary(e, { live = false } = {}) {
   files(live);
   uploadUi(live && canUpload(recorder));
   stravaUi(live && canStrava(recorder) && !e.stravaId);
+  garminUi(live && canGarmin(recorder) && !e.garminId);
   $('btn-delete-ride').hidden = live;
   $('btn-delete-ride').dataset.id = e.id;
   $('btn-delete-ride').textContent = tr('Delete ride');
-  if (live) { scheduleUpload('icu', canUpload(recorder)); scheduleUpload('strava', canStrava(recorder) && !e.stravaId); return; }
-  scheduleUpload('icu', false); scheduleUpload('strava', false);
+  if (live) { scheduleUpload('icu', canUpload(recorder)); scheduleUpload('strava', canStrava(recorder) && !e.stravaId); scheduleUpload('garmin', canGarmin(recorder) && !e.garminId); return; }
+  scheduleUpload('icu', false); scheduleUpload('strava', false); scheduleUpload('garmin', false);
   getRide(e.id).then((r) => {
     if (!r || shown.entry !== e) return;
     const rec = new Recorder();
@@ -2818,6 +2965,7 @@ function showSummary(e, { live = false } = {}) {
     files(true);
     uploadUi(canUpload(rec) && !e.uploadedId);
     stravaUi(canStrava(rec) && !e.stravaId);
+    garminUi(canGarmin(rec) && !e.garminId);
   });
 }
 /** The ride on the summary screen: its history entry and, when kept, its full record. */
@@ -3458,6 +3606,7 @@ function forgetIntervals() {
 const AUTO_UPLOAD = {
   icu: { wrap: 'sum-icu', box: 'sum-icu-auto', count: 'sum-icu-count', key: 'icuUpload', profile: 'f-icu-upload', run: () => uploadToIntervals(), done: () => shown.entry?.uploadedId || lastRide?.uploadedId },
   strava: { wrap: 'sum-strava', box: 'sum-strava-auto', count: 'sum-strava-count', key: 'stravaUpload', profile: 'f-strava-upload', run: () => uploadToStrava(), done: () => shown.entry?.stravaId },
+  garmin: { wrap: 'sum-garmin', box: 'sum-garmin-auto', count: 'sum-garmin-count', key: 'garminUpload', profile: 'f-garmin-upload', run: () => uploadToGarmin(), done: () => shown.entry?.garminId },
 };
 const uploadTimers = {};
 function stopUploadTimer(kind) {
@@ -3614,6 +3763,84 @@ async function uploadToStrava() {
   }
 }
 
+// ---------- Garmin Connect ----------
+let garminClient = null;
+let garminMfa = null; // Garmin's code step: the state to send back with the code
+
+async function initGarmin() {
+  if (!garminOn()) return;
+  garminClient = GarminClient.saved();
+  // the card shows once the function answers (it is deployed apart from the page)
+  if (!garminClient && !(await garminAvailable())) return;
+  $('garmin-card').hidden = false;
+  $('f-garmin-upload').checked = settings.garminUpload;
+  $('f-garmin-upload').onchange = () => { settings.garminUpload = $('f-garmin-upload').checked; saveSettings(); };
+  $('garmin-login').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const btn = $('btn-garmin'), st = $('garmin-status');
+    btn.disabled = true;
+    st.textContent = tr('Connecting to Garmin…');
+    try {
+      let got;
+      if (garminMfa) got = await GarminClient.verify(garminMfa, $('f-garmin-code').value);
+      else got = await GarminClient.connect($('f-garmin-email').value.trim(), $('f-garmin-password').value);
+      if (got.mfa) {
+        garminMfa = got.mfa;
+        $('f-garmin-code').hidden = false; $('f-garmin-code').required = true; $('f-garmin-code').focus();
+        st.textContent = tr('Garmin sent you a code: type it in');
+        btn.textContent = tr('Confirm');
+        return;
+      }
+      garminClient = got; garminMfa = null;
+      $('f-garmin-password').value = ''; $('f-garmin-code').value = '';
+      track('garmin', 'connected');
+      renderGarmin();
+      toast(tr('Garmin connected'));
+    } catch (err) {
+      track('garmin', 'failed');
+      st.textContent = tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') });
+    } finally { btn.disabled = false; }
+  };
+  $('btn-garmin-forget').onclick = () => { track('garmin', 'forget'); garminClient?.forget(); garminClient = null; renderGarmin(); };
+  $('btn-garmin-upload').onclick = uploadToGarmin;
+  renderGarmin();
+}
+
+function renderGarmin() {
+  garminMfa = null;
+  $('garmin-login').hidden = !!garminClient;
+  $('f-garmin-code').hidden = true; $('f-garmin-code').required = false;
+  $('btn-garmin').textContent = tr('Connect Garmin');
+  $('btn-garmin-forget').hidden = !garminClient;
+  $('garmin-status').textContent = garminClient ? (garminClient.name ? tr('Connected: {name}', { name: garminClient.name }) : tr('Connected')) : '';
+}
+
+async function uploadToGarmin() {
+  stopUploadTimer('garmin');
+  const e = shown.entry, rec = shown.rec;
+  if (!garminClient || !e?.summary || !rec || e.garminId) return;
+  const status = $('garmin-upload-status'), btn = $('btn-garmin-upload');
+  status.hidden = false;
+  status.textContent = tr('Uploading to Garmin Connect…');
+  btn.disabled = true;
+  try {
+    const { activityId, duplicate } = await garminClient.upload(rec.toFIT(), { filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit` });
+    e.garminId = activityId || true;
+    if (history.includes(e)) saveHistory();
+    track('garmin', duplicate ? 'duplicate' : 'uploaded');
+    const label = duplicate ? tr('Already on Garmin Connect') : tr('On Garmin Connect ✓');
+    status.innerHTML = activityId ? `${label} · <a href="${garminActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>` : label;
+    btn.hidden = true;
+    $('sum-garmin').hidden = true;
+  } catch (err) {
+    track('garmin', 'failed');
+    status.textContent = tr('Upload failed: {error}', { error: err.message });
+    btn.disabled = false;
+    btn.textContent = tr('Try again');
+    if (/connect again/.test(err.message)) { garminClient?.forget(); garminClient = null; renderGarmin(); }
+  }
+}
+
 function dayLabel(date) {
   const today = localDate();
   const tomorrow = localDate(new Date(Date.now() + 86400000));
@@ -3720,6 +3947,17 @@ function togglePacer() {
 }
 
 /** The pacer is out on the road: the workout pacer in a workout, the free-ride pacer otherwise. */
+/** A group ride: your position to the others, once a second (also while waiting on the line, so they see you there). */
+function groupSend() {
+  const G = ride?.group, now = performance.now();
+  if (!G?.live?.joined || now - G.sentAt < 1000) return;
+  G.sentAt = now;
+  G.live.send(groupPacket({
+    id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }),
+    look: { jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, figure: settings.figure },
+  }, Date.now()));
+}
+
 function pacerOn() {
   if (!ride?.pacer) return false;
   return ride.pacer.free ? !!settings.freePacer : settings.pacer === true;
@@ -3757,6 +3995,8 @@ $('f-sound').onchange = () => {
   saveSettings();
   if (settings.sound) { unlockAudio(); beep(880, 0.1); }
 };
+$('f-crowd').checked = settings.crowd !== false;
+$('f-crowd').onchange = () => { settings.crowd = $('f-crowd').checked; saveSettings(); };
 $('btn-download-tcx').onclick = () => download('tcx');
 $('btn-again').onclick = () => { flushUpload(); $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
 // The Gruppetto mark goes home: from the summary to the lobby (as «Ride again»), on the lobby it closes what is open
@@ -3770,9 +4010,7 @@ for (const a of document.querySelectorAll('[data-home]')) a.addEventListener('cl
 $('btn-delete-ride').onclick = () => {
   const b = $('btn-delete-ride');
   if (b.textContent !== tr('Tap again to delete')) { b.textContent = tr('Tap again to delete'); return; }
-  history = history.filter((e) => e.id !== b.dataset.id);
-  deleteRide(b.dataset.id);
-  saveHistory();
+  forgetRide(b.dataset.id);
   renderHistory();
   $('summary').hidden = true; $('lobby').hidden = false;
 };
@@ -3857,16 +4095,21 @@ function manualLap() {
   toast(tr('Split {n}: {time} · {km} km · {w} W', { n: ride.splits.length, time: fmtTime(t), km: (d / 1000).toFixed(2), w: avg }));
 }
 
-/** The camera views, in the order of keys 1–5. */
-const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front'];
-const CAMERA_NAMES = { chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front' };
+/** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots); the ones after have no key (C and the menu). */
+const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv', 'top', 'drone', 'tight', 'high', 'offset', 'long', 'car'];
+const CAMERA_NAMES = {
+  chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front',
+  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: by the road', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast', top: 'Camera: from above', drone: 'Camera: drone',
+  tight: 'Camera: close behind', high: 'Camera: high behind', offset: 'Camera: behind, to the right', long: 'Camera: long lens', car: 'Camera: team car',
+};
 function setCameraView(mode) {
   if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
   settings.camera = mode;
   saveSettings();
   scene?.setCamera?.(mode);
   $('f-camera').value = mode;
-  toast(`${CAMERAS.indexOf(mode) + 1} · ${tr(CAMERA_NAMES[mode])}`);
+  const i = CAMERAS.indexOf(mode);
+  toast(i < 10 ? `${(i + 1) % 10} · ${tr(CAMERA_NAMES[mode])}` : tr(CAMERA_NAMES[mode]));
 }
 /** The next camera view (C, or Y on the Zwift Ride). */
 function nextCamera() {
@@ -4135,10 +4378,12 @@ const KEYS = [
   [['N'], 'Skip the interval (free ride: new lap)'],
   [['P'], 'Pacer on / off'],
   [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · over the shoulder · front'],
+  [['6', '–', '9'], 'Camera: far behind · looking back · by the road · helicopter'],
+  [['0'], 'Camera: TV broadcast, cutting between shots'],
   [['C'], 'Next camera'],
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
-  [['M'], 'Bigger map'],
+  [['M'], 'Map zoom'],
   [['I'], 'Mini window over other apps (film, football, YouTube)'],
   [['R'], 'Switch the rider: man / woman'],
   [['+', '−'], 'Simulator: power ±10 W'],
@@ -4155,7 +4400,7 @@ $('btn-keys').onclick = () => toggleKeysHelp();
 function setFigure(f) {
   settings.figure = f === 'female' ? 'female' : 'male';
   $('f-figure').value = settings.figure;
-  saveSettings(); renderFigure();
+  saveSettings(); renderFigure(); renderGarageBits();
 }
 function renderFigure() {
   const f = settings.figure === 'female' ? 'female' : 'male';
@@ -4165,6 +4410,102 @@ function renderFigure() {
 for (const b of document.querySelectorAll('#figure-pick [data-figure]')) b.onclick = () => setFigure(b.dataset.figure);
 $('btn-figure').onclick = () => setFigure(settings.figure === 'female' ? 'male' : 'female');
 renderFigure();
+// ----- the garage: your rider on a turntable beside the colour pickers (js/garage.js) -----
+// the pickers live in the garage; their ids and bindings are the same as when they sat in the profile
+const LOOK_KEYS = { 'f-jersey': 'jersey', 'f-stripe': 'stripe', 'f-bike': 'bikeColor', 'f-tape': 'tapeColor', 'f-decal': 'decalColor', 'f-helmet': 'helmetColor', 'f-lens': 'lensColor' };
+const lookNow = () => ({
+  jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null,
+  decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male',
+});
+/** Ready-made kits: jersey, accent, frame, bar tape, wheel decals, helmet, lenses. */
+const GARAGE_KITS = [
+  ['Gruppetto', ['#16a0a8', '#ff8a1f', '#16a0a8', '#141416', '#ff8a1f', '#f2f2f2', '#1c2230']],
+  ['Blue & yellow', ['#0057b7', '#ffd500', '#0057b7', '#ffd500', '#ffd500', '#ffd500', '#1c2230']],
+  ['Night', ['#15171d', '#2fd4f0', '#1a1d24', '#15171d', '#2fd4f0', '#1a1d24', '#2fd4f0']],
+  ['Sunrise', ['#ff7a1a', '#ffd23f', '#f4f4f4', '#ff7a1a', '#ff7a1a', '#ffffff', '#ff4d2e']],
+  ['Forest', ['#2f6b3a', '#e8d9a8', '#2a2f2a', '#e8d9a8', '#e8d9a8', '#2f6b3a', '#3a2a14']],
+  ['Ice', ['#e8f1f8', '#2b6cb0', '#ffffff', '#ffffff', '#2b6cb0', '#e8f1f8', '#6fb7ff']],
+];
+const swatches = (c) => c.map((x) => `<b style="background:${esc(x)}"></b>`).join('');
+/** Sets the pickers as if you had picked each colour: the same path saves, syncs and repaints. */
+function applyLook(colors) {
+  Object.keys(LOOK_KEYS).forEach((id, i) => {
+    const el = $(id);
+    if (!colors[i] || el.value === colors[i]) return;
+    el.value = colors[i];
+    el.dispatchEvent(new Event('input'));
+  });
+}
+function surpriseLook() {
+  const hex = (h, s, l) => { // HSL (degrees, 0..1, 0..1) to #rrggbb
+    const f = (n) => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0'); };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const h = Math.random() * 360, jersey = hex(h, 0.55 + Math.random() * 0.3, 0.32 + Math.random() * 0.25);
+  const accent = hex((h + 150 + Math.random() * 60) % 360, 0.85, 0.55);
+  const dark = '#18191e', white = '#f2f2f2';
+  applyLook([jersey, accent, pick([jersey, dark, white]), pick([dark, accent, white]), accent, pick([white, jersey, dark]), pick(['#1c2230', accent, '#3a2a14'])]);
+}
+function renderGarageBits() {
+  const L = lookNow();
+  const sw = $('garage-swatches');
+  if (sw) sw.innerHTML = swatches([L.jersey, L.stripe, L.bike || L.jersey]);
+  const now = Object.values(LOOK_KEYS).map((k, i) => (i === 2 ? settings.bikeColor || settings.jersey : i === 4 ? settings.decalColor || settings.stripe : settings[k]).toLowerCase());
+  for (const b of document.querySelectorAll('#garage-kits [data-kit]')) b.classList.toggle('sel', GARAGE_KITS[b.dataset.kit][1].every((c, i) => c === now[i]));
+  garage?.setLook(L);
+}
+let garage = null;
+async function openGarage() {
+  const box = $('garage');
+  box.hidden = false;
+  $('garage-loading').hidden = !!garage?.rider;
+  try {
+    if (!garage) {
+      const { Garage } = await import('./garage.js');
+      garage = new Garage($('garage-canvas'));
+      garage.onReady = () => { $('garage-loading').hidden = true; };
+      garage.setSpin(garageSpin);
+    }
+    renderGarageBits();
+    if (!box.hidden) garage.start();
+  } catch (e) {
+    console.warn('Garage unavailable', e);
+    $('garage-loading').textContent = tr('3D graphics are not available in this browser — using 2D');
+  }
+}
+function closeGarage() {
+  $('garage').hidden = true;
+  garage?.stop();
+}
+$('garage-kits').innerHTML = GARAGE_KITS.map(([name, c], i) => `<button class="garage-kit" data-kit="${i}"><i>${swatches(c.slice(0, 3))}</i>${esc(tr(name))}</button>`).join('');
+$('garage-kits').addEventListener('click', (e) => { const b = e.target.closest('[data-kit]'); if (b) applyLook(GARAGE_KITS[b.dataset.kit][1]); });
+$('garage-random').onclick = surpriseLook;
+// the turntable: turning or held still, as you left it last time
+const SPIN_KEY = 'gruppetto.garageSpin';
+let garageSpin = (() => { try { return localStorage.getItem(SPIN_KEY) !== '0'; } catch { return true; } })();
+function renderSpin() {
+  $('garage-spin').textContent = garageSpin ? tr('⏸ Stop') : tr('▶ Turn');
+  $('garage-spin').setAttribute('aria-pressed', String(garageSpin));
+  garage?.setSpin(garageSpin);
+}
+$('garage-spin').onclick = () => { garageSpin = !garageSpin; try { localStorage.setItem(SPIN_KEY, garageSpin ? '1' : '0'); } catch { /* private mode */ } renderSpin(); };
+renderSpin();
+$('btn-garage').onclick = openGarage;
+$('rail-garage').onclick = openGarage;
+$('garage').addEventListener('click', (e) => { if (e.target.closest('[data-garage-close], #garage-done')) closeGarage(); });
+$('garage-views').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-gview]');
+  if (!b) return;
+  for (const x of $('garage-views').querySelectorAll('[data-gview]')) x.classList.toggle('sel', x === b);
+  garage?.setView(b.dataset.gview);
+});
+// Escape closes the garage first (and only it: the drawer under it stays open)
+window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !$('garage').hidden) { e.stopImmediatePropagation(); closeGarage(); } }, true);
+// after the field's own handler has stored the colour (that one is bound later, in the profile's setup): a task,
+// not a microtask, since a real click runs microtasks between one listener and the next, before the value is stored
+for (const id of [...Object.keys(LOOK_KEYS), 'f-figure']) $(id).addEventListener('input', () => setTimeout(renderGarageBits, 0));
+renderGarageBits();
 $('keys-help').addEventListener('click', (e) => { if (e.target === $('keys-help') || e.target.closest('[data-keys-close]')) toggleKeysHelp(false); });
 function toggleFullscreen() {
   if (document.fullscreenElement) document.exitFullscreen?.();
@@ -4177,7 +4518,7 @@ function onRideKey(e) {
   if (!ride && !$('wk-detail').hidden && e.code === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); $('wkd-ride').click(); return; }
   if (!ride) return;
   // settings open, or typing in a field: the keys belong to them, not to the ride
-  if (!$('drawer').hidden || e.target.closest?.('input, select, textarea')) return;
+  if (!$('drawer').hidden || !$('garage').hidden || e.target.closest?.('input, select, textarea')) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const c = e.code;
   if (c === 'Escape') {
@@ -4201,7 +4542,7 @@ function onRideKey(e) {
   else if (c === 'KeyP') { if (ride.pacer) togglePacer(); }
   else if (c === 'KeyE') toggleErg();
   else if (c === 'KeyC') nextCamera();
-  else if (/^(Digit|Numpad)[1-5]$/.test(c)) setCameraView(CAMERAS[Number(c.slice(-1)) - 1]);
+  else if (/^(Digit|Numpad)[0-9]$/.test(c)) setCameraView(CAMERAS[(Number(c.slice(-1)) + 9) % 10]);
   else if (c === 'KeyH') runIntent('hud');
   else if (c === 'KeyF') toggleFullscreen();
   else if (c === 'KeyM') toggleMinimap();
@@ -4231,7 +4572,20 @@ initSocialUi({
   settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,
   getProgress: () => progress, setProgress: (p) => { progress = p; saveProgress(); },
   saveSettingsRaw: writeSettings, saveRecords,
+  // full sync: your own workouts and the ride history, written here without sending them straight back
+  getWorkouts: () => myWorkouts, workoutsDeleted: () => myWorkoutsDeleted,
+  setWorkouts: (list, deleted) => {
+    myWorkouts = list; myWorkoutsDeleted = deleted; writeJson(MY_DEL_KEY, deleted);
+    seenWorkouts.clear(); stampChanged(myWorkouts, seenWorkouts); writeMyWorkouts(); renderModes();
+  },
+  getHistory: () => history, historyDeleted: () => historyDeleted,
+  setHistory: (list, removed) => {
+    for (const id of removed) deleteRide(id);
+    history = list; seenHistory.clear(); stampChanged(history, seenHistory); writeHistory(); renderHistory(); renderProgress();
+  },
   currentRoute: () => routes.find((x) => x.id === settings.routeId) || routes[0],
+  routes: () => routes.filter((x) => !x.custom),
+  startGroupRide: (g) => { if (!ride) startRide({ group: g }); },
   routeOfSegment: (seg) => routes.find((x) => !x.custom && seg.startsWith(`${x.id}-`) && (seg === `${x.id}-lap` || [...x.climbs, ...(x.sprints || [])].some((c) => c.id === seg))),
   refresh: () => { refreshProfileForm(); updateSummary(); renderProgress(); renderFtpBox(); },
 });

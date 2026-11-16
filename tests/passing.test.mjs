@@ -35,3 +35,44 @@ test('passing: alongside the wheel you are passing, you finish the pass instead 
   me.dist = 375.4; // half a wheel behind the one being passed
   assert.equal(pickLane(me, others, 0.8), 0.3 - 0.95);
 });
+
+// Free riding on a road where you keep right (home lane +1.2): on a wheel, held back, a centimetre to its right
+// (measured: 1.61 behind 1.60, and every pass went out to the verge at 2.55).
+const onWheel = (meLane, wheelLane, extra = {}) => {
+  const me = { me: true, dist: 100, lane: meLane, laneTarget: meLane, v: 8, vFree: 8.4, heldFor: PASS_AFTER + 1, ...extra };
+  return { me, others: [me, { name: 'wheel', dist: 102.1, lane: wheelLane, laneTarget: wheelLane, v: 8 }] };
+};
+
+test('passing: a centimetre off the wheel does not pick the side; the pass goes out toward the road\'s centre', () => {
+  const { me, others } = onWheel(1.61, 1.6);
+  assert.equal(pickLane(me, others, 1.2), 1.6 - 0.95);
+});
+
+test('passing: on the left half of the road the centre is to the right', () => {
+  const { me, others } = onWheel(-1.61, -1.6);
+  assert.equal(pickLane(me, others, -1.2), -1.6 + 0.95);
+});
+
+test('passing: already well out to one side, you pass on that side', () => {
+  const { me, others } = onWheel(2.0, 1.6);
+  assert.equal(pickLane(me, others, 1.2), 1.6 + 0.95);
+});
+
+test('passing: coming up much faster, you swing out early instead of sitting in first', () => {
+  const me = { me: true, dist: 100, lane: 1.2, laneTarget: 1.2, v: 10, vFree: 10, heldFor: 0 };
+  const others = [me, { name: 'slow', dist: 114, lane: 1.2, laneTarget: 1.2, v: 7.5 }];
+  assert.equal(pickLane(me, others, 1.2), 1.2 - 0.95);
+});
+
+test('passing: coming up only a little faster, you tuck in behind first', () => {
+  const me = { me: true, dist: 100, lane: 1.0, laneTarget: 1.0, v: 8.3, vFree: 8.3, heldFor: 0 };
+  const others = [me, { name: 'wheel', dist: 106, lane: 1.2, laneTarget: 1.2, v: 8 }];
+  assert.equal(pickLane(me, others, 1.0), 1.2);
+});
+
+test('passing: each rider has its own patience on a wheel', () => {
+  const quick = onWheel(1.6, 1.6, { heldFor: 2.2, passAfter: 2 });
+  assert.equal(pickLane(quick.me, quick.others, 1.2), 1.6 - 0.95);
+  const patient = onWheel(1.6, 1.6, { heldFor: 2.2 });
+  assert.equal(pickLane(patient.me, patient.others, 1.2), 1.6);
+});

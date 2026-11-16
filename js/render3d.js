@@ -10,6 +10,7 @@ import { loadRiderModel, ModelRider } from './rider-model.js';
 import { loadNature, natureMaterials } from './nature.js';
 import { loadBikeModel, ModelBike, setBikeEnvironment } from './bike-model.js';
 import { t, lang } from './i18n.js';
+import { ANISO } from './gltf.js';
 import { CSM } from '../vendor/three/addons/csm/CSM.js';
 import { villages, crossings, tunnels } from './villages.js';
 import { hexRgb, mixRgb, mixHex, blendAtmosphere } from './atmo-blend.js';
@@ -25,6 +26,25 @@ const AHEAD = LOW ? 4 : 7, BEHIND = 1;   // chunks kept around the rider (200 m 
 const ROAD_HALF = 3.6;         // m
 const TURN = 2.5;              // curvature exaggeration relative to the 2D renderer
 const V_EXAG = 1.5;            // vertical exaggeration
+/** Each camera view and its field of view, degrees. 'tv' cuts between the TV_SHOTS. */
+const CAM_FOV = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48, far: 55, back: 70, post: 40, heli: 38, tv: 48, beside: 45, wheel: 70, top: 50, drone: 55,
+  tight: 72, high: 58, offset: 58, long: 26, car: 62 };
+/** Plants too small to see far off: drawn only in the chunks whose middle is within SMALL_AHEAD m (+ half a chunk) of you. */
+const SMALL_PLANTS = ['tuft', 'sunflowers', 'lupine', 'tallgrass', 'plant', 'flowers3'];
+const SMALL_AHEAD = 450;
+/** Where the render scale this device settled on is kept between rides. */
+const SCALE_KEY = 'gruppetto.renderScale', FLOOR_KEY = 'gruppetto.renderFloor';
+const TV_SHOTS = ['front', 'heli', 'post', 'beside', 'far', 'wheel', 'side'];
+/** The views from behind, m: how far back, how high, how far to the right; the point looked at, ahead and its height; easing (a lagging car). */
+const REAR = {
+  tight: { back: 2.4, up: 1.8, ahead: 5, look: 0.1 },             // just behind the helmet
+  high: { back: 5, up: 3.4, ahead: 4, look: 0.2 },                // looking down on you and the road
+  offset: { back: 4, up: 2.0, side: 1.4, ahead: 12, look: 0.9 },  // behind, off to the right
+  long: { back: 14, up: 2.2, ahead: 6, look: 1.0 },               // a long lens from far behind: the road squeezed up
+  car: { back: 2.6, up: 1.8, ahead: 7, look: 0.6, lag: 1.2 },     // the team car, a little late in the bends
+};
+/** The views drawn by _moreCam. */
+const CAM_MORE = new Set(['far', 'back', 'post', 'heli', 'beside', 'wheel', 'top', 'drone', ...Object.keys(REAR)]);
 /** Offset along a SEG-long arc whose heading turns from h0 to h1, at fraction t of it. */
 function arc(h0, h1, t) {
   const dh = h1 - h0;
@@ -73,6 +93,7 @@ const TUNNEL_R = 4.6, TUNNEL_WALL = 3.2, TUNNEL_HILL = 11; // a tunnel: half its
 const HOUSE_TINTS = ['#ffffff', '#fff0d6', '#e6eeff', '#ffe0d0', '#eaf5df', '#fff7c8'].map((c) => new THREE.Color(c));
 const CSM_CASCADES = Number(new URLSearchParams(typeof location === 'undefined' ? '' : location.search).get('csm')) || (LOW ? 1 : 2); // ?csm=3 to compare
 const CSM_FAR = LOW ? 120 : 240;
+const RIDER_FILL = 0.95; // of the sky's fill on the riders (see _riderFill)
 const LABEL_RANGE = 60; // m: riders farther than this away show no name tag
 let preloaded = null;
 /** Starts the bike, rider and scenery downloads once, from the lobby, so the ride starts with them ready. */
@@ -123,6 +144,20 @@ function windify(mat, amp, time) {
         + sin(uWindTime * 2.9 + wRoot.x * 0.53 - wRoot.z * 0.41) * 0.3
         + 0.35; // leaning a little with the wind, swaying around that
       transformed.xz += vec2(0.8, 0.6) * wS * uWindAmp * ${amp.toFixed(4)} * wH * wH;`)}`;
+  });
+}
+
+/**
+ * Little plants shrink away between `near` and `far` m from the camera, smoothly (no popping in): out there they
+ * are smaller than a pixel in the haze, and sub-pixel triangles are the dearest the graphics card draws.
+ */
+function fadeFar(mat, near, far) {
+  return patchShader(mat, `fade${near}-${far}`, (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec3 fRoot = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        transformed *= 1.0 - smoothstep(${near.toFixed(1)}, ${far.toFixed(1)}, distance(fRoot, cameraPosition));
+      #endif`);
   });
 }
 
@@ -243,6 +278,7 @@ function surfaceTexture(water = false) {
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
+  texture.anisotropy = ANISO.value;
   texture.needsUpdate = true;
   return texture;
 }
@@ -268,6 +304,7 @@ function wornPaintTexture() {
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearMipmapLinearFilter;
   texture.generateMipmaps = true;
+  texture.anisotropy = ANISO.value;
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.needsUpdate = true;
   return texture;
@@ -746,6 +783,12 @@ export class Scene3D {
     this._orbitControls(canvas);
     if (typeof window !== 'undefined' && new URLSearchParams(location.search).has('debug')) window.__scene3d = this; // for inspecting in devtools
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !LOW, powerPreference: 'high-performance' });
+    ANISO.value = Math.min(LOW ? 2 : 8, this.renderer.capabilities.getMaxAnisotropy()); // textures stay sharp seen aslant (the road above all)
+    try { // the scale this device settled on last time, and the one below which fewer pixels bought it nothing
+      const k = Number(localStorage.getItem(SCALE_KEY)), fl = Number(localStorage.getItem(FLOOR_KEY));
+      if (k >= 0.5 && k <= 1) this.quality = k;
+      if (fl >= 0.5 && fl <= 1) this.qFloor = fl;
+    } catch { /* private mode */ }
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -880,7 +923,7 @@ export class Scene3D {
   _checkWarm(dist, me) {
     const c = Math.floor(dist / SEG / CHUNK);
     let built = true;
-    for (let k = c - BEHIND; k <= c + AHEAD; k++) if (!this.chunks.has(k)) built = false;
+    for (let k = c - BEHIND; k <= c + this._ahead(); k++) if (!this.chunks.has(k)) built = false;
     const timedOut = performance.now() - this.warmStart > 15000; // never hold the ride back for good
     if (!timedOut && (!built || !this.modelsReady || !me)) { this.warmFrames = 0; return; }
     // let a couple of complete frames render (shaders compiled, textures uploaded) before revealing
@@ -913,13 +956,39 @@ export class Scene3D {
    * back up when there is room again; checked every 2 s so it never flickers.
    */
   _adaptQuality(dt) {
+    // Each step rebuilds the picture's buffers: a 60-70 ms jerk. So a step needs the same verdict twice
+    // running down (4 s) and three times up (6 s), a step down has to pay for itself, and the scale found (and
+    // the floor) are kept for this device: the next ride starts there, and steps are left to the first ride.
     if (!dt || this.warming) return;
     this.qAcc = (this.qAcc || 0) + dt; this.qN = (this.qN || 0) + 1;
     if (this.qAcc < 2) return;
     const avg = this.qAcc / this.qN; this.qAcc = 0; this.qN = 0;
+    if (this.qSkip) { this.qSkip = false; return; } // the window with the rebuild in it says nothing
+    // a step down that bought less than 7 % (the trees and shadows cost it, not the pixels): back up, and no
+    // lower than that from now on: sharpness for nothing is no trade
+    const T = this.qTrial;
+    if (T) {
+      this.qTrial = null;
+      if (avg > T.avg * 0.93) {
+        this.qFloor = T.from; this.quality = T.from; this.qRun = 0;
+        try { localStorage.setItem(SCALE_KEY, String(T.from)); localStorage.setItem(FLOOR_KEY, String(T.from)); } catch { /* private mode */ }
+        this.resize();
+        return;
+      }
+    }
+    const verdict = avg > 0.021 ? (this.quality ?? 1) > (this.qFloor ?? 0) + 1e-3 ? -1 : 0 : avg < 0.0135 ? 1 : 0;
+    this.qRun = verdict && verdict === this.qLast ? (this.qRun || 0) + 1 : verdict ? 1 : 0;
+    this.qLast = verdict;
+    if (!verdict || this.qRun < (verdict < 0 ? 2 : 3)) return;
     const q = this.quality ?? 1;
-    const next = avg > 0.021 ? Math.max(LOW ? 0.5 : 0.6, q - 0.1) : avg < 0.0135 ? Math.min(1, q + 0.1) : q;
-    if (Math.abs(next - q) > 1e-3) { this.quality = next; this.resize(); }
+    const next = verdict < 0 ? Math.max(LOW ? 0.5 : 0.6, q - 0.1) : Math.min(1, q + 0.1);
+    this.qRun = 0;
+    if (Math.abs(next - q) < 1e-3) return;
+    if (next < q) this.qTrial = { from: q, avg };
+    this.qSkip = true;
+    this.quality = next;
+    try { localStorage.setItem(SCALE_KEY, String(next)); } catch { /* private mode */ }
+    this.resize();
   }
 
   /**
@@ -927,11 +996,120 @@ export class Scene3D {
    * 'side' (over the shoulder: behind and to the left) or 'front' (ahead of the rider, looking back, like a TV motorbike).
    */
   setCamera(mode) {
-    this.camMode = ['eyes', 'iso', 'side', 'front'].includes(mode) ? mode : 'chase';
-    this.camera.fov = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48 }[this.camMode];
+    this.camMode = CAM_FOV[mode] ? mode : 'chase';
+    this._tv = null;
+    this._post = null; this._droneAt = null;
+    this._heli = undefined;
+    this._heliPos = null;
+    this._isoHeading = undefined;
+    this._setFov(CAM_FOV[this.camMode]);
+  }
+
+  _setFov(fov) {
+    if (Math.abs(this.camera.fov - fov) < 0.02) return;
+    this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
     this.csm?.updateFrustums();
-    this._isoHeading = undefined;
+  }
+
+  /**
+   * The views after the first five, and the TV director's own shots:
+   * 'far' (high and far behind: the bunch around you), 'back' (your eyes, looking back down the road),
+   * 'post' (a camera standing on the verge: you ride up to it and past it, then it waits further on),
+   * 'heli' (a helicopter circling slowly high above), 'beside' (a camera on the verge, level with you)
+   * 'wheel' (low behind the back wheel, looking up the road past you), 'top' (straight down from above),
+   * 'drone' (following behind and above, a little late in bends) and the views from behind in REAR.
+   */
+  _moreCam(cm, me, dist, dt) {
+    const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
+    const cx = Math.cos(ch), cz = Math.sin(ch), rx = me.f.rx, rz = me.f.rz;
+    const px = me.f.x + rx * me.lane, pz = me.f.z + rz * me.lane, py = me.f.y;
+    const C = this.camera;
+    if (cm === 'far') {
+      const BACK = 11, ahead = this.frame(dist + 14);
+      C.position.set(px - cx * BACK, this._roadY(dist - BACK) + 4.2, pz - cz * BACK);
+      C.lookAt(px + cx * 14, ahead.y + 0.3, pz + cz * 14);
+    } else if (cm === 'back') {
+      const behind = this.frame(dist - 22);
+      C.position.set(px - cx * 0.1, py + 1.6, pz - cz * 0.1);
+      C.lookAt(behind.x + behind.rx * me.lane, behind.y + 1.1, behind.z + behind.rz * me.lane);
+    } else if (cm === 'beside') {
+      // level with you at the road's edge, on the side with more room, a step ahead. Not on the verge: by the
+      // climbs and sprints the fans stand there (3.95-4.2 m out), and the camera ended up inside a head
+      const AHEAD = 1.2, at = (me.lane > 0 ? -1 : 1) * (ROAD_HALF - 0.3), f = this.frame(dist + AHEAD);
+      C.position.set(f.x + f.rx * at, f.y + 1.4, f.z + f.rz * at);
+      C.lookAt(px + cx * 1.5, py + 0.95, pz + cz * 1.5);
+    } else if (cm === 'wheel') {
+      // a little camera low behind the back wheel, a bit to the left: the wheel and legs fill the bottom of the picture
+      const BACK = 1.7, ahead = this.frame(dist + 8);
+      C.position.set(px - cx * BACK - rx * 0.35, this._roadY(dist - BACK) + 0.42, pz - cz * BACK - rz * 0.35);
+      C.lookAt(px + cx * 8, ahead.y + 0.9, pz + cz * 8);
+    } else if (cm === 'post') {
+      // a camera on a stand by the road, 40–60 m ahead; once you are well past it, the next one goes up further on
+      let P = this._post;
+      if (!P || dist > P.d + 25 || dist < P.d - 120) {
+        const side = P ? -P.side : (Math.random() < 0.5 ? -1 : 1);
+        const d = dist + 40 + Math.random() * 20, f = this.frame(d);
+        P = this._post = { d, side, x: f.x + f.rx * side * (ROAD_HALF + 0.7), y: f.y + 2.6, z: f.z + f.rz * side * (ROAD_HALF + 0.7) }; // on the verge, inside the fence, over the fans' heads
+      }
+      C.position.set(P.x, P.y, P.z);
+      C.lookAt(px, py + 1.0, pz);
+      // a zoom lens: the rider stays about the same size as they come up to the camera
+      const L = Math.hypot(P.x - px, P.y - py, P.z - pz);
+      this._setFov(Math.max(14, Math.min(60, THREE.MathUtils.radToDeg(2 * Math.atan(2.6 / Math.max(1, L))))));
+    } else if (REAR[cm]) {
+      const R = REAR[cm], back = this.frame(dist - (R.back ?? 4)), ahead = this.frame(dist + (R.ahead ?? 9));
+      const lane = me.lane * (R.laneFollow ?? 0.8), side = R.side ?? 0;
+      const want = new THREE.Vector3(back.x + back.rx * (lane + side), back.y + (R.up ?? 2), back.z + back.rz * (lane + side));
+      if (!R.lag || !this._rearAt || this._rearAt.distanceTo(want) > 30) this._rearAt = want.clone();
+      else this._rearAt.lerp(want, Math.min(1, dt * R.lag));
+      C.position.copy(this._rearAt);
+      C.lookAt(ahead.x + ahead.rx * me.lane * 0.5, ahead.y + (R.look ?? 0.8), ahead.z + ahead.rz * me.lane * 0.5);
+    } else if (cm === 'top') {
+      // straight down from 16 m, the road running up the screen
+      C.position.set(px - cx * 2.5, py + 16, pz - cz * 2.5);
+      C.lookAt(px + cx * 1.5, py, pz + cz * 1.5);
+    } else if (cm === 'drone') {
+      // a drone following 8 m behind and 5 m up, lagging a little in bends and bobbing in the air
+      const t = performance.now() / 1000, back = this.frame(dist - 8);
+      const want = new THREE.Vector3(back.x + back.rx * me.lane * 0.5, back.y + 5.2 + Math.sin(t * 0.9) * 0.25, back.z + back.rz * me.lane * 0.5);
+      if (!this._droneAt || this._droneAt.distanceTo(want) > 30) this._droneAt = want.clone();
+      else this._droneAt.lerp(want, Math.min(1, dt * 1.8));
+      C.position.copy(this._droneAt);
+      C.lookAt(px + cx * 4, py + 0.8, pz + cz * 4);
+    } else if (cm === 'heli') {
+      // high above, slowly circling round the rider
+      this._heli = this._heli === undefined ? ch + Math.PI + 0.7 : this._heli + dt * 0.07;
+      const a = this._heli, R = 34, H = 26;
+      const target = new THREE.Vector3(px + cx * 4, py + 1, pz + cz * 4);
+      const want = new THREE.Vector3(target.x + Math.cos(a) * R, py + H, target.z + Math.sin(a) * R);
+      // eased, so a bend doesn't swing the helicopter round
+      if (!this._heliPos || this._heliPos.distanceTo(want) > 60) this._heliPos = want.clone();
+      else this._heliPos.lerp(want, Math.min(1, dt * 1.5));
+      C.position.copy(this._heliPos);
+      C.lookAt(target);
+      this._setFov(CAM_FOV.heli);
+    }
+  }
+
+  /**
+   * The TV director (camera 0): picks a shot, holds it for a while, then cuts to another, never the same twice
+   * in a row. A roadside shot lasts until the rider has gone past the camera.
+   */
+  _tvShot(dt, dist) {
+    const T = this._tv ??= { shot: null, left: 0, next: 0 };
+    T.left -= dt;
+    const passed = T.shot === 'post' && this._post && dist > this._post.d + 22;
+    if (T.shot && T.left > 0 && !passed) return T.shot;
+    if (T.shot === 'post' && !passed && T.left > -6) return T.shot; // let the rider go by before cutting
+    const pool = TV_SHOTS.filter(s => s !== T.shot);
+    T.shot = pool[Math.floor(Math.random() * pool.length)];
+    T.left = 6 + Math.random() * 6;
+    this._post = null; this._droneAt = null;
+    this._heli = undefined;
+    this._heliPos = null;
+    this._chaseH = undefined;
+    return T.shot;
   }
 
   /** The wind, m/s: grass, plants and trees sway harder and faster with it. */
@@ -965,8 +1143,11 @@ export class Scene3D {
     P.scene0.depthTexture = new THREE.DepthTexture(w, h); // for the soft shading in corners (AO)
     P.blurA = new THREE.WebGLRenderTarget(Math.ceil(w / q), Math.ceil(h / q), opts);
     P.blurB = new THREE.WebGLRenderTarget(Math.ceil(w / q), Math.ceil(h / q), opts);
-    P.aoA = new THREE.WebGLRenderTarget(Math.ceil(w / 2), Math.ceil(h / 2), opts); // AO at half size, then blurred
-    P.aoB = new THREE.WebGLRenderTarget(Math.ceil(w / 2), Math.ceil(h / 2), opts);
+    // AO at half the size in CSS pixels, then blurred: at half the drawing buffer a Retina screen took 20 depth
+    // reads for each of 4 million pixels (a soft shading nobody sees that sharp)
+    const a = 2 * Math.max(1, this.renderer.getPixelRatio());
+    P.aoA = new THREE.WebGLRenderTarget(Math.ceil(w / a), Math.ceil(h / a), opts);
+    P.aoB = new THREE.WebGLRenderTarget(Math.ceil(w / a), Math.ceil(h / a), opts);
     P.targets = [P.scene0, P.blurA, P.blurB, P.aoA, P.aoB];
     if (P.quad) return;
     P.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -1060,7 +1241,8 @@ export class Scene3D {
    * No tremble: on a screen it read as the picture jumping. The isometric view is left as it is.
    */
   _speedFeel(dt, dist) {
-    if (!dt || this.camMode === 'iso') return;
+    const cm = this._cm ?? this.camMode;
+    if (!dt || cm === 'iso' || cm === 'post' || cm === 'heli' || cm === 'top' || cm === 'long') return; // these keep their own lens
     // the speed from the distance and the real time between frames (the frame's dt is capped, the distance is not)
     const now = performance.now(), last = this._feelAt;
     this._feelAt = { t: now, d: dist };
@@ -1068,7 +1250,7 @@ export class Scene3D {
     const v = Math.max(0, Math.min(30, (dist - last.d) / ((now - last.t) / 1000))); // m/s
     this.vSmooth = (this.vSmooth ?? v) + (v - (this.vSmooth ?? v)) * Math.min(1, dt * 1.5);
     const k = Math.min(1, Math.max(0, (this.vSmooth - 4) / 11)); // from 15 to 55 km/h
-    const base = { chase: 62, eyes: 72, side: 58, front: 48 }[this.camMode] ?? 62;
+    const base = CAM_FOV[cm] ?? 62;
     const fov = base + k * k * 9;
     if (Math.abs(this.camera.fov - fov) > 0.02) { this.camera.fov = fov; this.camera.updateProjectionMatrix(); }
   }
@@ -1220,6 +1402,8 @@ export class Scene3D {
     this.matPlant = windify(this.mat.clone(), 0.15, this.windTime);
     this.matTall = windify(this.mat.clone(), 0.03, this.windTime);
     this.matGrass = windify(new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), 0.35, this.windTime);
+    // the grass and the little plants fade out from 150 to 230 m (the chunks further off don't draw them at all)
+    for (const m of [this.matGrass, this.matPlant, this.natureMats?.Grass, this.natureMats?.Flowers]) if (m) fadeFar(m, 150, 230);
     const asphalt = surfaceTexture();
     asphalt.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     // window glass and street lanterns: their light comes on at dusk (see _nightLights)
@@ -1550,6 +1734,33 @@ export class Scene3D {
   }
 
   /** Hook every lit material under `root` into the cascaded shadows (keeping its own shader tweaks). */
+  /**
+   * Less of the sky's fill on the riders and their bikes (`this.riderFill.value` of it). Outdoors the hemisphere
+   * light is bright and the ground under it green: it filled the kit's shaded side, so a colour came out light
+   * and flat (a violet jersey read lavender), while in the garage, with little fill, the same kit is deep and
+   * shaped. Only the riders' shaders: the land keeps its light.
+   */
+  _riderFill(root) {
+    const U = this.riderFill ||= { value: RIDER_FILL };
+    this.fillDone ||= new WeakSet();
+    root.traverse((o) => {
+      if (!o.material) return;
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        if (this.fillDone.has(m) || !m.isMeshStandardMaterial) continue;
+        this.fillDone.add(m);
+        const prev = m.onBeforeCompile, prevKey = m.customProgramCacheKey ? m.customProgramCacheKey() : '';
+        m.onBeforeCompile = function (sh, r) {
+          if (prev) prev.call(this, sh, r);
+          sh.uniforms.riderFill = U;
+          sh.fragmentShader = 'uniform float riderFill;\n' + sh.fragmentShader.replace('#include <lights_fragment_end>',
+            '#include <lights_fragment_end>\n  reflectedLight.indirectDiffuse *= riderFill;');
+        };
+        m.customProgramCacheKey = () => `${prevKey}|fill`;
+        m.needsUpdate = true;
+      }
+    });
+  }
+
   _csmMaterials(root) {
     if (!this.csm) return;
     root.traverse((o) => {
@@ -1643,6 +1854,123 @@ export class Scene3D {
     }
     return { lim, other }; // [left, right]
   }
+
+  /**
+   * The nearest point of ANOTHER stretch of this road to (x, z), for a place beside segment a whose centre line
+   * point is f: { dist, y, b } or null (none within 30 m). Another stretch: farther along the road than it is
+   * away (a hairpin's other leg counts, the bend itself does not). Only on roads that come back near themselves.
+   */
+  _otherRoad(x, z, a, f) {
+    if (!this.route.custom && !this.route.nearItself) return null;
+    const n = this.route.segments.length, loop = !this.route.oneWay;
+    if (!this._rg) { // every segment's centre, in 10 m cells
+      const cells = new Map();
+      for (let b = 0; b < n; b++) {
+        const g = this.frame(b * SEG), key = `${Math.floor(g.x / 10)},${Math.floor(g.z / 10)}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push([b, g.x, g.z, g.y]);
+      }
+      this._rg = cells;
+    }
+    const own = loop ? ((a % n) + n) % n : a, cx = Math.floor(x / 10), cz = Math.floor(z / 10);
+    let best = null;
+    for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) {
+      for (const [b, bx, bz, by] of this._rg.get(`${cx + i},${cz + j}`) || []) {
+        const dist = Math.hypot(bx - x, bz - z);
+        if (dist > 30 || (best && dist >= best.dist)) continue;
+        let gap = Math.abs(b - own);
+        if (loop) gap = Math.min(gap, n - gap);
+        if (gap * SEG < Math.hypot(bx - f.x, bz - f.z) * 1.4 + 20) continue; // the same stretch
+        best = { dist, y: by, b };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Where the road comes back near itself (out and back along one street, a crossing, a hairpin): nothing of
+   * this chunk may stand on the other stretch, nor its land rise through it. Each placed thing (trees, houses,
+   * fences, fans, grass: all instanced) within reach of the other road's asphalt is dropped, and the land
+   * there is kept under that road. Before, a house of one stretch stood on the other, fence rails ran
+   * across it and a hillside hung over it.
+   */
+  _clearOtherRoads(group, terrain, a0, rows, frames) {
+    const near = this._otherRoadsNear(a0, frames);
+    if (!near) return; // most chunks: no other stretch anywhere near
+    const nc = COLS.length;
+    // the land: under the other road, 0.3 m below it within 1.5 m of its edge
+    const pos = terrain.geometry.attributes.position;
+    let moved = false;
+    for (let i = 0; i < rows * nc; i++) {
+      const o = near(pos.getX(i), pos.getZ(i));
+      if (o && o.dist < ROAD_HALF + 1.5 && pos.getY(i) > o.y - 0.3) { pos.setY(i, o.y - 0.3); moved = true; }
+    }
+    if (moved) { pos.needsUpdate = true; terrain.geometry.computeVertexNormals(); }
+    // the things: each instance's middle, with half its size around it
+    const m = new THREE.Matrix4(), c = new THREE.Vector3(), sc = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    group.traverse((im) => {
+      if (!im.isInstancedMesh) return;
+      const g = im.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      let hid = 0;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        c.copy(g.boundingSphere.center).applyMatrix4(m);
+        const o = near(c.x, c.z);
+        if (!o) continue;
+        sc.setFromMatrixScale(m);
+        const half = Math.min(8, g.boundingSphere.radius * Math.max(sc.x, sc.z) * 0.5);
+        if (sc.x && o.dist < ROAD_HALF + 0.6 + half) { im.setMatrixAt(i, zero); hid++; }
+      }
+      if (hid) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere?.(); }
+    });
+  }
+
+  /**
+   * The other stretches near a chunk, as a lookup `(x, z) => { dist, y, b } | null` (the nearest within 14 m),
+   * or null when there are none: each point of the road within reach of the chunk, kept if it is another
+   * stretch for the chunk's row nearest to it, in 14 m cells.
+   */
+  _otherRoadsNear(a0, frames) {
+    if (!this.route.custom && !this.route.nearItself) return null;
+    this._otherRoad(0, 0, 0, frames[0]); // builds this._rg
+    const n = this.route.segments.length, loop = !this.route.oneWay, R = 14, reach = COLS[COLS.length - 1] + R;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const f of frames) { x0 = Math.min(x0, f.x); x1 = Math.max(x1, f.x); z0 = Math.min(z0, f.z); z1 = Math.max(z1, f.z); }
+    const cells = new Map();
+    let any = false;
+    for (let cx = Math.floor((x0 - reach) / 10); cx <= Math.floor((x1 + reach) / 10); cx++) {
+      for (let cz = Math.floor((z0 - reach) / 10); cz <= Math.floor((z1 + reach) / 10); cz++) {
+        for (const pt of this._rg.get(`${cx},${cz}`) || []) {
+          const [b, bx, bz] = pt;
+          let r = 0, bd = Infinity;
+          for (let i = 0; i < frames.length; i++) { const d = (frames[i].x - bx) ** 2 + (frames[i].z - bz) ** 2; if (d < bd) { bd = d; r = i; } }
+          const own = loop ? (((a0 + r) % n) + n) % n : a0 + r;
+          let gap = Math.abs(b - own);
+          if (loop) gap = Math.min(gap, n - gap);
+          if (gap * SEG < Math.sqrt(bd) * 1.4 + 20) continue; // the chunk's own stretch
+          const key = Math.floor(bx / R) * 65536 + Math.floor(bz / R);
+          if (!cells.has(key)) cells.set(key, []);
+          cells.get(key).push(pt);
+          any = true;
+        }
+      }
+    }
+    if (!any) return null;
+    return (x, z) => {
+      const kx = Math.floor(x / R), kz = Math.floor(z / R);
+      let best = null;
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const list = cells.get((kx + i) * 65536 + kz + j);
+        if (list) for (const [b, bx, bz, by] of list) {
+          const dist = Math.hypot(bx - x, bz - z);
+          if (dist < R && (!best || dist < best.dist)) best = { dist, y: by, b };
+        }
+      }
+      return best;
+    };
+  }
+
 
   /** The real land beside an imported road at segment a and offset o: '.' open, 'f' wood, 'w' water. */
   _landAt(a, o) {
@@ -1756,13 +2084,26 @@ export class Scene3D {
     // the road is drawn every 1.25 m (the land every 5 m), so bends stay round on a wide road
     const SUB = 4, fine = [];
     for (let q = 0; q <= CHUNK * SUB; q++) fine.push(q % SUB ? this.frame((a0 + q / SUB) * SEG) : frames[q / SUB]);
+    // where another stretch of the road lies on this one (out and back along a street): both verges go under
+    // both roads, and the later stretch's asphalt and lines 3 cm under the earlier one's, so the two surfaces
+    // don't flicker through each other
+    if (this.route.custom || this.route.nearItself) {
+      const n = this.route.segments.length;
+      fine.forEach((f, q) => {
+        const a = a0 + Math.floor(q / SUB), o = this._otherRoad(f.x, f.z, a, f);
+        if (!o || o.dist > 2 * ROAD_HALF + 1.2) return;
+        f.verge = -0.1;
+        const own = this.route.oneWay ? a : ((a % n) + n) % n;
+        if (o.dist < 2 * ROAD_HALF && o.b < own) f.sink = -0.03;
+      });
+    }
     const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false, shade = null) => {
       const p = [], cs = [], uv = [];
       const cc = color instanceof THREE.Color ? color : col(color);
       for (let q = 0; q < fine.length - 1; q++) {
         if (dashed && ((a0 + Math.floor(q / SUB)) % 3 + 3) % 3 !== 0) continue;
         const f1 = fine[q], f2 = fine[q + 1];
-        const v = (f, o) => [f.x + f.rx * o, f.y + lift, f.z + f.rz * o];
+        const v = (f, o) => [f.x + f.rx * o, f.y + lift + ((lift < 0.03 ? f.verge : f.sink) || 0), f.z + f.rz * o];
         const A = v(f1, o1), B = v(f1, o2), C = v(f2, o1), D = v(f2, o2);
         p.push(...A, ...B, ...C, ...B, ...D, ...C);
         // World-space coordinates keep the asphalt continuous across chunks.
@@ -1934,6 +2275,7 @@ export class Scene3D {
     }
     if (grass.length) {
       const im = new THREE.InstancedMesh(this.models.grassClump, this.matGrass, grass.length);
+      im.userData.small = true;
       const c = new THREE.Color();
       grass.forEach(([m, k], i) => { im.setMatrixAt(i, m); im.setColorAt(i, c.setScalar(k)); });
       im.receiveShadow = true;
@@ -2012,11 +2354,11 @@ export class Scene3D {
     for (const [key, list] of Object.entries(place)) {
       const [type, far] = key.split('@');
       if (!list.length) continue;
-      const castShadow = !far && !['tuft', 'sunflowers', 'lupine', 'tallgrass', 'plant', 'flowers3'].includes(type);
+      const small = SMALL_PLANTS.includes(type), castShadow = !far && !small;
       // LOD: a far tree (70 m and out) is the simple built-in model, a few hundred triangles instead of thousands:
       // at that distance it reads the same, and the woods can be thick
       const lod = far === 'far' && TREE_TYPES.includes(type) && this.models[type];
-      if (this.nature?.types[type] && !lod) { this._addNature(group, type, list, castShadow); continue; }
+      if (this.nature?.types[type] && !lod) { this._addNature(group, type, list, castShadow, small); continue; }
       const geom = this.models[type];
       if (!geom) continue;
       const mat = ['oak', 'pine', 'birch', 'palm'].includes(type) ? this.matTree
@@ -2034,10 +2376,12 @@ export class Scene3D {
       if (type === 'house' || type === 'cottage') list.forEach((m, i) => im.setColorAt(i, tints[Math.floor(hash2(m.elements[12] * 0.13, m.elements[14] * 0.17) * tints.length)]));
       im.castShadow = castShadow;
       im.receiveShadow = true;
+      if (small) im.userData.small = true;
       group.add(im);
     }
     if (flowers.length) {
       const im = new THREE.InstancedMesh(this.models.flower, this.matPlant, flowers.length);
+      im.userData.small = true;
       flowers.forEach(([x, y, z, c], i) => { im.setMatrixAt(i, mtx(x, y, z, 0, 1)); im.setColorAt(i, col(c)); });
       group.add(im);
     }
@@ -2065,6 +2409,7 @@ export class Scene3D {
       group.add(posts, rails);
     }
     this._crowd(group, a0, rows, frames, heightAt);
+    this._clearOtherRoads(group, terrain, a0, rows, frames);
     // arches over the road: start / finish, and the foot and the top of every climb
     for (const A of this._arches()) {
       const n = this.route.oneWay ? 0 : Math.floor((a0 * SEG - A.d) / this.route.length);
@@ -2426,12 +2771,14 @@ export class Scene3D {
         geo.setAttribute('aSkin', new THREE.InstancedBufferAttribute(skin, 3));
         geo.setAttribute('aHair', new THREE.InstancedBufferAttribute(hair, 3));
         const im = new THREE.InstancedMesh(geo, this._fanMaterial(), list.length);
+        im.userData.fan = true;
         list.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
         im.castShadow = true; im.frustumCulled = false;
         group.add(im);
       });
     } else if (fans.length) {
       const im = new THREE.InstancedMesh(M.body, M.mat, fans.length);
+      im.userData.fan = true;
       fans.forEach(([m, c], i) => { im.setMatrixAt(i, m); im.setColorAt(i, col(c)); });
       im.castShadow = true; im.frustumCulled = false;
       group.add(im);
@@ -2624,7 +2971,7 @@ export class Scene3D {
   }
 
   /** Quaternius models: one InstancedMesh per variant part, leaves tinted from the route palette. */
-  _addNature(group, type, list, castShadow) {
+  _addNature(group, type, list, castShadow, small = false) {
     const variants = this.nature.types[type];
     const tint = natureTint(this.t, type);
     const byVariant = variants.map(() => []);
@@ -2651,6 +2998,7 @@ export class Scene3D {
           im.setColorAt(i, c);
         });
         im.castShadow = castShadow && part.material !== 'Grass';
+        if (small || part.material === 'Grass') im.userData.small = true;
         im.receiveShadow = true;
         group.add(im);
       }
@@ -2670,14 +3018,36 @@ export class Scene3D {
     });
   }
 
+  /**
+   * Chunks built ahead of you: AHEAD, or on a lap shorter than that, just enough to go round it once (the
+   * 500 m oval was built three times over, on top of itself: three times the grass, trees and shadows).
+   */
+  _ahead() {
+    const R = this.route;
+    if (!R || R.oneWay) return AHEAD;
+    return Math.max(1, Math.min(AHEAD, Math.ceil(R.length / (CHUNK * SEG)) - BEHIND - 1));
+  }
+
   _updateChunks(dist) {
     const c = Math.floor(dist / SEG / CHUNK);
-    for (const [k, g] of this.chunks) if (k < c - BEHIND || k > c + AHEAD) { this._dispose(g); this.chunks.delete(k); }
+    for (const [k, g] of this.chunks) if (k < c - BEHIND || k > c + this._ahead()) { this._dispose(g); this.chunks.delete(k); }
     // build the nearest missing chunk first, at most two per frame while riding
     let built = 0;
     const budget = this.warming ? Infinity : 2; // behind the loading screen: the whole stretch at once
-    for (let k = c - BEHIND; k <= c + AHEAD && built < budget; k++) {
+    for (let k = c - BEHIND; k <= c + this._ahead() && built < budget; k++) {
       if (!this.chunks.has(k)) { const g = this._buildChunk(k); this._csmMaterials(g); this.chunks.set(k, g); built++; }
+    }
+    // grass, flowers and little plants only in the chunks near you: further up the road they are smaller than a
+    // pixel and lost in the haze, yet each tuft was still drawn and lit with three shadow maps (a third of a frame)
+    const me = this.frame(dist);
+    for (const [k, g] of this.chunks) {
+      // how far the chunk is from you on the ground, not along the road: a loop or a hairpin brings the road
+      // far ahead back beside you
+      const at = g.userData.mid ??= this.frame((k + 0.5) * CHUNK * SEG);
+      const near = Math.hypot(at.x - me.x, at.z - me.z) < SMALL_AHEAD + CHUNK * SEG / 2;
+      if (g.userData.smallOn === near) continue;
+      g.userData.smallOn = near;
+      g.traverse((o) => { if (o.userData.small) o.visible = near; });
     }
   }
 
@@ -2699,7 +3069,7 @@ export class Scene3D {
     const seen = new Set();
     let me = null;
     riders.forEach((r, i) => {
-      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.helmet || ''}:${r.lens || ''}:${r.figure || ''}` : r.key || r.name || i; // new colours -> new rider
+      const key = r.self ? `me:${r.color}:${r.stripe}:${r.bike || ''}:${r.tape || ''}:${r.decal || ''}:${r.helmet || ''}:${r.lens || ''}:${r.figure || ''}` : r.key || r.name || i; // new colours -> new rider
       seen.add(key);
       let R = this.riders.get(key);
       if (!R) {
@@ -2724,7 +3094,7 @@ export class Scene3D {
           R.model = new Model(riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens });
         }
         // the frame its own colour, or the jersey's
-        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
+        if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.decal || r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
         // a smaller rider on a smaller frame (rider json "bikeScale", "saddleDrop"): bike and rider scaled together
         const fit = R.model?.cfg;
         if (fit && (fit.bikeScale || fit.saddleDrop)) {
@@ -2745,13 +3115,15 @@ export class Scene3D {
           });
         }
         if (R.model && R.bike) { R.model.bikeFit = R.bike.fit; R.model.bike = R.bike; R.bike.pedalTilt = R.model.cfg?.pedalTilt; } // saddle, hoods and pedals of this bike; pedals tilted with the soles
+        this._riderFill(R.group);
         this._csmMaterials(R.group);
       }
       const d = r.dist;
       // phones draw riders within 150 m only: further up the road they are a few pixels, and each is ~110k triangles
       const visible = Math.abs(d - dist) < (LOW && !r.self ? 150 : CHUNK * SEG * AHEAD);
       // a ghost just behind you rides through the chase camera: hidden there (its gap is shown over your head)
-      const inCamera = (r.ghost && this.camMode === 'chase' && d < dist - 0.8 && d > dist - 7) || (r.self && this.camMode === 'eyes'); // your own eyes: no you
+      const cm = this._cm ?? this.camMode;
+      const inCamera = (r.ghost && cm === 'chase' && d < dist - 0.8 && d > dist - 7) || (r.self && (cm === 'eyes' || cm === 'back')); // your own eyes: no you
       R.group.visible = visible && this.modelsReady && !inCamera;
       // name tags only for riders near you: far up the road they pile up into an unreadable stack
       if (R.labelSprite) R.labelSprite.visible = Math.abs(d - dist) < LABEL_RANGE;
@@ -2781,7 +3153,13 @@ export class Scene3D {
       const leanTo = back * Math.max(-0.35, Math.min(0.35, Math.atan(((R.speed || 0) ** 2 * curv) / 9.81)));
       R.lean = (R.lean || 0) + (leanTo - (R.lean || 0)) * Math.min(1, dt * 4);
       if (R.lastD === undefined || d !== R.lastD) { R.lastD = d; R.lastLane = lane; R.lastMoveT = now; }
-      R.group.rotation.set(LEAN_SIGN * R.lean, -(head + (R.yaw || 0)) + (r.oncoming ? Math.PI : 0), slope, 'YXZ');
+      // out of the saddle: eased in and out over half a second; the bike rocks under the rider (the clip is baked
+      // in the bike's frame, so rolling the group puts the bike over and the rider back near upright)
+      R.self = !!r.self;
+      const standTo = R.model?.canStand ? (this.forceStand ?? (r.stand ? 1 : 0)) : 0; // forceStand: 0/1 from devtools (?debug), for measuring
+      R.standW = (R.standW || 0) + Math.max(-dt / 0.5, Math.min(dt / 0.5, standTo - (R.standW || 0)));
+      const rock = R.standW ? R.standW * R.model.rockAt(r.pedal || 0) : 0;
+      R.group.rotation.set(LEAN_SIGN * R.lean + rock, -(head + (R.yaw || 0)) + (r.oncoming ? Math.PI : 0), slope, 'YXZ');
       R.pose(r.pedal || 0);
       R.roll?.(d);
       R.bike?.pose(r.pedal || 0);
@@ -2790,16 +3168,19 @@ export class Scene3D {
         const now = performance.now(), dt = R.lastT ? (now - R.lastT) / 1000 : 0;
         const cadence = dt > 0 ? (((r.pedal || 0) - (R.lastPedal || 0)) / dt) * 60 / (Math.PI * 2) : 0;
         R.lastT = now; R.lastPedal = r.pedal || 0;
-        R.model.pose(r.pedal || 0, dt, cadence);
+        R.model.pose(r.pedal || 0, dt, cadence, R.standW);
+        if (R.bike && R.model.cfg?.standPedalTilt) R.bike.pedalTilt = R.model.pedalTiltAt(R.standW);
       }
       if (r.self) me = { f, lane, R, head: head + (R.yaw || 0) };
     });
     for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
 
-    // chase camera
-    if (me && this.camMode === 'iso') {
+    // the camera: the chosen view, or on the TV director's (0) the shot it is on now
+    const cm = this._cm = this.camMode === 'tv' && me ? this._tvShot(dt, dist) : this.camMode;
+    if (this.camMode === 'tv' && cm !== 'post' && cm !== 'heli') this._setFov(CAM_FOV[cm]);
+    if (me && cm === 'iso') {
       // isometric-style view: high, from behind and to the side, narrow field of view (model-like look)
-      const target = this.frame(dist + (this.camMode === 'side' ? 4 : 3));
+      const target = this.frame(dist + 3);
       const h = this._isoHeading = this._isoHeading === undefined ? target.h : this._isoHeading + (target.h - this._isoHeading) * 0.04;
       const fx = Math.cos(h), fz = Math.sin(h), rx = -Math.sin(h), rz = Math.cos(h);
       // iso: behind-and-side; side: almost square to the road, rider crosses the screen left to right
@@ -2809,15 +3190,15 @@ export class Scene3D {
       const tx = target.x + target.rx * me.lane, tz = target.z + target.rz * me.lane, ty = target.y + 0.8;
       this.camera.position.set(tx - fx * flat * Math.cos(yaw) + rx * flat * Math.sin(yaw), ty + Math.sin(pitch) * D, tz - fz * flat * Math.cos(yaw) + rz * flat * Math.sin(yaw));
       this.camera.lookAt(tx, ty, tz);
-    } else if (me && (this.camMode === 'eyes' || this.camMode === 'front' || this.camMode === 'side')) {
+    } else if (me && (cm === 'eyes' || cm === 'front' || cm === 'side')) {
       const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
       const px = me.f.x + me.f.rx * me.lane, pz = me.f.z + me.f.rz * me.lane, cx = Math.cos(ch), cz = Math.sin(ch);
-      if (this.camMode === 'eyes') {
+      if (cm === 'eyes') {
         // the rider's own eyes: just above the bars, looking down the road
         const ahead = this.frame(dist + 25);
         this.camera.position.set(px + cx * 0.25, me.f.y + 1.62, pz + cz * 0.25);
         this.camera.lookAt(px + cx * 25, ahead.y + 1.2, pz + cz * 25);
-      } else if (this.camMode === 'side') {
+      } else if (cm === 'side') {
         // over the shoulder: behind and to the left, the rider in the right of the picture, looking down the road
         const BACK = 5, LEFT = 1.9, ahead = this.frame(dist + 30);
         const lx = -me.f.rx * LEFT, lz = -me.f.rz * LEFT; // left of the rider (rx/rz points right)
@@ -2829,6 +3210,9 @@ export class Scene3D {
         this.camera.position.set(px + cx * AHEAD - me.f.rx * 1.2, front.y + 1.5, pz + cz * AHEAD - me.f.rz * 1.2);
         this.camera.lookAt(px, me.f.y + 1.0, pz);
       }
+      this.camPos = this.camera.position.clone();
+    } else if (me && CAM_MORE.has(cm)) {
+      this._moreCam(cm, me, dist, dt);
       this.camPos = this.camera.position.clone();
     } else if (me) {
       // behind the rider along the way it faces, a little late into a bend (as a following motorbike
@@ -2885,7 +3269,9 @@ export class Scene3D {
       // the near cascade every frame, the middle one every 2nd, the far one every 4th: far shadows
       // change slowly, and each map is read with the matrix it was drawn with, so nothing slides
       const f = (this.shadowFrame = (this.shadowFrame || 0) + 1);
-      this.csm.lights.forEach((l, i) => { if (f % [1, 2, 4][i] === 0) l.shadow.needsUpdate = true; });
+      // staggered, so no frame draws all three (it did every 4th: an uneven beat of heavy and light frames):
+      // the middle one on odd frames, the far one on every 4th even one
+      this.csm.lights.forEach((l, i) => { if (i === 0 || (i === 1 && f % 2 === 1) || (i === 2 && f % 4 === 2)) l.shadow.needsUpdate = true; });
       // The sun you see (disk, its glow and the bright side of the sky) still keeps to the heading, ahead and
       // left, just out of the picture. Put where the light is, a low morning sun came into view in bends,
       // right over the helmet, and the high-quality glow made it a white blot.
