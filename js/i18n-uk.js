@@ -93,7 +93,7 @@ export const UK = {
   'Climb difficulty': 'Складність підйомів', '3D style': '3D-стиль', 'Cartoon': 'Мультяшний', 'Pixel (retro)': 'Піксельний (ретро)',
   'Camera': 'Камера', 'Chase': 'Ззаду', 'Isometric': 'Ізометрія', 'Side, from above': 'Збоку, згори',
   'Workout pacer: a virtual partner riding the target power': 'Пейсер у тренуваннях: віртуальний напарник на цільовій потужності',
-  'Pacer name': 'Ім\'я пейсера', 'Pacer': 'Пейсер', 'Workout sounds and voice cues': 'Звуки й голосові підказки в тренуваннях',
+  'Pacer name': 'Ім\'я пейсера', 'Pacer': 'Пейсер', 'Workout sounds and voice cues': 'Звуки й голосові підказки в тренуваннях', 'Fans cheering on the climbs (never with the mini window or the Mac overlay)': 'Вболівальники на підйомах (ніколи в міні-вікні чи Mac-оверлеї)',
 
   // drawer: intervals.icu, history
   'Pull planned workouts from your calendar and upload completed rides automatically. Find your API key in intervals.icu → Settings → Developer Settings.': 'Підтягує заплановані тренування з календаря й сам вивантажує завершені заїзди. API-ключ знайдеш в intervals.icu → Settings → Developer Settings.',
@@ -122,7 +122,9 @@ export const UK = {
   'Camera: drag to orbit, scroll to zoom, double-click to reset': 'Камера: тягни, щоб покрутити, коліщатко для масштабу, подвійний клік, щоб скинути',
   'Camera: chase': 'Камера: ззаду', "Camera: rider's eyes": 'Камера: очима райдера', 'Camera: from the front': 'Камера: спереду', 'Next camera': 'Наступна камера',
   "Camera: chase · rider's eyes · isometric · over the shoulder · front": 'Камера: ззаду · очима · ізометрія · через плече · спереду',
-  '1 · Chase': '1 · Ззаду', "2 · Rider's eyes": '2 · Очима райдера', '3 · Isometric': '3 · Ізометрія', '4 · Over the shoulder': '4 · Через плече', 'Camera: over the shoulder': 'Камера: через плече', '5 · From the front': '5 · Спереду', 'Camera: isometric': 'Камера: ізометрія', 'Camera: side view': 'Камера: збоку',
+  '1 · Chase': '1 · Ззаду', "2 · Rider's eyes": '2 · Очима райдера', '3 · Isometric': '3 · Ізометрія', '4 · Over the shoulder': '4 · Через плече', 'Camera: over the shoulder': 'Камера: через плече', '5 · From the front': '5 · Спереду', '6 · Far behind': '6 · Здалеку ззаду', '7 · Looking back': '7 · Погляд назад', '8 · By the road': '8 · Біля дороги', '9 · Helicopter': '9 · Гелікоптер', '0 · TV broadcast': '0 · Телетрансляція',
+  'Camera: far behind': 'Камера: здалеку ззаду', 'Camera: looking back': 'Камера: погляд назад', 'Camera: by the road': 'Камера: біля дороги', 'Camera: helicopter': 'Камера: гелікоптер', 'Camera: TV broadcast': 'Камера: телетрансляція',
+  'Camera: far behind · looking back · by the road · helicopter': 'Камера: здалеку · назад · біля дороги · гелікоптер', 'Camera: TV broadcast, cutting between shots': 'Камера: телетрансляція, сама перемикає плани', 'Camera: isometric': 'Камера: ізометрія', 'Camera: side view': 'Камера: збоку',
   'No data from the trainer for {s} s — this gap was skipped': 'Від тренажера {s} с не було даних, цей проміжок пропущено',
   'Finish! {time} 🏁': 'Фініш! {time} 🏁', 'Finish! {time} — new record! ({delta}) 🏆': 'Фініш! {time}, новий рекорд! ({delta}) 🏆',
   'Finish! {time} ({delta} vs best)': 'Фініш! {time} ({delta} до рекорду)',
