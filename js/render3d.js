@@ -1827,6 +1827,123 @@ export class Scene3D {
     return { lim, other }; // [left, right]
   }
 
+  /**
+   * The nearest point of ANOTHER stretch of this road to (x, z), for a place beside segment a whose centre line
+   * point is f: { dist, y, b } or null (none within 30 m). Another stretch: farther along the road than it is
+   * away (a hairpin's other leg counts, the bend itself does not). Only on roads that come back near themselves.
+   */
+  _otherRoad(x, z, a, f) {
+    if (!this.route.custom && !this.route.nearItself) return null;
+    const n = this.route.segments.length, loop = !this.route.oneWay;
+    if (!this._rg) { // every segment's centre, in 10 m cells
+      const cells = new Map();
+      for (let b = 0; b < n; b++) {
+        const g = this.frame(b * SEG), key = `${Math.floor(g.x / 10)},${Math.floor(g.z / 10)}`;
+        if (!cells.has(key)) cells.set(key, []);
+        cells.get(key).push([b, g.x, g.z, g.y]);
+      }
+      this._rg = cells;
+    }
+    const own = loop ? ((a % n) + n) % n : a, cx = Math.floor(x / 10), cz = Math.floor(z / 10);
+    let best = null;
+    for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) {
+      for (const [b, bx, bz, by] of this._rg.get(`${cx + i},${cz + j}`) || []) {
+        const dist = Math.hypot(bx - x, bz - z);
+        if (dist > 30 || (best && dist >= best.dist)) continue;
+        let gap = Math.abs(b - own);
+        if (loop) gap = Math.min(gap, n - gap);
+        if (gap * SEG < Math.hypot(bx - f.x, bz - f.z) * 1.4 + 20) continue; // the same stretch
+        best = { dist, y: by, b };
+      }
+    }
+    return best;
+  }
+
+  /**
+   * Where the road comes back near itself (out and back along one street, a crossing, a hairpin): nothing of
+   * this chunk may stand on the other stretch, nor its land rise through it. Each placed thing (trees, houses,
+   * fences, fans, grass: all instanced) within reach of the other road's asphalt is dropped, and the land
+   * there is kept under that road. Before, a house of one stretch stood on the other, fence rails ran
+   * across it and a hillside hung over it.
+   */
+  _clearOtherRoads(group, terrain, a0, rows, frames) {
+    const near = this._otherRoadsNear(a0, frames);
+    if (!near) return; // most chunks: no other stretch anywhere near
+    const nc = COLS.length;
+    // the land: under the other road, 0.3 m below it within 1.5 m of its edge
+    const pos = terrain.geometry.attributes.position;
+    let moved = false;
+    for (let i = 0; i < rows * nc; i++) {
+      const o = near(pos.getX(i), pos.getZ(i));
+      if (o && o.dist < ROAD_HALF + 1.5 && pos.getY(i) > o.y - 0.3) { pos.setY(i, o.y - 0.3); moved = true; }
+    }
+    if (moved) { pos.needsUpdate = true; terrain.geometry.computeVertexNormals(); }
+    // the things: each instance's middle, with half its size around it
+    const m = new THREE.Matrix4(), c = new THREE.Vector3(), sc = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    group.traverse((im) => {
+      if (!im.isInstancedMesh) return;
+      const g = im.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      let hid = 0;
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        c.copy(g.boundingSphere.center).applyMatrix4(m);
+        const o = near(c.x, c.z);
+        if (!o) continue;
+        sc.setFromMatrixScale(m);
+        const half = Math.min(8, g.boundingSphere.radius * Math.max(sc.x, sc.z) * 0.5);
+        if (sc.x && o.dist < ROAD_HALF + 0.6 + half) { im.setMatrixAt(i, zero); hid++; }
+      }
+      if (hid) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere?.(); }
+    });
+  }
+
+  /**
+   * The other stretches near a chunk, as a lookup `(x, z) => { dist, y, b } | null` (the nearest within 14 m),
+   * or null when there are none: each point of the road within reach of the chunk, kept if it is another
+   * stretch for the chunk's row nearest to it, in 14 m cells.
+   */
+  _otherRoadsNear(a0, frames) {
+    if (!this.route.custom && !this.route.nearItself) return null;
+    this._otherRoad(0, 0, 0, frames[0]); // builds this._rg
+    const n = this.route.segments.length, loop = !this.route.oneWay, R = 14, reach = COLS[COLS.length - 1] + R;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const f of frames) { x0 = Math.min(x0, f.x); x1 = Math.max(x1, f.x); z0 = Math.min(z0, f.z); z1 = Math.max(z1, f.z); }
+    const cells = new Map();
+    let any = false;
+    for (let cx = Math.floor((x0 - reach) / 10); cx <= Math.floor((x1 + reach) / 10); cx++) {
+      for (let cz = Math.floor((z0 - reach) / 10); cz <= Math.floor((z1 + reach) / 10); cz++) {
+        for (const pt of this._rg.get(`${cx},${cz}`) || []) {
+          const [b, bx, bz] = pt;
+          let r = 0, bd = Infinity;
+          for (let i = 0; i < frames.length; i++) { const d = (frames[i].x - bx) ** 2 + (frames[i].z - bz) ** 2; if (d < bd) { bd = d; r = i; } }
+          const own = loop ? (((a0 + r) % n) + n) % n : a0 + r;
+          let gap = Math.abs(b - own);
+          if (loop) gap = Math.min(gap, n - gap);
+          if (gap * SEG < Math.sqrt(bd) * 1.4 + 20) continue; // the chunk's own stretch
+          const key = Math.floor(bx / R) * 65536 + Math.floor(bz / R);
+          if (!cells.has(key)) cells.set(key, []);
+          cells.get(key).push(pt);
+          any = true;
+        }
+      }
+    }
+    if (!any) return null;
+    return (x, z) => {
+      const kx = Math.floor(x / R), kz = Math.floor(z / R);
+      let best = null;
+      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+        const list = cells.get((kx + i) * 65536 + kz + j);
+        if (list) for (const [b, bx, bz, by] of list) {
+          const dist = Math.hypot(bx - x, bz - z);
+          if (dist < R && (!best || dist < best.dist)) best = { dist, y: by, b };
+        }
+      }
+      return best;
+    };
+  }
+
+
   /** The real land beside an imported road at segment a and offset o: '.' open, 'f' wood, 'w' water. */
   _landAt(a, o) {
     if (!this.land || Math.abs(o) < 11) return '.';
@@ -1939,13 +2056,26 @@ export class Scene3D {
     // the road is drawn every 1.25 m (the land every 5 m), so bends stay round on a wide road
     const SUB = 4, fine = [];
     for (let q = 0; q <= CHUNK * SUB; q++) fine.push(q % SUB ? this.frame((a0 + q / SUB) * SEG) : frames[q / SUB]);
+    // where another stretch of the road lies on this one (out and back along a street): both verges go under
+    // both roads, and the later stretch's asphalt and lines 3 cm under the earlier one's, so the two surfaces
+    // don't flicker through each other
+    if (this.route.custom || this.route.nearItself) {
+      const n = this.route.segments.length;
+      fine.forEach((f, q) => {
+        const a = a0 + Math.floor(q / SUB), o = this._otherRoad(f.x, f.z, a, f);
+        if (!o || o.dist > 2 * ROAD_HALF + 1.2) return;
+        f.verge = -0.1;
+        const own = this.route.oneWay ? a : ((a % n) + n) % n;
+        if (o.dist < 2 * ROAD_HALF && o.b < own) f.sink = -0.03;
+      });
+    }
     const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false, shade = null) => {
       const p = [], cs = [], uv = [];
       const cc = color instanceof THREE.Color ? color : col(color);
       for (let q = 0; q < fine.length - 1; q++) {
         if (dashed && ((a0 + Math.floor(q / SUB)) % 3 + 3) % 3 !== 0) continue;
         const f1 = fine[q], f2 = fine[q + 1];
-        const v = (f, o) => [f.x + f.rx * o, f.y + lift, f.z + f.rz * o];
+        const v = (f, o) => [f.x + f.rx * o, f.y + lift + ((lift < 0.03 ? f.verge : f.sink) || 0), f.z + f.rz * o];
         const A = v(f1, o1), B = v(f1, o2), C = v(f2, o1), D = v(f2, o2);
         p.push(...A, ...B, ...C, ...B, ...D, ...C);
         // World-space coordinates keep the asphalt continuous across chunks.
@@ -2251,6 +2381,7 @@ export class Scene3D {
       group.add(posts, rails);
     }
     this._crowd(group, a0, rows, frames, heightAt);
+    this._clearOtherRoads(group, terrain, a0, rows, frames);
     // arches over the road: start / finish, and the foot and the top of every climb
     for (const A of this._arches()) {
       const n = this.route.oneWay ? 0 : Math.floor((a0 * SEG - A.d) / this.route.length);
