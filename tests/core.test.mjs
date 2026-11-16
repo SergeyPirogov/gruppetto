@@ -1018,3 +1018,37 @@ test('race bunch: together on the flat, split by a climb', async () => {
   assert.ok(flatMax < 15, `the bunch holds on the flat (spread ${flatMax.toFixed(1)} m)`);
   assert.ok(spread() > 40, `the climb splits it (spread ${spread().toFixed(1)} m)`);
 });
+
+import { standStep } from '../js/standing.js';
+const runStand = (state, input, seconds) => { let up = false; for (let t = 0; t < seconds - 1e-9; t += 0.1) up = standStep(state, input, 0.1); return up; };
+test('standing: a surge stands after 0.4 s', () => {
+  assert.equal(runStand({}, { power: 300, ftp: 250, cadence: 95 }, 0.3), false);
+  assert.equal(runStand({}, { power: 300, ftp: 250, cadence: 95 }, 0.5), true);
+});
+test('standing: a grind stands', () => {
+  assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 65 }, 0.5), true);
+  assert.equal(runStand({}, { power: 100, ftp: 250, cadence: 65 }, 2), false); // under half of FTP: soft-pedalling
+});
+test('standing: sits after 0.8 s of easy riding', () => {
+  assert.equal(runStand({ up: true }, { power: 200, ftp: 250, cadence: 90 }, 0.7), true);
+  assert.equal(runStand({ up: true }, { power: 200, ftp: 250, cadence: 90 }, 0.9), false);
+});
+test('standing: no bobbing at the edge', () => {
+  for (const start of [true, false]) {
+    const s = { up: start };
+    for (let i = 0; i < 100; i++) { // 0.1 s steps, the power switching every 3 steps (0.3 s)
+      const power = Math.floor(i / 3) % 2 ? 310 : 290;
+      assert.equal(standStep(s, { power, ftp: 250, cadence: 90 }, 0.1), start, `step ${i} start=${start}`);
+    }
+  }
+});
+test('standing: coasting sits down', () => {
+  assert.equal(runStand({ up: true }, { power: 0, ftp: 250, cadence: 0 }, 0.9), false);
+});
+test('standing: no cadence uses power only', () => {
+  assert.equal(runStand({}, { power: 320, ftp: 250, cadence: null }, 0.5), true);
+  assert.equal(runStand({ up: true }, { power: 150, ftp: 250, cadence: null }, 0.9), false);
+});
+test('standing: no power never stands', () => {
+  assert.equal(runStand({}, { power: null, ftp: 250, cadence: 60 }, 2), false);
+});
