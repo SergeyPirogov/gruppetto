@@ -55,20 +55,28 @@ function thin(points, step = 200) {
 }
 
 /** Fetch the map data near a track; tries the next server when one is busy. */
-export async function fetchOsm(points, { fetcher = fetch, timeoutMs = 60000 } = {}) {
+/**
+ * `onTry(i, n)` says which of the n map servers is being asked (from 1); `signal` aborts the whole query
+ * (the rider chose to go on without the map).
+ */
+export async function fetchOsm(points, { fetcher = fetch, timeoutMs = 60000, onTry, signal } = {}) {
   const line = thin(points);
   if (line.length > 900 || trackBoxes(line).length > 120) throw new Error('track too long for a map query');
   const near = thin(points, 120);
   const body = new URLSearchParams({ data: overpassQuery(line, near.length <= 1300 ? near : []) });
   let lastErr;
-  for (const url of ENDPOINTS) {
-    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs);
+  for (const [i, url] of ENDPOINTS.entries()) {
+    if (signal?.aborted) break;
+    onTry?.(i + 1, ENDPOINTS.length);
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), timeoutMs), stop = () => ctl.abort();
+    signal?.addEventListener('abort', stop);
     try {
       const res = await fetcher(url, { method: 'POST', body, signal: ctl.signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return await res.json();
-    } catch (e) { lastErr = e; } finally { clearTimeout(timer); }
+    } catch (e) { lastErr = e; } finally { clearTimeout(timer); signal?.removeEventListener('abort', stop); }
   }
+  if (signal?.aborted) throw new Error('map skipped');
   throw lastErr || new Error('no map server answered');
 }
 

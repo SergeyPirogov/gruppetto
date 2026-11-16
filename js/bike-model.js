@@ -56,6 +56,13 @@ function decalFade(mat, under) {
 }
 export function setBikeEnvironment(renderer) {
   if (ENV || !renderer) return;
+  ENV = makeBikeEnvironment(renderer);
+}
+/**
+ * The soft sky the bike's gloss reflects, rendered for one renderer: a PMREM texture belongs to the WebGL
+ * context that made it, so a second canvas (the garage) makes its own instead of borrowing the ride's.
+ */
+export function makeBikeEnvironment(renderer) {
   const geo = new THREE.SphereGeometry(10, 32, 16);
   const col = [], c = new THREE.Color(), sky = new THREE.Color(0.78, 0.86, 1.0), haze = new THREE.Color(1.0, 0.98, 0.94), ground = new THREE.Color(0.22, 0.24, 0.2);
   const pos = geo.attributes.position;
@@ -68,8 +75,9 @@ export function setBikeEnvironment(renderer) {
   const env = new THREE.Scene();
   env.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
   const pm = new THREE.PMREMGenerator(renderer);
-  ENV = pm.fromScene(env, 0.04).texture;
+  const tex = pm.fromScene(env, 0.04).texture;
   pm.dispose(); geo.dispose();
+  return tex;
 }
 
 export async function loadBikeModel() {
