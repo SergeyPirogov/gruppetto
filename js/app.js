@@ -4397,6 +4397,7 @@ async function openGarage() {
       const { Garage } = await import('./garage.js');
       garage = new Garage($('garage-canvas'));
       garage.onReady = () => { $('garage-loading').hidden = true; };
+      garage.setSpin(garageSpin);
     }
     renderGarageBits();
     if (!box.hidden) garage.start();
@@ -4412,13 +4413,23 @@ function closeGarage() {
 $('garage-kits').innerHTML = GARAGE_KITS.map(([name, c], i) => `<button class="garage-kit" data-kit="${i}"><i>${swatches(c.slice(0, 3))}</i>${esc(tr(name))}</button>`).join('');
 $('garage-kits').addEventListener('click', (e) => { const b = e.target.closest('[data-kit]'); if (b) applyLook(GARAGE_KITS[b.dataset.kit][1]); });
 $('garage-random').onclick = surpriseLook;
+// the turntable: turning or held still, as you left it last time
+const SPIN_KEY = 'gruppetto.garageSpin';
+let garageSpin = (() => { try { return localStorage.getItem(SPIN_KEY) !== '0'; } catch { return true; } })();
+function renderSpin() {
+  $('garage-spin').textContent = garageSpin ? tr('⏸ Stop') : tr('▶ Turn');
+  $('garage-spin').setAttribute('aria-pressed', String(garageSpin));
+  garage?.setSpin(garageSpin);
+}
+$('garage-spin').onclick = () => { garageSpin = !garageSpin; try { localStorage.setItem(SPIN_KEY, garageSpin ? '1' : '0'); } catch { /* private mode */ } renderSpin(); };
+renderSpin();
 $('btn-garage').onclick = openGarage;
 $('rail-garage').onclick = openGarage;
 $('garage').addEventListener('click', (e) => { if (e.target.closest('[data-garage-close], #garage-done')) closeGarage(); });
 $('garage-views').addEventListener('click', (e) => {
   const b = e.target.closest('[data-gview]');
   if (!b) return;
-  for (const x of $('garage-views').children) x.classList.toggle('sel', x === b);
+  for (const x of $('garage-views').querySelectorAll('[data-gview]')) x.classList.toggle('sel', x === b);
   garage?.setView(b.dataset.gview);
 });
 // Escape closes the garage first (and only it: the drawer under it stays open)

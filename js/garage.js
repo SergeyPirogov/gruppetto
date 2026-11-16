@@ -64,6 +64,7 @@ export class Garage {
     this.goal = null; // the view the camera eases toward
     this.spin = 0; // the turntable's angle
     this.idle = IDLE;
+    this.spinning = true; // the turntable turns on its own; setSpin(false) holds it where it is
     this.pedal = 0;
     this.dist = 0;
     this.look = null;
@@ -81,6 +82,9 @@ export class Garage {
 
   /** The colours and figure to show: { jersey, stripe, bike, tape, decal, helmet, lens, figure }. */
   setLook(look) { this.look = look; }
+
+  /** The turntable on (it turns by itself while you leave it) or held still. */
+  setSpin(on) { this.spinning = !!on; this.idle = IDLE; }
 
   /** Ease the camera to a named view ('side', 'front', 'back', 'head'). */
   setView(name) {
@@ -204,7 +208,7 @@ export class Garage {
     this._build();
     // the turntable turns while you leave it alone
     this.idle += dt;
-    if (this.idle > IDLE && !this.goal) this.spin += SPIN * dt * Math.min(1, (this.idle - IDLE) / 1.5);
+    if (this.spinning && this.idle > IDLE && !this.goal) this.spin += SPIN * dt * Math.min(1, (this.idle - IDLE) / 1.5);
     this.table.rotation.y = this.spin;
     if (this.goal) {
       const k = Math.min(1, dt * 4), V = this.view, G = this.goal;
