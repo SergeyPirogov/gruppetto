@@ -27,7 +27,7 @@ import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
-import { initSocialUi, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { initSocialUi, groupChannel, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -39,6 +39,7 @@ import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './p
 import { nextWeather } from './atmo-blend.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
 import { PASS_AFTER, heldBy, pickLane } from './passing.js';
+import { Mates, packet as groupPacket } from './group.js';
 
 const $ = (id) => document.getElementById(id);
 // units in the interface language
@@ -66,6 +67,7 @@ if (!settings.pacerOffByDefault) {
 if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__ride', { get: () => ride });
   Object.defineProperty(window, '__scene', { get: () => scene });
+  window.__groupRide = (g) => startRide({ group: g }); // a group ride without an account (the browser tests)
   window.__pretendTrainer = false; // true: a simulator ride counts as a real one for the leaderboards (the browser tests)
   window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async () => null }; renderModes(); }; // try the plan box and uploads without an account
 }
@@ -1316,10 +1318,12 @@ async function startRide(opts) {
   const wentFull = watching ? false : installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
   if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); if (pipAsk) closePip(); return; }
   if (await wentFull) rideFullscreen = true;
-  const route = routes.find((r) => r.id === settings.routeId) || routes[0];
-  const workout = allWorkouts().find((w) => w.id === settings.mode) || null;
+  // a group ride (#84): its route, a free ride with the others live instead of the bots, held on the line till the start
+  const group = opts?.group || null;
+  const route = (group && routes.find((r) => r.id === group.routeId)) || routes.find((r) => r.id === settings.routeId) || routes[0];
+  const workout = group ? null : allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
-  const racing = settings.mode === 'race';
+  const racing = !group && settings.mode === 'race';
   const laps = route.oneWay ? 1 : Math.max(1, settings.raceLaps || 1);
   ride = {
     route, workout, simulated,
@@ -1336,16 +1340,24 @@ async function startRide(opts) {
         const lane = [-2.0, -0.4, 2.0][i % 3], home = lane;
         return { ...b, dist: -1.6 - Math.floor(i / 3) * 1.9, v: 0, pedal: i, lane, home, laneTarget: lane, line: BUNCH.lines[i % 2] };
       })
-      : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
+      : group ? [] : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
     race: racing ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
-    attacks: !racing && !workout && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
+    attacks: !racing && !workout && !group && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
-    ghost: racing ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
+    ghost: racing || group ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
-    pacer: racing ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
+    pacer: racing || group ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
   if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
-  track('ride-start', [racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
+  if (group) {
+    // on the line, a place of your own: four across, rows 1.9 m apart, picked by your account (the others' differ)
+    const slot = [...String(group.me.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 12;
+    ride.lane = ride.laneTarget = ride.laneHome = [-1.8, -0.6, 0.6, 1.8][slot % 4];
+    ride.dist = -Math.floor(slot / 4) * 1.9;
+    ride.group = { id: group.id, title: group.title, t0: group.startsAt, go: Date.now() >= group.startsAt, me: group.me, mates: new Mates(group.me.id), live: null, sentAt: 0 };
+    groupChannel(group.id, (p) => ride?.group?.mates.receive(p, Date.now())).then((live) => { if (ride?.group?.id === group.id) ride.group.live = live; else live.leave(); }).catch((e) => toast(e.message));
+  }
+  track('ride-start', [group ? 'group' : racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   // on the grid in the first row with the bunch, the front wheel just behind the line (the bike is ~1.7 m long)
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; ride.dist = -1.6; }
@@ -1367,7 +1379,7 @@ async function startRide(opts) {
   $('wk-intensity').hidden = !workout;
   $('wk-steps').hidden = !workout;
   $('race-board').hidden = !racing;
-  $('countdown').hidden = !racing;
+  $('countdown').hidden = !racing && !group;
   $('minimap-box').classList.toggle('big', !!settings.bigMap); mapZoomLabel(); // as you left it
   hidePanel('map', !!settings.hideMap); hidePanel('profile', !!settings.hideProfile);
   ride.stepStats = [];
@@ -1436,6 +1448,11 @@ function advance(now = performance.now()) {
     if (ride.race.countdown <= 0) { ride.race.go = true; ride.race.t0 = ride.elapsed; cueBeep(1320, 0.45); }
     left = 0;
   }
+  if (ride.group && !ride.group.go) { // a group ride: on the line till the time it starts, the clock waiting too
+    if (Date.now() >= ride.group.t0) { ride.group.go = true; cueBeep(1320, 0.45); } else { t += left * 1000; left = 0; }
+  }
+  groupSend();
+  const mates = ride.group ? ride.group.mates.list(Date.now()) : [];
   updateWind();
   const W = ride.wind || { head: 0, cross: 0 };
   while (left > 1e-6) {
@@ -1445,7 +1462,7 @@ function advance(now = performance.now()) {
     const cadence = cadenceAt(t, power);
     const grade = route.gradeAt(ride.dist);
     // drafting: the shelter of the riders ahead (deeper in a bunch), and a little from one close behind
-    const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
+    const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...mates];
     ride.draft = packDraft(pack.map((o) => ({ gap: o.dist - ride.dist, sideways: o.lane - ride.lane })), W.cross);
     ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft), wind: W.head });
     // your speed on your own, out of the wind shadow: faster than the wheel ahead -> you come past it,
@@ -1510,7 +1527,7 @@ function advance(now = performance.now()) {
     // overtaking: a rider closing on someone in the same lane swings out to a free one, then back
     if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
       ride.laneCheck = 0;
-      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, heldFor: ride.heldFor, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : [])];
+      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, heldFor: ride.heldFor, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...mates];
       const inBunch = ride.race && ride.race.go && ride.elapsed - (ride.race.t0 ?? 0) > 8;
       for (const b of ride.bots) {
         const lane = pickLane(b, solid, inBunch && b.line != null ? b.line : b.home);
@@ -1613,12 +1630,14 @@ function frame(now) {
   // the fans on the climbs: not with the sound or the fans off, on a pause, or while you watch something else
   // with the numbers in the mini window or the Mac overlay (the road isn't drawn then, and the cheering got over a film)
   if (settings.sound && settings.crowd !== false && !ride.paused && !pipOpen() && !overlayOn()) crowd(crowdLevel()); else crowdOff();
-  if (ride.race) {
-    const c = ride.race.countdown, el = $('countdown');
-    const txt = ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
+  if (ride.race || ride.group) {
+    const G = ride.group, c = G ? (G.t0 - Date.now()) / 1000 : ride.race.countdown, el = $('countdown');
+    const txt = G ? (G.go ? (Date.now() - G.t0 < 1500 ? tr('GO!') : '') : c > 3 ? tr('Group start in {t}', { t: fmtTime(Math.ceil(c)) }) : String(Math.ceil(c)))
+      : ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
+    el.classList.toggle('wait', !!G && !G.go && c > 3);
     if (el.textContent !== txt) {
       el.textContent = txt; el.hidden = !txt;
-      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+      el.classList.remove('pop'); void el.offsetWidth; if (!el.classList.contains('wait')) el.classList.add('pop'); // the wait's clock ticks quietly
       if (/^[123]$/.test(txt)) cueBeep(880, 0.15);
     }
   }
@@ -1629,6 +1648,7 @@ function frame(now) {
     ...(ride.ghost ? [ride.ghost] : []),
     ...(ride.climbGhost ? [ride.climbGhost] : []),
     ...(ride.passers || []),
+    ...(ride.group ? ride.group.mates.list(Date.now()) : []),
   ];
   // the mini window is open: the 3D road is not drawn (nobody looks at it, and the video you watch keeps the
   // graphics card); the ride goes on, and the road comes back the moment the mini window closes
@@ -2591,6 +2611,7 @@ function finishRide() {
   });
   const socialSim = ride.simulated && !window.__pretendTrainer;
   const socialTimed = !ride.route.custom && (ride.lapEfforts.length + ride.efforts.length) > 0;
+  ride.group?.live?.leave();
   const socialFirst = ride.efforts.find((x) => socialItems.some((i) => i.segment_id === x.segId))?.name.replace(/^\S+\s/, '') || ride.route.name;
   ride = null;
   if (trainer.connected && trainer.controllable) {
@@ -3924,6 +3945,17 @@ function togglePacer() {
 }
 
 /** The pacer is out on the road: the workout pacer in a workout, the free-ride pacer otherwise. */
+/** A group ride: your position to the others, once a second (also while waiting on the line, so they see you there). */
+function groupSend() {
+  const G = ride?.group, now = performance.now();
+  if (!G?.live?.joined || now - G.sentAt < 1000) return;
+  G.sentAt = now;
+  G.live.send(groupPacket({
+    id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }),
+    look: { jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, figure: settings.figure },
+  }, Date.now()));
+}
+
 function pacerOn() {
   if (!ride?.pacer) return false;
   return ride.pacer.free ? !!settings.freePacer : settings.pacer === true;
@@ -4523,6 +4555,8 @@ initSocialUi({
     history = list; seenHistory.clear(); stampChanged(history, seenHistory); writeHistory(); renderHistory(); renderProgress();
   },
   currentRoute: () => routes.find((x) => x.id === settings.routeId) || routes[0],
+  routes: () => routes.filter((x) => !x.custom),
+  startGroupRide: (g) => { if (!ride) startRide({ group: g }); },
   routeOfSegment: (seg) => routes.find((x) => !x.custom && seg.startsWith(`${x.id}-`) && (seg === `${x.id}-lap` || [...x.climbs, ...(x.sprints || [])].some((c) => c.id === seg))),
   refresh: () => { refreshProfileForm(); updateSummary(); renderProgress(); renderFtpBox(); },
 });

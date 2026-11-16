@@ -49,6 +49,7 @@
       <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
       <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
       <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Oblast against oblast: kilometres and climbing">🇺🇦 <span>Ratings of Ukraine</span></button>
+      <button id="hdr-group" class="hdr-account hdr-ua" hidden title="Ride together at a set time, live on the road">👥 <span>Group rides</span></button>
       <button id="hdr-account" class="hdr-account" hidden></button>
       <div class="dev-chips">
         <button class="dev-chip" data-key="trainer" data-open="devices"><i></i>Trainer</button>
@@ -758,6 +759,29 @@
         <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to put your oblast on the board.</p>
         <p id="ua-cta" class="hint" hidden></p>
         <p class="hint">Rides on a trainer of riders signed in, each by the oblast in their profile. The simulator does not count.</p>
+      </div>
+    </div>
+
+    <!-- group rides (#84, js/group.js): the calendar, joining, and a new ride -->
+    <div id="gr-view" class="wk-menu" hidden>
+      <div class="drawer-bg" data-gr-close></div>
+      <div class="wk-menu-panel lb-panel gr-panel">
+        <div class="wk-menu-head"><h2>Group rides</h2><button class="drawer-close" data-gr-close aria-label="Close">✕</button></div>
+        <p id="gr-cta" class="hint" hidden></p>
+        <ul id="gr-list" class="gr-list"></ul>
+        <p id="gr-empty" class="hint" hidden>No group rides planned yet: set one up and send the link to your friends.</p>
+        <details id="gr-new" class="gr-new">
+          <summary>+ New group ride</summary>
+          <form id="gr-form" class="gr-form">
+            <label class="gr-wide">Title<input id="gr-title" maxlength="80" required placeholder="Evening spin"></label>
+            <label class="gr-wide">Route<select id="gr-route"></select></label>
+            <label>Date<input id="gr-date" type="date" required></label>
+            <label>Time<input id="gr-time" type="time" required></label>
+            <button id="gr-create" class="primary gr-wide" type="submit">Set up the ride</button>
+            <p id="gr-err" class="hint gr-wide" hidden></p>
+          </form>
+        </details>
+        <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together: you see each other live on the road, and ride in each other's shelter. Signed in, on a trainer or in the simulator.</p>
       </div>
     </div>
 

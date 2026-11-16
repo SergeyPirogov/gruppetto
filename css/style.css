@@ -925,6 +925,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .race-row .rg { color: var(--cyan); font-weight: 700; }
 .countdown { position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%); font-size: clamp(3rem, 12vw, 8rem); font-weight: 900; color: #fff; text-shadow: 0 6px 30px rgba(0,0,0,.45); pointer-events: none; z-index: 8; }
 .countdown[hidden] { display: none; }
+/* a group ride's wait on the line: a small clock, not the big numbers */
+.countdown.wait { top: 20%; font-size: clamp(1.1rem, 3.2vw, 1.9rem); font-weight: 800; white-space: nowrap; padding: 10px 22px; border-radius: 999px; background: rgba(15, 20, 32, .72); text-shadow: none; }
 .countdown.pop { animation: cd-pop .9s ease-out; }
 @keyframes cd-pop { from { transform: translate(-50%, -50%) scale(1.6); opacity: 0; } 30% { opacity: 1; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
 .race-pick .race-laps { display: inline-flex; gap: 4px; align-items: center; font-size: .78rem; color: var(--muted); }
@@ -1485,3 +1487,32 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 #ua-region { width: auto; }
 .ua-table td:nth-child(4) { font-weight: 400; }
 .ua-table td.on { font-weight: 700; }
+
+/* group rides (#84): the calendar */
+.gr-panel { max-width: 640px; }
+.gr-list { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 8px; }
+.gr-row { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 12px; background: rgba(255, 255, 255, .04); border: 1px solid rgba(255, 255, 255, .06); }
+.gr-row.soon { border-color: rgba(47, 212, 240, .45); background: rgba(47, 212, 240, .07); }
+.gr-row.focus { box-shadow: 0 0 0 2px var(--cyan) inset; }
+.gr-when { display: grid; text-align: center; line-height: 1.15; }
+.gr-when b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.gr-when small, .gr-what small { color: var(--muted); }
+.gr-what { display: grid; gap: 2px; min-width: 0; }
+.gr-what b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gr-tag { justify-self: start; margin-top: 2px; font-size: .78rem; color: var(--muted); }
+.gr-tag.open { color: var(--cyan); font-weight: 700; }
+.gr-tag.live { color: #22c55e; font-weight: 700; }
+.gr-acts { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.gr-acts .pill-btn, .gr-acts .primary { width: auto; white-space: nowrap; }
+.gr-ride { padding: 8px 18px; }
+.gr-icon { padding: 6px 9px; }
+.gr-cancel { color: var(--muted); font-size: .82rem; }
+.gr-new { margin: 6px 0 10px; }
+.gr-new summary { cursor: pointer; font-weight: 700; color: var(--cyan); padding: 6px 0; }
+.gr-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
+.gr-form label { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+.gr-form .gr-wide { grid-column: 1 / -1; }
+@media (max-width: 560px) {
+  .gr-row { grid-template-columns: 52px 1fr; }
+  .gr-acts { grid-column: 1 / -1; justify-content: flex-start; }
+}
