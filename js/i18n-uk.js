@@ -30,7 +30,7 @@ export const UK = {
   'No rides here yet: ride on a trainer to put your oblast on the board.': 'Тут ще немає заїздів: покатай на тренажері, і твоя область з’явиться в таблиці.',
   'Rides on a trainer of riders signed in, each by the oblast in their profile. The simulator does not count.': 'Заїзди на тренажері зареєстрованих райдерів, за областю з профілю. Симулятор не рахується.',
   'to put your kilometres on the board of your oblast': 'щоб твої кілометри пішли в залік твоєї області', 'Pick your oblast': 'Вибери свою область', 'to ride for it': 'щоб їздити за неї',
-  'Garage': 'Гараж', '⏸ Stop': '⏸ Зупинити', '▶ Turn': '▶ Крутити', 'Stop or start the turntable': 'Зупинити чи запустити поворотний круг', 'Kit, bike and helmet colours, on a turntable': 'Кольори форми, байка й шолома, на поворотному крузі',
+  'Garage': 'Гараж', '⏸ Stop': '⏸ Зупинити', '▶ Turn': '▶ Крутити', 'Stop or start the turntable and the pedalling': 'Зупинити чи запустити круг і педалі', 'Kit, bike and helmet colours, on a turntable': 'Кольори форми, байка й шолома, на поворотному крузі',
   'Loading the rider…': 'Завантажую райдера…', 'Side': 'Збоку', 'Front': 'Спереду', 'From behind': 'Ззаду', 'Helmet': 'Шолом',
   'Drag to turn, scroll to zoom': 'Тягни, щоб повернути, колесо — наблизити', 'Kits': 'Готові форми', '🎲 Surprise me': '🎲 Здивуй мене',
   'Rider': 'Райдер', 'Bike': 'Байк', 'Done': 'Готово', 'Blue & yellow': 'Синьо-жовта', 'Night': 'Ніч', 'Sunrise': 'Світанок', 'Forest': 'Ліс', 'Ice': 'Лід',
