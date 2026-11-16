@@ -49,7 +49,7 @@ const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
-  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
+  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
   intensity: 100, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
@@ -381,6 +381,8 @@ function initLobby() {
   bind('f-bike', 'bikeColor', false);
   $('f-bike').value = settings.bikeColor || settings.jersey; // until one is picked, the frame wears the jersey's colour
   bind('f-tape', 'tapeColor', false);
+  bind('f-decal', 'decalColor', false);
+  $('f-decal').value = settings.decalColor || settings.stripe; // until one is picked, the wheel lettering wears the accent
   bind('f-helmet', 'helmetColor', false);
   bind('f-lens', 'lensColor', false);
   bind('f-figure', 'figure', false);
@@ -1592,7 +1594,7 @@ function frame(now) {
     }
   }
   const riders = [
-    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, stand: !!ride.stand, self: true, name: settings.name, lane: ride.lane, v: ride.v },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, stand: !!ride.stand, self: true, name: settings.name, lane: ride.lane, v: ride.v },
     ...ride.bots,
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),
@@ -4028,11 +4030,12 @@ function manualLap() {
   toast(tr('Split {n}: {time} · {km} km · {w} W', { n: ride.splits.length, time: fmtTime(t), km: (d / 1000).toFixed(2), w: avg }));
 }
 
-/** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots). */
-const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv'];
+/** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots); the ones after have no key (C and the menu). */
+const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv', 'top', 'drone', 'tight', 'high', 'offset', 'long', 'car'];
 const CAMERA_NAMES = {
   chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front',
-  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: by the road', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast',
+  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: by the road', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast', top: 'Camera: from above', drone: 'Camera: drone',
+  tight: 'Camera: close behind', high: 'Camera: high behind', offset: 'Camera: behind, to the right', long: 'Camera: long lens', car: 'Camera: team car',
 };
 function setCameraView(mode) {
   if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
@@ -4040,7 +4043,8 @@ function setCameraView(mode) {
   saveSettings();
   scene?.setCamera?.(mode);
   $('f-camera').value = mode;
-  toast(`${(CAMERAS.indexOf(mode) + 1) % 10} · ${tr(CAMERA_NAMES[mode])}`);
+  const i = CAMERAS.indexOf(mode);
+  toast(i < 10 ? `${(i + 1) % 10} · ${tr(CAMERA_NAMES[mode])}` : tr(CAMERA_NAMES[mode]));
 }
 /** The next camera view (C, or Y on the Zwift Ride). */
 function nextCamera() {

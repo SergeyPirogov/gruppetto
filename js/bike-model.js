@@ -30,6 +30,30 @@ const WHEEL_R = 0.36;                     // m, tyre radius of the rigged model 
 /** Loads the bike once: { gltf, cfg }, or null when there is no model file. */
 // a soft sky/ground light probe for the bike's PBR materials; set once by the renderer
 let ENV = null;
+
+/**
+ * The decals are lettering modelled in triangles, a few millimetres a stroke: once a pixel covers more than a
+ * stroke, the letters broke into specks that flickered as the wheel turned or the bike leant into a bend. A
+ * texture would fall back to a smaller mipmap there; these do the same by hand: as a pixel grows (fwidth of the
+ * view position, metres) the decal's colour blends to its average over what lies under it (`under`, about a third
+ * lettering) and its gloss goes soft. Up close it is untouched.
+ */
+export const DECAL_FADE = { from: 0.0012, to: 0.0035, cover: 0.35 };
+function decalFade(mat, under) {
+  const u = { uUnder: { value: new THREE.Color(under) }, uFade: { value: new THREE.Vector3(DECAL_FADE.from, DECAL_FADE.to, DECAL_FADE.cover) } };
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.fragmentShader = 'uniform vec3 uUnder;\nuniform vec3 uFade;\n' + sh.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        float decalK = smoothstep(uFade.x, uFade.y, length(fwidth(vViewPosition)));
+        diffuseColor.rgb = mix(diffuseColor.rgb, mix(uUnder, diffuseColor.rgb, uFade.z), decalK);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, max(roughnessFactor, 0.7), decalK);`);
+  };
+  mat.customProgramCacheKey = () => 'decalFade';
+  mat.userData.decalFade = u;
+  return mat;
+}
 export function setBikeEnvironment(renderer) {
   if (ENV || !renderer) return;
   const geo = new THREE.SphereGeometry(10, 32, 16);
@@ -159,6 +183,12 @@ export class ModelBike {
     // baked into vertex colours is repainted per vertex
     let own = false;
     gltf.scene.traverse((o) => { if (o.isMesh && /^paint/i.test(o.material?.name || '')) own = true; });
+    const under = {};
+    this.root.traverse((o) => {
+      const n = o.material?.name || '';
+      if (/^paint/i.test(n)) under.paint ??= `#${o.material.color.getHexString()}`;
+      if (/rim/i.test(n)) under.rim ??= `#${o.material.color.getHexString()}`;
+    });
     this.root.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
@@ -178,6 +208,13 @@ export class ModelBike {
         if (color && /^paint/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(color); }
         if (tape && /^tape/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(tape); }
         if (accent && /^accent/i.test(o.material.name)) { o.material = o.material.clone(); o.material.color.set(accent); }
+        // what the decals lie on: the frame's paint, the rim (after the colours: a clone drops onBeforeCompile)
+        if (/decal/i.test(o.material.name)) decalFade(o.material, color || under.paint || '#808080');
+        if (/^accent/i.test(o.material.name)) decalFade(o.material, under.rim || '#202020');
+        // the rim's lacquer was a perfect mirror (clear coat roughness 0): on the rounded edge by the tyre the sun
+        // and the bright sky came back as a white dot a pixel or two wide, which sparkled as the bike leant into
+        // a bend. A satin coat, as carbon rims mostly are: the sheen stays, the dot goes
+        if (/^s5_rim/i.test(o.material.name) && o.material.isMeshPhysicalMaterial) Object.assign(o.material, { clearcoat: 0.5, clearcoatRoughness: 0.25 });
         // reflections: without them gloss, clear coat and metal render flat black (Blender previews with an HDRI)
         if (ENV && o.material.envMap !== ENV) { o.material.envMap = ENV; o.material.envMapIntensity = 0.9; o.material.needsUpdate = true; }
         // the pedal axle is bare between crank and pedal and its material has no metallicFactor (glTF reads

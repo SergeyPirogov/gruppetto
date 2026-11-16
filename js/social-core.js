@@ -7,7 +7,7 @@
 /** The settings that follow you to another device: who you are and how you look, nothing about this computer. */
 export const SYNC_FIELDS = ['name', 'weight', 'height', 'ftp', 'wPrimeKj', 'maxHr', 'lthr', 'hrZones', 'hrZoneNames', 'jersey', 'stripe', 'bikeColor', 'lang',
   // the rider's kit and figure, and how you like to ride (not this screen's graphics, sound or camera)
-  'tapeColor', 'helmetColor', 'lensColor', 'figure', 'difficulty', 'chainring', 'cog', 'shiftMode', 'intensity',
+  'tapeColor', 'decalColor', 'helmetColor', 'lensColor', 'figure', 'difficulty', 'chainring', 'cog', 'shiftMode', 'intensity',
   'pacer', 'pacerName', 'freePacer', 'freePacerWkg', 'bots', 'attacks', 'ghost', 'style', 'timeOfDay', 'weather', 'wind',
   'icuUpload', 'stravaUpload', 'garminUpload'];
 
