@@ -34,7 +34,7 @@ import { Scene, drawProfile } from './render.js';
 import { themeFor } from './themes.js';
 import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
 import { nextWeather } from './atmo-blend.js';
-import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, gearGradeOffset, BASE_WHEEL_MM } from './gears.js';
+import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
 import { PASS_AFTER, heldBy, pickLane } from './passing.js';
 
 const $ = (id) => document.getElementById(id);
@@ -392,6 +392,14 @@ function initLobby() {
   bind('f-chainring', 'chainring');
   bind('f-cog', 'cog');
   bind('f-shift', 'shiftMode', false);
+  // gears on the bike: the chainring and cog say nothing then
+  const gearFields = () => {
+    const off = settings.shiftMode === 'off';
+    for (const el of document.querySelectorAll('.gear-teeth')) el.hidden = off;
+    $('gears-note').hidden = off; $('gears-note-off').hidden = !off;
+  };
+  $('f-shift').addEventListener('input', gearFields);
+  gearFields();
   bind('f-style', 'style', false);
   bind('f-camera', 'camera', false);
   bind('f-time', 'timeOfDay', false);
@@ -1768,7 +1776,8 @@ function tick(power, cadence, hr) {
     } else {
       ride.lastSentTarget = null;
       if (ride.shiftMode === 'wheel') sendVirtualGear();
-      const offset = ride.shiftMode === 'wheel' ? 0 : gearGradeOffset(ride.gear);
+      else if (ride.shiftMode === 'off') sendRealWheel();
+      const offset = shiftPlan(ride.shiftMode, ride.gear, settings.chainring, settings.cog || 14).gradeOffset;
       // the wind as extra grade: a headwind is a gentle hill, a tailwind a gentle descent (±5 % at most)
       const wg = ride.wind?.head ? Math.max(-5, Math.min(5, windGrade(ride.v, ride.wind.head, ride.cda * (1 - (ride.draft || 0)), settings.weight) * 100)) : 0;
       const g = Math.round(((grade * 100 + wg) * (settings.difficulty / 100) + offset) * 10) / 10;
@@ -2484,7 +2493,7 @@ function finishRide() {
   ride = null;
   if (trainer.connected && trainer.controllable) {
     trainer.setSimulation(0);
-    if (settings.shiftMode === 'wheel') trainer.setWheelCircumference(BASE_WHEEL_MM);
+    if (settings.shiftMode !== 'grade') trainer.setWheelCircumference(BASE_WHEEL_MM);
   }
   const entry = sum && sum.duration >= 30 ? saveToHistory(lastRide, recorder.samples) : null;
   if (entry) putRide({ id: entry.id, start: (recorder.startTime || new Date()).getTime(), samples: recorder.samples, lapStarts: recorder.lapStarts });
@@ -3886,6 +3895,20 @@ function runIntent(intent, value) {
 }
 
 /** Sends the virtual gear as a wheel circumference; falls back to grade offsets if the trainer refuses. */
+/**
+ * Gears on the bike: the trainer gets the real wheel size once (a virtual gear left from an earlier ride
+ * would make every gear feel wrong); a trainer that cannot take it already uses the real one.
+ */
+function sendRealWheel() {
+  if (ride.lastSentWheel === 'real' || ride.wheelPending) return;
+  ride.wheelPending = true;
+  trainer.setWheelCircumference(shiftPlan('off').wheelMm).then(() => {
+    if (!ride) return;
+    ride.wheelPending = false;
+    ride.lastSentWheel = 'real';
+  });
+}
+
 function sendVirtualGear() {
   if (ride.gear === ride.lastSentWheel || ride.wheelPending) return;
   const gear = ride.gear;
@@ -3985,7 +4008,7 @@ const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !==
 const inHold = () => !!(ride?.hold && !(ride.workout && !ride.workoutDone));
 
 function setGear(gear) {
-  if (!ride || inErgStep() || inHold()) return;
+  if (!ride || inErgStep() || inHold() || ride.shiftMode === 'off') return;
   const g = Math.max(1, Math.min(GEARS, Math.round(gear)));
   if (g !== ride.gear) shift(g - ride.gear);
 }
@@ -4000,6 +4023,11 @@ function shift(dir) {
     setHold(ride.hold + Math.sign(dir) * 5);
     toast(`ERG ${ride.hold} ${U.W}`);
     updateGear();
+  } else if (ride.shiftMode === 'off') {
+    // the gears are on the bike: the simulator's slider still moves, a real trainer is left alone
+    if (ride.simulated) { const s = $('sim-power'); s.value = Number(s.value) + dir * 5; s.oninput(); }
+    else if (!ride.offShiftTold) { ride.offShiftTold = true; toast(tr('Gears are on your bike (Profile → Gears)')); }
+    return;
   } else {
     const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
     if (next === ride.gear) return;
@@ -4032,6 +4060,8 @@ function skipInterval() {
 function updateGear() {
   if (!ride) return;
   const inErg = inErgStep(), hold = inHold();
+  // gears on the bike: nothing to show in a free ride (the cell is back for ERG, where the shifters move the target)
+  document.querySelector('.stat.gear').hidden = ride.shiftMode === 'off' && !inErg && !hold;
   $('m-gear-label').textContent = inErg || hold ? 'ERG' : tr('Gear');
   $('m-gear').textContent = hold ? ride.hold : inErg ? settings.intensity : ride.gear; // what the shifters move
   $('m-gear-unit').textContent = hold ? U.W : inErg ? '%' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
