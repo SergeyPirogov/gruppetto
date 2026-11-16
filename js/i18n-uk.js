@@ -24,7 +24,7 @@ export const UK = {
   'Imported from GPX (elevation from a terrain model). Point to point, finish at {km} km.': 'Імпортовано з GPX (висоти з карти рельєфу). З точки до точки, фініш на {km} км.',
   'Map data': 'Дані карти', 'contributors': 'учасники',
   'Importing GPX…': 'Імпортую GPX…', 'Importing {name}': 'Імпорт «{name}»', 'terrain': 'рельєф', 'map': 'карта',
-  'Garage': 'Гараж', '⏸ Stop': '⏸ Зупинити', '▶ Turn': '▶ Крутити', 'Stop or start the turntable': 'Зупинити чи запустити поворотний круг', 'Kit, bike and helmet colours, on a turntable': 'Кольори форми, байка й шолома, на поворотному крузі',
+  'Garage': 'Гараж', '⏸ Stop': '⏸ Зупинити', '▶ Turn': '▶ Крутити', 'Stop or start the turntable and the pedalling': 'Зупинити чи запустити круг і педалі', 'Kit, bike and helmet colours, on a turntable': 'Кольори форми, байка й шолома, на поворотному крузі',
   'Loading the rider…': 'Завантажую райдера…', 'Side': 'Збоку', 'Front': 'Спереду', 'From behind': 'Ззаду', 'Helmet': 'Шолом',
   'Drag to turn, scroll to zoom': 'Тягни, щоб повернути, колесо — наблизити', 'Kits': 'Готові форми', '🎲 Surprise me': '🎲 Здивуй мене',
   'Rider': 'Райдер', 'Bike': 'Байк', 'Done': 'Готово', 'Blue & yellow': 'Синьо-жовта', 'Night': 'Ніч', 'Sunrise': 'Світанок', 'Forest': 'Ліс', 'Ice': 'Лід',

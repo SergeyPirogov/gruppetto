@@ -4434,8 +4434,9 @@ $('garage-views').addEventListener('click', (e) => {
 });
 // Escape closes the garage first (and only it: the drawer under it stays open)
 window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !$('garage').hidden) { e.stopImmediatePropagation(); closeGarage(); } }, true);
-// after the field's own handler has stored the colour (that one is bound later, in the profile's setup)
-for (const id of [...Object.keys(LOOK_KEYS), 'f-figure']) $(id).addEventListener('input', () => queueMicrotask(renderGarageBits));
+// after the field's own handler has stored the colour (that one is bound later, in the profile's setup): a task,
+// not a microtask, since a real click runs microtasks between one listener and the next, before the value is stored
+for (const id of [...Object.keys(LOOK_KEYS), 'f-figure']) $(id).addEventListener('input', () => setTimeout(renderGarageBits, 0));
 renderGarageBits();
 $('keys-help').addEventListener('click', (e) => { if (e.target === $('keys-help') || e.target.closest('[data-keys-close]')) toggleKeysHelp(false); });
 function toggleFullscreen() {
