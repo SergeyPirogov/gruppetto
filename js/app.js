@@ -1442,7 +1442,8 @@ function advance(now = performance.now()) {
       if (!P.free && target && Math.abs(power - target) <= target * 0.05) P.dist += (ride.dist - P.dist) * Math.min(1, dt / 20);
       const pc = liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5);
       P.pedal = pc < 5 ? levelPedals(P.pedal, dt) : P.pedal + (pc / 60) * Math.PI * 2 * dt;
-      P.stand = standStep(P.standState ||= {}, { power: pw, ftp: settings.ftp, cadence: pc }, dt); // he rides your FTP's targets
+      // the workout pacer rides your FTP's targets; the free pacer holds his own steady power, so that is his FTP
+      P.stand = standStep(P.standState ||= {}, { power: pw, ftp: P.free ? pw : settings.ftp, cadence: pc }, dt);
       // rides beside you, on the side with more room; switches sides only well past the centre line
       P.side = ride.lane > 0.6 ? -1 : ride.lane < -0.6 ? 1 : (P.side || (ride.lane > 0 ? -1 : 1));
       P.lane = easeLane(P.lane, ride.lane + 1.4 * P.side, dt, P);

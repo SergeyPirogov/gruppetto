@@ -233,6 +233,7 @@ def pose_morphs(copies, rig, act, prefix='f', first=False, step=None):
     frames = list(range(FRAMES[0], FRAMES[1] + 1, step or MORPH_STEP))
     if frames[-1] != FRAMES[1]:
         frames.append(FRAMES[1])
+    slots = {}
     for src_name, ob in copies:
         if src_name not in MORPH_PARTS:
             continue
@@ -270,9 +271,11 @@ def pose_morphs(copies, rig, act, prefix='f', first=False, step=None):
                 kb.value = val
                 kb.keyframe_insert('value', frame=fr)
         kb.value = 0.0
+        slots[ob.name] = slot
         for fc in act_fcurves(act, slot):
             for kp in fc.keyframe_points:
                 kp.interpolation = 'LINEAR'
+    return slots
 
 
 def act_fcurves(act, slot):
@@ -520,11 +523,28 @@ def run():
     bpy.context.view_layer.update()
     for n, ob in zip(BODY_PARTS, copies):
         match_pose(ob, O[n], rig)
-    pose_morphs(list(zip(BODY_PARTS, copies)), rig, pedal_act)
+    pedal_slots = pose_morphs(list(zip(BODY_PARTS, copies)), rig, pedal_act)
     if stand_act:
         rig.animation_data.action = stand_act
-        pose_morphs(list(zip(BODY_PARTS, copies)), rig, stand_act, prefix='s', first=True, step=STAND_MORPH_STEP)
+        stand_slots = pose_morphs(list(zip(BODY_PARTS, copies)), rig, stand_act, prefix='s', first=True, step=STAND_MORPH_STEP)
         rig.animation_data.action = pedal_act
+        # the shape keys back on the seated clip, every key off: the GLB's default weights are what a model shows
+        # before (or without) a clip, and the standing clip's first key left at 1 lifted the seated rider off the saddle
+        for ob in copies:
+            key = ob.data.shape_keys if ob.type == 'MESH' else None
+            if not key:
+                continue
+            if ob.name in pedal_slots:
+                key.animation_data.action = pedal_act
+                key.animation_data.action_slot = pedal_slots[ob.name]
+            if ob.name in stand_slots:
+                # a muted NLA strip keeps the standing slot in use, or the glTF exporter drops its morph tracks
+                track = key.animation_data.nla_tracks.new()
+                track.name, track.mute = 'stand_cycle', True
+                strip = track.strips.new('stand_cycle', int(stand_act.frame_range[0]), stand_act)
+                strip.action_slot = stand_slots[ob.name]
+            for kb in key.key_blocks[1:]:
+                kb.value = 0.0
         sc.frame_set(FRAMES[0])
     for n in HEAD_GEAR:
         if n in O:

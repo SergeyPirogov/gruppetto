@@ -7,7 +7,8 @@ const DOWN_POWER = 1.05; // × FTP
 const GRIND_RPM = 70;    // at or under: a grind...
 const GRIND_POWER = 0.5; // ...when pushing at least this × FTP
 const EASY_RPM = 76;     // over: spinning again
-const COAST_RPM = 20;    // under: not really pedalling
+const COAST_RPM = 20;    // under: not really pedalling (unless still pushing a surge: some trainers read 0 rpm when slow)
+const SOFT_POWER = 0.4;  // × FTP: under it the rider sits whatever the cadence (soft-pedalling after a grind)
 const UP_HOLD = 0.4;     // s the reason to stand has to last
 const DOWN_HOLD = 0.8;   // s the reason to sit has to last
 
@@ -25,8 +26,8 @@ export function standStep(state, { power, ftp, cadence }, dt) {
     const grind = known && cadence > COAST_RPM && cadence <= GRIND_RPM && power >= GRIND_POWER * ftp;
     flip = surge || grind;
   } else {
-    const coasting = known && cadence < COAST_RPM;
-    const easy = power < DOWN_POWER * ftp && (!known || cadence > EASY_RPM);
+    const coasting = known && cadence < COAST_RPM && power < DOWN_POWER * ftp;
+    const easy = (power < DOWN_POWER * ftp && (!known || cadence > EASY_RPM)) || power < SOFT_POWER * ftp;
     flip = coasting || easy;
   }
   state.t = flip ? (state.t || 0) + dt : 0;

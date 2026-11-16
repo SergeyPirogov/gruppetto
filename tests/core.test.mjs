@@ -1066,5 +1066,23 @@ test('rider assets: both clips and the rock', () => {
     assert.ok(Number.isFinite(cfg.standRockPivot), f);
     assert.equal(cfg.standPedalTilt?.length, 3, f);
     assert.ok(statSync(new URL(`../assets/riders/${f}.glb`, import.meta.url)).size <= 10.2e6, `${f} too big`);
+    // seated by default: no corrective shape key on unless a clip turns it on (s01 at 1 lifted the seated rider off the saddle)
+    for (const m of gltf.meshes) (m.weights || []).forEach((w, i) => assert.equal(w, 0, `${f} ${m.name} ${m.extras?.targetNames?.[i]} default ${w}`));
+    // and each clip still drives its own keys
+    for (const name of ['pedal_cycle', 'stand_cycle']) {
+      const a = gltf.animations.find((x) => x.name === name);
+      assert.ok(a.channels.some((c) => c.target.path === 'weights'), `${f} ${name} has no shape key tracks`);
+    }
   }
+});
+test('standing: a surge at a stalled cadence stays up (a trainer reading 0 rpm when slow)', () => {
+  const s = {};
+  for (let i = 0; i < 60; i++) { const up = standStep(s, { power: 320, ftp: 250, cadence: 0 }, 0.1); if (i >= 4) assert.equal(up, true, `step ${i}`); }
+});
+test('standing: soft-pedalling after a grind sits down', () => {
+  assert.equal(runStand({ up: true }, { power: 80, ftp: 250, cadence: 55 }, 0.9), false);
+});
+test('standing: a grind right at the power floor does not bob', () => {
+  const s = { up: true };
+  for (let i = 0; i < 100; i++) assert.equal(standStep(s, { power: (i % 6 < 3) ? 120 : 130, ftp: 250, cadence: 65 }, 0.1), true, `step ${i}`);
 });
