@@ -1094,3 +1094,28 @@ test('standing: a grind right at the power floor does not bob', () => {
   const s = { up: true };
   for (let i = 0; i < 100; i++) assert.equal(standStep(s, { power: (i % 6 < 3) ? 120 : 130, ftp: 250, cadence: 65 }, 0.1), true, `step ${i}`);
 });
+import { gradeColor, gradeRuns } from '../js/grade-color.js';
+test('grade colours: stops, blend, clamp', () => {
+  assert.equal(gradeColor(0), 'rgb(34,197,94)');
+  assert.equal(gradeColor(9), 'rgb(220,38,38)');
+  assert.equal(gradeColor(20), 'rgb(220,38,38)');
+  assert.equal(gradeColor(-10), 'rgb(59,130,246)');
+  assert.equal(gradeColor(4.5), 'rgb(242,147,15)'); // halfway 3 % -> 6 %, rounded
+});
+test('grade runs sample the route every 25 m', () => {
+  const r = routes[0], runs = gradeRuns(r, 0, 100);
+  assert.deepEqual(runs.map((x) => x.d), [0, 25, 50, 75, 100]);
+  assert.equal(runs[1].color, gradeColor(r.gradeAt(25) * 100));
+});
+test('grade runs can average the grade over a window', () => {
+  const r = routes.find((x) => x.id === 'rolling'), [p] = gradeRuns(r, 200, 200, 25, 200);
+  assert.notEqual(gradeColor(r.gradeAt(200) * 100), gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100)); // a spot where it matters
+  assert.equal(p.color, gradeColor((r.elevAt(300) - r.elevAt(100)) / 200 * 100));
+});
+test('segment ticks: a segment ending on the line ends at the right edge, one over it wraps', async () => {
+  const { segmentSpan } = await import('../js/grade-color.js');
+  const v = routes.find((x) => x.id === 'velodrome');
+  assert.deepEqual(segmentSpan(v, v.sprints[0]), [250, 500]);
+  const r = routes.find((x) => x.id === 'rolling');
+  assert.deepEqual(segmentSpan(r, { start: r.length - 100, length: 300 }), [r.length - 100, 200]);
+});

@@ -30,14 +30,14 @@
   "helmet": false,
   "glasses": false,
   "pedalTilt": [
-    12.46,
-    -12.92,
+    12.08,
+    -12.74,
     0.0
   ],
   "standPedalTilt": [
-    12.52,
-    -12.92,
-    0.12
+    12.13,
+    -12.74,
+    0.1
   ],
   "standRock": [
     -0.12,
