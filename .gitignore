@@ -20,3 +20,4 @@ overlay/Gruppetto-HUD.zip
 
 # Blender autosave copies (blender/f12_bike.blend itself is committed: own parts + CC-BY parts only)
 blender/*.blend1
+supabase/.temp/
