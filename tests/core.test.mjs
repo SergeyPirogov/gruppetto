@@ -1063,6 +1063,78 @@ test('race bunch: together on the flat, split by a climb', async () => {
   assert.ok(spread() > 40, `the climb splits it (spread ${spread().toFixed(1)} m)`);
 });
 
+import { positionFor, oceanAnchor } from '../js/geo.js';
+
+/** Great-circle distance in metres. */
+const metresBetween = ([a, b], [c, d]) => {
+  const r = Math.PI / 180, x = Math.sin((c - a) * r / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin((d - b) * r / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(x));
+};
+
+test('GPS track: an imported route is back on its real road', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  const { Route } = await import('../js/routes.js');
+  // the same road as above: 3 km due north from Yaremche-ish, a right turn, 1 km east
+  const pts = [], lat0 = 48.45, lon0 = 24.55, m = 1 / 111320;
+  for (let d = 0; d <= 3000; d += 10) pts.push({ lat: lat0 + d * m, lon: lon0, ele: 500 + d * 0.03 });
+  for (let d = 10; d <= 1000; d += 10) pts.push({ lat: lat0 + 3000 * m, lon: lon0 + d / 73900, ele: 590 });
+  const r = new Route(JSON.parse(JSON.stringify(routeFromTrack({ name: 'Test', points: pts }))));
+  const at = positionFor(r);
+  assert.ok(metresBetween(at(0), [lat0, lon0]) < 25, `start ${at(0)}`); // the import smooths the track over ±20 m
+  assert.ok(metresBetween(at(1500), [lat0 + 1500 * m, lon0]) < 15, `1.5 km ${at(1500)}`);
+  assert.ok(metresBetween(at(r.length), [lat0 + 3000 * m, lon0 + 1000 / 73900]) < 40, `finish ${at(r.length)}`);
+  // ridden at 1 Hz, the points are about as far apart as the distance ridden
+  assert.ok(Math.abs(metresBetween(at(2000), at(2010)) - 10) < 2);
+  // an import from before the shape was kept: no place on the map rather than a wrong one
+  assert.equal(positionFor(new Route({ ...JSON.parse(JSON.stringify(routeFromTrack({ name: 'Old', points: pts }))), map: undefined })), null);
+});
+
+test('GPS track: built-in routes lie in the open ocean, each in its own place, laps over the same road', () => {
+  const seen = [];
+  for (const r of routes.filter((x) => !x.custom)) {
+    const at = positionFor(r);
+    assert.ok(at, r.id);
+    const a = oceanAnchor(r.id);
+    assert.deepEqual(at(0).map((v) => Math.round(v * 1e6)), [a.lat, a.lon].map((v) => Math.round(v * 1e6)));
+    // South Pacific, far from any coast (well south of the islands, well west of Chile)
+    for (const d of [0, r.length / 3, r.length * 0.7]) {
+      const [la, lo] = at(d);
+      assert.ok(la < -36 && la > -44 && lo > -130 && lo < -116, `${r.id} at ${d}: ${la}, ${lo}`);
+    }
+    // the second lap: a closed loop goes round again, an open one runs on from where the first ended (no jump)
+    if (!r.oneWay) {
+      assert.ok(metresBetween(at(r.length - 5), at(r.length + 5)) < 15, `${r.id}: into the second lap`);
+      if (r.id === 'velodrome') assert.ok(metresBetween(at(100), at(r.length + 100)) < 1);
+    }
+    seen.push(at(0));
+  }
+  for (let i = 0; i < seen.length; i++) for (let j = i + 1; j < seen.length; j++) assert.ok(metresBetween(seen[i], seen[j]) > 60000);
+});
+
+test('FIT and TCX carry the GPS track (official Garmin decoder)', () => {
+  const r = routes.find((x) => x.id === 'carpathians');
+  const rec = new Recorder();
+  rec.position = positionFor(r);
+  for (let i = 0; i < 120; i++) rec.add({ power: 200, cadence: 90, heartRate: 140, speed: 8, distance: i * 8, altitude: 500, elevationGain: 0 });
+  rec.startTime = new Date('2026-11-16T10:00:00Z');
+  const { messages, errors } = new Decoder(Stream.fromByteArray(Array.from(rec.toFIT()))).read();
+  assert.deepEqual(errors, []);
+  const deg = (sc) => sc * 180 / 2 ** 31;
+  const rr = messages.recordMesgs[60], want = rec.position(480);
+  assert.ok(Math.abs(deg(rr.positionLat) - want[0]) < 1e-6 && Math.abs(deg(rr.positionLong) - want[1]) < 1e-6);
+  assert.ok(rr.positionLat < 0 && rr.positionLong < 0); // the southern and western hemispheres: signed values survive
+  const s = messages.sessionMesgs[0];
+  assert.ok(Math.abs(deg(s.startPositionLat) - oceanAnchor('carpathians').lat) < 1e-6);
+  assert.equal(s.subSport, 'virtualActivity');
+  assert.match(rec.toTCX(), /<Position><LatitudeDegrees>-\d+\.\d+<\/LatitudeDegrees><LongitudeDegrees>-\d+\.\d+<\/LongitudeDegrees><\/Position>/);
+  // no route, no track: the file is as before
+  const bare = new Recorder();
+  for (let i = 0; i < 10; i++) bare.add({ power: 100, cadence: 80, heartRate: 0, speed: 7, distance: i * 7, altitude: 0, elevationGain: 0 });
+  const b = new Decoder(Stream.fromByteArray(Array.from(bare.toFIT()))).read();
+  assert.equal(b.messages.recordMesgs[5].positionLat, undefined);
+  assert.doesNotMatch(bare.toTCX(), /Position/);
+});
+
 import { standStep } from '../js/standing.js';
 const runStand = (state, input, seconds) => { let up = false; for (let t = 0; t < seconds - 1e-9; t += 0.1) up = standStep(state, input, 0.1); return up; };
 test('standing: a surge stands after 0.4 s', () => {

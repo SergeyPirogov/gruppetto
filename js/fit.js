@@ -4,8 +4,10 @@
 // Field numbers and scales follow the official Garmin FIT SDK profile.
 
 const FIT_EPOCH = 631065600; // 1989-12-31T00:00:00Z in Unix seconds
-const T = { enum: [0x00, 1], uint8: [0x02, 1], uint16: [0x84, 2], uint32: [0x86, 4], uint32z: [0x8c, 4], string: [0x07, 0] };
-const INVALID = { 0x00: 0xff, 0x02: 0xff, 0x84: 0xffff, 0x86: 0xffffffff, 0x8c: 0 };
+const T = { enum: [0x00, 1], uint8: [0x02, 1], uint16: [0x84, 2], sint32: [0x85, 4], uint32: [0x86, 4], uint32z: [0x8c, 4], string: [0x07, 0] };
+const INVALID = { 0x00: 0xff, 0x02: 0xff, 0x84: 0xffff, 0x85: 0x7fffffff, 0x86: 0xffffffff, 0x8c: 0 };
+/** Degrees → semicircles, the FIT unit for latitude and longitude. */
+const semicircles = (deg) => Math.round(deg * (2 ** 31 / 180));
 
 const CRC_TABLE = [0x0000, 0xcc01, 0xd801, 0x1400, 0xf001, 0x3c00, 0x2800, 0xe401, 0xa001, 0x6c00, 0x7800, 0xb401, 0x5000, 0x9c01, 0x8801, 0x4400];
 function crc16(bytes, crc = 0) {
@@ -51,7 +53,10 @@ class FitWriter {
     }
     let v = value === null || value === undefined || Number.isNaN(value) ? INVALID[base] : Math.round(value);
     const max = 2 ** (8 * n) - 1;
-    if (v !== INVALID[base]) v = Math.max(0, Math.min(max - 1, v));
+    if (base === 0x85) { // signed: two's complement
+      if (v !== INVALID[base]) v = Math.max(-(2 ** 31) + 1, Math.min(2 ** 31 - 2, v));
+      v >>>= 0;
+    } else if (v !== INVALID[base]) v = Math.max(0, Math.min(max - 1, v));
     for (let i = 0; i < n; i++) this.bytes.push(Math.floor(v / 2 ** (8 * i)) & 0xff);
   }
 
@@ -85,9 +90,10 @@ function stats(samples) {
 
 /**
  * @param samples  [{power, cadence, heartRate, speed, distance, altitude, elevationGain}] one per second
- * @param opts     {start: Date, lapStarts: number[] (sample indices), normalizedPower: fn}
+ * @param opts     {start: Date, lapStarts: number[] (sample indices), normalizedPower: fn,
+ *                  position: fn(distance m) → [lat, lon] degrees, for a GPS track (optional)}
  */
-export function encodeActivity(samples, { start, lapStarts = [0], normalizedPower = () => 0, productName = 'Gruppetto' }) {
+export function encodeActivity(samples, { start, lapStarts = [0], normalizedPower = () => 0, productName = 'Gruppetto', position = null }) {
   const w = new FitWriter();
   const t0 = fitTime(start);
   const n = samples.length;
@@ -99,9 +105,11 @@ export function encodeActivity(samples, { start, lapStarts = [0], normalizedPowe
   w.message(23, [[253, 'uint32', t0], [0, 'uint8', 0], [2, 'uint16', 255], [4, 'uint16', 1], [27, 'string', productName, 16]]);
   w.message(21, [[253, 'uint32', t0], [0, 'enum', 0], [1, 'enum', 0]]);
 
+  const at = position ? samples.map((s) => position(s.distance || 0)) : null;
   samples.forEach((s, i) => {
     const f = [
       [253, 'uint32', t0 + i],
+      ...(at ? [[0, 'sint32', semicircles(at[i][0])], [1, 'sint32', semicircles(at[i][1])]] : []),
       [5, 'uint32', s.distance * 100],
       [6, 'uint16', s.speed * 1000],
       [2, 'uint16', (s.altitude + 500) * 5],
@@ -139,6 +147,7 @@ export function encodeActivity(samples, { start, lapStarts = [0], normalizedPowe
   const last = samples[n - 1] || { distance: 0, elevationGain: 0 };
   w.message(18, [
     [253, 'uint32', tEnd], [0, 'enum', 8], [1, 'enum', 1], [2, 'uint32', t0], [5, 'enum', 2], [6, 'enum', 58],
+    ...(at?.length ? [[3, 'sint32', semicircles(at[0][0])], [4, 'sint32', semicircles(at[0][1])]] : []),
     [7, 'uint32', n * 1000], [8, 'uint32', n * 1000], [9, 'uint32', last.distance * 100],
     [11, 'uint16', st.work / 1000], [14, 'uint16', n ? (last.distance / n) * 1000 : 0], [15, 'uint16', st.maxSpeed * 1000],
     [16, 'uint8', st.avgHr], [17, 'uint8', st.maxHr], [18, 'uint8', st.avgCadence],

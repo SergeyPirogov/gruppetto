@@ -91,11 +91,13 @@ export class StravaClient {
    * Uploads a FIT and waits for Strava to make it an activity (a few seconds, up to a minute).
    * Returns { activityId, duplicate? }; throws with Strava's reason when it refuses the file.
    */
-  async upload(fit, { name, description, externalId, filename = 'gruppetto.fit' }) {
+  async upload(fit, { name, description, externalId, filename = 'gruppetto.fit', gps = false }) {
     const form = new FormData();
     form.append('file', new Blob([fit], { type: 'application/vnd.ant.fit' }), filename);
     form.append('data_type', 'fit');
-    form.append('trainer', '1');
+    // a ride with a GPS track goes up as a Virtual Ride with its map (the FIT's sub_sport says it was virtual);
+    // without one it is a trainer ride
+    if (!gps) form.append('trainer', '1');
     if (name) form.append('name', name);
     if (description) form.append('description', description);
     if (externalId) form.append('external_id', externalId);
