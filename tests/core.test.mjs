@@ -392,6 +392,42 @@ test('GPX track: point-to-point route with smoothed elevation, bends and a finis
   assert.throws(() => routeFromTrack({ name: '', points: pts.slice(0, 50) }), /shorter than 1 km/);
 });
 
+test('GPX track: the road built from its turns stays on the track (city corners, out and back)', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  // 20 corners of 90° every 200-400 m, with GPS jitter, and a 300 m spur ridden out and back
+  const m = 1 / 111320, lat0 = 48.45, lon0 = 24.55, k = Math.cos(lat0 * Math.PI / 180);
+  const xy = [[0, 0]];
+  let h = 0, x = 0, y = 0;
+  const go = (len) => { for (let d = 0; d < len; d += 10) { x += Math.cos(h) * 10; y += Math.sin(h) * 10; xy.push([x, y]); } };
+  for (let i = 0; i < 20; i++) {
+    go(200 + (i % 3) * 100);
+    if (i === 7) { const back = xy.slice(-31, -1).reverse(); go(300); xy.push(...back.map(([a, b]) => [a + 2, b + 2])); [x, y] = xy[xy.length - 1]; h += Math.PI; }
+    h += (i % 4 === 3 ? -1 : 1) * Math.PI / 2;
+  }
+  const pts = xy.map(([a, b], i) => ({ lat: lat0 + (b + Math.sin(i * 7.3) * 1.5) * m, lon: lon0 + (a + Math.cos(i * 5.1) * 1.5) * m / k, ele: 100 }));
+  const def = routeFromTrack({ name: 'City', points: pts });
+  // the renderer's road: heading += curve * TURN / SEG per 5 m segment, each segment an arc
+  const SEG = 5, TURN = 2.5, M = [];
+  for (let i = 0; i < def.map.length; i += 2) M.push([def.map[i], def.map[i + 1]]);
+  let rh = -def.startHeading, rx = M[0][0], rz = M[0][1], worst = 0;
+  const errs = [];
+  for (const c of def.curve) {
+    let best = Infinity;
+    for (let i = 0; i < M.length - 1; i++) {
+      const [ax, az] = M[i], vx = M[i + 1][0] - ax, vz = M[i + 1][1] - az, L = vx * vx + vz * vz || 1;
+      const t = Math.max(0, Math.min(1, ((rx - ax) * vx + (rz - az) * vz) / L));
+      best = Math.min(best, Math.hypot(rx - ax - vx * t, rz - az - vz * t));
+    }
+    errs.push(best); worst = Math.max(worst, best);
+    const h1 = rh + (c * TURN) / SEG, a = h1 - rh;
+    if (Math.abs(a) < 1e-6) { rx += Math.cos(rh) * SEG; rz += Math.sin(rh) * SEG; } else { rx += (SEG / a) * (Math.sin(h1) - Math.sin(rh)); rz -= (SEG / a) * (Math.cos(h1) - Math.cos(rh)); }
+    rh = h1;
+  }
+  errs.sort((a, b) => a - b);
+  assert.ok(errs[errs.length >> 1] < 3, `median ${errs[errs.length >> 1]}`);
+  assert.ok(worst < 30, `worst ${worst}`); // the top of the U-turn: no tighter than a 12 m radius
+});
+
 test('route groups: flat, hilly and mountain', () => {
   const g = Object.fromEntries(routes.map((r) => [r.id, r.group]));
   assert.equal(g.lakes, 'flat');

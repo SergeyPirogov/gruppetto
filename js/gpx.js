@@ -152,15 +152,60 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
   const head = [];
   for (let k = 0; k < n - 1; k++) head.push(Math.atan2(sy[k + 1] - sy[k], sx[k + 1] - sx[k]));
   head.push(head[head.length - 1]);
-  const maxTurn = SEG / MIN_RADIUS;
-  let dh = [];
-  for (let k = 0; k < n; k++) {
-    let a = k + 1 < n ? head[k + 1] - head[k] : 0;
-    while (a > Math.PI) a -= 2 * Math.PI;
-    while (a < -Math.PI) a += 2 * Math.PI;
-    dh.push(Math.max(-maxTurn, Math.min(maxTurn, a)));
+  // The renderer builds the road from the turn of each segment alone, adding them up from the start. Turns
+  // read off the track drifted: a tenth of a degree too much here, a clamped corner there, and 1 km on the
+  // road ran 160 m from where the track was, 5 km on, kilometres; it crossed itself where the track never
+  // did, with the ground, the fences and the houses of one stretch standing on another. So the turns are
+  // steered: each segment aims at the track 20 m ahead from where the road has got to (pure pursuit, the
+  // same arcs the renderer draws), and the road stays within a metre or two of the track all the way.
+  const maxTurn = SEG / MIN_RADIUS, LOOK = 4;
+  const arcStep = (h0, h1) => {
+    const a = h1 - h0;
+    if (Math.abs(a) < 1e-6) return [Math.cos(h0) * SEG, Math.sin(h0) * SEG];
+    const k = SEG / a;
+    return [k * (Math.sin(h1) - Math.sin(h0)), -k * (Math.cos(h1) - Math.cos(h0))];
+  };
+  const dh = new Array(n).fill(0), RX = new Array(n), RY = new Array(n);
+  let px = sx[0], py = sy[0], H = head[0], at = 0; // `at`: the track point nearest to where the road has got to
+  const idx = (i) => (loop ? ((i % n) + n) % n : Math.min(n - 1, i));
+  for (let k = 0; k < n - 1; k++) {
+    // the road cuts corners, so it runs ahead of the track's count: find where it is on the track, searching
+    // only a step or two on from last time (a 5 m step of road can't be further on than that: out and back
+    // along a street, the way back lies right beside you and must not be taken for where you are), then aim
+    // 20 m on from there; at the end of a one-way track, ride straight on
+    let bd = Infinity, bi = at;
+    for (let i = at; i <= at + 3; i++) { const q = idx(i), d = (sx[q] - px) ** 2 + (sy[q] - py) ** 2; if (d < bd) { bd = d; bi = i; } }
+    at = bi;
+    const j = idx(at + LOOK), tx = sx[j] - px, ty = sy[j] - py, Ld = Math.hypot(tx, ty);
+    let alpha = Ld > SEG && (loop || at + LOOK < n - 1) ? Math.atan2(ty, tx) - H : 0;
+    while (alpha > Math.PI) alpha -= 2 * Math.PI;
+    while (alpha < -Math.PI) alpha += 2 * Math.PI;
+    // the arc through the target: curvature 2 sin(alpha) / Ld (pure pursuit); a target behind (the top of a
+    // U-turn): as hard as allowed, its way
+    const turn = Math.abs(alpha) > Math.PI / 2 ? Math.sign(alpha) * maxTurn : (2 * Math.sin(alpha) * SEG) / Math.max(Ld, SEG);
+    dh[k] = Math.max(-maxTurn, Math.min(maxTurn, turn));
+    RX[k] = px; RY[k] = py;
+    const [ox, oy] = arcStep(H, H + dh[k]);
+    px += ox; py += oy; H += dh[k];
   }
-  dh = wrap(dh, (a) => smooth(a, 3, 2)); // bends come in and out gradually
+  RX[n - 1] = px; RY[n - 1] = py;
+  // where the road comes back over itself (out and back along a street, a crossing) the two passes are one
+  // place: one height. They were smoothed apart, a metre or two, and the two road surfaces cut through each
+  // other. Each point takes the mean of the passes within 7 m of it (fully within 3 m, blending out to 7 m)
+  const cell = (x, y) => `${Math.floor(x / 10)},${Math.floor(y / 10)}`, grid = new Map();
+  for (let k = 0; k < n; k++) { const c = cell(RX[k], RY[k]); if (!grid.has(c)) grid.set(c, []); grid.get(c).push(k); }
+  const along = (a, b) => { const d = Math.abs(a - b) * SEG; return loop ? Math.min(d, n * SEG - d) : d; };
+  const flat = elev.slice();
+  for (let k = 0; k < n; k++) {
+    let sum = 0, wsum = 0;
+    const cx = Math.floor(RX[k] / 10), cy = Math.floor(RY[k] / 10);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const m of grid.get(`${cx + i},${cy + j}`) || []) {
+      if (along(k, m) < 60) continue;
+      const w = 1 - Math.min(1, Math.max(0, (Math.hypot(RX[m] - RX[k], RY[m] - RY[k]) - 3) / 4));
+      if (w > 0) { sum += w * elev[m]; wsum += w; }
+    }
+    if (wsum > 0) { const w = Math.min(1, wsum); flat[k] = elev[k] + (sum / wsum - elev[k]) * w * 0.5; }
+  }
   // map north-up (x east, y north) onto the renderer's heading sense: it turns toward +right for +curve
   const curve = dh.map((a) => (-a * SEG) / TURN);
 
@@ -178,7 +223,7 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     theme: 'meadow',
     custom: true,
     oneWay: !loop,
-    elev: elev.map((e) => Math.round(e * 100) / 100), // cm: at 0.1 m the 20 m grade could only move in 0.5 % steps
+    elev: flat.map((e) => Math.round(e * 100) / 100), // cm: at 0.1 m the 20 m grade could only move in 0.5 % steps
     curve: curve.map((c) => Math.round(c * 1e5) / 1e5),
   };
 }
