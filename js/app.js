@@ -25,7 +25,7 @@ import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js'
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
-import { averages, rideItems, categoryOf, stampChanged } from './social-core.js';
+import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
 import { initSocialUi, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
@@ -2597,7 +2597,9 @@ function finishRide() {
   deleteDraft();
   $('ride').hidden = true;
   showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
-  socialAfterRide(socialItems, { firstName: socialFirst, simulated: socialSim, timed: socialTimed });
+  // the kilometres and climbing for the ratings across Ukraine (a ride on a trainer, kept in the history)
+  const socialRide = entry ? rideTotal(entry, { simulated: socialSim, weight: settings.weight, client: SOCIAL_CLIENT }) : null;
+  socialAfterRide(socialItems, { firstName: socialFirst, simulated: socialSim, timed: socialTimed, ride: socialRide });
 }
 
 // ---------- Ride history (#19) ----------

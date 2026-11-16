@@ -296,3 +296,34 @@ export function withGaps(rows) {
 
 /** 🇺🇦 from UA. */
 export const flagOf = (cc) => (/^[A-Z]{2}$/.test(cc || '') ? String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) : '');
+
+// ---------- Ratings across Ukraine (0003_regions.sql) ----------
+
+/** The oblasts by ISO 3166-2:UA code: [code, English, Ukrainian], in the Ukrainian alphabet's order. */
+export const REGIONS = [
+  ['UA-43', 'Crimea', 'АР Крим'], ['UA-05', 'Vinnytsia', 'Вінницька'], ['UA-07', 'Volyn', 'Волинська'], ['UA-12', 'Dnipropetrovsk', 'Дніпропетровська'],
+  ['UA-14', 'Donetsk', 'Донецька'], ['UA-18', 'Zhytomyr', 'Житомирська'], ['UA-21', 'Zakarpattia', 'Закарпатська'], ['UA-23', 'Zaporizhzhia', 'Запорізька'],
+  ['UA-26', 'Ivano-Frankivsk', 'Івано-Франківська'], ['UA-30', 'Kyiv (city)', 'Київ'], ['UA-32', 'Kyiv', 'Київська'], ['UA-35', 'Kirovohrad', 'Кіровоградська'],
+  ['UA-09', 'Luhansk', 'Луганська'], ['UA-46', 'Lviv', 'Львівська'], ['UA-48', 'Mykolaiv', 'Миколаївська'], ['UA-51', 'Odesa', 'Одеська'],
+  ['UA-53', 'Poltava', 'Полтавська'], ['UA-56', 'Rivne', 'Рівненська'], ['UA-40', 'Sevastopol', 'Севастополь'], ['UA-59', 'Sumy', 'Сумська'],
+  ['UA-61', 'Ternopil', 'Тернопільська'], ['UA-63', 'Kharkiv', 'Харківська'], ['UA-65', 'Kherson', 'Херсонська'], ['UA-68', 'Khmelnytskyi', 'Хмельницька'],
+  ['UA-71', 'Cherkasy', 'Черкаська'], ['UA-74', 'Chernivtsi', 'Чернівецька'], ['UA-77', 'Chernihiv', 'Чернігівська'],
+];
+/** An oblast's name in the language ('uk' or another), '' for none. */
+export function regionName(code, lang = 'en') {
+  const r = REGIONS.find((x) => x[0] === code);
+  return r ? (lang === 'uk' ? r[2] : r[1]) : '';
+}
+
+/**
+ * A ride for the ratings (submit_rides), from its history entry: null when it may not count — the simulator,
+ * under 5 minutes or 1 km. The server checks it again.
+ */
+export function rideTotal(entry, { simulated = false, weight, client } = {}) {
+  const s = entry?.summary;
+  if (simulated || !s || !(s.duration >= 300) || !(s.distance >= 1000) || !(s.avgPower > 0)) return null;
+  return {
+    ride_id: entry.id, ridden_at: entry.date, distance_m: Math.round(s.distance), climb_m: Math.round(s.elevationGain || 0),
+    duration_s: Math.round(s.duration), avg_power: Math.round(s.avgPower), weight_kg: weight, client,
+  };
+}

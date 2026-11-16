@@ -8,6 +8,7 @@ import { oauthReturn, enqueue } from './social-core.js';
 export const CLIENT = 'gruppetto-web/1';
 const AUTH_KEY = 'gruppetto.social.auth';
 const QUEUE_KEY = 'gruppetto.social.queue';
+const RIDE_QUEUE_KEY = 'gruppetto.social.rides'; // rides for the ratings across Ukraine, waiting to go
 
 /** Whether this copy of the app has a project to sign in to. */
 export const socialOn = () => !!(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -71,18 +72,28 @@ export async function signOut() {
   for (const f of listeners) f(null);
 }
 
+const PROFILE_COLS = 'display_name,country,gender,region,public,updated_at', PROFILE_COLS_OLD = 'display_name,country,gender,public,updated_at';
+const noRegion = (r) => !!r.error && /region/.test(r.error.message || '');
+
 /** My profile in the account (name, country, gender, public and data), or null before the first save. */
 export async function loadProfile() {
   if (!user) return null;
   const c = await client();
-  return ok(await c.from('profiles').select('display_name,country,gender,public,data,updated_at').eq('id', user.id).maybeSingle());
+  const read = (cols) => c.from('profiles').select(cols).eq('id', user.id).maybeSingle();
+  const r = await read(`${PROFILE_COLS},data`);
+  // a project without 0003_regions.sql yet has no region column: the profile reads as before
+  return ok(noRegion(r) ? await read(`${PROFILE_COLS_OLD},data`) : r);
 }
 
-/** Writes my profile (any of display_name, country, gender, public, data). */
+/** Writes my profile (any of display_name, country, gender, region, public, data). */
 export async function saveProfile(fields) {
   if (!user) return null;
   const c = await client();
-  return ok(await c.from('profiles').upsert({ id: user.id, ...fields }).select('display_name,country,gender,public,updated_at').single());
+  const write = (f, cols) => c.from('profiles').upsert({ id: user.id, ...f }).select(cols).single();
+  const r = await write(fields, PROFILE_COLS);
+  if (!noRegion(r)) return ok(r);
+  const { region: _, ...rest } = fields; // not in the project yet: everything else is saved
+  return ok(await write(rest, PROFILE_COLS_OLD));
 }
 
 // ---------- Rides (full sync) ----------
@@ -152,10 +163,47 @@ export async function leaderboard({ segment, version, period = 'all', gender = n
   return { total: rows[0]?.total ?? 0, rows };
 }
 
+// ---------- Ratings across Ukraine (0003_regions.sql) ----------
+
+const readRides = () => { try { return JSON.parse(localStorage.getItem(RIDE_QUEUE_KEY) || '[]'); } catch { return []; } };
+const writeRides = (q) => { try { if (q.length) localStorage.setItem(RIDE_QUEUE_KEY, JSON.stringify(q)); else localStorage.removeItem(RIDE_QUEUE_KEY); } catch { /* private mode */ } };
+
+/**
+ * Sends a ride's totals (from rideTotal) with the ones still waiting; whatever the server did not answer stays for
+ * next time (offline, or a project without 0003_regions.sql yet). The answers, [{ status, reason? }].
+ */
+export async function sendRides(ride = null) {
+  const q = readRides().filter((x) => x.ride_id !== ride?.ride_id);
+  if (ride) q.push(ride);
+  writeRides(q.slice(-100));
+  if (!user || !q.length) return [];
+  let res;
+  try {
+    const c = await client();
+    res = ok(await c.rpc('submit_rides', { items: q.slice(0, 50) }));
+  } catch { return []; }
+  writeRides(q.slice(50));
+  return res || [];
+}
+
+/** Oblast against oblast: [{ place, region, riders, rides, distance_km, climb_m }]. metric: 'km' | 'climb'. */
+export async function regionBoard({ period = 'week', metric = 'km' } = {}) {
+  const c = await client();
+  return ok(await c.rpc('region_board', { period, metric })) || [];
+}
+
+/** Rider against rider across Ukraine (or one oblast): { total, rows: [{ place, display_name, region, rides, distance_km, climb_m, me }] }. */
+export async function riderBoard({ period = 'week', metric = 'km', region = null, gender = null, aroundMe = true } = {}) {
+  const c = await client();
+  const rows = ok(await c.rpc('rider_board', { period, metric, region, gender, around_me: aroundMe })) || [];
+  return { total: rows[0]?.total ?? 0, rows };
+}
+
 /** The account and every result in it, gone; signed out here. What is on this device stays. */
 export async function deleteAccount() {
   const c = await client();
   ok(await c.rpc('delete_me'));
   writeQueue([]);
+  writeRides([]);
   await signOut();
 }

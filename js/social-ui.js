@@ -4,10 +4,11 @@
 // without a project (social-config.js) init returns at once and none of it shows.
 import {
   socialOn, initSocial, currentUser, onUser, signIn, signOut, loadProfile, saveProfile, queueAdd, queued, sendResults, leaderboard, deleteAccount,
-  loadActivities, saveActivities,
+  loadActivities, saveActivities, sendRides, regionBoard, riderBoard,
 } from './social.js';
 import {
   SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
+  REGIONS, regionName,
 } from './social-core.js';
 
 let ctx = null;
@@ -80,6 +81,23 @@ function buildUi() {
   const countries = COUNTRIES.map((cc) => [cc, names?.of(cc) || cc]).sort((a, b) => a[1].localeCompare(b[1], ctx.locale));
   $('ss-country').innerHTML = `<option value="">${tr('Not shown')}</option>${countries.map(([cc, n]) => `<option value="${cc}">${flagOf(cc)} ${ctx.esc(n)}</option>`).join('')}`;
   $('ss-save').onclick = saveSetup;
+  const regions = REGIONS.map(([code]) => [code, regionName(code, ctx.lang)]).sort((a, b) => a[1].localeCompare(b[1], ctx.locale));
+  $('ss-region').innerHTML = `<option value="">${tr('Not shown')}</option>${regions.map(([c, n]) => `<option value="${c}">${ctx.esc(n)}</option>`).join('')}`;
+  $('ss-country').onchange = () => { $('ss-region-box').hidden = $('ss-country').value !== 'UA'; };
+  // the ratings across Ukraine
+  $('ua-region').innerHTML = `<option value="">${tr('All of Ukraine')}</option>${regions.map(([c, n]) => `<option value="${c}">${ctx.esc(n)}</option>`).join('')}`;
+  $('hdr-ua').hidden = false;
+  $('hdr-ua').onclick = () => { ctx.track('social', 'ua-board'); openUa(); };
+  for (const el of document.querySelectorAll('[data-ua-close]')) el.onclick = () => { $('ua-view').hidden = true; };
+  for (const id of ['ua-tab', 'ua-period', 'ua-metric', 'ua-gender']) {
+    $(id).onclick = (ev) => {
+      const b = ev.target.closest('[data-v]');
+      if (!b) return;
+      for (const x of $(id).querySelectorAll('[data-v]')) x.classList.toggle('sel', x === b);
+      renderUa();
+    };
+  }
+  $('ua-region').onchange = renderUa;
   // the table
   for (const el of document.querySelectorAll('[data-lb-close]')) el.onclick = () => { $('lb-view').hidden = true; };
   $('lb-signin').onclick = () => signIn(redirect()).catch((e) => status(e.message));
@@ -225,6 +243,8 @@ async function syncRides() {
 function openSetup({ first = false } = {}) {
   $('ss-name').value = profileRow?.display_name || (ctx.settings.name && ctx.settings.name !== 'Me' ? ctx.settings.name : '') || currentUser()?.user_metadata?.full_name?.slice(0, 24) || '';
   $('ss-country').value = profileRow?.country || '';
+  $('ss-region').value = profileRow?.region || '';
+  $('ss-region-box').hidden = $('ss-country').value !== 'UA';
   $('ss-gender').value = profileRow?.gender || '';
   $('ss-public').checked = profileRow ? profileRow.public !== false : true;
   $('social-setup').dataset.first = first ? '1' : '';
@@ -235,7 +255,9 @@ function openSetup({ first = false } = {}) {
 async function saveSetup() {
   const name = $('ss-name').value.trim().slice(0, 24);
   if (!name) { $('ss-name').focus(); return; }
-  const fields = { display_name: name, country: $('ss-country').value || null, gender: $('ss-gender').value || null, public: $('ss-public').checked };
+  const country = $('ss-country').value || null;
+  const fields = { display_name: name, country, gender: $('ss-gender').value || null, public: $('ss-public').checked };
+  if (country === 'UA' || profileRow?.region) fields.region = country === 'UA' ? $('ss-region').value || null : null;
   const first = $('social-setup').dataset.first === '1';
   try {
     if (first) fields.data = mergeData(localData(), null);
@@ -272,6 +294,7 @@ export function socialDataChanged() {
 async function flush(items = []) {
   if (!profileRow) { queueAdd(items); return []; } // the first sign-in's window first: the profile must exist
   const answers = await sendResults(items);
+  if ((await sendRides()).some((r) => r?.status === 'saved')) uaCache.clear();
   for (const { item, result } of answers) if (result) results.set(`${item.segment_id}|${item.time_s}`, result);
   const saved = answers.filter((a) => a.result?.status === 'saved');
   if (saved.length) { ctx.track('social-submit', saved.length > 9 ? '10+' : String(saved.length)); boards.clear(); leaders.clear(); }
@@ -282,8 +305,10 @@ async function flush(items = []) {
  * After a ride (items: its results that may go in the tables). Signed in: they go now (or wait for the
  * network) and the finish screen shows the places; signed out: the finish screen asks you to sign in.
  */
-export async function socialAfterRide(items, { firstName, simulated = false, timed = false } = {}) {
+export async function socialAfterRide(items, { firstName, simulated = false, timed = false, ride = null } = {}) {
   if (!on()) return;
+  // the ride's kilometres and climbing for the ratings across Ukraine: now, or with the first sync after signing in
+  if (ride) sendRides(ride).then((r) => { if (r.some((x) => x?.status === 'saved')) uaCache.clear(); }).catch(() => {});
   const cta = $('sum-social');
   cta.hidden = true;
   results = new Map();
@@ -415,6 +440,67 @@ export function socialSegStart(route, climb) {
 export function socialSegLeader(climbId) {
   const l = on() && leaders.get(climbId);
   return l ? ` · 👑 ${tr('{time} this week, {cat}', { time: ctx.fmtTime(l.time), cat: myCategory() })}` : '';
+}
+
+// ---------- Ratings across Ukraine ----------
+
+const uaCache = new Map(); // filters -> { at, data }, a minute
+const uaPick = (id) => $(id).querySelector('.sel')?.dataset.v || '';
+
+/** Oblast against oblast, or rider against rider, by kilometres or climbing. */
+export function openUa() {
+  if (!on()) return;
+  $('ua-view').hidden = false;
+  if (profileRow?.region && !$('ua-region').dataset.set) { $('ua-region').value = ''; $('ua-region').dataset.set = '1'; }
+  renderUa();
+}
+
+async function renderUa() {
+  const tab = uaPick('ua-tab') || 'regions', period = uaPick('ua-period') || 'week', metric = uaPick('ua-metric') || 'km';
+  const riders = tab === 'riders', region = riders ? $('ua-region').value || null : null, gender = riders ? uaPick('ua-gender') || null : null;
+  $('ua-gender').hidden = !riders;
+  $('ua-region').hidden = !riders;
+  const km = (x) => `${Number(x).toLocaleString(ctx.locale, { maximumFractionDigits: 0 })} ${tr('km')}`;
+  const up = (x) => `${Number(x).toLocaleString(ctx.locale)} ${tr('m')}`;
+  $('ua-head').innerHTML = riders
+    ? `<tr><th>#</th><th>${tr('Rider')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Rides')}</th></tr>`
+    : `<tr><th>#</th><th>${tr('Oblast')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
+  const body = $('ua-rows');
+  body.innerHTML = `<tr><td colspan="5" class="muted">${tr('Loading…')}</td></tr>`;
+  $('ua-empty').hidden = true;
+  // who is not on the board yet, and why
+  const u = currentUser();
+  $('ua-cta').hidden = !!(u && profileRow?.region);
+  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to put your kilometres on the board of your oblast')}`
+    : `<button class="link-btn" data-ua-setup>${tr('Pick your oblast')}</button> ${tr('to ride for it')}`;
+  const si = $('ua-cta').querySelector('[data-ua-signin]'), su = $('ua-cta').querySelector('[data-ua-setup]');
+  if (si) si.onclick = () => signIn(redirect()).catch((e) => status(e.message));
+  if (su) su.onclick = () => openSetup();
+  const key = [tab, period, metric, region, gender, u?.id].join('|');
+  try {
+    let hit = uaCache.get(key);
+    if (!hit || Date.now() - hit.at > 60000) {
+      hit = { at: Date.now(), data: riders ? await riderBoard({ period, metric, region, gender }) : await regionBoard({ period, metric }) };
+      uaCache.set(key, hit);
+    }
+    if (key !== [uaPick('ua-tab') || 'regions', uaPick('ua-period') || 'week', uaPick('ua-metric') || 'km', riders ? $('ua-region').value || null : null, riders ? uaPick('ua-gender') || null : null, currentUser()?.id].join('|')) return; // another filter picked meanwhile
+    const rows = riders ? hit.data.rows : hit.data;
+    $('ua-empty').hidden = !!rows.length;
+    if (riders) {
+      body.innerHTML = withGaps(rows).map((r) => (r.gap ? '<tr class="lb-gap"><td colspan="5">⋯</td></tr>'
+        : `<tr class="${r.me ? 'me' : ''}"><td>${r.place}</td><td>${ctx.esc(r.display_name)}${r.region ? ` <small class="muted">${ctx.esc(regionName(r.region, ctx.lang))}</small>` : ''}</td>`
+          + `<td class="${metric === 'km' ? 'on' : ''}">${km(r.distance_km)}</td><td class="${metric === 'climb' ? 'on' : ''}">${up(r.climb_m)}</td><td>${r.rides}</td></tr>`)).join('');
+    } else {
+      const top = Math.max(1, ...rows.map((r) => Number(metric === 'climb' ? r.climb_m : r.distance_km)));
+      const mine = profileRow?.region;
+      body.innerHTML = rows.map((r) => `<tr class="${r.region === mine ? 'me' : ''}"><td>${r.place}</td>`
+        + `<td>${ctx.esc(regionName(r.region, ctx.lang))}<i class="ua-bar" style="width:${Math.max(4, Math.round((Number(metric === 'climb' ? r.climb_m : r.distance_km) / top) * 100))}%"></i></td>`
+        + `<td class="${metric === 'km' ? 'on' : ''}">${km(r.distance_km)}</td><td class="${metric === 'climb' ? 'on' : ''}">${up(r.climb_m)}</td><td>${r.riders}</td></tr>`).join('');
+    }
+  } catch (e) {
+    uaCache.delete(key);
+    body.innerHTML = `<tr><td colspan="5" class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</td></tr>`;
+  }
 }
 
 // every country with a flag, by ISO 3166 code
