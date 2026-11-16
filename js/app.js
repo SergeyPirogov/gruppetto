@@ -4028,11 +4028,12 @@ function manualLap() {
   toast(tr('Split {n}: {time} · {km} km · {w} W', { n: ride.splits.length, time: fmtTime(t), km: (d / 1000).toFixed(2), w: avg }));
 }
 
-/** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots). */
-const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv'];
+/** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots); the ones after have no key (C and the menu). */
+const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv', 'top', 'drone', 'tight', 'high', 'offset', 'long', 'car'];
 const CAMERA_NAMES = {
   chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front',
-  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: by the road', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast',
+  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: by the road', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast', top: 'Camera: from above', drone: 'Camera: drone',
+  tight: 'Camera: close behind', high: 'Camera: high behind', offset: 'Camera: behind, to the right', long: 'Camera: long lens', car: 'Camera: team car',
 };
 function setCameraView(mode) {
   if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
@@ -4040,7 +4041,8 @@ function setCameraView(mode) {
   saveSettings();
   scene?.setCamera?.(mode);
   $('f-camera').value = mode;
-  toast(`${(CAMERAS.indexOf(mode) + 1) % 10} · ${tr(CAMERA_NAMES[mode])}`);
+  const i = CAMERAS.indexOf(mode);
+  toast(i < 10 ? `${(i + 1) % 10} · ${tr(CAMERA_NAMES[mode])}` : tr(CAMERA_NAMES[mode]));
 }
 /** The next camera view (C, or Y on the Zwift Ride). */
 function nextCamera() {

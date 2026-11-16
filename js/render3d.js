@@ -26,10 +26,19 @@ const ROAD_HALF = 3.6;         // m
 const TURN = 2.5;              // curvature exaggeration relative to the 2D renderer
 const V_EXAG = 1.5;            // vertical exaggeration
 /** Each camera view and its field of view, degrees. 'tv' cuts between the TV_SHOTS. */
-const CAM_FOV = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48, far: 55, back: 70, post: 40, heli: 38, tv: 48, beside: 45, wheel: 70 };
+const CAM_FOV = { chase: 62, eyes: 72, iso: 30, side: 58, front: 48, far: 55, back: 70, post: 40, heli: 38, tv: 48, beside: 45, wheel: 70, top: 50, drone: 55,
+  tight: 72, high: 58, offset: 58, long: 26, car: 62 };
 const TV_SHOTS = ['front', 'heli', 'post', 'beside', 'far', 'wheel', 'side'];
+/** The views from behind, m: how far back, how high, how far to the right; the point looked at, ahead and its height; easing (a lagging car). */
+const REAR = {
+  tight: { back: 2.4, up: 1.8, ahead: 5, look: 0.1 },             // just behind the helmet
+  high: { back: 5, up: 3.4, ahead: 4, look: 0.2 },                // looking down on you and the road
+  offset: { back: 4, up: 2.0, side: 1.4, ahead: 12, look: 0.9 },  // behind, off to the right
+  long: { back: 14, up: 2.2, ahead: 6, look: 1.0 },               // a long lens from far behind: the road squeezed up
+  car: { back: 2.6, up: 1.8, ahead: 7, look: 0.6, lag: 1.2 },     // the team car, a little late in the bends
+};
 /** The views drawn by _moreCam. */
-const CAM_MORE = new Set(['far', 'back', 'post', 'heli', 'beside', 'wheel']);
+const CAM_MORE = new Set(['far', 'back', 'post', 'heli', 'beside', 'wheel', 'top', 'drone', ...Object.keys(REAR)]);
 /** Offset along a SEG-long arc whose heading turns from h0 to h1, at fraction t of it. */
 function arc(h0, h1, t) {
   const dh = h1 - h0;
@@ -934,7 +943,7 @@ export class Scene3D {
   setCamera(mode) {
     this.camMode = CAM_FOV[mode] ? mode : 'chase';
     this._tv = null;
-    this._post = null;
+    this._post = null; this._droneAt = null;
     this._heli = undefined;
     this._heliPos = null;
     this._isoHeading = undefined;
@@ -953,7 +962,8 @@ export class Scene3D {
    * 'far' (high and far behind: the bunch around you), 'back' (your eyes, looking back down the road),
    * 'post' (a camera standing on the verge: you ride up to it and past it, then it waits further on),
    * 'heli' (a helicopter circling slowly high above), 'beside' (a camera on the verge, level with you)
-   * and 'wheel' (low behind the back wheel, looking up the road past you).
+   * 'wheel' (low behind the back wheel, looking up the road past you), 'top' (straight down from above),
+   * 'drone' (following behind and above, a little late in bends) and the views from behind in REAR.
    */
   _moreCam(cm, me, dist, dt) {
     const ch = this._chaseH = this._chaseH === undefined || Math.abs(me.head - this._chaseH) > 1.5 ? me.head : this._chaseH + (me.head - this._chaseH) * Math.min(1, dt * 3.5);
@@ -991,6 +1001,26 @@ export class Scene3D {
       // a zoom lens: the rider stays about the same size as they come up to the camera
       const L = Math.hypot(P.x - px, P.y - py, P.z - pz);
       this._setFov(Math.max(14, Math.min(60, THREE.MathUtils.radToDeg(2 * Math.atan(2.6 / Math.max(1, L))))));
+    } else if (REAR[cm]) {
+      const R = REAR[cm], back = this.frame(dist - (R.back ?? 4)), ahead = this.frame(dist + (R.ahead ?? 9));
+      const lane = me.lane * (R.laneFollow ?? 0.8), side = R.side ?? 0;
+      const want = new THREE.Vector3(back.x + back.rx * (lane + side), back.y + (R.up ?? 2), back.z + back.rz * (lane + side));
+      if (!R.lag || !this._rearAt || this._rearAt.distanceTo(want) > 30) this._rearAt = want.clone();
+      else this._rearAt.lerp(want, Math.min(1, dt * R.lag));
+      C.position.copy(this._rearAt);
+      C.lookAt(ahead.x + ahead.rx * me.lane * 0.5, ahead.y + (R.look ?? 0.8), ahead.z + ahead.rz * me.lane * 0.5);
+    } else if (cm === 'top') {
+      // straight down from 16 m, the road running up the screen
+      C.position.set(px - cx * 2.5, py + 16, pz - cz * 2.5);
+      C.lookAt(px + cx * 1.5, py, pz + cz * 1.5);
+    } else if (cm === 'drone') {
+      // a drone following 8 m behind and 5 m up, lagging a little in bends and bobbing in the air
+      const t = performance.now() / 1000, back = this.frame(dist - 8);
+      const want = new THREE.Vector3(back.x + back.rx * me.lane * 0.5, back.y + 5.2 + Math.sin(t * 0.9) * 0.25, back.z + back.rz * me.lane * 0.5);
+      if (!this._droneAt || this._droneAt.distanceTo(want) > 30) this._droneAt = want.clone();
+      else this._droneAt.lerp(want, Math.min(1, dt * 1.8));
+      C.position.copy(this._droneAt);
+      C.lookAt(px + cx * 4, py + 0.8, pz + cz * 4);
     } else if (cm === 'heli') {
       // high above, slowly circling round the rider
       this._heli = this._heli === undefined ? ch + Math.PI + 0.7 : this._heli + dt * 0.07;
@@ -1019,7 +1049,7 @@ export class Scene3D {
     const pool = TV_SHOTS.filter(s => s !== T.shot);
     T.shot = pool[Math.floor(Math.random() * pool.length)];
     T.left = 6 + Math.random() * 6;
-    this._post = null;
+    this._post = null; this._droneAt = null;
     this._heli = undefined;
     this._heliPos = null;
     this._chaseH = undefined;
@@ -1153,7 +1183,7 @@ export class Scene3D {
    */
   _speedFeel(dt, dist) {
     const cm = this._cm ?? this.camMode;
-    if (!dt || cm === 'iso' || cm === 'post' || cm === 'heli') return; // these set their own (a zoom lens)
+    if (!dt || cm === 'iso' || cm === 'post' || cm === 'heli' || cm === 'top' || cm === 'long') return; // these keep their own lens
     // the speed from the distance and the real time between frames (the frame's dt is capped, the distance is not)
     const now = performance.now(), last = this._feelAt;
     this._feelAt = { t: now, d: dist };
