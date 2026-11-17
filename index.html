@@ -50,6 +50,7 @@
       <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
       <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Oblast against oblast: kilometres and climbing">🇺🇦 <span>Ratings of Ukraine</span></button>
       <button id="hdr-group" class="hdr-account hdr-ua" hidden title="Ride together at a set time, live on the road">👥 <span>Group rides</span></button>
+      <span id="hdr-guest" class="hdr-guest" hidden>You are a guest</span>
       <button id="hdr-account" class="hdr-account" hidden></button>
       <div class="dev-chips">
         <button class="dev-chip" data-key="trainer" data-open="devices"><i></i>Trainer</button>
@@ -62,6 +63,8 @@
 
     <div class="lobby-cols">
     <main class="lobby-main">
+      <!-- signed in: your day in the tables and the group rides at a glance -->
+      <section id="me-today" class="me-today" hidden aria-label="Your day"></section>
       <div id="draft-box" class="note draft-box" hidden>
         <span id="draft-text"></span>
         <span class="draft-actions"><button id="draft-save" class="primary">Save ride</button><button id="draft-drop" class="ghost">Discard</button></span>
@@ -765,6 +768,54 @@
         <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to put your oblast on the board.</p>
         <p id="ua-cta" class="hint" hidden></p>
         <p class="hint">Rides on a trainer of riders signed in, each by the oblast in their profile. The simulator does not count.</p>
+      </div>
+    </div>
+
+    <!-- the first visit: ride as a guest at once, or sign in, each with what it gives -->
+    <div id="welcome" class="welcome" hidden role="dialog" aria-labelledby="welcome-title">
+      <div class="welcome-in">
+        <div class="welcome-brand"><img class="mark" src="logo.svg" alt="">Gruppetto</div>
+        <h1 id="welcome-title">Ride at home. Free, right in the browser.</h1>
+        <p class="welcome-sub">You can ride at once, with no sign-up. Signing in is only for what has to do with other riders.</p>
+        <div class="welcome-cards">
+          <section class="welcome-card">
+            <small>Without signing in</small>
+            <h2>Ride as a guest</h2>
+            <ul class="welcome-list ok">
+              <li>Free rides, ERG workouts, a race against the bots</li>
+              <li>Every route, your own GPX, the garage</li>
+              <li>History and progress, on this device</li>
+              <li>FIT, Strava, intervals.icu, Garmin</li>
+              <li>Challenge a friend: their ghost against yours</li>
+            </ul>
+            <button id="welcome-guest" class="primary big">Ride now</button>
+          </section>
+          <section class="welcome-card acc">
+            <small>With a Google account</small>
+            <h2>Ride with everyone</h2>
+            <p class="welcome-plus">Everything a guest has, and:</p>
+            <ul class="welcome-list plus">
+              <li>Your times in the tables of climbs, sprints and laps, women and men apart</li>
+              <li>Ratings of Ukraine: you ride for your oblast</li>
+              <li>Group rides, live with friends</li>
+              <li>Profile, workouts and history on every device</li>
+            </ul>
+            <button id="welcome-signin" class="google-btn big"></button>
+          </section>
+        </div>
+        <p class="welcome-foot">You can sign in any time later, from the top bar or in Profile. The rides already on this device go into the account.</p>
+      </div>
+    </div>
+
+    <!-- a guest taps something that wants an account: what it gives, and the way in or on -->
+    <div id="lock-sheet" class="wk-menu" hidden>
+      <div class="drawer-bg" data-lock-close></div>
+      <div class="wk-menu-panel lock-panel" role="dialog" aria-labelledby="lock-title">
+        <div class="wk-menu-head"><h2 id="lock-title"></h2><button class="drawer-close" data-lock-close aria-label="Close">✕</button></div>
+        <p id="lock-why" class="lock-why"></p>
+        <p class="lock-also"><small>The same sign-in opens</small><span id="lock-also"></span></p>
+        <button id="lock-signin" class="google-btn big"></button>
+        <div class="lock-foot"><button id="lock-guest" class="link-btn"></button><a href="privacy.html" target="_blank" rel="noopener">What we keep</a></div>
       </div>
     </div>
 

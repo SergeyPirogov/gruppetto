@@ -27,7 +27,7 @@ import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
-import { initSocialUi, groupChannel, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { initSocialUi, groupChannel, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -41,6 +41,7 @@ import { nextWeather } from './atmo-blend.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
 import { PASS_AFTER, heldBy, pickLane } from './passing.js';
 import { Mates, packet as groupPacket } from './group.js';
+import { socialOn } from './social.js';
 
 const $ = (id) => document.getElementById(id);
 // units in the interface language
@@ -1098,11 +1099,31 @@ function initDrawer() {
   });
   $('wk-detail').addEventListener('click', (e) => { if (e.target.closest('[data-wkd-close]')) closeWorkoutDetail(); });
   $('wk-menu').addEventListener('click', (e) => { if (e.target.closest('[data-wk-close]')) closeWorkoutMenu(); });
-  // first visit with nothing to ride on: show the devices
+  // first visit with nothing to ride on: the welcome (a guest at once, or signed in), then the devices
   if (!trainer.connected && !$('sim').checked && !localStorage.getItem('powerup-seen-drawer')) {
     try { localStorage.setItem('powerup-seen-drawer', '1'); } catch { /* private mode */ }
-    open('devices');
+    if (socialOn() && !localStorage.getItem(WELCOME_KEY) && !history.length) showWelcome(() => open('devices')); else open('devices');
   }
+}
+
+// ---------- The first visit's welcome ----------
+const WELCOME_KEY = 'gruppetto.welcomed';
+/** Two ways in, each with what it gives: ride at once as a guest (then `next`), or sign in with Google. */
+function showWelcome(next) {
+  const done = (how) => {
+    try { localStorage.setItem(WELCOME_KEY, how); } catch { /* private mode */ }
+    $('welcome').hidden = true;
+    window.removeEventListener('keydown', onKey, true);
+    track('welcome', how);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done('guest'); next(); } };
+  $('welcome-signin').innerHTML = `${GOOGLE_G}<span>${esc(tr('Sign in with Google'))}</span>`;
+  $('welcome-guest').onclick = () => { done('guest'); next(); };
+  $('welcome-signin').onclick = () => { done('sign-in'); socialSignIn('welcome'); };
+  window.addEventListener('keydown', onKey, true);
+  $('welcome').hidden = false;
+  $('welcome-guest').focus();
+  track('welcome', 'show');
 }
 
 function markSelected(list, id) {
