@@ -52,3 +52,16 @@ test('group ride: a packet that is not one is dropped', () => {
   for (const p of [null, {}, { u: 'x' }, { u: 'x', d: 'far' }, { u: 'x', d: 1e9, v: 1 }, { u: 'x', d: 10, v: -3 }, { u: 'x'.repeat(80), d: 1, v: 1 }]) m.receive(p, 0);
   assert.equal(m.list(0).length, 0);
 });
+
+test('a race: the finish time goes in the packet and stays after the rider has gone', () => {
+  assert.equal(packet({ id: 'a', name: 'A', dist: 1, v: 1, lane: 0 }, 0).x, undefined);
+  assert.equal(packet({ id: 'a', name: 'A', dist: 1, v: 1, lane: 0, finish: 1234.56 }, 0).x, 1234.6);
+  const m = new Mates('me');
+  m.receive({ u: 'b', n: 'Bo', d: 10, v: 9, l: 0, j: '#ff0000' }, 0);
+  assert.deepEqual(m.finished(), []);
+  m.receive({ u: 'b', n: 'Bo', d: 12000, v: 9, l: 0, j: '#ff0000', x: 1500 }, 1000);
+  m.receive({ u: 'b', n: 'Bo', d: 12009, v: 9, l: 0, j: '#ff0000', x: 1400 }, 2000); // the first one stands
+  m.receive({ u: 'c', n: 'Cy', d: 0, v: 0, l: 0, x: 'soon' }, 2000); // not a time
+  m.list(60000); // long gone from the road
+  assert.deepEqual(m.finished(), [{ id: 'b', name: 'Bo', color: '#ff0000', stripe: '#e2e8f0', wkg: 0, finish: 1500 }]);
+});

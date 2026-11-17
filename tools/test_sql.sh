@@ -32,3 +32,21 @@ run < supabase/migrations/0001_social.sql
 run < supabase/migrations/0004_group_rides.sql
 run < supabase/migrations/0004_group_rides.sql # applies twice: safe to paste again
 run < supabase/tests/group_rides_test.sql
+# group rides again with 0005 on top (the old calls still work), then the races, each on a fresh database
+run <<'SQL'
+drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
+SQL
+run < supabase/tests/auth_stub.sql
+run < supabase/migrations/0001_social.sql
+run < supabase/migrations/0004_group_rides.sql
+run < supabase/migrations/0005_group_races.sql
+run < supabase/migrations/0005_group_races.sql # applies twice: safe to paste again
+run < supabase/tests/group_rides_test.sql
+run <<'SQL'
+drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
+SQL
+run < supabase/tests/auth_stub.sql
+run < supabase/migrations/0001_social.sql
+run < supabase/migrations/0004_group_rides.sql
+run < supabase/migrations/0005_group_races.sql
+run < supabase/tests/group_races_test.sql
