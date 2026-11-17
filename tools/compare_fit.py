@@ -95,7 +95,13 @@ def summary(name, s):
     p = [r['power'] for r in s.values() if r['power'] is not None]
     hr = [r['hr'] for r in s.values() if r['hr']]
     print(f'{name}: {len(s)} s, power avg {mean(p):.0f} W (no zeros {mean([x for x in p if x > 0]):.0f}), '
-          f'HR avg {mean(hr):.0f}, gaps {gaps(s)}')
+          f'HR avg {mean(hr):.0f}, HR missing {sum(1 for r in s.values() if not r["hr"])} s, '
+          f'HR jumps >10 bpm/s {hr_jumps(s)}, gaps {gaps(s)}')
+
+
+def hr_jumps(s):
+    ts = sorted(s)
+    return sum(1 for x, y in zip(ts, ts[1:]) if s[x]['hr'] and s[y]['hr'] and y - x == 1 and abs(s[y]['hr'] - s[x]['hr']) > 10)
 
 
 def gaps(s):
@@ -112,11 +118,17 @@ def same_time(a, b):
     pa = mean(a[t]['power'] for t in common); pb = mean(b[t]['power'] for t in common)
     print(f'  power A {pa:.1f} W, B {pb:.1f} W, A-B {pa - pb:+.1f} W ({(pa - pb) / pb * 100:+.1f}%)')
     print(f'  per second A-B: median {statistics.median(dp):+.1f} W, spread (sd) {statistics.pstdev(dp):.1f} W')
-    print('  by 5 min:')
+    dh = [a[t]['hr'] - b[t]['hr'] for t in common if a[t]['hr'] and b[t]['hr']]
+    if dh:
+        print(f'  heart rate A-B: mean {mean(dh):+.1f} bpm, median {statistics.median(dh):+.1f}, '
+              f'sd {statistics.pstdev(dh):.1f}, seconds off by >5 bpm {sum(1 for x in dh if abs(x) > 5)}')
+    print('  by 5 min (power A, B, %; HR A, B):')
     for i in range(0, len(common), 300):
         blk = common[i:i + 300]
         ba, bb = mean(a[t]['power'] for t in blk), mean(b[t]['power'] for t in blk)
-        print(f'    {i // 60:3d}-{(i + len(blk)) // 60:<3d} min  A {ba:5.0f}  B {bb:5.0f}  {(ba - bb) / bb * 100 if bb else 0:+5.1f}%')
+        ha, hb = mean(a[t]['hr'] for t in blk if a[t]['hr']), mean(b[t]['hr'] for t in blk if b[t]['hr'])
+        print(f'    {i // 60:3d}-{(i + len(blk)) // 60:<3d} min  A {ba:5.0f}  B {bb:5.0f}  {(ba - bb) / bb * 100 if bb else 0:+5.1f}%'
+              f'   HR {ha:5.0f} {hb:5.0f}')
     return True
 
 
