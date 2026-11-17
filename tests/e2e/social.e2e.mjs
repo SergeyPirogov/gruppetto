@@ -69,6 +69,23 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       const b = boardFrom(db.efforts.filter((e) => e.segment_id === q.segment), { me: USER.id, period: q.period, gender: q.gender, category: q.category });
       return send(route, 200, b.rows.map((r) => ({ ...r, total: b.total, wkg: r.avg_power / r.weight_kg })));
     }
+    // group rides and leagues (#84)
+    if (p === '/rest/v1/rpc/group_ride_list') return send(route, 200, db.rides || []);
+    if (p === '/rest/v1/rpc/league_list') return send(route, 200, db.leagues || []);
+    if (p === '/rest/v1/rpc/create_league') {
+      const id = `00000000-0000-4000-8000-00000000000${(db.leagues || []).length + 1}`;
+      (db.leagues ||= []).push({ id, title: JSON.parse(body).p_title, host_name: 'Olena', races: 0, next_at: null, mine: true });
+      return send(route, 200, id);
+    }
+    if (p === '/rest/v1/rpc/create_group_ride') {
+      const q = JSON.parse(body), l = (db.leagues || []).find((x) => x.id === q.p_league);
+      const id = '11111111-0000-4000-8000-000000000001';
+      (db.rides ||= []).push({ id, title: q.p_title, route_id: q.p_route, starts_at: q.p_starts, host_name: 'Olena', mine: true, riders: 1, joined: true, kind: q.p_kind, laps: q.p_laps, league_id: l?.id || null, league_title: l?.title || null });
+      if (l) l.races += 1;
+      return send(route, 200, id);
+    }
+    if (p === '/rest/v1/rpc/league_standings') return send(route, 200, [{ name: 'Taras', points: 45, races: 2, wins: 1, best: 1, me: false }, { name: 'Olena', points: 20, races: 1, wins: 0, best: 2, me: true }]);
+    if (p === '/rest/v1/rpc/league_races') return send(route, 200, (db.rides || []).filter((r) => r.league_id === JSON.parse(body).p_id).map((r) => ({ ...r, finishers: 0 })));
     if (p === '/rest/v1/rpc/delete_me') { db.profile = null; db.efforts = []; return send(route, 204); }
     return send(route, 404, { message: `mock: no ${p}` });
   };
@@ -284,6 +301,41 @@ test('deleting the account: everything goes from the server, nothing from this d
   const left = await page.evaluate(() => ({ records: JSON.parse(localStorage.getItem('gruppetto.records')), auth: localStorage.getItem('gruppetto.social.auth') }));
   assert.equal(left.records.lap.rolling, 900);
   assert.equal(left.auth, null);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a league: set up from the Leagues tab, a race put in it, its standings', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#hdr-account.in');
+  await page.evaluate(() => document.getElementById('hdr-group').click());
+  await page.waitForSelector('#gr-view:not([hidden])');
+  await page.click('[data-gr-tab="lg"]');
+  await page.waitForSelector('#gr-lg-empty:not([hidden])');
+  await page.click('#gr-lg-new summary');
+  await page.fill('#gr-lg-title', 'Winter Cup');
+  await page.click('#gr-lg-create');
+  await page.waitForSelector('#gr-lg-one:not([hidden]) #gr-lg-rows tr.me');
+  assert.match(await page.textContent('#gr-lg-name'), /Winter Cup/);
+  assert.match(await page.textContent('#gr-lg-rows tr:first-child'), /Taras\s*45/);
+  // a race in the calendar, in the league
+  await page.click('[data-gr-tab="cal"]');
+  await page.click('#gr-new summary');
+  await page.fill('#gr-title', 'Round 1');
+  await page.selectOption('#gr-kind', 'race');
+  await page.waitForSelector('#gr-league-wrap:not([hidden])');
+  await page.selectOption('#gr-league', { label: '🏆 Winter Cup' });
+  await page.click('#gr-create');
+  await page.waitForSelector('.gr-race');
+  assert.match(await page.textContent('.gr-race'), /Winter Cup/);
+  const made = mock.db.requests.filter((r) => r.path === '/rest/v1/rpc/create_group_ride').at(-1);
+  assert.equal(JSON.parse(made.body).p_league, mock.db.leagues[0].id);
+  // a plain ride sends no league at all (a database without leagues takes it)
+  await page.click('#gr-new summary');
+  await page.fill('#gr-title', 'Spin');
+  await page.selectOption('#gr-kind', 'ride');
+  assert.equal(await page.isHidden('#gr-league-wrap'), true);
   assert.deepEqual(errors, []);
   await context.close();
 });

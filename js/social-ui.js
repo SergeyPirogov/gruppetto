@@ -8,6 +8,7 @@ import {
   finishGroupRace, groupRaceResults,
 } from './social.js';
 import { rideWindow } from './group.js';
+import { initLeagues, load as loadLeagues, leagueSelect, chosenLeague } from './league-ui.js';
 import {
   SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
   REGIONS, regionName,
@@ -114,6 +115,11 @@ function buildUi() {
   $('gr-list').onclick = groupAction;
   $('gr-form').onsubmit = groupCreate;
   $('gr-kind').onchange = $('gr-route').onchange = grLapsShow;
+  initLeagues({
+    ctx, signedIn: () => !!currentUser(), hasProfile: () => !!profileRow,
+    needAccount: () => { if (!currentUser()) signIn(redirect()).catch((e) => status(e.message)); else openSetup(); },
+    openRide: (id) => { grFocus = id; renderGroups(); $('gr-list').querySelector(`[data-row="${id}"]`)?.scrollIntoView({ block: 'nearest' }); },
+  });
   // the table
   for (const el of document.querySelectorAll('[data-lb-close]')) el.onclick = () => { $('lb-view').hidden = true; };
   $('lb-signin').onclick = () => signIn(redirect()).catch((e) => status(e.message));
@@ -685,6 +691,7 @@ export function openGroups(focus = null) {
     $('gr-time').value = `${pad(t.getHours())}:00`;
   }
   loadGroups();
+  loadLeagues(); // the league select in the form, and the Leagues tab
   clearInterval(grTimer); // the «starts in» and the Ride buttons keep up with the clock while the calendar is open
   grTimer = setInterval(() => { if ($('gr-view').hidden) clearInterval(grTimer); else renderGroups(); }, 15000);
 }
@@ -693,10 +700,12 @@ export function openGroups(focus = null) {
 function grLapsShow() {
   const r = ctx.routes().find((x) => x.id === $('gr-route').value);
   $('gr-laps-wrap').hidden = $('gr-kind').value !== 'race' || !!r?.oneWay;
+  leagueSelect();
 }
 
 /** What a ride is, for its row: a race and its laps, or nothing for riding together. */
-const raceLabel = (g, route) => (g.kind !== 'race' ? '' : route?.oneWay || !(g.laps > 1) ? `🏁 ${tr('Race')}` : `🏁 ${tr('Race')} · ${tr('{n} laps', { n: g.laps })}`);
+const raceLabel = (g, route) => (g.kind !== 'race' ? ''
+  : (route?.oneWay || !(g.laps > 1) ? `🏁 ${tr('Race')}` : `🏁 ${tr('Race')} · ${tr('{n} laps', { n: g.laps })}`) + (g.league_title ? ` · 🏆 ${g.league_title}` : ''));
 
 async function loadGroups() {
   if (!grRows.length) $('gr-list').innerHTML = `<li class="muted">${tr('Loading…')}</li>`;
@@ -779,7 +788,9 @@ async function groupCreate(ev) {
     const kind = $('gr-kind').value === 'race' ? 'race' : 'ride';
     const laps = Math.max(1, Math.min(10, Math.round(Number($('gr-laps').value) || 1)));
     const route = ctx.routes().find((x) => x.id === $('gr-route').value);
-    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt, kind, laps: route?.oneWay ? 1 : laps });
+    const league = kind === 'race' ? chosenLeague() : null;
+    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt, kind, laps: route?.oneWay ? 1 : laps, league });
+    if (league) loadLeagues(); // its race count
     ctx.track('social', 'group-create');
     $('gr-title').value = '';
     $('gr-new').open = false;
