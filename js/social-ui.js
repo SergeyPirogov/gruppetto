@@ -92,7 +92,7 @@ function buildUi() {
   // the ratings across Ukraine
   $('ua-region').innerHTML = `<option value="">${tr('All of Ukraine')}</option>${regions.map(([c, n]) => `<option value="${c}">${ctx.esc(n)}</option>`).join('')}`;
   $('hdr-ua').hidden = false;
-  $('hdr-ua').onclick = () => { ctx.track('social', 'ua-board'); openUa(); };
+  $('hdr-ua').onclick = () => { ctx.track('social', 'ua-board'); gate('ua', openUa); };
   for (const el of document.querySelectorAll('[data-ua-close]')) el.onclick = () => { $('ua-view').hidden = true; };
   for (const id of ['ua-tab', 'ua-period', 'ua-metric', 'ua-gender']) {
     $(id).onclick = (ev) => {
@@ -105,7 +105,10 @@ function buildUi() {
   $('ua-region').onchange = renderUa;
   // group rides
   $('hdr-group').hidden = false;
-  $('hdr-group').onclick = () => { ctx.track('social', 'group-list'); openGroups(); };
+  $('hdr-group').onclick = () => { ctx.track('social', 'group-list'); gate('group', () => openGroups()); };
+  // the lock sheet: what an account gives, from a guest's tap on something that wants one
+  for (const el of document.querySelectorAll('[data-lock-close]')) el.onclick = () => { $('lock-sheet').hidden = true; };
+  $('lock-signin').innerHTML = `${GOOGLE_G}<span>${ctx.esc(tr('Sign in with Google'))}</span>`;
   for (const el of document.querySelectorAll('[data-gr-close]')) el.onclick = () => { $('gr-view').hidden = true; };
   $('gr-list').onclick = groupAction;
   $('gr-form').onsubmit = groupCreate;
@@ -138,9 +141,109 @@ function renderHeader() {
   const u = currentUser();
   b.hidden = false;
   b.classList.toggle('in', !!u);
-  b.innerHTML = u ? `🏆 <span>${ctx.esc(profileRow?.display_name || u.email || '')}</span>` : `${GOOGLE_G}<span>${ctx.esc(tr('Sign in with Google'))}</span>`;
+  // a guest: who you are now and the way in; signed in: you, your oblast, and that your things are on every device
+  $('hdr-guest').hidden = !!u;
+  const name = profileRow?.display_name || u?.email?.split('@')[0] || '';
+  const sub = [profileRow?.region ? regionName(profileRow.region, ctx.lang) : '', tr('synced')].filter(Boolean).join(' · ');
+  b.innerHTML = u
+    ? `<i class="hdr-avatar" style="background:${ctx.esc(ctx.settings.jersey || '#7c3aed')}">${ctx.esc((name[0] || '?').toUpperCase())}</i><span class="hdr-who"><b>${ctx.esc(name)}</b><small>${ctx.esc(sub)}</small></span>`
+    : `${GOOGLE_G}<span>${ctx.esc(tr('Sign in'))}</span>`;
   b.title = u ? tr('Your account and leaderboards') : tr('Sign in to put your times in the tables, and to have your profile on every device');
+  // what wants an account wears a lock for a guest (looking stays open to anyone)
+  for (const id of ['hdr-ua', 'hdr-group']) {
+    const el = $(id);
+    el.classList.toggle('locked', !u);
+    el.querySelector('.lock-ic')?.remove();
+    if (!u) el.insertAdjacentHTML('beforeend', LOCK_IC);
+  }
+  renderToday();
   b.onclick = u ? showAccount : () => { ctx.track('social', 'sign-in-header'); signIn(redirect()).catch((e) => status(e.message)); };
+}
+
+const LOCK_IC = '<svg class="lock-ic" viewBox="0 0 24 24" role="img" aria-label="with an account"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+
+// ---------- A guest at something that wants an account ----------
+const LOCK_SEEN = 'gruppetto.lockSeen';
+const LOCKS = {
+  ua: { title: 'Ratings of Ukraine: with an account', why: 'So that your kilometres and climbing count for your oblast. Anyone can look at the board.', guest: 'Just look, as a guest' },
+  group: { title: 'Group rides: with an account', why: 'So that the others see who rides beside them. Anyone sees the calendar; joining and riding come after signing in.', guest: 'See the calendar as a guest' },
+};
+const OPENS = { tables: 'the tables of climbs, sprints and laps', ua: 'Ratings of Ukraine', group: 'group rides', sync: 'your profile and history on every device' };
+
+/**
+ * A guest's first tap on something that wants an account: the sheet with what it gives and the two ways on, once
+ * per feature (later taps go straight to it, where its own line asks to sign in). Signed in: straight on.
+ */
+function gate(kind, go) {
+  let seen = {};
+  try { seen = JSON.parse(localStorage.getItem(LOCK_SEEN) || '{}'); } catch { /* private mode */ }
+  if (currentUser() || seen[kind]) { go(); return; }
+  seen[kind] = 1;
+  try { localStorage.setItem(LOCK_SEEN, JSON.stringify(seen)); } catch { /* private mode */ }
+  const L = LOCKS[kind];
+  $('lock-title').textContent = tr(L.title);
+  $('lock-why').textContent = tr(L.why);
+  $('lock-also').textContent = Object.keys(OPENS).filter((k) => k !== kind).map((k) => tr(OPENS[k])).join(' · ');
+  $('lock-guest').textContent = tr(L.guest);
+  $('lock-guest').onclick = () => { ctx.track('social', `lock-guest-${kind}`); $('lock-sheet').hidden = true; go(); };
+  $('lock-signin').onclick = () => { ctx.track('social', `lock-sign-in-${kind}`); signIn(redirect()).catch((e) => status(e.message)); };
+  $('lock-sheet').hidden = false;
+  ctx.track('social', `lock-${kind}`);
+}
+
+/** Sign in from outside this file (the first visit's welcome). */
+export function socialSignIn(source = 'welcome') {
+  if (!socialOn()) return;
+  ctx?.track('social', `sign-in-${source}`);
+  signIn(redirect()).catch((e) => status(e.message));
+}
+
+// ---------- Your day, signed in ----------
+let todayAt = 0;
+let todayData = null;
+
+/** The lobby's strip for a signed-in rider: your oblast this week, the next group ride. Nothing for a guest. */
+async function renderToday(force = false) {
+  const box = $('me-today');
+  if (!box) return;
+  const u = currentUser();
+  if (!u || !profileRow) { box.hidden = true; return; } // the profile first (its oblast)
+  if (force || !todayData || Date.now() - todayAt > 120000) {
+    todayAt = Date.now();
+    const [regions, rides] = await Promise.all([
+      profileRow?.region ? regionBoard({ period: 'week', metric: 'km' }).catch(() => null) : Promise.resolve(null),
+      groupRides(7).catch(() => null),
+    ]);
+    todayData = { regions, rides };
+  }
+  if (currentUser()?.id !== u.id) return;
+  const { regions, rides } = todayData;
+  const tiles = [];
+  if (profileRow?.region) {
+    const r = regions?.find((x) => x.region === profileRow.region);
+    tiles.push(`<button class="me-tile" data-today="ua"><small>${tr('Your oblast this week')}</small>`
+      + `<b>${ctx.esc(regionName(profileRow.region, ctx.lang))}${r ? ` · ${tr('{place} of {n}', { place: r.place, n: regions.length })}` : ''}</b>`
+      + `<span>${r ? tr('{km} km together, {riders} riding', { km: Math.round(Number(r.distance_km)).toLocaleString(ctx.locale), riders: r.riders }) : tr('No kilometres yet this week: yours can be the first')}</span></button>`);
+  } else if (!profileRow.country || profileRow.country === 'UA') {
+    tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ratings of Ukraine')}</small><b>${tr('Pick your oblast')}</b><span>${tr('and your kilometres count for it')}</span></button>`);
+  }
+  const now = Date.now(), next = (rides || []).filter((g) => rideWindow(Date.parse(g.starts_at), now).state !== 'over');
+  const g = next.find((x) => x.joined) || next[0];
+  if (g) {
+    const d = new Date(g.starts_at), today = d.toDateString() === new Date().toDateString();
+    const when = `${today ? tr('Today') : d.toLocaleDateString(ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' })}`;
+    const route = ctx.routes().find((r) => r.id === g.route_id);
+    tiles.push(`<button class="me-tile acc" data-today="group"><small>${g.joined ? tr('Your group ride') : tr('Group ride')}</small><b>${ctx.esc(when)}</b>`
+      + `<span>${ctx.esc(g.title)}${route ? ` · ${ctx.esc(route.name)}` : ''} · ${tr('{n} going', { n: g.riders })}</span></button>`);
+  } else {
+    tiles.push(`<button class="me-tile" data-today="group"><small>${tr('Group rides')}</small><b>${tr('Nothing planned this week')}</b><span>${tr('Set one up and send the link to friends')}</span></button>`);
+  }
+  box.innerHTML = tiles.join('');
+  box.hidden = false;
+  box.onclick = (ev) => {
+    const t = ev.target.closest('[data-today]')?.dataset.today;
+    if (t === 'ua') openUa(); else if (t === 'setup') openSetup(); else if (t === 'group') openGroups(g?.id || null);
+  };
 }
 
 /** Profile, at the account card. */
@@ -149,7 +252,7 @@ function showAccount() {
   requestAnimationFrame(() => $('social-card').scrollIntoView({ block: 'start' }));
 }
 
-const GOOGLE_G = '<svg viewBox="0 0 48 48" class="g-logo" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+export const GOOGLE_G = '<svg viewBox="0 0 48 48" class="g-logo" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
 
 function renderCard() {
   if (!on()) return;
@@ -210,6 +313,7 @@ export function sync({ send = false } = {}) {
     }
     profileRow = row;
     renderCard();
+    renderToday(true);
     const merged = mergeData(localData(), row.data);
     merged.workouts = syncWorkouts(row.data?.workouts);
     apply(merged);
