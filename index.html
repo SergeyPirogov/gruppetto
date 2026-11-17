@@ -832,13 +832,15 @@
           <form id="gr-form" class="gr-form">
             <label class="gr-wide">Title<input id="gr-title" maxlength="80" required placeholder="Evening spin"></label>
             <label class="gr-wide">Route<select id="gr-route"></select></label>
+            <label>Kind<select id="gr-kind"><option value="ride">Ride together</option><option value="race">Race</option></select></label>
+            <label id="gr-laps-wrap" hidden>Laps<input id="gr-laps" type="number" min="1" max="10" value="3" inputmode="numeric"></label>
             <label>Date<input id="gr-date" type="date" required></label>
             <label>Time<input id="gr-time" type="time" required></label>
             <button id="gr-create" class="primary gr-wide" type="submit">Set up the ride</button>
             <p id="gr-err" class="hint gr-wide" hidden></p>
           </form>
         </details>
-        <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together: you see each other live on the road, and ride in each other's shelter. Signed in, on a trainer or in the simulator.</p>
+        <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together: you see each other live on the road, and ride in each other's shelter. In a race, the first across the line after the laps wins, and the results stay with the ride. Signed in, on a trainer or in the simulator.</p>
       </div>
     </div>
 

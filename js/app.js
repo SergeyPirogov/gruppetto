@@ -27,7 +27,7 @@ import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
-import { initSocialUi, groupChannel, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { initSocialUi, groupChannel, groupFinish, groupResults, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -1350,7 +1350,9 @@ async function startRide(opts) {
   const workout = group ? null : allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   const racing = !group && settings.mode === 'race';
-  const laps = route.oneWay ? 1 : Math.max(1, settings.raceLaps || 1);
+  // a group race: the others live instead of the bots, over the laps the host set, the start at the set time
+  const groupRace = group?.kind === 'race';
+  const laps = route.oneWay ? 1 : Math.max(1, (groupRace ? group.laps : settings.raceLaps) || 1);
   ride = {
     route, workout, simulated,
     dist: 0, v: 0, elapsed: 0, secAcc: 0, workoutT: 0, workoutDone: false,
@@ -1367,7 +1369,7 @@ async function startRide(opts) {
         return { ...b, dist: -1.6 - Math.floor(i / 3) * 1.9, v: 0, pedal: i, lane, home, laneTarget: lane, line: BUNCH.lines[i % 2] };
       })
       : group ? [] : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
-    race: racing ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
+    race: racing || groupRace ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
     attacks: !racing && !workout && !group && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
     ghost: racing || group ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
@@ -1383,7 +1385,7 @@ async function startRide(opts) {
     ride.group = { id: group.id, title: group.title, t0: group.startsAt, go: Date.now() >= group.startsAt, me: group.me, mates: new Mates(group.me.id), live: null, sentAt: 0 };
     groupChannel(group.id, (p) => ride?.group?.mates.receive(p, Date.now())).then((live) => { if (ride?.group?.id === group.id) ride.group.live = live; else live.leave(); }).catch((e) => toast(e.message));
   }
-  track('ride-start', [group ? 'group' : racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
+  track('ride-start', [groupRace ? 'group-race' : group ? 'group' : racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
   // on the grid in the first row with the bunch, the front wheel just behind the line (the bike is ~1.7 m long)
   if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; ride.dist = -1.6; }
@@ -1405,7 +1407,7 @@ async function startRide(opts) {
   $('workout-panel').hidden = !workout;
   $('wk-intensity').hidden = !workout;
   $('wk-steps').hidden = !workout;
-  $('race-board').hidden = !racing;
+  $('race-board').hidden = !racing && !groupRace;
   $('countdown').hidden = !racing && !group;
   $('minimap-box').classList.toggle('big', !!settings.bigMap); mapZoomLabel(); // as you left it
   hidePanel('map', !!settings.hideMap); hidePanel('profile', !!settings.hideProfile);
@@ -1469,14 +1471,17 @@ function advance(now = performance.now()) {
   }
   const { route } = ride;
   let t = from;
-  if (ride.race && !ride.race.go) { // on the line: the clock waits for the start
+  if (ride.race && !ride.race.go && !ride.group) { // on the line: the clock waits for the start (a group race: for the set time, below)
     if (!scene?.warming) ride.race.countdown -= left; // not while the world is still loading behind the loader
     t += left * 1000;
     if (ride.race.countdown <= 0) { ride.race.go = true; ride.race.t0 = ride.elapsed; cueBeep(1320, 0.45); }
     left = 0;
   }
   if (ride.group && !ride.group.go) { // a group ride: on the line till the time it starts, the clock waiting too
-    if (Date.now() >= ride.group.t0) { ride.group.go = true; cueBeep(1320, 0.45); } else { t += left * 1000; left = 0; }
+    if (Date.now() >= ride.group.t0) {
+      ride.group.go = true; cueBeep(1320, 0.45);
+      if (ride.race) { ride.race.go = true; ride.race.t0 = ride.elapsed; }
+    } else { t += left * 1000; left = 0; }
   }
   groupSend();
   const mates = ride.group ? ride.group.mates.list(Date.now()) : [];
@@ -1696,14 +1701,18 @@ function frame(now) {
 /** Everyone's place: finishers by their time, the rest by how far they have got. */
 function raceStandings() {
   const R = ride.race, me = { me: true, name: settings.name || tr('You'), color: settings.jersey, stripe: settings.stripe, dist: ride.dist, v: ride.v };
-  const all = [me, ...ride.bots];
-  const time = (r) => (r.me ? (R.done ? R.myTime : null) : R.finish.get(r) ?? null);
+  // a group race: the others on the road, and those who have finished (and may have gone since)
+  const G = ride.group, done = G ? G.mates.finished() : [];
+  const live = G ? G.mates.list(Date.now()).filter((m) => !done.some((d) => d.id === m.id)) : [];
+  const all = [me, ...ride.bots, ...live, ...done.map((d) => ({ ...d, mate: true, dist: R.distance }))];
+  const time = (r) => (r.me ? (R.done ? R.myTime : null) : r.finish ?? R.finish.get(r) ?? null);
   return all.map((r) => ({ r, t: time(r) })).sort((a, b) => (a.t !== null && b.t !== null ? a.t - b.t : a.t !== null ? -1 : b.t !== null ? 1 : b.r.dist - a.r.dist));
 }
 /** The board while racing: your place, laps and distance to go, and the riders round you with gaps in seconds. */
 /** W/kg right now: a bot's power this moment over its weight, yours from the last 3 s. */
 function wkgNow(r) {
   if (r.me) return ride.powerHist.length ? ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length / Math.max(30, settings.weight) : 0;
+  if (r.mate) return r.wkg || 0; // a group mate: as sent
   return (r.power ?? 0) / Math.max(30, r.weight || 70);
 }
 function updateRaceBoard() {
@@ -1726,8 +1735,46 @@ function raceFinished() {
   toast(place === 1 ? tr('🏆 You win! {time}', { time: fmtTime(ride.race.myTime) }) : tr('🏁 {n} of {m} · {time}', { n: place, m: list.length, time: fmtTime(ride.race.myTime) }));
   cueBeep(place === 1 ? 1320 : 1040, 0.5);
   cueSay(place === 1 ? 'You win!' : `You finished in position ${place}`);
+  if (ride.group) groupRaceFinished();
   setTimeout(() => { if (ride?.race?.done) finishRide(); }, 4000);
 }
+/** A group race: your time to the results (the summary shows them, and keeps them up to date). */
+function groupRaceFinished() {
+  const s = recorder.summary(), sim = ride.simulated && !window.__pretendTrainer;
+  const avgW = s?.avgPower ?? null, wkg = avgW ? Math.round((avgW / Math.max(30, settings.weight)) * 100) / 100 : null;
+  groupSent = { id: ride.group.id, p: null };
+  groupSent.p = ride.group.sent = groupFinish(ride.group.id, { time: Math.round(ride.race.myTime * 10) / 10, avgW, wkg, sim })
+    .catch((e) => toast(tr('The result did not reach the table: {error}', { error: e.message })));
+}
+
+/**
+ * A group race on the summary: the results from the table, everyone who has finished so far, fastest first. While
+ * the summary is open it looks again every 15 s for half an hour, so the ones still riding come in as they finish.
+ */
+let groupSent = null, groupTableTimer = null;
+function groupRaceTable(e) {
+  clearTimeout(groupTableTimer);
+  if (!e.groupRace?.id) return;
+  const id = e.groupRace.id, until = Date.now() + 30 * 60e3;
+  const load = async () => {
+    if ($('summary').hidden || shown.entry !== e) return;
+    try {
+      if (groupSent?.id === id) await groupSent.p; // your own time in first
+      const rows = await groupResults(id);
+      if (shown.entry !== e || !rows.length) throw 0;
+      const mine = rows.findIndex((x) => x.me), best = rows[0].time_s;
+      $('sum-race').hidden = false;
+      $('sum-race-place').textContent = mine >= 0 ? tr('{n} of {m}', { n: mine + 1, m: rows.length }) : '';
+      // those still riding when you finished, from the ride's own table, after the finishers, marked * (until they are in)
+      const riding = (e.race || []).filter((x) => x.est && !x.me && !rows.some((r) => r.name === x.name)).map((x) => ({ name: x.name, time_s: x.time, est: true }));
+      $('sum-race-rows').innerHTML = [...rows, ...riding].map((x, i) => `<tr class="${x.me ? 'me' : ''}"><td>${x.est ? '' : i + 1}</td><td>${esc(x.name || tr('Rider'))}${x.sim ? ` <small class="muted" title="${esc(tr('Ridden in the simulator'))}">🖥</small>` : ''}</td>`
+        + `<td>${fmtTime(Math.round(x.time_s))}${x.est ? ' *' : ''}${x.wkg ? ` <small class="muted">${Number(x.wkg).toFixed(1)} ${U.wkg}</small>` : ''}</td><td>${i ? `+${fmtTime(Math.round(x.time_s - best))}` : ''}</td></tr>`).join('');
+    } catch { /* no results yet, or no connection: the ride's own table stays */ }
+    if (Date.now() < until) groupTableTimer = setTimeout(load, 15000);
+  };
+  load();
+}
+
 /** Results for the summary: those still riding are given the time they would take at their speed now. */
 function raceResults() {
   const R = ride.race;
@@ -2598,7 +2645,7 @@ function finishRide() {
   crowdOff();
   const sum = recorder.summary();
   const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
-  lastRide = { race: raceResults(), raceLaps: ride.race?.laps, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
+  lastRide = { race: raceResults(), raceLaps: ride.race?.laps, groupRace: ride.group && ride.race ? { id: ride.group.id, title: ride.group.title, sent: ride.group.sent || null } : null, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
   // the ride's laps, climbs and sprints for the leaderboards (a real ride on a built-in route only)
   const socialItems = ride.route.custom ? [] : rideItems({
     route: ride.route, version: versionOf(ride.route), simulated: ride.simulated && !window.__pretendTrainer,
@@ -2669,7 +2716,7 @@ function historyEntry(r, samples) {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(Math.min(...wbal)) : wPrime, summary: r.summary,
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
-    race: r.race || null, raceLaps: r.raceLaps || null,
+    race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
     maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
     stops: stopsOf(samples.map((x) => x.power || 0)), // short pauses: how many and how long in all
@@ -2908,6 +2955,7 @@ function showSummary(e, { live = false } = {}) {
   decorateSummary();
   // files and intervals.icu: the ride just finished, or an older one whose full record is still kept
   shown = { entry: e, rec: live ? recorder : null };
+  groupRaceTable(e); // a group race: the results from the table, kept up to date
   renderEarned(e);
   $('btn-challenge').hidden = !(e.chart?.d?.length > 1 && !e.race && routes.some((r) => r.id === e.routeId && !r.custom));
   const files = (on) => {
@@ -3957,7 +4005,7 @@ function groupSend() {
   if (!G?.live?.joined || now - G.sentAt < 1000) return;
   G.sentAt = now;
   G.live.send(groupPacket({
-    id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }),
+    id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }), finish: ride.race?.done ? ride.race.myTime : 0,
     look: { jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, figure: settings.figure },
   }, Date.now()));
 }

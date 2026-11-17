@@ -199,15 +199,23 @@ export async function riderBoard({ period = 'week', metric = 'km', region = null
   return { total: rows[0]?.total ?? 0, rows };
 }
 
-/** The group rides' calendar (#84): [{ id, title, route_id, starts_at, host_name, mine, riders, joined }], soonest first. */
+/** The group rides' calendar (#84): [{ id, title, route_id, starts_at, host_name, mine, riders, joined, kind, laps }], soonest first. */
 export async function groupRides(days = 14) {
   const c = await client();
   return ok(await c.rpc('group_ride_list', { days })) || [];
 }
-/** A new group ride you host (and have joined): its id. */
-export async function createGroupRide({ title, routeId, startsAt }) {
+/** A new group ride you host (and have joined), or a race over `laps` laps (kind 'race'): its id. */
+export async function createGroupRide({ title, routeId, startsAt, kind = 'ride', laps = null }) {
   const c = await client();
-  return ok(await c.rpc('create_group_ride', { p_title: title, p_route: routeId, p_starts: new Date(startsAt).toISOString() }));
+  return ok(await c.rpc('create_group_ride', { p_title: title, p_route: routeId, p_starts: new Date(startsAt).toISOString(), p_kind: kind, p_laps: kind === 'race' ? laps : null }));
+}
+/** Your finish in a group race (s), with your average watts and W/kg; the first one sent stands. */
+export async function finishGroupRace(id, { time, avgW = null, wkg = null, sim = false }) {
+  ok(await (await client()).rpc('finish_group_race', { p_id: id, p_time: time, p_avg_w: avgW, p_wkg: wkg, p_sim: sim }));
+}
+/** A group race's results, fastest first: [{ name, time_s, avg_w, wkg, sim, me }]. */
+export async function groupRaceResults(id) {
+  return ok(await (await client()).rpc('group_race_results', { p_id: id })) || [];
 }
 export async function cancelGroupRide(id) { ok(await (await client()).rpc('cancel_group_ride', { p_id: id })); }
 export async function joinGroupRide(id, on = true) { ok(await (await client()).rpc('join_group_ride', { p_id: id, p_on: on })); }

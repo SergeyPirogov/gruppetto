@@ -1587,3 +1587,6 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .me-tile b { font-size: 1.25rem; }
 .me-tile span { color: var(--muted); font-size: .9rem; }
 @media (max-width: 560px) { .me-today { grid-template-columns: 1fr; } }
+
+/* group races: the badge in the calendar */
+.gr-race { justify-self: start; margin: 2px 0; padding: 1px 8px; border-radius: 999px; background: rgba(255, 138, 31, .15); color: var(--accent, #ff9b3d); font-size: .75rem; font-weight: 700; vertical-align: 2px; }

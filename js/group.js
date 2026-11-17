@@ -22,12 +22,13 @@ export function rideWindow(startsAt, now) {
 
 const round = (x, k) => Math.round(x * k) / k;
 
-/** Your position as sent: who (account id and name), where, how fast, which lane, W/kg, and the look. */
+/** Your position as sent: who (account id and name), where, how fast, which lane, W/kg, the look, and in a race your finish time (s). */
 export function packet(me, now) {
   const L = me.look || {};
   return {
     u: me.id, n: String(me.name || '').slice(0, 40), d: round(me.dist, 10), v: round(me.v, 100), l: round(me.lane, 100), w: round(me.wkg || 0, 10),
     j: L.jersey || null, s: L.stripe || null, b: L.bike || null, f: L.figure === 'female' ? 'female' : 'male', t: now,
+    ...(me.finish > 0 ? { x: round(me.finish, 10) } : {}),
   };
 }
 
@@ -36,7 +37,7 @@ export function packet(me, now) {
  * toward each new packet instead of jumping (a far jump, from a tab that slept, snaps).
  */
 export class Mates {
-  constructor(selfId) { this.self = selfId; this.by = new Map(); }
+  constructor(selfId) { this.self = selfId; this.by = new Map(); this.done = new Map(); }
 
   receive(p, now) {
     if (!p || typeof p.u !== 'string' || p.u.length > 64 || p.u === this.self) return;
@@ -49,7 +50,16 @@ export class Mates {
       color: look(p.j) || '#64748b', stripe: look(p.s) || '#e2e8f0', bike: look(p.b), figure: p.f === 'female' ? 'female' : 'male',
       at: now, shown: was && Math.abs(was.shown - d) < 30 ? was.shown : d, seen: was?.seen ?? now,
     });
+    // a race: the finish time, kept after the rider has gone (the first one heard stands)
+    const x = Number(p.x);
+    if (Number.isFinite(x) && x > 0 && x < 86400 && !this.done.has(p.u)) {
+      const m = this.by.get(p.u);
+      this.done.set(p.u, { id: p.u, name: m.name, color: m.color, stripe: m.stripe, wkg: m.wkg, finish: x });
+    }
   }
+
+  /** The riders who have finished the race: [{ id, name, color, stripe, wkg, finish }], in the order heard. */
+  finished() { return [...this.done.values()]; }
 
   /** The riders to draw at `now` (ms), for the renderer and the shelter. */
   list(now) {
