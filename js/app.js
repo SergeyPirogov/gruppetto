@@ -41,6 +41,7 @@ import { nextWeather } from './atmo-blend.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
 import { PASS_AFTER, heldBy, pickLane } from './passing.js';
 import { Mates, packet as groupPacket } from './group.js';
+import { ChatLog, Reactions, Watchers, SendGate, QUICK } from './chat.js';
 import { socialOn } from './social.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1382,8 +1383,17 @@ async function startRide(opts) {
     const slot = [...String(group.me.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 12;
     ride.lane = ride.laneTarget = ride.laneHome = [-1.8, -0.6, 0.6, 1.8][slot % 4];
     ride.dist = -Math.floor(slot / 4) * 1.9;
-    ride.group = { id: group.id, title: group.title, t0: group.startsAt, go: Date.now() >= group.startsAt, me: group.me, mates: new Mates(group.me.id), live: null, sentAt: 0 };
-    groupChannel(group.id, (p) => ride?.group?.mates.receive(p, Date.now())).then((live) => { if (ride?.group?.id === group.id) ride.group.live = live; else live.leave(); }).catch((e) => toast(e.message));
+    ride.group = {
+      id: group.id, title: group.title, t0: group.startsAt, go: Date.now() >= group.startsAt, me: group.me, mates: new Mates(group.me.id), live: null, sentAt: 0,
+      chat: new ChatLog(group.me.id), gate: new SendGate(), reacts: new Reactions(), watchers: new Watchers(), shownAt: 0, // chat (#85), spectators (#86)
+    };
+    const mine = () => (ride?.group?.id === group.id ? ride.group : null);
+    groupChannel(group.id, {
+      pos: (p) => mine()?.mates.receive(p, Date.now()),
+      chat: (p) => { const G = mine(); if (G?.chat.receive(p, Date.now())) chatRender(); },
+      react: (p) => { const G = mine(), r = G?.reacts.receive(p, Date.now()); if (r && r.to === G.me.id) reactPop(r); },
+      watch: (p) => mine()?.watchers.receive(p, Date.now()),
+    }).then((live) => { if (mine()) ride.group.live = live; else live.leave(); }).catch((e) => toast(e.message));
   }
   track('ride-start', [groupRace ? 'group-race' : group ? 'group' : racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
   ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
@@ -1409,6 +1419,7 @@ async function startRide(opts) {
   $('wk-steps').hidden = !workout;
   $('race-board').hidden = !racing && !groupRace;
   $('countdown').hidden = !racing && !group;
+  $('chat-box').hidden = !group; $('btn-chat').hidden = !group; $('chat-feed').innerHTML = ''; chatOpen(false); // a group ride's chat (#85)
   $('minimap-box').classList.toggle('big', !!settings.bigMap); mapZoomLabel(); // as you left it
   hidePanel('map', !!settings.hideMap); hidePanel('profile', !!settings.hideProfile);
   ride.stepStats = [];
@@ -2654,6 +2665,7 @@ function finishRide() {
   const socialSim = ride.simulated && !window.__pretendTrainer;
   const socialTimed = !ride.route.custom && (ride.lapEfforts.length + ride.efforts.length) > 0;
   ride.group?.live?.leave();
+  chatOpen(false); $('chat-box').hidden = true;
   const socialFirst = ride.efforts.find((x) => socialItems.some((i) => i.segment_id === x.segId))?.name.replace(/^\S+\s/, '') || ride.route.name;
   ride = null;
   if (trainer.connected && trainer.controllable) {
@@ -4002,12 +4014,95 @@ function togglePacer() {
 /** A group ride: your position to the others, once a second (also while waiting on the line, so they see you there). */
 function groupSend() {
   const G = ride?.group, now = performance.now();
+  if (G && now - G.shownAt > 1000) { G.shownAt = now; chatRender(); } // old messages fade, the spectators' count keeps up
   if (!G?.live?.joined || now - G.sentAt < 1000) return;
   G.sentAt = now;
   G.live.send(groupPacket({
-    id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }), finish: ride.race?.done ? ride.race.myTime : 0,
+    id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }), power: wkgNow({ me: true }) * Math.max(30, settings.weight),
+    finish: ride.race?.done ? ride.race.myTime : 0,
     look: { jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, figure: settings.figure },
   }, Date.now()));
+}
+
+// ---------- Chat in a group ride (#85) and the spectators' reactions (#86) ----------
+/** The chat on the road: the last messages (younger than 20 s; open, the last eight), who is watching, and your name to mute. */
+function chatRender() {
+  const G = ride?.group;
+  if (!G) return;
+  const now = Date.now(), open = !$('chat-bar').hidden;
+  const items = G.chat.recent(now, open ? 8 : 4, open ? 0 : 20000);
+  const n = G.watchers.count(now);
+  $('chat-watch').hidden = !n;
+  $('chat-watch').textContent = `👀 ${n}`;
+  $('chat-watch').title = tr('{n} watching', { n });
+  $('chat-feed').innerHTML = items.map((m) => `<div class="chat-msg${m.me ? ' me' : ''}${m.quick ? ' quick' : ''}">`
+    + (m.me ? `<b>${esc(tr('You'))}</b>` : `<button class="chat-who" data-mute="${esc(m.from)}" title="${esc(tr('Mute {name} for this ride', { name: m.name }))}">${esc(m.name)}</button>`)
+    + ` <span>${esc(m.quick ? tr(m.text) : m.text)}</span></div>`).join('');
+}
+/** The field to write in, with the quick phrases (open), or closed back to the road. */
+function chatOpen(show) {
+  const bar = $('chat-bar');
+  if (!bar) return;
+  if (show && !bar.dataset.ready) {
+    bar.dataset.ready = '1';
+    $('chat-quick').innerHTML = QUICK.map((q, i) => `<button class="pill-btn chat-q" data-q="${q.id}" title="${i + 1}">${esc(tr(q.text))}</button>`).join('');
+  }
+  bar.hidden = !show;
+  if (show) $('chat-input').focus(); else { $('chat-input').value = ''; $('chat-input').blur(); }
+  chatRender();
+}
+/** Send a message ({ m }) or a quick phrase ({ q }), at the pace the others' screens allow. */
+function chatSend(body) {
+  const G = ride?.group;
+  if (!G?.live?.joined) { toast(tr('Not connected to the group ride yet')); return false; }
+  const msg = { u: G.me.id, n: G.me.name, ...body };
+  if (!G.gate.ok(Date.now())) { toast(tr('Not so fast: a message a second')); return false; }
+  const shown = G.chat.receive(msg, Date.now(), { mine: true });
+  if (!shown) return false;
+  G.live.say('chat', body.q ? msg : { ...msg, m: shown.text });
+  track('group-chat', body.q ? 'quick' : 'text');
+  chatRender();
+  return true;
+}
+$('chat-input').addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Escape') { e.preventDefault(); chatOpen(false); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const t = $('chat-input').value.trim();
+    if (!t) { chatOpen(false); return; }
+    if (chatSend({ m: t })) chatOpen(false);
+    return;
+  }
+  const k = /^[1-6]$/.test(e.key) && !$('chat-input').value ? Number(e.key) : 0; // the field empty: a digit is a quick phrase
+  if (k) { e.preventDefault(); if (chatSend({ q: QUICK[k - 1].id })) chatOpen(false); }
+});
+$('chat-quick').onclick = (e) => { const b = e.target.closest('[data-q]'); if (b && chatSend({ q: b.dataset.q })) chatOpen(false); };
+$('chat-send').onclick = () => { const t = $('chat-input').value.trim(); if (t && chatSend({ m: t })) chatOpen(false); };
+$('btn-chat').onclick = () => chatOpen($('chat-bar').hidden);
+$('chat-watch-link').onclick = async () => { // friends watch you live (#86), followed from the start
+  const G = ride?.group;
+  if (!G) return;
+  const url = `${location.origin}${location.pathname}#watch=${G.id}&follow=${G.me.id}`;
+  try { await navigator.clipboard.writeText(url); toast(tr('Link copied: whoever opens it watches you live')); } catch { toast(url); }
+  track('group-watch-link');
+};
+$('chat-feed').onclick = (e) => {
+  const b = e.target.closest('[data-mute]');
+  if (!b || !ride?.group) return;
+  if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Mute?'); setTimeout(() => chatRender(), 3000); return; }
+  ride.group.chat.mute(b.dataset.mute);
+  toast(tr('Muted for this ride'));
+  chatRender();
+};
+/** A spectator's reaction to you: the emoji up the screen, and who sent it. */
+function reactPop(r) {
+  const el = document.createElement('div');
+  el.className = 'react-pop';
+  el.style.left = `${55 + Math.random() * 30}%`;
+  el.innerHTML = `<span>${esc(r.emoji)}</span>${r.name ? `<small>${esc(r.name)}</small>` : ''}`;
+  $('ride').append(el);
+  setTimeout(() => el.remove(), 2600);
 }
 
 function pacerOn() {
@@ -4439,6 +4534,7 @@ const KEYS = [
   [['I'], 'Mini window over other apps (film, football, YouTube)'],
   [['R'], 'Switch the rider: man / woman'],
   [['+', '−'], 'Simulator: power ±10 W'],
+  [['Enter'], 'Group ride: chat (1–6 with the field empty: a quick phrase)'],
   [['Esc'], 'Menu: Finish and Settings'],
   [['?'], 'This list'],
 ];
@@ -4581,6 +4677,7 @@ function onRideKey(e) {
     return;
   }
   if (c === 'Slash' || c === 'KeyK') { toggleKeysHelp(); return; }
+  if ((c === 'Enter' || c === 'NumpadEnter') && ride.group) { e.preventDefault(); chatOpen(true); return; } // a group ride: say something
   if (e.repeat && !['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract', 'BracketLeft', 'BracketRight'].includes(c)) return;
   const up = c === 'ArrowUp' || c === 'KeyW', down = c === 'ArrowDown' || c === 'KeyS';
   if (c === 'Space') { e.preventDefault(); togglePause(); }

@@ -8,6 +8,7 @@ import {
   finishGroupRace, groupRaceResults,
 } from './social.js';
 import { rideWindow } from './group.js';
+import { openWatch, initWatch } from './watch-ui.js';
 import { initLeagues, load as loadLeagues, leagueSelect, chosenLeague } from './league-ui.js';
 import {
   SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
@@ -62,6 +63,9 @@ export async function initSocialUi(c) {
   const linked = /^#group=([0-9a-f-]{36})$/i.exec(location.hash)?.[1] || sessionStorage.getItem(GR_PENDING);
   sessionStorage.removeItem(GR_PENDING);
   if (linked) { if (location.hash) history.replaceState(null, '', location.pathname + location.search); openGroups(linked); }
+  // a link to watch a ride (#watch=<id>, and whom to follow: &follow=<id>)
+  const w = /^#watch=([0-9a-f-]{36})(?:&follow=([\w-]{1,64}))?$/i.exec(location.hash);
+  if (w) { history.replaceState(null, '', location.pathname + location.search); watchById(w[1], w[2] || null); }
 }
 
 function status(text) { const el = $('social-status'); if (el) el.textContent = text || ''; }
@@ -113,6 +117,7 @@ function buildUi() {
   $('lock-signin').innerHTML = `${GOOGLE_G}<span>${ctx.esc(tr('Sign in with Google'))}</span>`;
   for (const el of document.querySelectorAll('[data-gr-close]')) el.onclick = () => { $('gr-view').hidden = true; };
   $('gr-list').onclick = groupAction;
+  initWatch();
   $('gr-form').onsubmit = groupCreate;
   $('gr-kind').onchange = $('gr-route').onchange = grLapsShow;
   initLeagues({
@@ -664,8 +669,8 @@ let grRows = [];
 let grFocus = null; // the ride a link opened, shown first and marked
 let grTimer = null;
 
-/** Riding a group ride together: the live channel (social.js groupLive). */
-export const groupChannel = (id, onPacket) => groupLive(id, onPacket);
+/** Riding a group ride together, or watching it: the live channel (social.js groupLive). */
+export const groupChannel = (id, on) => groupLive(id, on);
 /** A group race: your finish to the results, and the results (social.js). */
 export const groupFinish = (id, result) => finishGroupRace(id, result);
 export const groupResults = (id) => groupRaceResults(id);
@@ -736,6 +741,7 @@ function renderGroups() {
       can ? `<button class="primary gr-ride" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
         : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
           : `<button class="pill-btn" data-act="join" data-id="${g.id}">${tr('Join')}</button>`,
+      w.state !== 'later' ? `<button class="pill-btn" data-act="watch" data-id="${g.id}" title="${ctx.esc(tr('Watch it live: the riders, their power, the chat'))}">👀 ${tr('Watch')}</button>` : '',
       `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to send it to friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
       g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Call off')}</button>` : '',
     ].join('');
@@ -758,6 +764,7 @@ async function groupAction(ev) {
     ctx.track('social', 'group-link');
     return;
   }
+  if (act === 'watch') { $('gr-view').hidden = true; watch(g); return; } // open to anyone, a guest too
   if (!currentUser()) { sessionStorage.setItem(GR_PENDING, g.id); signIn(redirect()).catch((e) => status(e.message)); return; }
   if (!profileRow) { openSetup(); return; }
   try {
@@ -772,6 +779,24 @@ async function groupAction(ev) {
       ctx.track('social', 'group-ride');
       ctx.startGroupRide({ id: g.id, title: g.title, routeId: g.route_id, startsAt: Date.parse(g.starts_at), kind: g.kind || 'ride', laps: g.laps || 1, me: { id: currentUser().id, name: profileRow.display_name || ctx.settings.name || tr('Rider') } });
     }
+  } catch (e) { ctx.toast(e.message); }
+}
+
+/** Watch a ride from the calendar (#86): a guest too (reactions); writing in the chat wants an account with a profile. */
+function watch(g, follow = null) {
+  const route = ctx.routes().find((r) => r.id === g.route_id) || null;
+  const u = currentUser();
+  ctx.track('social', 'group-watch');
+  openWatch({
+    ride: g, route, follow, channel: groupChannel, tr, esc: ctx.esc, toast: ctx.toast, track: ctx.track,
+    me: u && profileRow ? { id: u.id, name: profileRow.display_name || tr('Spectator') } : null, canChat: !!(u && profileRow),
+  });
+}
+async function watchById(id, follow) {
+  try {
+    const g = (await groupRides()).find((x) => x.id === id);
+    if (!g || rideWindow(Date.parse(g.starts_at), Date.now()).state === 'over') { ctx.toast(tr('This ride is over or was called off')); openGroups(); return; }
+    watch(g, follow);
   } catch (e) { ctx.toast(e.message); }
 }
 
