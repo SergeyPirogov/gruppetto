@@ -1507,6 +1507,19 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .gr-ride { padding: 8px 18px; }
 .gr-icon { padding: 6px 9px; }
 .gr-cancel { color: var(--muted); font-size: .82rem; }
+.gr-tabs { display: flex; gap: 6px; margin: 0 0 10px; }
+.gr-tabs .pill-btn { width: auto; }
+.gr-tabs .pill-btn { border: 1px solid var(--line); background: transparent; color: var(--muted); }
+.gr-tabs .pill-btn.sel { border-color: rgba(47, 212, 240, .6); background: rgba(47, 212, 240, .12); color: var(--text); }
+.gr-lg-row { cursor: pointer; }
+.gr-lg-row:hover { border-color: rgba(255, 176, 0, .45); }
+.gr-lg-name { margin: 6px 0 8px; }
+.gr-lg-sub { margin: 14px 0 6px; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.gr-lg-table td:nth-child(2) { white-space: normal; overflow-wrap: anywhere; font-weight: 400; }
+.gr-lg-table td:nth-child(3) { font-weight: 800; color: var(--accent2, #ffb000); }
+.gr-lg-table td:nth-child(4) { font-weight: 400; }
+.gr-lg-races { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: .9rem; }
+.gr-lg-races small, .gr-lg-when { color: var(--muted); }
 .gr-new { margin: 6px 0 10px; }
 .gr-new summary { cursor: pointer; font-weight: 700; color: var(--cyan); padding: 6px 0; }
 .gr-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }

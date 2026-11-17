@@ -824,6 +824,32 @@
       <div class="drawer-bg" data-gr-close></div>
       <div class="wk-menu-panel lb-panel gr-panel">
         <div class="wk-menu-head"><h2>Group rides</h2><button class="drawer-close" data-gr-close aria-label="Close">✕</button></div>
+        <!-- the calendar, or the leagues (#84, part 2: js/league-ui.js) -->
+        <nav id="gr-tabs" class="gr-tabs" role="tablist"><button class="pill-btn sel" data-gr-tab="cal" role="tab">Calendar</button><button class="pill-btn" data-gr-tab="lg" role="tab">🏆 Leagues</button></nav>
+        <div id="gr-lg" hidden>
+          <div id="gr-lg-home">
+            <ul id="gr-lg-list" class="gr-list"></ul>
+            <p id="gr-lg-empty" class="hint" hidden>No leagues yet: set one up, then put your group races in it.</p>
+            <details id="gr-lg-new" class="gr-new">
+              <summary>+ New league</summary>
+              <form id="gr-lg-form" class="gr-form">
+                <label class="gr-wide">Title<input id="gr-lg-title" maxlength="80" required placeholder="Winter Cup"></label>
+                <button id="gr-lg-create" class="primary gr-wide" type="submit">Set up the league</button>
+                <p id="gr-lg-err" class="hint gr-wide" hidden></p>
+              </form>
+            </details>
+            <p class="hint">A league is a series of group races. Each race gives points by place: 25, 20, 16, 13, 11, then 10 down to 1 for 15th. Rides in the simulator get no points. Set up a race in the calendar and pick the league for it.</p>
+          </div>
+          <div id="gr-lg-one" hidden>
+            <button id="gr-lg-back" class="link-btn">← All leagues</button>
+            <h3 id="gr-lg-name" class="gr-lg-name"></h3>
+            <table class="lb-table gr-lg-table"><thead><tr><th>#</th><th>Rider</th><th>Points</th><th>Races</th><th>Wins</th></tr></thead><tbody id="gr-lg-rows"></tbody></table>
+            <p id="gr-lg-none" class="hint" hidden>No results yet: the points come with the first race.</p>
+            <h4 class="gr-lg-sub">Races</h4>
+            <ul id="gr-lg-races" class="gr-lg-races"></ul>
+          </div>
+        </div>
+        <div id="gr-cal">
         <p id="gr-cta" class="hint" hidden></p>
         <ul id="gr-list" class="gr-list"></ul>
         <p id="gr-empty" class="hint" hidden>No group rides planned yet: set one up and send the link to your friends.</p>
@@ -834,6 +860,7 @@
             <label class="gr-wide">Route<select id="gr-route"></select></label>
             <label>Kind<select id="gr-kind"><option value="ride">Ride together</option><option value="race">Race</option></select></label>
             <label id="gr-laps-wrap" hidden>Laps<input id="gr-laps" type="number" min="1" max="10" value="3" inputmode="numeric"></label>
+            <label id="gr-league-wrap" class="gr-wide" hidden>League<select id="gr-league"></select></label>
             <label>Date<input id="gr-date" type="date" required></label>
             <label>Time<input id="gr-time" type="time" required></label>
             <button id="gr-create" class="primary gr-wide" type="submit">Set up the ride</button>
@@ -841,6 +868,7 @@
           </form>
         </details>
         <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together: you see each other live on the road, and ride in each other's shelter. In a race, the first across the line after the laps wins, and the results stay with the ride. Signed in, on a trainer or in the simulator.</p>
+        </div>
       </div>
     </div>
 
