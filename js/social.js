@@ -205,10 +205,21 @@ export async function groupRides(days = 14) {
   return ok(await c.rpc('group_ride_list', { days })) || [];
 }
 /** A new group ride you host (and have joined), or a race over `laps` laps (kind 'race'): its id. */
-export async function createGroupRide({ title, routeId, startsAt, kind = 'ride', laps = null }) {
+export async function createGroupRide({ title, routeId, startsAt, kind = 'ride', laps = null, league = null }) {
   const c = await client();
-  return ok(await c.rpc('create_group_ride', { p_title: title, p_route: routeId, p_starts: new Date(startsAt).toISOString(), p_kind: kind, p_laps: kind === 'race' ? laps : null }));
+  const args = { p_title: title, p_route: routeId, p_starts: new Date(startsAt).toISOString(), p_kind: kind, p_laps: kind === 'race' ? laps : null };
+  if (league && kind === 'race') args.p_league = league; // only when set: the call works on a database without leagues too
+  return ok(await c.rpc('create_group_ride', args));
 }
+
+/** Leagues (#84, part 2): [{ id, title, host_name, races, next_at, mine }], the soonest next race first. */
+export async function leagues() { return ok(await (await client()).rpc('league_list')) || []; }
+/** A new league you host: its id. */
+export async function createLeague(title) { return ok(await (await client()).rpc('create_league', { p_title: title })); }
+/** A league's standings, most points first: [{ name, points, races, wins, best, me }]. */
+export async function leagueStandings(id) { return ok(await (await client()).rpc('league_standings', { p_id: id })) || []; }
+/** A league's races, in order: [{ id, title, route_id, starts_at, laps, finishers }]. */
+export async function leagueRaces(id) { return ok(await (await client()).rpc('league_races', { p_id: id })) || []; }
 /** Your finish in a group race (s), with your average watts and W/kg; the first one sent stands. */
 export async function finishGroupRace(id, { time, avgW = null, wkg = null, sim = false }) {
   ok(await (await client()).rpc('finish_group_race', { p_id: id, p_time: time, p_avg_w: avgW, p_wkg: wkg, p_sim: sim }));

@@ -9,6 +9,7 @@ import {
 } from './social.js';
 import { rideWindow } from './group.js';
 import { openWatch, initWatch } from './watch-ui.js';
+import { initLeagues, load as loadLeagues, leagueSelect, chosenLeague } from './league-ui.js';
 import {
   SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
   REGIONS, regionName,
@@ -119,6 +120,11 @@ function buildUi() {
   initWatch();
   $('gr-form').onsubmit = groupCreate;
   $('gr-kind').onchange = $('gr-route').onchange = grLapsShow;
+  initLeagues({
+    ctx, signedIn: () => !!currentUser(), hasProfile: () => !!profileRow,
+    needAccount: () => { if (!currentUser()) signIn(redirect()).catch((e) => status(e.message)); else openSetup(); },
+    openRide: (id) => { grFocus = id; renderGroups(); $('gr-list').querySelector(`[data-row="${id}"]`)?.scrollIntoView({ block: 'nearest' }); },
+  });
   // the table
   for (const el of document.querySelectorAll('[data-lb-close]')) el.onclick = () => { $('lb-view').hidden = true; };
   $('lb-signin').onclick = () => signIn(redirect()).catch((e) => status(e.message));
@@ -164,7 +170,39 @@ function renderHeader() {
     if (!u) el.insertAdjacentHTML('beforeend', LOCK_IC);
   }
   renderToday();
-  b.onclick = u ? showAccount : () => { ctx.track('social', 'sign-in-header'); signIn(redirect()).catch((e) => status(e.message)); };
+  b.onclick = u ? accountMenu : () => { ctx.track('social', 'sign-in-header'); signIn(redirect()).catch((e) => status(e.message)); };
+  if (!u) $('hdr-menu')?.remove();
+}
+
+/** Signed in, a tap on your name in the header: a small menu, to your profile or out of the account. */
+function accountMenu(ev) {
+  ev.stopPropagation();
+  if ($('hdr-menu')) { $('hdr-menu').remove(); return; }
+  const b = $('hdr-account'), m = document.createElement('div');
+  m.id = 'hdr-menu';
+  m.className = 'hdr-menu';
+  m.setAttribute('role', 'menu');
+  m.innerHTML = `<button role="menuitem" data-m="profile">${ctx.esc(tr('Your account and leaderboards'))}</button>`
+    + `<button role="menuitem" data-m="out">${ctx.esc(tr('Sign out'))}</button>`;
+  const r = b.getBoundingClientRect();
+  m.style.top = `${Math.round(r.bottom + 6)}px`;
+  m.style.right = `${Math.round(Math.max(8, innerWidth - r.right))}px`;
+  document.body.append(m);
+  const close = () => { m.remove(); document.removeEventListener('click', away, true); document.removeEventListener('keydown', esc); };
+  const away = (e) => { if (!m.contains(e.target) && e.target !== b && !b.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('click', away, true);
+  document.addEventListener('keydown', esc);
+  m.onclick = async (e) => {
+    const it = e.target.closest('[data-m]');
+    if (!it) return;
+    close();
+    if (it.dataset.m === 'profile') { showAccount(); return; }
+    ctx.track('social', 'sign-out-header');
+    await signOut();
+    ctx.toast(tr('Signed out. Everything stays on this device.'));
+  };
+  m.querySelector('button').focus();
 }
 
 const LOCK_IC = '<svg class="lock-ic" viewBox="0 0 24 24" role="img" aria-label="with an account"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
@@ -658,6 +696,7 @@ export function openGroups(focus = null) {
     $('gr-time').value = `${pad(t.getHours())}:00`;
   }
   loadGroups();
+  loadLeagues(); // the league select in the form, and the Leagues tab
   clearInterval(grTimer); // the «starts in» and the Ride buttons keep up with the clock while the calendar is open
   grTimer = setInterval(() => { if ($('gr-view').hidden) clearInterval(grTimer); else renderGroups(); }, 15000);
 }
@@ -666,10 +705,12 @@ export function openGroups(focus = null) {
 function grLapsShow() {
   const r = ctx.routes().find((x) => x.id === $('gr-route').value);
   $('gr-laps-wrap').hidden = $('gr-kind').value !== 'race' || !!r?.oneWay;
+  leagueSelect();
 }
 
 /** What a ride is, for its row: a race and its laps, or nothing for riding together. */
-const raceLabel = (g, route) => (g.kind !== 'race' ? '' : route?.oneWay || !(g.laps > 1) ? `🏁 ${tr('Race')}` : `🏁 ${tr('Race')} · ${tr('{n} laps', { n: g.laps })}`);
+const raceLabel = (g, route) => (g.kind !== 'race' ? ''
+  : (route?.oneWay || !(g.laps > 1) ? `🏁 ${tr('Race')}` : `🏁 ${tr('Race')} · ${tr('{n} laps', { n: g.laps })}`) + (g.league_title ? ` · 🏆 ${g.league_title}` : ''));
 
 async function loadGroups() {
   if (!grRows.length) $('gr-list').innerHTML = `<li class="muted">${tr('Loading…')}</li>`;
@@ -772,7 +813,9 @@ async function groupCreate(ev) {
     const kind = $('gr-kind').value === 'race' ? 'race' : 'ride';
     const laps = Math.max(1, Math.min(10, Math.round(Number($('gr-laps').value) || 1)));
     const route = ctx.routes().find((x) => x.id === $('gr-route').value);
-    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt, kind, laps: route?.oneWay ? 1 : laps });
+    const league = kind === 'race' ? chosenLeague() : null;
+    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt, kind, laps: route?.oneWay ? 1 : laps, league });
+    if (league) loadLeagues(); // its race count
     ctx.track('social', 'group-create');
     $('gr-title').value = '';
     $('gr-new').open = false;
