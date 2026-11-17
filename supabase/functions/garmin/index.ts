@@ -96,9 +96,27 @@ async function oauth1Header(method: string, url: string, token?: { token: string
 type OAuth1 = { token: string; secret: string; mfa_token?: string };
 type OAuth2 = { access_token: string; refresh_token?: string; expires_at: number };
 
+// Garmin's gate (Cloudflare) answers 429 to token requests now and then, more from cloud servers like this one: a
+// couple of tries a few seconds apart (the ticket lives about a minute), then a 429 of our own that says to wait.
+// Trying again and again only makes the block longer (others saw a day or two), so the page says an hour.
+const LIMITED = 'Garmin: too many sign-ins right now (429)';
+const WAITS = [2000, 5000];
+async function withRetry(send: () => Promise<Response>): Promise<Response> {
+  let r = await send();
+  for (const ms of WAITS) {
+    if (r.status !== 429) break;
+    await r.body?.cancel();
+    await new Promise((ok) => setTimeout(ok, ms));
+    r = await send();
+  }
+  if (r.status === 429) throw new HttpError(429, LIMITED);
+  return r;
+}
+
 async function oauth1FromTicket(ticket: string): Promise<OAuth1> {
   const url = `${API}/oauth-service/oauth/preauthorized?${qs({ ticket, 'login-url': SSO_EMBED, 'accepts-mfa-tokens': 'true' })}`;
-  const r = await fetch(url, { headers: { 'User-Agent': API_UA, Authorization: await oauth1Header('GET', url) } });
+  // a fresh signature each try (its nonce and time)
+  const r = await withRetry(async () => fetch(url, { headers: { 'User-Agent': API_UA, Authorization: await oauth1Header('GET', url) } }));
   if (!r.ok) throw new HttpError(502, `Garmin: token ${r.status}`);
   const p = new URLSearchParams(await r.text());
   const t = { token: p.get('oauth_token') || '', secret: p.get('oauth_token_secret') || '', mfa_token: p.get('mfa_token') || undefined };
@@ -109,14 +127,14 @@ async function oauth1FromTicket(ticket: string): Promise<OAuth1> {
 async function oauth2From(o1: OAuth1): Promise<OAuth2> {
   const url = `${API}/oauth-service/oauth/exchange/user/2.0`;
   const body: Record<string, string> = o1.mfa_token ? { mfa_token: o1.mfa_token } : {};
-  const r = await fetch(url, {
+  const r = await withRetry(async () => fetch(url, {
     method: 'POST',
     headers: {
       'User-Agent': API_UA, 'Content-Type': 'application/x-www-form-urlencoded',
       Authorization: await oauth1Header('POST', url, { token: o1.token, secret: o1.secret }, body),
     },
     body: qs(body),
-  });
+  }));
   if (r.status === 401) throw new HttpError(401, 'Garmin: signed out, connect again');
   if (!r.ok) throw new HttpError(502, `Garmin: exchange ${r.status}`);
   const j = await r.json();

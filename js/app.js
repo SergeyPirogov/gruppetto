@@ -3795,8 +3795,11 @@ async function initGarmin() {
       renderGarmin();
       toast(tr('Garmin connected'));
     } catch (err) {
-      track('garmin', 'failed');
-      st.textContent = tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') });
+      // 429: Garmin's gate is limiting sign-ins (its "token 429" said nothing); trying again at once makes it longer
+      st.textContent = err.status === 429
+        ? tr('Garmin is limiting sign-ins right now (429). Your password was right: wait an hour and try once more, since trying again and again makes the wait longer.')
+        : tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') });
+      track('garmin', err.status === 429 ? 'limited' : 'failed');
     } finally { btn.disabled = false; }
   };
   $('btn-garmin-forget').onclick = () => { track('garmin', 'forget'); garminClient?.forget(); garminClient = null; renderGarmin(); };
