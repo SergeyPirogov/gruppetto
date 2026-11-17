@@ -1529,6 +1529,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 }
 @media (max-width: 760px) { .shift-btn { width: 56px; height: 56px; font-size: 30px; } .shifters { top: 58%; } }
 #ride.hud-hidden .shifters { display: none; }
+.g-hand { display: block; margin-top: 4px; color: var(--muted); }
+
 /* ---------- signing in: the first visit's welcome, a guest's locks, the signed-in header and day ---------- */
 .google-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; font-weight: 700; border-radius: 14px; }
 .google-btn:hover { background: #f3f4f6; }
