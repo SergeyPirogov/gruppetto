@@ -11,7 +11,7 @@ import { chromium } from 'playwright';
 import { checkEffort, boardFrom, categoryOf } from '../../js/social-core.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const PORT = 8765;
+const PORT = Number(process.env.E2E_PORT) || 8765; // E2E_PORT when something else listens on 8765
 const APP = `http://localhost:${PORT}/`;
 const SB = 'https://mock-project.supabase.co';
 const ICU_SECRET = 'ICU-SECRET-KEY-123';
@@ -106,7 +106,7 @@ async function openApp({ config = true, signedIn = false, verifier = false, loca
 }
 
 const SETTINGS = { name: 'Olena', weight: 60, ftp: 240, icuKey: ICU_SECRET, icuAthlete: 'i42', bots: 0, stats: false, settingsUpdatedAt: 1000 };
-const LOCAL = { 'powerup.settings': SETTINGS, 'gruppetto.strava': { access: STRAVA_SECRET, refresh: STRAVA_SECRET, expires: 9e9, name: 'R' } };
+const LOCAL = { 'gruppetto.welcomed': 'guest', 'powerup.settings': SETTINGS, 'gruppetto.strava': { access: STRAVA_SECRET, refresh: STRAVA_SECRET, expires: 9e9, name: 'R' } };
 const PROFILE = (data = {}) => ({ display_name: 'Olena', country: 'UA', gender: 'f', public: true, data: { profile: { name: 'Olena' }, settingsUpdatedAt: 1, records: { lap: {}, seg: {}, top: {} }, ...data } });
 
 /** No secret went to Supabase, in an address, a header or a body. */
@@ -284,6 +284,25 @@ test('deleting the account: everything goes from the server, nothing from this d
   const left = await page.evaluate(() => ({ records: JSON.parse(localStorage.getItem('gruppetto.records')), auth: localStorage.getItem('gruppetto.social.auth') }));
   assert.equal(left.records.lap.rolling, 900);
   assert.equal(left.auth, null);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('signing out from the header: a tap on your name, then Sign out', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#hdr-account.in');
+  const tap = () => page.evaluate(() => document.getElementById('hdr-account').click()); // the Devices page may be open over the lobby on a first visit
+  await tap();
+  await page.waitForSelector('#hdr-menu');
+  await page.keyboard.press('Escape'); // closes without doing anything
+  assert.equal(await page.$('#hdr-menu'), null);
+  await tap();
+  await page.click('#hdr-menu [data-m="out"]');
+  await page.waitForFunction(() => !document.getElementById('hdr-account').classList.contains('in'));
+  assert.equal(await page.$('#hdr-menu'), null);
+  assert.equal(await page.isVisible('#hdr-guest'), true);
+  assert.equal(await page.evaluate(() => localStorage.getItem('gruppetto.social.auth')), null);
   assert.deepEqual(errors, []);
   await context.close();
 });
