@@ -3771,9 +3771,10 @@ async function initGarmin() {
       toast(tr('Garmin connected'));
     } catch (err) {
       // 429: Garmin's gate is limiting sign-ins (its "token 429" said nothing); trying again at once makes it longer
-      st.textContent = err.status === 429
+      st.innerHTML = esc(err.status === 429
         ? tr('Garmin is limiting sign-ins right now (429). Your password was right: wait an hour and try once more, since trying again and again makes the wait longer.')
-        : tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') });
+        : tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') }))
+        + ` <span class="g-hand">${esc(tr('Meanwhile a ride still goes by hand: Download .FIT on the finish screen, then'))} <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a>.</span>`;
       track('garmin', err.status === 429 ? 'limited' : 'failed');
     } finally { btn.disabled = false; }
   };
@@ -3790,6 +3791,9 @@ function renderGarmin() {
   $('btn-garmin-forget').hidden = !garminClient;
   $('garmin-status').textContent = garminClient ? (garminClient.name ? tr('Connected: {name}', { name: garminClient.name }) : tr('Connected')) : '';
 }
+
+/** Garmin Connect's page for importing a file: the way round when the sign-in or the upload does not work. */
+const GARMIN_IMPORT = 'https://connect.garmin.com/modern/import-data';
 
 async function uploadToGarmin() {
   stopUploadTimer('garmin');
@@ -3810,7 +3814,10 @@ async function uploadToGarmin() {
     $('sum-garmin').hidden = true;
   } catch (err) {
     track('garmin', 'failed');
-    status.textContent = tr('Upload failed: {error}', { error: err.message });
+    // the way that always works: the file, and Garmin Connect's own import page
+    status.innerHTML = `${esc(tr('Upload failed: {error}', { error: err.status === 429 ? tr('Garmin is limiting requests right now (429), try later') : err.message }))}`
+      + ` <span class="g-hand">${esc(tr('Send it by hand:'))} <button class="link-btn" data-g-fit>${esc(tr('Download .FIT'))}</button> → <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a></span>`;
+    status.querySelector('[data-g-fit]').onclick = () => { track('garmin', 'by-hand'); download('fit'); };
     btn.disabled = false;
     btn.textContent = tr('Try again');
     if (/connect again/.test(err.message)) { garminClient?.forget(); garminClient = null; renderGarmin(); }

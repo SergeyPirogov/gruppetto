@@ -1529,3 +1529,4 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 }
 @media (max-width: 760px) { .shift-btn { width: 56px; height: 56px; font-size: 30px; } .shifters { top: 58%; } }
 #ride.hud-hidden .shifters { display: none; }
+.g-hand { display: block; margin-top: 4px; color: var(--muted); }
