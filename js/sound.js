@@ -33,25 +33,58 @@ export function beep(freq = 880, dur = 0.12, vol = 0.18) {
   o.stop(t + dur + 0.02);
 }
 
-export function say(text) {
-  if (!text || typeof speechSynthesis === 'undefined') return;
+/**
+ * The voice to read a cue in: one of the interface language only (uk-UA, uk_UA, …), the natural or online ones first
+ * (Edge's Polina and Ostap read Ukrainian far better than the offline voices). None: null, and the cue stays a beep:
+ * left to itself the browser reads Ukrainian text in its default voice, on many computers a Russian one.
+ */
+export function pickVoice(voices, language) {
+  const mine = (voices || []).filter((v) => String(v?.lang || '').toLowerCase().replace('_', '-').split('-')[0] === language);
+  return mine.find((v) => /natural|online|neural/i.test(v.name || '')) || mine[0] || null;
+}
+
+let voices = [];
+const loadVoices = () => { try { voices = speechSynthesis.getVoices() || []; } catch { voices = []; } };
+if (typeof speechSynthesis !== 'undefined') {
+  loadVoices();
+  // Chrome lists its voices a moment after the page loads: the first getVoices() is empty
+  speechSynthesis.addEventListener?.('voiceschanged', loadVoices);
+}
+
+/**
+ * The language the cues are read in: Ukrainian or English only. Ukrainian when the interface is and the device has a
+ * Ukrainian voice; else English, when it has an English one; null: no voice to read in, the cues are beeps.
+ */
+export function speechLang() {
+  if (typeof speechSynthesis === 'undefined') return null;
+  if (!voices.length) loadVoices();
+  if (lang === 'uk' && pickVoice(voices, 'uk')) return 'uk';
+  return pickVoice(voices, 'en') ? 'en' : null;
+}
+
+/** Read a cue aloud in `language` ('uk' or 'en'), in a voice of it. False when it was not: no such voice. */
+export function say(text, language = speechLang()) {
+  if (!text || !language || typeof speechSynthesis === 'undefined') return false;
+  if (!voices.length) loadVoices();
+  const voice = pickVoice(voices, language);
+  if (!voice) return false;
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = lang === 'uk' ? 'uk-UA' : 'en-US';
-  const voice = speechSynthesis.getVoices().find((v) => v.lang?.toLowerCase().startsWith(lang));
-  if (voice) u.voice = voice;
+  u.voice = voice;
+  u.lang = voice.lang;
   u.rate = 1.05;
   speechSynthesis.cancel();
   speechSynthesis.speak(u);
+  return true;
 }
 
 /** "3 minutes", "45 seconds", "1 minute 30 seconds" */
-export function spokenDuration(sec) {
+export function spokenDuration(sec, language = lang) {
   sec = Math.round(sec);
   const m = Math.floor(sec / 60), s = sec % 60;
-  const words = lang === 'uk'
+  const words = language === 'uk'
     ? { minute: ['хвилина', 'хвилини', 'хвилин'], second: ['секунда', 'секунди', 'секунд'] }
     : { minute: ['minute', 'minutes', 'minutes'], second: ['second', 'seconds', 'seconds'] };
-  const say = (n, w) => `${n} ${lang === 'uk' ? plural(n, words[w]) : words[w][n === 1 ? 0 : 1]}`;
+  const say = (n, w) => `${n} ${language === 'uk' ? plural(n, words[w]) : words[w][n === 1 ? 0 : 1]}`;
   if (!m) return say(s, 'second');
   if (!s) return say(m, 'minute');
   return `${say(m, 'minute')} ${say(s, 'second')}`;

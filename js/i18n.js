@@ -18,6 +18,14 @@ export function t(s, vars) {
   return out;
 }
 
+/** Translate `s` into `language` ('en' or 'uk'), whatever the interface language: a spoken cue falls back to
+ * English when the device has no Ukrainian voice. */
+export function tIn(language, s, vars) {
+  let out = (language === 'uk' ? UK : {})[s] ?? s;
+  if (vars) out = out.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m));
+  return out;
+}
+
 /** Ukrainian plural: plural(5, ['хвилина', 'хвилини', 'хвилин']) -> 'хвилин'. */
 export function plural(n, [one, few, many]) {
   const a = Math.abs(n) % 100, b = a % 10;

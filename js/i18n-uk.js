@@ -177,6 +177,14 @@ export const UK = {
   'The trainer does not accept wheel circumference — using grade-based gears': 'Тренажер не приймає довжину кола колеса, передачі працюють через нахил',
   'Low cadence — ERG temporarily reduced': 'Низький каденс, ERG тимчасово знижено', 'Power dropped — ERG temporarily reduced': 'Потужність упала, ERG тимчасово знижено',
   'Interval skipped ⏭': 'Інтервал пропущено ⏭',
+  'No Ukrainian voice on this device: the cues are in English. Add one in the system settings (Windows: Time & language → Speech) or open the app in Edge': 'На цьому пристрої немає українського голосу, тому підказки звучать англійською. Додай голос у налаштуваннях системи (Windows: Час і мова → Мовлення) або відкрий застосунок в Edge',
+  'No voice on this device: the cues are beeps': 'На цьому пристрої немає голосу, тому підказки звучать сигналами',
+  'Ramp test. Hold each step as long as you can.': 'Рамп-тест. Тримай кожну сходинку, скільки зможеш.',
+  '{name} attacks!': '{name} атакує!', '{name} goes across': '{name} іде слідом',
+  'You win!': 'Перемога!', 'You finished in position {n}': 'Фініш, {n}-те місце',
+  'In 10 seconds: {what}': 'Через 10 секунд: {what}', 'Workout complete. Great job!': 'Тренування завершено. Чудова робота!',
+  'Test over. Your F T P is about {w} watts. Spin easy now.': 'Тест завершено. Твій FTP приблизно {w} ват. Тепер крути легко.',
+  'Test over. Spin easy now.': 'Тест завершено. Тепер крути легко.',
   // voice cues
   'Spin up your cadence': 'Підніми каденс', 'free ride': 'вільна їзда', '{n} watts': '{n} ват', 'cadence {a} to {b}': 'каденс від {a} до {b}',
 
