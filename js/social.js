@@ -221,18 +221,23 @@ export async function cancelGroupRide(id) { ok(await (await client()).rpc('cance
 export async function joinGroupRide(id, on = true) { ok(await (await client()).rpc('join_group_ride', { p_id: id, p_on: on })); }
 
 /**
- * Riding a group ride together: a Realtime broadcast channel of its own, where each rider's packet (group.js)
- * goes to the others. { send(packet), leave() }; onPacket gets the others' packets (never your own).
+ * Riding a group ride together, or watching it: a Realtime broadcast channel of its own. Its events: `pos` (each
+ * rider's packet, group.js), `chat` (a message or a quick phrase, chat.js), `react` (a spectator's emoji to a rider)
+ * and `watch` (a spectator saying they are there). `on` is { pos, chat, react, watch } (a function alone: pos).
+ * { joined, send(packet), say(event, payload), leave() }; nothing you send comes back to you.
  */
-export async function groupLive(id, onPacket) {
+export async function groupLive(id, on = {}) {
   const c = await client();
+  const handlers = typeof on === 'function' ? { pos: on } : on;
   const ch = c.channel(`group:${id}`, { config: { broadcast: { self: false } } });
-  ch.on('broadcast', { event: 'pos' }, (m) => onPacket(m.payload));
+  for (const ev of ['pos', 'chat', 'react', 'watch']) if (handlers[ev]) ch.on('broadcast', { event: ev }, (m) => handlers[ev](m.payload));
   let joined = false;
   ch.subscribe((s) => { joined = s === 'SUBSCRIBED'; });
+  const say = (event, payload) => { if (joined) ch.send({ type: 'broadcast', event, payload }).catch(() => {}); };
   return {
     get joined() { return joined; },
-    send: (p) => { if (joined) ch.send({ type: 'broadcast', event: 'pos', payload: p }).catch(() => {}); },
+    send: (p) => say('pos', p),
+    say,
     leave: () => { joined = false; c.removeChannel(ch).catch(() => {}); },
   };
 }

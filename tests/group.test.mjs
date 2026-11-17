@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rideWindow, packet, Mates, OPENS_BEFORE, LIVE_FOR, STALE } from '../js/group.js';
+import { rideWindow, packet, Mates, spectate, OPENS_BEFORE, LIVE_FOR, STALE } from '../js/group.js';
 
 const T = Date.UTC(2026, 10, 20, 17, 0); // a group ride at 19:00 Kyiv time
 
@@ -15,7 +15,7 @@ test('group ride: shut until 10 minutes before, open at the line, live for two h
 
 test('group ride: a packet carries who and where in a few rounded numbers', () => {
   const p = packet({ id: 'u1', name: 'Olena', dist: 1234.567, v: 9.8765, lane: 1.234, wkg: 3.14159, look: { jersey: '#ff0000', stripe: '#00ff00', bike: null, figure: 'female' } }, 5000);
-  assert.deepEqual(p, { u: 'u1', n: 'Olena', d: 1234.6, v: 9.88, l: 1.23, w: 3.1, j: '#ff0000', s: '#00ff00', b: null, f: 'female', t: 5000 });
+  assert.deepEqual(p, { u: 'u1', n: 'Olena', d: 1234.6, v: 9.88, l: 1.23, p: 0, w: 3.1, j: '#ff0000', s: '#00ff00', b: null, f: 'female', t: 5000 });
 });
 
 test('group ride: a rider heard from rides on at their speed between packets, smoothly', () => {
@@ -63,5 +63,29 @@ test('a race: the finish time goes in the packet and stays after the rider has g
   m.receive({ u: 'b', n: 'Bo', d: 12009, v: 9, l: 0, j: '#ff0000', x: 1400 }, 2000); // the first one stands
   m.receive({ u: 'c', n: 'Cy', d: 0, v: 0, l: 0, x: 'soon' }, 2000); // not a time
   m.list(60000); // long gone from the road
-  assert.deepEqual(m.finished(), [{ id: 'b', name: 'Bo', color: '#ff0000', stripe: '#e2e8f0', wkg: 0, finish: 1500 }]);
+  assert.deepEqual(m.finished(), [{ id: 'b', name: 'Bo', color: '#ff0000', stripe: '#e2e8f0', wkg: 0, power: 0, finish: 1500 }]);
+});
+
+test('spectator: finished first by time, then by distance, with laps and gaps in seconds', () => {
+  const m = new Mates('watcher');
+  const look = { j: '#ff0000', s: '#ffffff', f: 'male' };
+  m.receive({ u: 'a', n: 'Ann', d: 1500, v: 10, p: 250, w: 4, ...look, t: 0 }, 0);
+  m.receive({ u: 'b', n: 'Bo', d: 1400, v: 10, p: 220, w: 3.2, ...look, t: 0 }, 0);
+  m.receive({ u: 'c', n: 'Cy', d: 2000, v: 0, p: 0, w: 0, x: 300.5, ...look, t: 0 }, 0);
+  const rows = spectate(m, 0, { length: 1000, laps: 2 });
+  assert.deepEqual(rows.map((r) => r.id), ['c', 'a', 'b']);
+  assert.equal(rows[0].finish, 300.5);
+  assert.equal(rows[0].dist, 2000);
+  assert.equal(rows[1].lap, 2);
+  assert.equal(rows[1].power, 250);
+  assert.equal(rows[1].gap, null); // behind a finisher: no gap in seconds
+  assert.equal(rows[2].gap, 10); // 100 m at 10 m/s
+  assert.deepEqual(rows.map((r) => r.place), [1, 2, 3]);
+});
+
+test('group ride: the power in a packet is kept, held to 0..3000 W', () => {
+  const m = new Mates('me');
+  m.receive({ u: 'x', n: 'X', d: 10, v: 5, p: 9999, t: 0 }, 0);
+  assert.equal(m.list(0)[0].power, 3000);
+  assert.equal(packet({ id: 'u', name: 'U', dist: 0, v: 0, lane: 0, power: 251.6 }, 0).p, 252);
 });

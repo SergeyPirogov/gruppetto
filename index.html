@@ -591,6 +591,7 @@
           <button id="btn-pause" class="pill-btn">Pause</button>
           <button id="btn-finish" class="pill-btn danger">Finish</button>
           <button id="btn-figure" class="pill-btn" title="Switch the rider (R)">Woman</button>
+          <button id="btn-chat" class="pill-btn icon-btn" title="Chat (Enter)" aria-label="Chat (Enter)" hidden>💬</button>
           <button id="btn-keys" class="pill-btn icon-btn" title="Keyboard (?)" aria-label="Keyboard (?)"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
           <button id="btn-pip" class="pill-btn icon-btn" title="Mini window over other apps (I)" aria-label="Mini window over other apps (I)" hidden><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="12" y="11.5" width="7" height="5.5" rx="1" fill="currentColor"/></svg></button>
           <button id="btn-settings" class="pill-btn icon-btn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
@@ -611,6 +612,16 @@
       </div>
     </div>
     <div id="ghost-tag" class="ghost-mini" hidden></div>
+    <!-- a group ride's chat (#85, js/chat.js): the last messages over the road, and the field with the quick phrases -->
+    <div id="chat-box" class="chat-box" hidden>
+      <span id="chat-watch" class="chat-watch" hidden></span>
+      <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
+      <div id="chat-bar" class="chat-bar" hidden>
+        <div id="chat-quick" class="chat-quick"></div>
+        <div class="chat-line"><input id="chat-input" maxlength="140" placeholder="Say something… (Enter sends, Esc closes)" autocomplete="off"><button id="chat-send" class="pill-btn">Send</button></div>
+        <button id="chat-watch-link" class="link-btn chat-watch-link">👀 Copy a link to watch me</button>
+      </div>
+    </div>
     <div id="countdown" class="countdown" hidden></div>
     <div id="paused" class="paused" hidden>PAUSED</div>
     <div id="keys-help" class="keys-help" hidden>
@@ -843,6 +854,43 @@
         <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together: you see each other live on the road, and ride in each other's shelter. In a race, the first across the line after the laps wins, and the results stay with the ride. Signed in, on a trainer or in the simulator.</p>
       </div>
     </div>
+
+    <!-- watching a group ride or race (#86, js/watch-ui.js): the board, the route, the rider you follow, reactions, the chat -->
+    <section id="watch-view" class="watch-view" hidden aria-label="Watching">
+      <header class="wv-head">
+        <button id="wv-close" class="pill-btn" aria-label="Back">← Back</button>
+        <div class="wv-what"><b id="wv-title"></b><small id="wv-route"></small></div>
+        <span id="wv-clock" class="wv-clock"></span>
+        <span id="wv-watchers" class="wv-watchers" title="Watching now"></span>
+      </header>
+      <div class="wv-body">
+        <div class="wv-main">
+          <div id="wv-follow" class="wv-follow" hidden>
+            <div class="wv-f-head"><i id="wv-f-dot"></i><b id="wv-f-name"></b><span id="wv-f-place" class="wv-f-place"></span></div>
+            <div class="wv-f-stats">
+              <div><b id="wv-f-power">0</b><small>W</small></div>
+              <div><b id="wv-f-speed">0</b><small>km/h</small></div>
+              <div><b id="wv-f-wkg">0</b><small>W/kg</small></div>
+            </div>
+            <small id="wv-f-where" class="wv-f-where"></small>
+            <div id="wv-react" class="wv-react" aria-label="Cheer"></div>
+          </div>
+          <canvas id="wv-profile" class="wv-profile"></canvas>
+          <p id="wv-empty" class="hint"></p>
+          <ol id="wv-rows" class="wv-rows"></ol>
+          <p class="hint">Tap a rider to follow them. Your reactions pop up on their screen.</p>
+        </div>
+        <aside class="wv-chat">
+          <h3>Chat</h3>
+          <div id="wv-feed" class="wv-feed"></div>
+          <div id="wv-write">
+            <div id="wv-quick" class="chat-quick"></div>
+            <div class="chat-line"><input id="wv-input" maxlength="140" placeholder="Cheer them on…" autocomplete="off"><button id="wv-send" class="pill-btn">Send</button></div>
+          </div>
+          <p id="wv-write-hint" class="hint" hidden>Sign in to write in the chat. Reactions work for everyone.</p>
+        </aside>
+      </div>
+    </section>
 
     <!-- the garage (js/garage.js): your rider on a turntable beside the colour pickers -->
     <div id="garage" class="garage" hidden role="dialog" aria-label="Garage">
