@@ -1414,6 +1414,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .hdr-account:hover { background: #f3f4f6; }
 .hdr-account.in { background: rgba(255, 122, 26, .14); border-color: rgba(255, 122, 26, .5); color: var(--accent); }
 .hdr-account.in:hover { background: rgba(255, 122, 26, .22); }
+.hdr-menu { position: fixed; z-index: 60; display: flex; flex-direction: column; min-width: 200px; padding: 6px; border-radius: 12px; background: var(--card, #182030); border: 1px solid var(--line, #2a3448); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); }
+.hdr-menu button { width: 100%; text-align: left; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: .92rem; cursor: pointer; }
+.hdr-menu button:hover, .hdr-menu button:focus-visible { background: rgba(255, 255, 255, .07); }
 .hdr-account span { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
 .g-logo { width: 18px; height: 18px; flex: none; }
 .link-btn { width: auto; padding: 0; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }

@@ -339,3 +339,22 @@ test('a league: set up from the Leagues tab, a race put in it, its standings', a
   assert.deepEqual(errors, []);
   await context.close();
 });
+
+test('signing out from the header: a tap on your name, then Sign out', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#hdr-account.in');
+  const tap = () => page.evaluate(() => document.getElementById('hdr-account').click()); // the Devices page may be open over the lobby on a first visit
+  await tap();
+  await page.waitForSelector('#hdr-menu');
+  await page.keyboard.press('Escape'); // closes without doing anything
+  assert.equal(await page.$('#hdr-menu'), null);
+  await tap();
+  await page.click('#hdr-menu [data-m="out"]');
+  await page.waitForFunction(() => !document.getElementById('hdr-account').classList.contains('in'));
+  assert.equal(await page.$('#hdr-menu'), null);
+  assert.equal(await page.isVisible('#hdr-guest'), true);
+  assert.equal(await page.evaluate(() => localStorage.getItem('gruppetto.social.auth')), null);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
