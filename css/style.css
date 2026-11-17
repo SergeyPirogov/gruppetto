@@ -1140,6 +1140,11 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .greet { display: grid; gap: 2px; margin-right: auto; }
 .greet b { font-size: 1.6rem; letter-spacing: -.02em; }
 .greet small { color: var(--muted); font-size: .85rem; }
+/* the greeting keeps its line: when the buttons do not fit beside it, they go under it, not it into a narrow column */
+.greet { flex: 1 0 auto; }
+.greet { max-width: 100%; min-width: 0; }
+.greet b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media not all and (display-mode: window-controls-overlay) { .lobby-body .lobby-top { flex-wrap: wrap; row-gap: 12px; } }
 .lobby-body .dev-chips { flex: none; gap: 0; padding: 3px; border-radius: 999px; background: #121a28; border: 1px solid var(--line); }
 .lobby-body .dev-chip { border: 0; background: transparent; padding: 5px 11px; }
 .lobby-body .dev-chip + .dev-chip { border-left: 1px solid var(--line); border-radius: 0; }
