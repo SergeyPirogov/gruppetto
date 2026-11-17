@@ -1227,3 +1227,24 @@ test('segment ticks: a segment ending on the line ends at the right edge, one ov
   const r = routes.find((x) => x.id === 'rolling');
   assert.deepEqual(segmentSpan(r, { start: r.length - 100, length: 300 }), [r.length - 100, 200]);
 });
+
+test('voice: a cue is read only in a voice of its language, never another (no Russian for Ukrainian text)', async () => {
+  const { pickVoice } = await import('../js/sound.js');
+  const ru = { name: 'Milena', lang: 'ru-RU' }, en = { name: 'Samantha', lang: 'en-US' };
+  const uk = { name: 'Lesya', lang: 'uk-UA' }, ukNat = { name: 'Microsoft Polina Online (Natural) - Ukrainian (Ukraine)', lang: 'uk-UA' };
+  assert.equal(pickVoice([ru, en], 'uk'), null);
+  assert.equal(pickVoice([ru, uk, en], 'uk'), uk);
+  assert.equal(pickVoice([uk, ukNat], 'uk'), ukNat);
+  assert.equal(pickVoice([{ name: 'x', lang: 'uk_UA' }], 'uk').name, 'x'); // Android writes it so
+  assert.equal(pickVoice([ru, en], 'en'), en);
+  assert.equal(pickVoice([], 'en'), null);
+});
+
+test('voice: cue phrases translate into the speech language, whatever the interface one', async () => {
+  const { tIn } = await import('../js/i18n.js');
+  const { spokenDuration } = await import('../js/sound.js');
+  assert.equal(tIn('en', 'You finished in position {n}', { n: 3 }), 'You finished in position 3');
+  assert.equal(tIn('uk', 'You finished in position {n}', { n: 3 }), 'Фініш, 3-те місце');
+  assert.equal(spokenDuration(90, 'en'), '1 minute 30 seconds');
+  assert.equal(spokenDuration(300, 'uk'), '5 хвилин');
+});

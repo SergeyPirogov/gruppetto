@@ -6,7 +6,7 @@ import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
-import { t as tr, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
+import { t as tr, tIn, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { WORKOUT_KINDS, workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
 /** Heart rate zones in bpm: from intervals.icu when connected, otherwise from the threshold heart rate (Profile). */
@@ -30,7 +30,7 @@ import { CLIENT as SOCIAL_CLIENT } from './social.js';
 import { initSocialUi, groupChannel, groupFinish, groupResults, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
-import { unlockAudio, beep, say, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
+import { unlockAudio, beep, say, speechLang, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
 import { Scene, drawProfile } from './render.js';
 import { standStep } from './standing.js';
 import { gradeRuns } from './grade-color.js';
@@ -1646,7 +1646,7 @@ function attackStep(grade) {
     if (!a.told && t >= a.start) {
       a.told = true;
       const msg = a.lead ? tr('⚡ {name} attacks!', { name: b.name }) : tr('⚡ {name} goes across', { name: b.name });
-      toast(msg); cueSay(msg.replace('⚡ ', ''));
+      toast(msg); cueSay(a.lead ? '{name} attacks!' : '{name} goes across', { name: b.name });
     }
     const gap = b.dist - ride.dist;
     if (gap > 15) a.away = true;
@@ -1745,7 +1745,7 @@ function raceFinished() {
   ride.race.place = place;
   toast(place === 1 ? tr('🏆 You win! {time}', { time: fmtTime(ride.race.myTime) }) : tr('🏁 {n} of {m} · {time}', { n: place, m: list.length, time: fmtTime(ride.race.myTime) }));
   cueBeep(place === 1 ? 1320 : 1040, 0.5);
-  cueSay(place === 1 ? 'You win!' : `You finished in position ${place}`);
+  cueSay(place === 1 ? 'You win!' : 'You finished in position {n}', { n: place });
   if (ride.group) groupRaceFinished();
   setTimeout(() => { if (ride?.race?.done) finishRide(); }, 4000);
 }
@@ -1919,12 +1919,12 @@ function tick(power, cadence, hr) {
         ride.stepIndex = t.index;
         if (t.step.text) toast(t.step.text);
         else if (t.watts === null) toast(tr('Free segment — ride by feel'));
-        if (t.step.dur >= 20) cueSay(describeStep(t.step, ride.target));
+        if (t.step.dur >= 20) cueSay((L) => describeStep(t.step, ride.target, L));
         updateGear();
       }
       if (t.remaining <= 3 && t.remaining >= 1) cueBeep(660, 0.12);
       const next = ride.workout.steps[t.index + 1];
-      if (next && t.remaining === 10 && t.step.dur >= 30) cueSay(`In 10 seconds: ${describeStep(next, ergTarget({ watts: stepWatts(next, 0, settings.ftp) }))}`);
+      if (next && t.remaining === 10 && t.step.dur >= 30) cueSay((L) => tIn(L, 'In 10 seconds: {what}', { what: describeStep(next, ergTarget({ watts: stepWatts(next, 0, settings.ftp) }), L) }));
     } else {
       ride.workoutDone = true;
       ride.target = null;
@@ -4351,7 +4351,7 @@ function rampWatch(power, cadence) {
   const ftp = ride.rampBest ? rampFtp(ride.rampBest) : null;
   track('ramp-done');
   cueBeep(1040, 0.5);
-  cueSay(ftp ? `Test over. Your F T P is about ${ftp} watts. Spin easy now.` : 'Test over. Spin easy now.');
+  cueSay(ftp ? 'Test over. Your F T P is about {w} watts. Spin easy now.' : 'Test over. Spin easy now.', { w: ftp });
   toast(ftp ? tr('Ramp test over: FTP ≈ {w} W. Spin easy to cool down, then finish', { w: ftp }) : tr('Ramp test over. Spin easy to cool down'));
   updateGear();
   if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
@@ -4366,7 +4366,7 @@ function updateSpiralGuard(power, cadence) {
   if (ride.lowFor >= 3 && ride.ergFactor > 0.5) {
     ride.ergFactor = 0.5;
     toast(hasCadence ? tr('Low cadence — ERG temporarily reduced') : tr('Power dropped — ERG temporarily reduced'));
-    cueSay(tr('Spin up your cadence'));
+    cueSay('Spin up your cadence');
   } else if (ride.ergFactor < 1) {
     // restore only once the rider has clearly recovered (hysteresis avoids bouncing)
     const recovered = hasCadence ? cadence >= 70 : power >= eff * 0.85;
@@ -4374,14 +4374,29 @@ function updateSpiralGuard(power, cadence) {
   }
 }
 
-function describeStep(step, watts) {
-  const what = watts === null || watts === undefined ? tr('free ride') : tr('{n} watts', { n: watts });
-  const cad = step.cad ? `, ${tr('cadence {a} to {b}', { a: step.cad[0], b: step.cad[1] })}` : '';
-  return `${what}, ${spokenDuration(step.dur)}${cad}${step.text ? `. ${step.text}` : ''}`;
+function describeStep(step, watts, L = lang) {
+  const what = watts === null || watts === undefined ? tIn(L, 'free ride') : tIn(L, '{n} watts', { n: watts });
+  const cad = step.cad ? `, ${tIn(L, 'cadence {a} to {b}', { a: step.cad[0], b: step.cad[1] })}` : '';
+  // the workout's own note is in whatever language it was written: read only in the interface's
+  return `${what}, ${spokenDuration(step.dur, L)}${cad}${step.text && L === lang ? `. ${step.text}` : ''}`;
 }
 
 const cueBeep = (f, d) => { if (settings.sound) beep(f, d); };
-const cueSay = (text) => { if (settings.voice) say(text); };
+let voiceTold = false;
+/**
+ * A spoken cue, in Ukrainian or English only: `s` an English phrase (with `vars`) or a function of the language
+ * that builds it. Ukrainian with no Ukrainian voice on the device: English, said once; no voice at all: beeps only.
+ */
+const cueSay = (s, vars) => {
+  if (!settings.voice) return;
+  const L = speechLang();
+  if (!voiceTold && L !== lang && typeof speechSynthesis !== 'undefined') {
+    voiceTold = true;
+    toast(L ? tr('No Ukrainian voice on this device: the cues are in English. Add one in the system settings (Windows: Time & language → Speech) or open the app in Edge')
+      : tr('No voice on this device: the cues are beeps'));
+  }
+  if (L) say(typeof s === 'function' ? s(L) : tIn(L, s, vars), L);
+};
 
 function changeIntensity(delta) {
   settings.intensity = Math.max(50, Math.min(150, settings.intensity + delta));
