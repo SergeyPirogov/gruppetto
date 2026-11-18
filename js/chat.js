@@ -64,7 +64,8 @@ export class ChatLog {
       this.pace.set(p.u, g);
       if (!g.ok(now)) return null;
     }
-    const e = { id: ++this.n, from: p.u, name: clean(p.n).slice(0, 40) || '?', text, quick: quick?.id || null, at: now, me: mine };
+    // from the fans' channel (social.js groupLive): a spectator, shown as one, so no one there passes for a rider
+    const e = { id: ++this.n, from: p.u, name: `${p.fan ? '👀 ' : ''}${clean(p.n).slice(0, 40) || '?'}`, fan: !!p.fan, text, quick: quick?.id || null, at: now, me: mine };
     this.items.push(e);
     if (this.items.length > this.keep) this.items.splice(0, this.items.length - this.keep);
     return e;

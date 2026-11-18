@@ -71,3 +71,12 @@ test('a spectator\'s id: random, the same for the tab', () => {
   assert.match(a, /^g-[a-z0-9]+$/);
   assert.equal(guestId(store), a);
 });
+
+test('chat from the fans channel shows as a spectator', async () => {
+  const { ChatLog } = await import('../js/chat.js');
+  const c = new ChatLog('me');
+  const e = c.receive({ u: 'x1', n: 'Olena', m: 'go go', fan: true }, 0);
+  assert.equal(e.name, '👀 Olena');
+  assert.equal(e.fan, true);
+  assert.equal(c.receive({ u: 'x2', n: 'Taras', m: 'hi' }, 0).name, 'Taras');
+});
