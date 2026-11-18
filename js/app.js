@@ -2414,10 +2414,12 @@ function updateProgress() {
   if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} ${U.km} · ${fmtTime(ride.elapsed)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(L < 1000 ? 1 : 0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   if (ride.workout) {
-    const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
+    const total = totalDuration(ride.workout), done = Math.min(1, ride.workoutT / total);
     $('wk-name').textContent = ride.workout.name;
     $('wk-name').title = ride.workout.name;
-    $('wk-pct').textContent = ride.workoutDone ? tr('done') : `${Math.round(done * 100)}%`;
+    // how long the workout is and how much of it is left, beside how far through it you are
+    $('wk-pct').textContent = ride.workoutDone ? tr('done')
+      : `${tr('{total} · {left} left', { total: fmtTime(total), left: fmtTime(Math.max(0, total - ride.workoutT)) })} · ${Math.round(done * 100)}%`;
   }
 }
 
