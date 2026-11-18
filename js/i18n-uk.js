@@ -177,6 +177,7 @@ export const UK = {
   'The trainer does not accept wheel circumference — using grade-based gears': 'Тренажер не приймає довжину кола колеса, передачі працюють через нахил',
   'Low cadence — ERG temporarily reduced': 'Низький каденс, ERG тимчасово знижено', 'Power dropped — ERG temporarily reduced': 'Потужність упала, ERG тимчасово знижено',
   'Interval skipped ⏭': 'Інтервал пропущено ⏭',
+  'Upload again': 'Завантажити ще раз', 'not paired with the planned workout (moved or deleted there?)': 'не прив’язано до запланованого тренування (перенесли чи видалили там?)', 'Deleted it there? Send this ride once more': 'Видалили там? Надішліть цей заїзд ще раз',
   'syncing…': 'синхронізую…', 'not synced': 'не синхронізовано', 'just now': 'щойно', '{n} min ago': '{n} хв тому',
   'Syncing…': 'Синхронізую…', 'Not synced: {error}': 'Не синхронізовано: {error}', 'Synced {when}': 'Синхронізовано {when}',
   '{n} rides in the account': 'заїздів в акаунті: {n}', 'Sync now': 'Синхронізувати зараз',
