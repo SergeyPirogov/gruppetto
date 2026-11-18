@@ -1693,3 +1693,10 @@ body.watching { overflow: hidden; }
 /* the account card's sync line: when it last went through, or what went wrong (#: sync status) */
 .social-sync { margin: 6px 0 0; font-size: .85rem; color: var(--muted); }
 .social-sync.bad { color: #fca5a5; }
+
+/* your routes on Strava (openStravaRoutes): a list to pick one from */
+.strava-routes-panel { max-width: 520px; }
+.sr-list { display: grid; gap: 8px; max-height: 60vh; overflow: auto; padding: 4px 2px; }
+.sr-row { text-align: left; }
+.sr-row[disabled] { opacity: .5; cursor: default; }
+.rc-strava b { color: #fc5200; }
