@@ -362,9 +362,13 @@ export function sync({ send = false } = {}) {
     const merged = mergeData(localData(), row.data);
     merged.workouts = syncWorkouts(row.data?.workouts);
     apply(merged);
-    if (!sameData(merged, row.data)) await saveProfile({ data: merged });
-    await syncRides();
-    if (send) await flush();
+    // each part on its own: the profile failing to save must not keep the rides or the results from syncing
+    const errors = [];
+    const step = async (f) => { try { await f(); } catch (e) { errors.push(e); } };
+    if (!sameData(merged, row.data)) await step(() => saveProfile({ data: merged }));
+    await step(syncRides);
+    if (send) await step(flush);
+    if (errors.length) throw errors[0];
   })().finally(() => { syncing = null; });
   return syncing;
 }

@@ -47,6 +47,9 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       const one = (req.headers().accept || '').includes('vnd.pgrst.object');
       if (req.method() === 'GET') return send(route, 200, one ? db.profile : (db.profile ? [db.profile] : []));
       const row = JSON.parse(body);
+      // like Postgres: an insert (an upsert too) needs the name, NOT NULL, even for a row already there
+      if (req.method() === 'POST' && !row.display_name) return send(route, 400, { code: '23502', message: 'null value in column "display_name" of relation "profiles" violates not-null constraint' });
+      if (req.method() === 'PATCH' && !db.profile) return send(route, 406, { code: 'PGRST116', message: 'no rows' });
       db.profile = { public: true, data: {}, ...db.profile, ...row, updated_at: new Date().toISOString() };
       return send(route, 201, one ? db.profile : [db.profile]);
     }
@@ -190,7 +193,7 @@ test('signing in: back from Google, this device\'s profile and the account\'s me
   assert.equal(settings.icuKey, ICU_SECRET); // the key stays here
   // the merge went back up: this device's coast lap and sprint speed are in the account now
   await page.waitForFunction(() => true);
-  const up = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && r.method === 'POST').at(-1);
+  const up = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && ['POST', 'PATCH'].includes(r.method)).at(-1);
   assert.ok(up, 'the merged profile went up');
   assert.equal(JSON.parse(up.body).data.records.lap.coast, 1200);
   assert.equal(JSON.parse(up.body).data.records.top['rolling-s1'], 50);
@@ -198,7 +201,7 @@ test('signing in: back from Google, this device\'s profile and the account\'s me
   // a change to the profile goes up 3 s later
   await page.evaluate(() => { const f = document.getElementById('f-weight'); f.value = '58'; f.oninput(); });
   await page.waitForTimeout(3600);
-  const last = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && r.method === 'POST').at(-1);
+  const last = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && ['POST', 'PATCH'].includes(r.method)).at(-1);
   assert.equal(JSON.parse(last.body).data.profile.weight, 58);
   noSecrets(mock.db);
   assert.deepEqual(errors, []);

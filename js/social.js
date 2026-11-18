@@ -89,7 +89,11 @@ export async function loadProfile() {
 export async function saveProfile(fields) {
   if (!user) return null;
   const c = await client();
-  const write = (f, cols) => c.from('profiles').upsert({ id: user.id, ...f }).select(cols).single();
+  // an upsert without the name fails for a profile already there (Postgres checks display_name NOT NULL on the row it
+  // would insert, before it sees the conflict): with no name it is an update of my row; with one, the first save too
+  const write = (f, cols) => (f.display_name
+    ? c.from('profiles').upsert({ id: user.id, ...f })
+    : c.from('profiles').update(f).eq('id', user.id)).select(cols).single();
   const r = await write(fields, PROFILE_COLS);
   if (!noRegion(r)) return ok(r);
   const { region: _, ...rest } = fields; // not in the project yet: everything else is saved
