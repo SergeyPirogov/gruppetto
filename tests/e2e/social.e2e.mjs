@@ -47,11 +47,18 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       const one = (req.headers().accept || '').includes('vnd.pgrst.object');
       if (req.method() === 'GET') return send(route, 200, one ? db.profile : (db.profile ? [db.profile] : []));
       const row = JSON.parse(body);
+      if (db.failProfile) return send(route, 500, { message: 'the account is down' });
       // like Postgres: an insert (an upsert too) needs the name, NOT NULL, even for a row already there
       if (req.method() === 'POST' && !row.display_name) return send(route, 400, { code: '23502', message: 'null value in column "display_name" of relation "profiles" violates not-null constraint' });
       if (req.method() === 'PATCH' && !db.profile) return send(route, 406, { code: 'PGRST116', message: 'no rows' });
       db.profile = { public: true, data: {}, ...db.profile, ...row, updated_at: new Date().toISOString() };
       return send(route, 201, one ? db.profile : [db.profile]);
+    }
+    if (p === '/rest/v1/activities') { // the full sync's rides: read them all, upsert by id
+      db.activities ||= [];
+      if (req.method() === 'GET') return send(route, 200, db.activities);
+      for (const r of JSON.parse(body)) { const i = db.activities.findIndex((x) => x.id === r.id); if (i >= 0) db.activities[i] = r; else db.activities.push(r); }
+      return send(route, 201, []);
     }
     if (p === '/rest/v1/rpc/submit_efforts') {
       if (db.offline) return route.abort('internetdisconnected');
@@ -405,5 +412,21 @@ test('a ride on intervals.icu can go up again (deleted there): once more, paired
   await page.waitForFunction(() => window.__icuUploads.length === 2, null, { timeout: 10000 });
   assert.equal((await page.evaluate(() => window.__icuUploads))[1].eventId, 77);
   assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('the sync says how it went: synced with the rides in the account, or what failed, with Sync now', async () => {
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
+  const { page, context } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForFunction(() => /synced/.test(document.getElementById('hdr-account').textContent), null, { timeout: 10000 });
+  assert.match(await page.textContent('#social-sync-text'), /Synced just now/);
+  // the account refuses the next write: the header and the card say so, and Sync now tries again
+  mock.db.failProfile = true;
+  await page.evaluate(() => { const f = document.getElementById('f-weight'); f.value = '61'; f.oninput(); });
+  await page.waitForFunction(() => /not synced/.test(document.getElementById('hdr-account').textContent), null, { timeout: 10000 });
+  assert.match(await page.textContent('#social-sync-text'), /Not synced:/);
+  mock.db.failProfile = false;
+  await page.evaluate(() => document.getElementById('btn-social-sync').click());
+  await page.waitForFunction(() => /Synced just now/.test(document.getElementById('social-sync-text').textContent), null, { timeout: 10000 });
   await context.close();
 });
