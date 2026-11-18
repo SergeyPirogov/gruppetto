@@ -27,7 +27,7 @@ import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
-import { initSocialUi, groupChannel, groupFinish, groupResults, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, accountRecord, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { initSocialUi, groupChannel, groupFinish, groupResults, groupStart, groupRow, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, accountRecord, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, speechLang, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -1381,6 +1381,47 @@ function preflight() {
 /** Opened as an installed app (its own window), not in a browser tab. */
 const installedApp = () => matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: fullscreen)').matches;
 
+/** A held ride: read its start from the database (after the host's word, or every 20 s), and set the clock to it. */
+function groupCheckStart() {
+  const G = ride?.group;
+  if (!G?.held || G.checking) return;
+  G.checking = true; G.polledAt = Date.now();
+  groupRow(G.id).then((g) => {
+    if (ride?.group !== G || !G.held) return;
+    if (g && !g.held) groupStarted(G, Date.parse(g.starts_at));
+    else if (!g) { toast(tr('This ride is over or was called off')); G.held = false; G.t0 = Date.now(); }
+  }).catch(() => {}).finally(() => { G.checking = false; });
+}
+function groupStarted(G, t0) {
+  G.held = false; G.t0 = t0;
+  $('gr-host').hidden = true;
+  toast(tr('The host started the ride: off in {t}', { t: fmtTime(Math.max(0, Math.ceil((t0 - Date.now()) / 1000))) }));
+}
+/** The host's start buttons, while their held ride waits; and who is on the line. */
+function groupHostRender() {
+  const G = ride?.group, el = $('gr-host');
+  const show = !!(G?.held && G.host);
+  if (el.hidden === !show && !show) return;
+  el.hidden = !show;
+  if (show) {
+    const n = G.mates.list(Date.now()).length + 1;
+    const line = tr('{n} on the line, you too', { n });
+    if ($('gr-host-line').textContent !== line) $('gr-host-line').textContent = line;
+  }
+}
+$('gr-host').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-in]'), G = ride?.group;
+  if (!b || !G?.held || !G.host) return;
+  for (const x of $('gr-host').querySelectorAll('button')) x.disabled = true;
+  try {
+    const t0 = await groupStart(G.id, Number(b.dataset.in));
+    groupStarted(G, t0);
+    track('social', `group-start-${b.dataset.in}`);
+    // say so on the channel, a few times (one who joins a moment later hears it too); they read the time themselves
+    for (let i = 0; i < 6; i++) setTimeout(() => { if (ride?.group === G) G.live?.say('start', { u: G.me.id }); }, i * 3000);
+  } catch (err) { toast(err.message); } finally { for (const x of $('gr-host').querySelectorAll('button')) x.disabled = false; }
+});
+
 async function startRide(opts) {
   // Watch & ride (#watch, from the Ride button's menu): the mini window opens now, while the click counts, and the
   // 3D world is not even loaded
@@ -1431,7 +1472,9 @@ async function startRide(opts) {
     ride.lane = ride.laneTarget = ride.laneHome = [-1.8, -0.6, 0.6, 1.8][slot % 4];
     ride.dist = -Math.floor(slot / 4) * 1.9;
     ride.group = {
-      id: group.id, title: group.title, t0: group.startsAt, go: Date.now() >= group.startsAt, me: group.me, mates: new Mates(group.me.id), live: null, sentAt: 0,
+      id: group.id, title: group.title, t0: group.held ? Infinity : group.startsAt, go: !group.held && Date.now() >= group.startsAt, me: group.me,
+      held: !!group.held, host: !!group.host, polledAt: Date.now(), // held: on the line till its host starts it (0010)
+      mates: new Mates(group.me.id), live: null, sentAt: 0,
       chat: new ChatLog(group.me.id), gate: new SendGate(), reacts: new Reactions(), watchers: new Watchers(), shownAt: 0, // chat (#85), spectators (#86)
     };
     const mine = () => (ride?.group?.id === group.id ? ride.group : null);
@@ -1440,6 +1483,7 @@ async function startRide(opts) {
       chat: (p) => { const G = mine(); if (G?.chat.receive(p, Date.now())) chatRender(); },
       react: (p) => { const G = mine(), r = G?.reacts.receive(p, Date.now()); if (r && r.to === G.me.id) reactPop(r); },
       watch: (p) => mine()?.watchers.receive(p, Date.now()),
+      start: () => { if (mine()?.held) groupCheckStart(); }, // the host says it started: the time comes from the database
     }).then((live) => { if (mine()) ride.group.live = live; else live.leave(); }).catch((e) => toast(e.message));
   }
   track('ride-start', [groupRace ? 'group-race' : group ? 'group' : racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
@@ -1537,6 +1581,7 @@ function advance(now = performance.now()) {
     if (ride.race.countdown <= 0) { ride.race.go = true; ride.race.t0 = ride.elapsed; cueBeep(1320, 0.45); }
     left = 0;
   }
+  if (ride.group?.held && Date.now() - ride.group.polledAt > 20000) groupCheckStart(); // a start broadcast missed
   if (ride.group && !ride.group.go) { // a group ride: on the line till the time it starts, the clock waiting too
     if (Date.now() >= ride.group.t0) {
       ride.group.go = true; cueBeep(1320, 0.45);
@@ -1725,9 +1770,11 @@ function frame(now) {
   if (settings.sound && settings.crowd !== false && !ride.paused && !pipOpen() && !overlayOn()) crowd(crowdLevel()); else crowdOff();
   if (ride.race || ride.group) {
     const G = ride.group, c = G ? (G.t0 - Date.now()) / 1000 : ride.race.countdown, el = $('countdown');
-    const txt = G ? (G.go ? (Date.now() - G.t0 < 1500 ? tr('GO!') : '') : c > 3 ? tr('Group start in {t}', { t: fmtTime(Math.ceil(c)) }) : String(Math.ceil(c)))
+    const txt = G ? (G.held ? (G.host ? tr('On the line') : tr('Waiting for the host to start · {n} on the line', { n: G.mates.list(Date.now()).length + 1 }))
+      : G.go ? (Date.now() - G.t0 < 1500 ? tr('GO!') : '') : c > 3 ? tr('Group start in {t}', { t: fmtTime(Math.ceil(c)) }) : String(Math.ceil(c)))
       : ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
     el.classList.toggle('wait', !!G && !G.go && c > 3);
+    groupHostRender();
     if (el.textContent !== txt) {
       el.textContent = txt; el.hidden = !txt;
       el.classList.remove('pop'); void el.offsetWidth; if (!el.classList.contains('wait')) el.classList.add('pop'); // the wait's clock ticks quietly
@@ -2727,6 +2774,7 @@ let rideFullscreen = false; // full screen was ours (installed app): leave it wi
 function finishRide() {
   if (!ride) return;
   setKeepReconnecting(false);
+  $('gr-host').hidden = true;
   if (rideFullscreen && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   rideFullscreen = false;
   advance();

@@ -89,3 +89,9 @@ test('group ride: the power in a packet is kept, held to 0..3000 W', () => {
   assert.equal(m.list(0)[0].power, 3000);
   assert.equal(packet({ id: 'u', name: 'U', dist: 0, v: 0, lane: 0, power: 251.6 }, 0).p, 252);
 });
+
+test('group ride held till its host starts it: open at once, over once it waited its 2 hours', () => {
+  const latest = T + 2 * 3600e3;
+  assert.deepEqual(rideWindow(latest, T, true), { state: 'open', held: true, in: null });
+  assert.equal(rideWindow(latest, latest + 1, true).state, 'over');
+});

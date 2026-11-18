@@ -12,7 +12,9 @@ export const STALE = 6;
 const LOOK = /^#[0-9a-f]{3,8}$/i;
 
 /** Where a ride starting at `startsAt` (ms) stands at `now` (ms): later, open (in s to the start), live (since s), over. */
-export function rideWindow(startsAt, now) {
+export function rideWindow(startsAt, now, held = false) {
+  // held (set up «when everyone is ready»): on the line at once, till its host starts it; startsAt is the latest it waits to
+  if (held) return now < startsAt ? { state: 'open', held: true, in: null } : { state: 'over' };
   const t = (now - startsAt) / 1000;
   if (t < -OPENS_BEFORE) return { state: 'later', in: -t };
   if (t < 0) return { state: 'open', in: -t };

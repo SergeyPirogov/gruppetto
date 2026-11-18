@@ -1694,6 +1694,11 @@ body.watching { overflow: hidden; }
 .social-sync { margin: 6px 0 0; font-size: .85rem; color: var(--muted); }
 .social-sync.bad { color: #fca5a5; }
 
+/* a held group ride: the host's start buttons, under the «waiting» line */
+.gr-host { position: absolute; left: 50%; top: calc(20% + 52px); transform: translateX(-50%); z-index: 9; display: grid; gap: 8px; justify-items: center; padding: 12px 16px; border-radius: 16px; background: rgba(15, 20, 32, .82); color: #fff; max-width: calc(100vw - 32px); text-align: center; }
+.gr-host[hidden] { display: none; }
+.gr-host span { font-size: .85rem; opacity: .8; }
+.gr-host-btns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
 /* your routes on Strava (openStravaRoutes): a list to pick one from */
 .strava-routes-panel { max-width: 520px; }
 .sr-list { display: grid; gap: 8px; max-height: 60vh; overflow: auto; padding: 4px 2px; }

@@ -245,9 +245,10 @@ export async function groupRides(days = 14) {
   return ok(await c.rpc('group_ride_list', { days })) || [];
 }
 /** A new group ride you host (and have joined), or a race over `laps` laps (kind 'race'): its id. */
-export async function createGroupRide({ title, routeId, startsAt, kind = 'ride', laps = null, league = null }) {
+export async function createGroupRide({ title, routeId, startsAt, kind = 'ride', laps = null, league = null, held = false }) {
   const c = await client();
-  const args = { p_title: title, p_route: routeId, p_starts: new Date(startsAt).toISOString(), p_kind: kind, p_laps: kind === 'race' ? laps : null };
+  const args = { p_title: title, p_route: routeId, p_starts: new Date(held ? Date.now() : startsAt).toISOString(), p_kind: kind, p_laps: kind === 'race' ? laps : null };
+  if (held) args.p_held = true; // started by its host when everyone is ready (0010)
   if (league && kind === 'race') args.p_league = league; // only when set: the call works on a database without leagues too
   return ok(await c.rpc('create_group_ride', args));
 }
@@ -268,20 +269,25 @@ export async function finishGroupRace(id, { time, avgW = null, wkg = null, sim =
 export async function groupRaceResults(id) {
   return ok(await (await client()).rpc('group_race_results', { p_id: id })) || [];
 }
+/** The host starts a held ride in `inSec` seconds (10..1800): its start time (ms). */
+export async function startGroupRide(id, inSec) {
+  return Date.parse(ok(await (await client()).rpc('start_group_ride', { p_id: id, p_in: Math.round(inSec) })));
+}
 export async function cancelGroupRide(id) { ok(await (await client()).rpc('cancel_group_ride', { p_id: id })); }
 export async function joinGroupRide(id, on = true) { ok(await (await client()).rpc('join_group_ride', { p_id: id, p_on: on })); }
 
 /**
  * Riding a group ride together, or watching it: a Realtime broadcast channel of its own. Its events: `pos` (each
  * rider's packet, group.js), `chat` (a message or a quick phrase, chat.js), `react` (a spectator's emoji to a rider)
- * and `watch` (a spectator saying they are there). `on` is { pos, chat, react, watch } (a function alone: pos).
+ * `watch` (a spectator saying they are there) and `start` (the host started a held ride: read its time from the
+ * database, not from this, which anyone could send). `on` is { pos, chat, react, watch } (a function alone: pos).
  * { joined, send(packet), say(event, payload), leave() }; nothing you send comes back to you.
  */
 export async function groupLive(id, on = {}) {
   const c = await client();
   const handlers = typeof on === 'function' ? { pos: on } : on;
   const ch = c.channel(`group:${id}`, { config: { broadcast: { self: false } } });
-  for (const ev of ['pos', 'chat', 'react', 'watch']) if (handlers[ev]) ch.on('broadcast', { event: ev }, (m) => handlers[ev](m.payload));
+  for (const ev of ['pos', 'chat', 'react', 'watch', 'start']) if (handlers[ev]) ch.on('broadcast', { event: ev }, (m) => handlers[ev](m.payload));
   let joined = false;
   ch.subscribe((s) => { joined = s === 'SUBSCRIBED'; });
   const say = (event, payload) => { if (joined) ch.send({ type: 'broadcast', event, payload }).catch(() => {}); };

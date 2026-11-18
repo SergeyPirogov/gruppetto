@@ -4,7 +4,7 @@
 // without a project (social-config.js) init returns at once and none of it shows.
 import {
   socialOn, initSocial, currentUser, onUser, signIn, signOut, loadProfile, saveProfile, queueAdd, queued, sendResults, leaderboard, deleteAccount,
-  loadActivities, saveActivities, sendRides, regionBoard, riderBoard, groupRides, createGroupRide, cancelGroupRide, joinGroupRide, groupLive,
+  loadActivities, saveActivities, sendRides, regionBoard, riderBoard, groupRides, createGroupRide, cancelGroupRide, joinGroupRide, groupLive, startGroupRide,
   finishGroupRace, groupRaceResults, recordIds, loadRecord, saveRecord, deleteRecords,
 } from './social.js';
 import { rideWindow } from './group.js';
@@ -123,6 +123,7 @@ function buildUi() {
   initWatch();
   $('gr-form').onsubmit = groupCreate;
   $('gr-kind').onchange = $('gr-route').onchange = grLapsShow;
+  $('gr-start').onchange = grStartShow;
   initLeagues({
     ctx, signedIn: () => !!currentUser(), hasProfile: () => !!profileRow,
     needAccount: () => { if (!currentUser()) signIn(redirect()).catch((e) => status(e.message)); else openSetup(); },
@@ -277,7 +278,7 @@ async function renderToday(force = false) {
   } else if (!profileRow.country || profileRow.country === 'UA') {
     tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ratings of Ukraine')}</small><b>${tr('Pick your oblast')}</b><span>${tr('and your kilometres count for it')}</span></button>`);
   }
-  const now = Date.now(), next = (rides || []).filter((g) => rideWindow(Date.parse(g.starts_at), now).state !== 'over');
+  const now = Date.now(), next = (rides || []).filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   const g = next.find((x) => x.joined) || next[0];
   if (g) {
     const d = new Date(g.starts_at), today = d.toDateString() === new Date().toDateString();
@@ -744,6 +745,10 @@ export const groupChannel = (id, on) => groupLive(id, on);
 /** A group race: your finish to the results, and the results (social.js). */
 export const groupFinish = (id, result) => finishGroupRace(id, result);
 export const groupResults = (id) => groupRaceResults(id);
+/** A held ride started by its host, in `inSec` seconds: its start time (ms). */
+export const groupStart = (id, inSec) => startGroupRide(id, inSec);
+/** A ride's row as the database has it now (its start time, held or not), or null. */
+export const groupRow = async (id) => (await groupRides()).find((g) => g.id === id) || null;
 
 /** The calendar: what is planned, joining, riding, and a new ride. */
 export function openGroups(focus = null) {
@@ -759,6 +764,7 @@ export function openGroups(focus = null) {
   $('gr-route').innerHTML = list.map((r) => `<option value="${ctx.esc(r.id)}">${ctx.esc(r.name)}</option>`).join('');
   $('gr-route').value = list.some((r) => r.id === cur?.id) ? cur.id : list[0]?.id || '';
   grLapsShow();
+  grStartShow();
   if (!$('gr-date').value) {
     const t = new Date(Date.now() + 3600e3); t.setMinutes(0, 0, 0);
     const pad = (n) => String(n).padStart(2, '0');
@@ -769,6 +775,12 @@ export function openGroups(focus = null) {
   loadLeagues(); // the league select in the form, and the Leagues tab
   clearInterval(grTimer); // the «starts in» and the Ride buttons keep up with the clock while the calendar is open
   grTimer = setInterval(() => { if ($('gr-view').hidden) clearInterval(grTimer); else renderGroups(); }, 15000);
+}
+
+/** The date and time: only for a ride at a set time (not one started when everyone is ready). */
+function grStartShow() {
+  const ready = $('gr-start').value === 'ready';
+  for (const id of ['gr-date', 'gr-time']) { $(id).closest('label').hidden = ready; $(id).required = !ready; }
 }
 
 /** The laps: for a race on a loop (a point-to-point route is raced once, start to finish). */
@@ -796,14 +808,15 @@ async function loadGroups() {
 const inTime = (s) => (s < 3600 ? tr('{n} min', { n: Math.max(1, Math.ceil(s / 60)) }) : s < 86400 ? tr('{n} h', { n: Math.round(s / 3600) }) : tr('{n} d', { n: Math.round(s / 86400) }));
 
 function renderGroups() {
-  const now = Date.now(), rows = grRows.filter((g) => rideWindow(Date.parse(g.starts_at), now).state !== 'over');
+  const now = Date.now(), rows = grRows.filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   $('gr-empty').hidden = !!rows.length;
   $('gr-list').innerHTML = rows.map((g) => {
-    const w = rideWindow(Date.parse(g.starts_at), now), d = new Date(g.starts_at);
+    const w = rideWindow(Date.parse(g.starts_at), now, g.held), d = new Date(g.starts_at);
     const route = ctx.routes().find((r) => r.id === g.route_id);
     const day = d.toLocaleDateString(ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' });
     const time = d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' });
     const state = w.state === 'live' ? `<span class="gr-tag live">${tr('Riding now')}</span>`
+      : w.held ? `<span class="gr-tag open">${tr('On the line: starts when {host} starts it', { host: g.mine ? tr('you') : g.host_name || tr('the host') })}</span>`
       : w.state === 'open' ? `<span class="gr-tag open">${tr('On the line: starts in {t}', { t: inTime(w.in) })}</span>`
         : `<span class="gr-tag">${tr('in {t}', { t: inTime(w.in) })}</span>`;
     const can = route && w.state !== 'later';
@@ -816,7 +829,7 @@ function renderGroups() {
       g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Call off')}</button>` : '',
     ].join('');
     return `<li class="gr-row${g.id === grFocus ? ' focus' : ''}${w.state !== 'later' ? ' soon' : ''}" data-row="${g.id}">`
-      + `<div class="gr-when"><b>${ctx.esc(time)}</b><small>${ctx.esc(day)}</small></div>`
+      + (g.held ? `<div class="gr-when"><b>⏳</b><small>${ctx.esc(tr('when ready'))}</small></div>` : `<div class="gr-when"><b>${ctx.esc(time)}</b><small>${ctx.esc(day)}</small></div>`)
       + `<div class="gr-what"><b>${ctx.esc(g.title)}</b>${g.kind === 'race' ? `<span class="gr-race">${ctx.esc(raceLabel(g, route))}</span>` : ''}`
       + `<small>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))} · ${ctx.esc(g.host_name || tr('a rider'))} · 👥 ${g.riders}</small>${state}</div>`
       + `<div class="gr-acts">${acts}</div></li>`;
@@ -847,7 +860,7 @@ async function groupAction(ev) {
       if (!g.joined) await joinGroupRide(g.id, true).catch(() => {});
       $('gr-view').hidden = true;
       ctx.track('social', 'group-ride');
-      ctx.startGroupRide({ id: g.id, title: g.title, routeId: g.route_id, startsAt: Date.parse(g.starts_at), kind: g.kind || 'ride', laps: g.laps || 1, me: { id: currentUser().id, name: profileRow.display_name || ctx.settings.name || tr('Rider') } });
+      ctx.startGroupRide({ id: g.id, title: g.title, routeId: g.route_id, startsAt: Date.parse(g.starts_at), held: !!g.held, host: !!g.mine, kind: g.kind || 'ride', laps: g.laps || 1, me: { id: currentUser().id, name: profileRow.display_name || ctx.settings.name || tr('Rider') } });
     }
   } catch (e) { ctx.toast(e.message); }
 }
@@ -858,14 +871,14 @@ function watch(g, follow = null) {
   const u = currentUser();
   ctx.track('social', 'group-watch');
   openWatch({
-    ride: g, route, follow, channel: groupChannel, tr, esc: ctx.esc, toast: ctx.toast, track: ctx.track,
+    ride: g, route, follow, channel: groupChannel, reload: groupRow, tr, esc: ctx.esc, toast: ctx.toast, track: ctx.track,
     me: u && profileRow ? { id: u.id, name: profileRow.display_name || tr('Spectator') } : null, canChat: !!(u && profileRow),
   });
 }
 async function watchById(id, follow) {
   try {
     const g = (await groupRides()).find((x) => x.id === id);
-    if (!g || rideWindow(Date.parse(g.starts_at), Date.now()).state === 'over') { ctx.toast(tr('This ride is over or was called off')); openGroups(); return; }
+    if (!g || rideWindow(Date.parse(g.starts_at), Date.now(), g.held).state === 'over') { ctx.toast(tr('This ride is over or was called off')); openGroups(); return; }
     watch(g, follow);
   } catch (e) { ctx.toast(e.message); }
 }
@@ -876,15 +889,16 @@ async function groupCreate(ev) {
   err.hidden = true;
   if (!currentUser()) { signIn(redirect()).catch((e) => status(e.message)); return; }
   if (!profileRow) { openSetup(); return; }
+  const held = $('gr-start').value === 'ready';
   const startsAt = new Date(`${$('gr-date').value}T${$('gr-time').value}`);
-  if (!(startsAt.getTime() > Date.now() - 60e3)) { err.textContent = tr('Pick a time to come'); err.hidden = false; return; }
+  if (!held && !(startsAt.getTime() > Date.now() - 60e3)) { err.textContent = tr('Pick a time to come'); err.hidden = false; return; }
   $('gr-create').disabled = true;
   try {
     const kind = $('gr-kind').value === 'race' ? 'race' : 'ride';
     const laps = Math.max(1, Math.min(10, Math.round(Number($('gr-laps').value) || 1)));
     const route = ctx.routes().find((x) => x.id === $('gr-route').value);
     const league = kind === 'race' ? chosenLeague() : null;
-    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt, kind, laps: route?.oneWay ? 1 : laps, league });
+    const id = await createGroupRide({ title: $('gr-title').value.trim(), routeId: $('gr-route').value, startsAt, kind, laps: route?.oneWay ? 1 : laps, league, held });
     if (league) loadLeagues(); // its race count
     ctx.track('social', 'group-create');
     $('gr-title').value = '';
