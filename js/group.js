@@ -101,3 +101,31 @@ export function spectate(mates, now, { length = 0, laps = 1, oneWay = false } = 
     return { id: r.id, name: r.name, color: r.color, stripe: r.stripe, dist: r.dist, v: r.v || 0, power: r.power || 0, wkg: r.wkg || 0, lap, finish: r.finish ?? null, place: i + 1, gap };
   });
 }
+
+// ---------- Race categories (0012) ----------
+
+export const CATS = ['A', 'B', 'C', 'D'];
+const catOf = (wkg) => (!(wkg > 0) ? 0 : wkg >= 4.0 ? 4 : wkg >= 3.2 ? 3 : wkg >= 2.5 ? 2 : 1);
+/** A rider's category, as the database sets it: the stronger of their FTP's W/kg and the race's own. */
+export function raceCat(ftpWkg, raceWkg) {
+  const c = Math.max(catOf(ftpWkg >= 0.5 && ftpWkg <= 10 ? ftpWkg : 0), catOf(raceWkg));
+  return c ? 'ABCD'[4 - c] : null;
+}
+
+/** The results of one category (or all, for null), placed within it, with each one's gap to its winner. */
+export function catResults(rows, cat = null) {
+  const list = (rows || []).filter((r) => !cat || r.cat === cat);
+  const best = list[0]?.time_s;
+  return list.map((r, i) => ({ ...r, place: i + 1, gap: i ? r.time_s - best : 0 }));
+}
+
+/** The categories a race's results have, in order A..D. */
+export const catsIn = (rows) => CATS.filter((c) => (rows || []).some((r) => r.cat === c));
+
+/** The results as text for a club's channel: a title, then per category the places, names, times and gaps. */
+export function resultsText(rows, { title = '', fmt = (s) => String(s) } = {}) {
+  const cats = catsIn(rows);
+  const block = (cat) => catResults(rows, cat).map((r) => `${r.place}. ${r.name || '?'}  ${fmt(Math.round(r.time_s))}${r.gap ? `  +${fmt(Math.round(r.gap))}` : ''}${r.wkg ? `  ${Number(r.wkg).toFixed(1)} W/kg` : ''}${!cat && r.cat ? `  [${r.cat}]` : ''}`).join('\n');
+  const parts = cats.length > 1 ? cats.map((c) => `${c}\n${block(c)}`) : [block(null)];
+  return [title, ...parts].filter(Boolean).join('\n\n');
+}

@@ -262,10 +262,12 @@ export async function leagueStandings(id) { return ok(await (await client()).rpc
 /** A league's races, in order: [{ id, title, route_id, starts_at, laps, finishers }]. */
 export async function leagueRaces(id) { return ok(await (await client()).rpc('league_races', { p_id: id })) || []; }
 /** Your finish in a group race (s), with your average watts and W/kg; the first one sent stands. */
-export async function finishGroupRace(id, { time, avgW = null, wkg = null, sim = false }) {
-  ok(await (await client()).rpc('finish_group_race', { p_id: id, p_time: time, p_avg_w: avgW, p_wkg: wkg, p_sim: sim }));
+export async function finishGroupRace(id, { time, avgW = null, wkg = null, sim = false, ftpWkg = null }) {
+  const args = { p_id: id, p_time: time, p_avg_w: avgW, p_wkg: wkg, p_sim: sim };
+  if (ftpWkg) args.p_ftp_wkg = ftpWkg; // your category's (0012); without it the database places you by the race
+  ok(await (await client()).rpc('finish_group_race', args));
 }
-/** A group race's results, fastest first: [{ name, time_s, avg_w, wkg, sim, me }]. */
+/** A group race's results, fastest first: [{ name, time_s, avg_w, wkg, sim, me, cat }] (cat: A..D, 0012). */
 export async function groupRaceResults(id) {
   return ok(await (await client()).rpc('group_race_results', { p_id: id })) || [];
 }

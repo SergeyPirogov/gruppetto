@@ -40,7 +40,7 @@ import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './p
 import { nextWeather } from './atmo-blend.js';
 import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
 import { PASS_AFTER, heldBy, pickLane } from './passing.js';
-import { Mates, packet as groupPacket } from './group.js';
+import { Mates, packet as groupPacket, catResults, catsIn, resultsText } from './group.js';
 import { ChatLog, Reactions, Watchers, SendGate, QUICK } from './chat.js';
 import { socialOn } from './social.js';
 
@@ -1851,7 +1851,7 @@ function groupRaceFinished() {
   const s = recorder.summary(), sim = ride.simulated && !window.__pretendTrainer;
   const avgW = s?.avgPower ?? null, wkg = avgW ? Math.round((avgW / Math.max(30, settings.weight)) * 100) / 100 : null;
   groupSent = { id: ride.group.id, p: null };
-  groupSent.p = ride.group.sent = groupFinish(ride.group.id, { time: Math.round(ride.race.myTime * 10) / 10, avgW, wkg, sim })
+  groupSent.p = ride.group.sent = groupFinish(ride.group.id, { time: Math.round(ride.race.myTime * 10) / 10, avgW, wkg, sim, ftpWkg: settings.ftp && settings.weight ? Math.round(settings.ftp / settings.weight * 100) / 100 : null })
     .catch((e) => toast(tr('The result did not reach the table: {error}', { error: e.message })));
 }
 
@@ -1870,18 +1870,44 @@ function groupRaceTable(e) {
       if (groupSent?.id === id) await groupSent.p; // your own time in first
       const rows = await groupResults(id);
       if (shown.entry !== e || !rows.length) throw 0;
-      const mine = rows.findIndex((x) => x.me), best = rows[0].time_s;
-      $('sum-race').hidden = false;
-      $('sum-race-place').textContent = mine >= 0 ? tr('{n} of {m}', { n: mine + 1, m: rows.length }) : '';
-      // those still riding when you finished, from the ride's own table, after the finishers, marked * (until they are in)
-      const riding = (e.race || []).filter((x) => x.est && !x.me && !rows.some((r) => r.name === x.name)).map((x) => ({ name: x.name, time_s: x.time, est: true }));
-      $('sum-race-rows').innerHTML = [...rows, ...riding].map((x, i) => `<tr class="${x.me ? 'me' : ''}"><td>${x.est ? '' : i + 1}</td><td>${esc(x.name || tr('Rider'))}${x.sim ? ` <small class="muted" title="${esc(tr('Ridden in the simulator'))}">🖥</small>` : ''}</td>`
-        + `<td>${fmtTime(Math.round(x.time_s))}${x.est ? ' *' : ''}${x.wkg ? ` <small class="muted">${Number(x.wkg).toFixed(1)} ${U.wkg}</small>` : ''}</td><td>${i ? `+${fmtTime(Math.round(x.time_s - best))}` : ''}</td></tr>`).join('');
+      raceTable.rows = rows; raceTable.e = e;
+      // your category first, the first time (a club reads its own); All a tap away
+      const cats = catsIn(rows), myCat = rows.find((x) => x.me)?.cat;
+      if (raceTable.id !== id) { raceTable.id = id; raceTable.cat = cats.length > 1 && myCat ? myCat : null; }
+      renderRaceTable();
     } catch { /* no results yet, or no connection: the ride's own table stays */ }
     if (Date.now() < until) groupTableTimer = setTimeout(load, 15000);
   };
   load();
 }
+
+/** The race's results on the summary: by category (tabs, when there are more than one), with a copy for the club. */
+const raceTable = { id: null, cat: null, rows: [], e: null };
+function renderRaceTable() {
+  const { rows, e } = raceTable, cats = catsIn(rows);
+  if (raceTable.cat && !cats.includes(raceTable.cat)) raceTable.cat = null;
+  const list = catResults(rows, raceTable.cat), mine = list.find((x) => x.me);
+  $('sum-race').hidden = false;
+  $('sum-race-place').textContent = mine ? `${raceTable.cat ? `${raceTable.cat} · ` : ''}${tr('{n} of {m}', { n: mine.place, m: list.length })}` : '';
+  $('sum-race-cats').hidden = cats.length < 2;
+  $('sum-race-cats').innerHTML = [null, ...cats].map((c) => `<button class="pill-btn${c === raceTable.cat ? ' sel' : ''}" data-cat="${c || ''}">${c ? `${tr('Cat')} ${c}` : tr('All')}</button>`).join('');
+  // those still riding when you finished, from the ride's own table, after the finishers, marked * (until they are in)
+  const riding = raceTable.cat ? [] : (e.race || []).filter((x) => x.est && !x.me && !rows.some((r) => r.name === x.name)).map((x) => ({ name: x.name, time_s: x.time, est: true }));
+  $('sum-race-rows').innerHTML = [...list, ...riding].map((x) => `<tr class="${x.me ? 'me' : ''}"><td>${x.est ? '' : x.place}</td><td>${esc(x.name || tr('Rider'))}${x.cat && !raceTable.cat ? ` <small class="race-cat cat-${x.cat}">${x.cat}</small>` : ''}${x.sim ? ` <small class="muted" title="${esc(tr('Ridden in the simulator'))}">🖥</small>` : ''}</td>`
+    + `<td>${fmtTime(Math.round(x.time_s))}${x.est ? ' *' : ''}${x.wkg ? ` <small class="muted">${Number(x.wkg).toFixed(1)} ${U.wkg}</small>` : ''}</td><td>${x.gap ? `+${fmtTime(Math.round(x.gap))}` : ''}</td></tr>`).join('');
+}
+$('sum-race-cats').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-cat]');
+  if (!b) return;
+  raceTable.cat = b.dataset.cat || null; renderRaceTable();
+});
+$('btn-race-copy').addEventListener('click', async () => {
+  const e = raceTable.e;
+  const title = e ? `🏁 ${[e.groupRace?.title, e.routeName, new Date(e.date).toLocaleDateString(locale)].filter(Boolean).join(' · ')}` : '';
+  const text = resultsText(raceTable.rows, { title, fmt: fmtTime });
+  try { await navigator.clipboard.writeText(text); toast(tr('Results copied: paste them in your club\'s chat')); } catch { toast(text); }
+  track('social', 'race-copy');
+});
 
 /** Results for the summary: those still riding are given the time they would take at their speed now. */
 function raceResults() {
@@ -3103,7 +3129,7 @@ function showSummary(e, { live = false, from = null } = {}) {
   $('btn-challenge').hidden = !(e.chart?.d?.length > 1 && !e.race && routes.some((r) => r.id === e.routeId && !r.custom));
   const files = (on) => {
     for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !on; $(id).disabled = !sum; }
-    document.querySelector('#summary .hint:last-of-type').hidden = !on;
+    $('sum-fit-hint').hidden = !on; // (by id: «.hint:last-of-type» was the race card's, the first in the page)
   };
   const uploadUi = (can) => {
     $('btn-icu-upload').hidden = !can;
