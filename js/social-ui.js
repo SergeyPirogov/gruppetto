@@ -158,7 +158,7 @@ function renderHeader() {
   const u = currentUser();
   b.hidden = false;
   b.classList.toggle('in', !!u);
-  // a guest: who you are now and the way in; signed in: you, your oblast, and that your things are on every device
+  // a guest: who you are now and the way in; signed in: you, your region, and that your things are on every device
   $('hdr-guest').hidden = !!u;
   const name = profileRow?.display_name || u?.email?.split('@')[0] || '';
   // what the last sync did, not a promise: «synced» only once it went through
@@ -216,7 +216,7 @@ const LOCK_IC = '<svg class="lock-ic" viewBox="0 0 24 24" role="img" aria-label=
 // ---------- A guest at something that wants an account ----------
 const LOCK_SEEN = 'gruppetto.lockSeen';
 const LOCKS = {
-  ua: { title: 'Ratings of Ukraine: with an account', why: 'So that your kilometres and climbing count for your oblast. Anyone can look at the board.', guest: 'Just look, as a guest' },
+  ua: { title: 'Ratings of Ukraine: with an account', why: 'So that your kilometres and climbing count for your region. Anyone can look at the board.', guest: 'Just look, as a guest' },
   group: { title: 'Group rides: with an account', why: 'So that the others see who rides beside them. Anyone sees the calendar; joining and riding come after signing in.', guest: 'See the calendar as a guest' },
 };
 const OPENS = { tables: 'the tables of climbs, sprints and laps', ua: 'Ratings of Ukraine', group: 'group rides', sync: 'your profile and history on every device' };
@@ -253,12 +253,12 @@ export function socialSignIn(source = 'welcome') {
 let todayAt = 0;
 let todayData = null;
 
-/** The lobby's strip for a signed-in rider: your oblast this week, the next group ride. Nothing for a guest. */
+/** The lobby's strip for a signed-in rider: your region this week, the next group ride. Nothing for a guest. */
 async function renderToday(force = false) {
   const box = $('me-today');
   if (!box) return;
   const u = currentUser();
-  if (!u || !profileRow) { box.hidden = true; return; } // the profile first (its oblast)
+  if (!u || !profileRow) { box.hidden = true; return; } // the profile first (its region)
   if (force || !todayData || Date.now() - todayAt > 120000) {
     todayAt = Date.now();
     const [regions, rides] = await Promise.all([
@@ -272,11 +272,11 @@ async function renderToday(force = false) {
   const tiles = [];
   if (profileRow?.region) {
     const r = regions?.find((x) => x.region === profileRow.region);
-    tiles.push(`<button class="me-tile" data-today="ua"><small>${tr('Your oblast this week')}</small>`
+    tiles.push(`<button class="me-tile" data-today="ua"><small>${tr('Your region this week')}</small>`
       + `<b>${ctx.esc(regionName(profileRow.region, ctx.lang))}${r ? ` · ${tr('{place} of {n}', { place: r.place, n: regions.length })}` : ''}</b>`
       + `<span>${r ? tr('{km} km together, {riders} riding', { km: Math.round(Number(r.distance_km)).toLocaleString(ctx.locale), riders: r.riders }) : tr('No kilometres yet this week: yours can be the first')}</span></button>`);
   } else if (!profileRow.country || profileRow.country === 'UA') {
-    tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ratings of Ukraine')}</small><b>${tr('Pick your oblast')}</b><span>${tr('and your kilometres count for it')}</span></button>`);
+    tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ratings of Ukraine')}</small><b>${tr('Pick your region')}</b><span>${tr('and your kilometres count for it')}</span></button>`);
   }
   const now = Date.now(), next = (rides || []).filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   const g = next.find((x) => x.joined) || next[0];
@@ -678,7 +678,7 @@ export function socialSegLeader(climbId) {
 const uaCache = new Map(); // filters -> { at, data }, a minute
 const uaPick = (id) => $(id).querySelector('.sel')?.dataset.v || '';
 
-/** Oblast against oblast, or rider against rider, by kilometres or climbing. */
+/** Region against region, or rider against rider, by kilometres or climbing. */
 export function openUa() {
   if (!on()) return;
   $('ua-view').hidden = false;
@@ -695,15 +695,15 @@ async function renderUa() {
   const up = (x) => `${Number(x).toLocaleString(ctx.locale)} ${tr('m')}`;
   $('ua-head').innerHTML = riders
     ? `<tr><th>#</th><th>${tr('Rider')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Rides')}</th></tr>`
-    : `<tr><th>#</th><th>${tr('Oblast')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
+    : `<tr><th>#</th><th>${tr('Region')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
   const body = $('ua-rows');
   body.innerHTML = `<tr><td colspan="5" class="muted">${tr('Loading…')}</td></tr>`;
   $('ua-empty').hidden = true;
   // who is not on the board yet, and why
   const u = currentUser();
   $('ua-cta').hidden = !!(u && profileRow?.region);
-  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to put your kilometres on the board of your oblast')}`
-    : `<button class="link-btn" data-ua-setup>${tr('Pick your oblast')}</button> ${tr('to ride for it')}`;
+  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to put your kilometres on the board of your region')}`
+    : `<button class="link-btn" data-ua-setup>${tr('Pick your region')}</button> ${tr('to ride for it')}`;
   const si = $('ua-cta').querySelector('[data-ua-signin]'), su = $('ua-cta').querySelector('[data-ua-setup]');
   if (si) si.onclick = () => signIn(redirect()).catch((e) => status(e.message));
   if (su) su.onclick = () => openSetup();

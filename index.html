@@ -48,7 +48,7 @@
       <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
       <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
       <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
-      <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Oblast against oblast: kilometres and climbing">🇺🇦 <span>Ratings of Ukraine</span></button>
+      <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Region against region: kilometres and climbing">🇺🇦 <span>Ratings of Ukraine</span></button>
       <button id="hdr-group" class="hdr-account hdr-ua" hidden title="Ride together at a set time, live on the road">👥 <span>Group rides</span></button>
       <span id="hdr-guest" class="hdr-guest" hidden>You are a guest</span>
       <button id="hdr-account" class="hdr-account" hidden></button>
@@ -804,7 +804,7 @@
         <div class="fields">
           <label>Name in the tables <input id="ss-name" maxlength="24" autocomplete="nickname"></label>
           <label>Country <select id="ss-country"></select></label>
-          <label id="ss-region-box" hidden>Oblast, for the ratings of Ukraine <select id="ss-region"></select></label>
+          <label id="ss-region-box" hidden>Region, for the ratings of Ukraine <select id="ss-region"></select></label>
           <label>Gender, for the filter <select id="ss-gender"><option value="">Rather not say</option><option value="f">Female</option><option value="m">Male</option></select></label>
         </div>
         <label class="check"><input type="checkbox" id="ss-public" checked> Show me in the tables</label>
@@ -834,24 +834,24 @@
       </div>
     </div>
 
-    <!-- the ratings across Ukraine (0003_regions.sql): oblast against oblast, rider against rider -->
+    <!-- the ratings across Ukraine (0003_regions.sql): region against region, rider against rider -->
     <div id="ua-view" class="wk-menu" hidden>
       <div class="drawer-bg" data-ua-close></div>
       <div class="wk-menu-panel lb-panel">
         <div class="wk-menu-head"><h2>Ratings of Ukraine</h2><button class="drawer-close" data-ua-close aria-label="Close">✕</button></div>
         <div class="lb-filters">
-          <div class="lb-chips" id="ua-tab"><button class="pill-btn sel" data-v="regions">Oblasts</button><button class="pill-btn" data-v="riders">Riders</button></div>
+          <div class="lb-chips" id="ua-tab"><button class="pill-btn sel" data-v="regions">Regions</button><button class="pill-btn" data-v="riders">Riders</button></div>
           <div class="lb-chips" id="ua-period"><button class="pill-btn sel" data-v="week">This week</button><button class="pill-btn" data-v="month">This month</button><button class="pill-btn" data-v="all">All time</button></div>
           <div class="lb-chips" id="ua-metric"><button class="pill-btn sel" data-v="km">Kilometres</button><button class="pill-btn" data-v="climb">Climbing</button></div>
           <div class="lb-chips" id="ua-gender" hidden><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
-          <select id="ua-region" aria-label="Oblast" hidden></select>
+          <select id="ua-region" aria-label="Region" hidden></select>
         </div>
         <div class="lb-scroll">
           <table class="lb-table ua-table"><thead id="ua-head"></thead><tbody id="ua-rows"></tbody></table>
         </div>
-        <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to put your oblast on the board.</p>
+        <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to put your region on the board.</p>
         <p id="ua-cta" class="hint" hidden></p>
-        <p class="hint">Rides on a trainer of riders signed in, each by the oblast in their profile. The simulator does not count.</p>
+        <p class="hint">Rides on a trainer of riders signed in, each by the region in their profile. The simulator does not count.</p>
       </div>
     </div>
 
@@ -880,7 +880,7 @@
             <p class="welcome-plus">Everything a guest has, and:</p>
             <ul class="welcome-list plus">
               <li>Your times in the tables of climbs, sprints and laps, women and men apart</li>
-              <li>Ratings of Ukraine: you ride for your oblast</li>
+              <li>Ratings of Ukraine: you ride for your region</li>
               <li>Group rides, live with friends</li>
               <li>Profile, workouts and history on every device</li>
             </ul>
