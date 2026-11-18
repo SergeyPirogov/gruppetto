@@ -1494,7 +1494,8 @@ function advance(now = performance.now()) {
   if (ride.group && !ride.group.go) { // a group ride: on the line till the time it starts, the clock waiting too
     if (Date.now() >= ride.group.t0) {
       ride.group.go = true; cueBeep(1320, 0.45);
-      if (ride.race) { ride.race.go = true; ride.race.t0 = ride.elapsed; }
+      // a group race's clock runs from the set start, also for one who comes late (the server checks start + time)
+      if (ride.race) { ride.race.go = true; ride.race.t0 = ride.elapsed - Math.max(0, (Date.now() - ride.group.t0) / 1000); }
     } else { t += left * 1000; left = 0; }
   }
   groupSend();
