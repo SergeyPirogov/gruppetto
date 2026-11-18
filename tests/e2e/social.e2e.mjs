@@ -93,6 +93,7 @@ function mockSupabase({ profile = null, offline = false } = {}) {
     }
     // group rides and leagues (#84)
     if (p === '/rest/v1/rpc/group_ride_list') return send(route, 200, db.rides || []);
+    if (p === '/rest/v1/rpc/group_race_results') return send(route, 200, db.raceResults || []);
     if (p === '/rest/v1/rpc/league_list') return send(route, 200, db.leagues || []);
     if (p === '/rest/v1/rpc/create_league') {
       const id = `00000000-0000-4000-8000-00000000000${(db.leagues || []).length + 1}`;
@@ -552,6 +553,34 @@ test('a route of yours on Strava: listed, picked, and in My routes', async () =>
   await page.evaluate(() => document.querySelector('#sr-list [data-id="9001"]').click());
   await page.waitForFunction(() => [...document.querySelectorAll('#route-list .option[data-id]')].some((e) => e.textContent.includes('Kyiv loop')), null, { timeout: 60000 });
   assert.ok(seen.includes('/api/v3/routes/9001/export_gpx'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('race results by category: yours first, All a tap away, and a copy for the club', async () => {
+  const id = 'r1700000055000';
+  const entry = { id, date: new Date().toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', groupRace: { id: '33333333-0000-4000-8000-000000000003', title: 'Club crit' },
+    summary: { duration: 1460, distance: 12000, avgPower: 230 }, chart: { every: 5, pw: [], hr: [], d: [], wb: [] }, lapTimes: [], splits: [], efforts: [], updatedAt: 9 };
+  const mock = mockSupabase({ profile: PROFILE() });
+  mock.db.raceResults = [
+    { name: 'Taras', time_s: 1450, avg_w: 300, wkg: 4.1, sim: false, me: false, cat: 'A' },
+    { name: 'Olena', time_s: 1460, avg_w: 200, wkg: 3.3, sim: false, me: true, cat: 'B' },
+    { name: 'Bo', time_s: 1500, avg_w: 210, wkg: 3.2, sim: false, me: false, cat: 'B' },
+  ];
+  const { page, context, errors } = await openApp({ mock, local: { ...LOCAL, 'gruppetto.history': [entry] }, signedIn: true });
+  await page.evaluate(() => { window.__copied = null; navigator.clipboard.writeText = async (t) => { window.__copied = t; }; });
+  await page.waitForSelector('#hdr-account.in');
+  await page.evaluate(() => document.querySelector('[data-open="history"]').click());
+  await page.evaluate((id) => document.querySelector(`.hist-row[data-id="${id}"]`).click(), id);
+  await page.waitForSelector('#sum-race:not([hidden]) #sum-race-cats:not([hidden])', { timeout: 15000 });
+  assert.match(await page.textContent('#sum-race-place'), /B · 1 of 2/); // your category first
+  assert.equal(await page.locator('#sum-race-rows tr').count(), 2);
+  await page.click('#sum-race-cats [data-cat=""]');
+  assert.equal(await page.locator('#sum-race-rows tr').count(), 3);
+  assert.match(await page.textContent('#sum-race-place'), /2 of 3/);
+  await page.click('#btn-race-copy');
+  await page.waitForFunction(() => window.__copied);
+  assert.match(await page.evaluate(() => window.__copied), /Club crit[\s\S]*\nA\n1\. Taras[\s\S]*\nB\n1\. Olena[\s\S]*2\. Bo .*\+0:40/);
   assert.deepEqual(errors, []);
   await context.close();
 });

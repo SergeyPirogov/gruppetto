@@ -177,6 +177,8 @@ export const UK = {
   'The trainer does not accept wheel circumference — using grade-based gears': 'Тренажер не приймає довжину кола колеса, передачі працюють через нахил',
   'Low cadence — ERG temporarily reduced': 'Низький каденс, ERG тимчасово знижено', 'Power dropped — ERG temporarily reduced': 'Потужність упала, ERG тимчасово знижено',
   'Interval skipped ⏭': 'Інтервал пропущено ⏭',
+  'Cat': 'Кат.', 'All': 'Усі', 'Copy the results': 'Скопіювати протокол', "Results copied: paste them in your club's chat": 'Протокол скопійовано: встав його в чат клубу',
+  'Categories by W/kg (A from 4.0, B 3.2, C 2.5, D below): your FTP\'s, or the race\'s own if you rode above it.': 'Категорії за Вт/кг (A від 4,0, B від 3,2, C від 2,5, D нижче): за твоїм FTP або за самою гонкою, якщо їхав сильніше.',
   'Start': 'Старт', 'At a set time': 'У визначений час', 'When everyone is ready: I start it': 'Коли всі готові: стартую я',
   'On the line: starts when {host} starts it': 'На старті: почнеться, коли {host} дасть старт', 'you': 'ти', 'the host': 'організатор', 'when ready': 'коли готові',
   'On the line': 'На старті', 'Waiting for the host to start · {n} on the line': 'Чекаємо старту від організатора · на старті {n}',

@@ -1705,3 +1705,9 @@ body.watching { overflow: hidden; }
 .sr-row { text-align: left; }
 .sr-row[disabled] { opacity: .5; cursor: default; }
 .rc-strava b { color: #fc5200; }
+
+/* race categories (0012): tabs over the results, a letter by each name under All */
+.race-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.race-cats[hidden] { display: none; }
+.race-cat { display: inline-block; min-width: 1.4em; text-align: center; border-radius: 6px; padding: 0 4px; font-weight: 800; color: #0f1420; }
+.cat-A { background: #f87171; } .cat-B { background: #4ade80; } .cat-C { background: #60a5fa; } .cat-D { background: #facc15; }

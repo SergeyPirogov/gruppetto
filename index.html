@@ -669,8 +669,9 @@
       <div id="sum-ftp" class="ftp-tip" hidden></div>
       <div id="sum-race" class="card sum-race" hidden>
         <div class="sum-chart-head"><h2>Race results</h2><span id="sum-race-place" class="race-place"></span></div>
+        <div id="sum-race-cats" class="race-cats" hidden></div>
         <table><tbody id="sum-race-rows"></tbody></table>
-        <p class="hint">* still riding: the time at their speed</p>
+        <p class="hint"><span>* still riding: the time at their speed</span><br><span>Categories by W/kg (A from 4.0, B 3.2, C 2.5, D below): your FTP's, or the race's own if you rode above it.</span> <button id="btn-race-copy" class="link-btn">Copy the results</button></p>
       </div>
       <div id="sum-intervals" class="card sum-intervals" hidden>
         <div class="sum-chart-head"><h2>Intervals</h2><span id="sum-int-score" class="int-score"></span></div>
@@ -705,7 +706,7 @@
       <p id="icu-upload-status" class="hint" hidden></p>
       <p id="strava-upload-status" class="hint" hidden></p>
       <p id="garmin-upload-status" class="hint" hidden></p>
-      <p class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
+      <p id="sum-fit-hint" class="hint">You can upload the .FIT file (a virtual ride, like Zwift) to Strava, Garmin Connect or intervals.icu.</p>
     </main>
   </section>
 

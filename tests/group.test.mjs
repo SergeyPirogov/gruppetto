@@ -95,3 +95,16 @@ test('group ride held till its host starts it: open at once, over once it waited
   assert.deepEqual(rideWindow(latest, T, true), { state: 'open', held: true, in: null });
   assert.equal(rideWindow(latest, latest + 1, true).state, 'over');
 });
+
+test('race categories: the stronger of the FTP and the race; results by category; text for the club', async () => {
+  const { raceCat, catResults, catsIn, resultsText } = await import('../js/group.js');
+  assert.equal(raceCat(4.2, 3.5), 'A');
+  assert.equal(raceCat(2.4, 3.3), 'B'); // rode above the FTP's category
+  assert.equal(raceCat(null, 2.0), 'D');
+  assert.equal(raceCat(null, null), null);
+  const rows = [{ name: 'Olena', time_s: 1450, wkg: 3.5, cat: 'A' }, { name: 'Bo', time_s: 1460, wkg: 3.3, cat: 'B' }, { name: 'Cy', time_s: 1500, wkg: 3.0, cat: 'B' }];
+  assert.deepEqual(catsIn(rows), ['A', 'B']);
+  assert.deepEqual(catResults(rows, 'B').map((r) => [r.name, r.place, r.gap]), [['Bo', 1, 0], ['Cy', 2, 40]]);
+  const text = resultsText(rows, { title: '🏁 Crit', fmt: (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` });
+  assert.equal(text, '🏁 Crit\n\nA\n1. Olena  24:10  3.5 W/kg\n\nB\n1. Bo  24:20  3.3 W/kg\n2. Cy  25:00  +0:40  3.0 W/kg');
+});
