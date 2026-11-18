@@ -361,3 +361,21 @@ test('signing out from the header: a tap on your name, then Sign out', async () 
   assert.deepEqual(errors, []);
   await context.close();
 });
+
+test('a ride cut off by a reload goes on from where it was: time, distance and the seconds ridden', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: LOCAL });
+  await page.evaluate(() => document.getElementById('btn-start').click());
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  await page.waitForFunction(() => window.__ride.elapsed >= 32, null, { timeout: 60000 }); // the draft is kept every 30 s
+  const before = await page.evaluate(() => ({ elapsed: window.__ride.elapsed, dist: window.__ride.dist }));
+  await page.reload();
+  await page.waitForFunction(() => document.getElementById('btn-start')?.onclick);
+  await page.waitForFunction(() => !document.getElementById('draft-box').hidden, null, { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('draft-continue').click());
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  const after = await page.evaluate(() => ({ elapsed: window.__ride.elapsed, dist: window.__ride.dist, route: window.__ride.route.id }));
+  assert.ok(after.elapsed >= 30 && after.elapsed <= before.elapsed + 2, `elapsed ${after.elapsed}, was ${before.elapsed}`);
+  assert.ok(after.dist > 0 && after.dist <= before.dist + 30, `dist ${after.dist}, was ${before.dist}`);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
