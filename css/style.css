@@ -1711,3 +1711,28 @@ body.watching { overflow: hidden; }
 .race-cats[hidden] { display: none; }
 .race-cat { display: inline-block; min-width: 1.4em; text-align: center; border-radius: 6px; padding: 0 4px; font-weight: 800; color: #0f1420; }
 .cat-A { background: #f87171; } .cat-B { background: #4ade80; } .cat-C { background: #60a5fa; } .cat-D { background: #facc15; }
+
+/* ---------- Ride dashboard B (js/app.js applyHudLayout): the boards in one strip at the bottom ---------- */
+.hud-strip {
+  display: flex; flex-wrap: wrap; align-items: stretch;
+  background: var(--pill); border: 1px solid var(--pill-line); border-radius: 14px;
+  backdrop-filter: blur(6px); box-shadow: 0 2px 10px rgba(10, 20, 40, 0.18); color: #fff;
+}
+.hud-strip[hidden] { display: none; }
+#ride.hud-b .hud-bottom { flex-wrap: wrap; }
+.hud-strip { flex: 1 0 100%; }
+.hud-strip > .board, .hud-strip > .topbar, .hud-strip .stat, .hud-strip .tb-cell { flex-grow: 1; }
+.hud-strip > .board, .hud-strip > .topbar {
+  display: flex; flex-direction: row; flex: 0 1 auto; width: auto; min-width: 0;
+  background: none; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none;
+}
+.hud-strip > * + * { border-left: 1px solid rgba(255, 255, 255, .16); }
+.hud-strip .stat { display: flex; align-items: flex-end; gap: 6px; padding: 7px 10px 5px; border-left: 0; border-bottom: 3px solid var(--c); }
+.hud-strip .stat + .stat { border-top: 0; border-left: 1px solid rgba(255, 255, 255, .08); }
+.hud-strip .stat > .ic { display: none; }
+.hud-strip .st-val b { font-size: 1.55rem; }
+.hud-strip .stat.power .st-val b { font-size: 2.3rem; }
+.hud-strip .tb-cell { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 0; padding: 7px 10px 8px; }
+.hud-strip .tb-cell .ic { display: none; }
+.hud-strip .tb-cell b { font-size: 1.55rem; text-align: left; min-width: 0; }
+.hud-strip .tb-cell + .tb-cell { border-left: 1px solid rgba(255, 255, 255, .08); }

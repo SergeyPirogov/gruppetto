@@ -426,6 +426,7 @@
         <h2>App</h2>
         <div class="fields">
           <label>Language <select id="f-lang"></select></label>
+          <label>Ride dashboard <select id="f-hud-layout"><option value="a">A: boards in the corners</option><option value="b">B: every number in a strip at the bottom</option></select></label>
           <h3 class="fields-head">Sound</h3>
           <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
           <label class="check wide"><input type="checkbox" id="f-crowd"> Fans cheering on the climbs (never with the mini window or the Mac overlay)</label>
@@ -587,6 +588,8 @@
     </div>
 
     <div class="hud-bottom">
+      <!-- dashboard B (Profile > Settings, js/app.js applyHudLayout): the boards move here, one strip of numbers -->
+      <div id="hud-strip" class="hud-strip" hidden></div>
       <div class="bottom-main">
       <div class="bottom-row">
       <div class="bottom-left">

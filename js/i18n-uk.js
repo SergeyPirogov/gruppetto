@@ -310,6 +310,7 @@ export const UK = {
   'Skip the interval (free ride: new lap)': 'Пропустити інтервал (вільна їзда: нове коло)',
   'Pacer on / off': 'Пейсер увімк. / вимк.', 'Hide / show the dashboard': 'Сховати / показати табло',
   'Full screen': 'На весь екран', 'Simulator: power ±10 W': 'Симулятор: потужність ±10 Вт',
+  'Ride dashboard': 'Табло в заїзді', 'A: boards in the corners': 'A: блоки по кутах', 'B: every number in a strip at the bottom': 'B: усі цифри в смузі внизу',
   'Menu: Finish and Settings': 'Меню: Завершити й Налаштування', 'This list': 'Цей список',
   // after the ride (#9)
   'Time in power zones': 'Час у зонах потужності', 'Time in heart rate zones': 'Час у пульсових зонах',
