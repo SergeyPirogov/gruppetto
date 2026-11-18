@@ -488,6 +488,14 @@ function renderRouteList() {
       add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 150 km')}</small>`;
       add.htmlFor = 'gpx-file';
       box.append(add);
+      // your own routes on Strava (as in Slipstream): pick one, and it comes in as a GPX would
+      if (!$('strava-card').hidden) {
+        const st = document.createElement('button');
+        st.className = 'option rc-import rc-strava';
+        st.innerHTML = `<b>＋ ${tr('From Strava')}</b><small>${stravaClient ? tr('One of your routes on Strava') : tr('Connect Strava, then pick one of your routes')}</small>`;
+        st.onclick = () => (stravaClient ? openStravaRoutes() : (location.href = stravaAuthorizeUrl(stravaRedirect())));
+        box.append(st);
+      }
     }
     rl.append(sec);
   }
@@ -512,12 +520,18 @@ function markRoute() {
 
 let restoreStart = null;
 async function importGpx(ev) {
-  restoreStart = null;
   const file = ev.target.files?.[0];
   ev.target.value = '';
   if (!file) return;
+  await importGpxText(await file.text(), file.name);
+}
+
+/** A GPX made into a route of your own: from a file, or a route of yours on Strava. */
+async function importGpxText(text, fileName) {
+  restoreStart = null;
+  const file = { name: fileName };
   try {
-    const track = parseGpx(await file.text());
+    const track = parseGpx(text);
     // real elevations from a terrain model along the road (#25); without a network, the file's own
     // and the woods, water and buildings beside it from OpenStreetMap; each is optional
     // no riding off on the previously chosen route while this one is still being built
@@ -577,6 +591,38 @@ async function importGpx(ev) {
     restoreStart?.();
   }
 }
+
+/** The picker of your Strava routes: name, length and climbing; one tapped comes in as a route. */
+async function openStravaRoutes() {
+  const box = $('strava-routes'), list = $('sr-list');
+  box.hidden = false;
+  list.innerHTML = `<p class="muted">${esc(tr('Loading your routes…'))}</p>`;
+  track('strava', 'routes');
+  let routesOnStrava;
+  try { routesOnStrava = await stravaClient.routes(); } catch (e) {
+    list.innerHTML = `<p class="muted">${esc(tr('Strava did not give the routes: {error}', { error: e.message }))}</p>`;
+    return;
+  }
+  const hint = `<p class="hint">${esc(tr('Only public routes? Your private ones show after connecting Strava again (Profile → Connections).'))}</p>`;
+  if (!routesOnStrava.length) { list.innerHTML = `<p class="muted">${esc(tr('No ride routes on your Strava yet. Make one in Strava\'s route builder.'))}</p>${hint}`; return; }
+  list.innerHTML = routesOnStrava.map((r) => `<button class="option sr-row" data-id="${esc(r.id)}" ${r.distance > 150000 ? 'disabled' : ''}>`
+    + `<b>${r.starred ? '★ ' : ''}${esc(r.name)}</b><small>${(r.distance / 1000).toFixed(1)} ${U.km} · ↗ ${Math.round(r.gain)} ${U.m}${r.distance > 150000 ? ` · ${esc(tr('over 150 km'))}` : ''}</small></button>`).join('') + hint;
+  list.onclick = async (ev) => {
+    const b = ev.target.closest('[data-id]');
+    if (!b || b.disabled) return;
+    const r = routesOnStrava.find((x) => x.id === b.dataset.id);
+    b.disabled = true; b.querySelector('small').textContent = tr('Getting the route…');
+    try {
+      const gpx = await stravaClient.routeGpx(r.id);
+      box.hidden = true;
+      track('strava', 'route-import');
+      await importGpxText(gpx, `${r.name}.gpx`);
+    } catch (e) {
+      b.disabled = false; b.querySelector('small').textContent = tr('Strava did not give the route: {error}', { error: e.message });
+    }
+  };
+}
+for (const el of document.querySelectorAll('[data-sr-close]')) el.addEventListener('click', () => { $('strava-routes').hidden = true; });
 
 function deleteCustomRoute(r) {
   if (!confirm(tr('Delete “{name}”? Its records stay in your ride history.', { name: r.name }))) return;
