@@ -1,5 +1,6 @@
 import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
+import { variant } from './experiments.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
 import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
@@ -54,7 +55,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, powerAvg: 3, shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, powerAvg: 3, hudLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -2920,6 +2921,7 @@ function saveToHistory(r, samples) {
     if (!allWorkouts().some((w) => w.id === settings.mode) && !['free', 'race'].includes(settings.mode)) { settings.mode = 'free'; saveSettings(); }
   }
   track('ride-finish', minutesBucket(e.summary?.duration || 0));
+  track('exp', `hud-${hudLayout}`); // rides finished by dashboard, to compare A and B
   if (rideMilestone(progress.rides)) track('ride-count', rideMilestone(progress.rides));
   for (const b of got.badges) track('badge', b.id);
   e.earned = { xp: got.progress.xp, badges: got.badges.map((b) => b.id), levelUp: got.levelUp ? levelOf(got.progress.xp).level : 0 };
@@ -4969,6 +4971,28 @@ for (const r of routes) {
   localizeClimbs(r);
 }
 for (const w of workouts) { w.name = tr(w.name); w.description = tr(w.description); }
+/**
+ * The ride's dashboard, A or B (an A/B test, js/experiments.js; the rider's pick in Settings wins).
+ * B moves the boards (power, heart rate, cadence, W′bal; speed, time, distance; grade, gear, climbed)
+ * into one strip at the bottom; A puts each back where it was. The elements keep their ids and handlers.
+ */
+const HUD_MOVED = ['#ride .hud-left > .board:not(.intensity):not(.wk-steps)', '#ride .hud-center > .topbar', '#ride .hud-right > .board:not(.minimap):not(.race-board):not(.ahead)'];
+const hudHome = new Map(); // element -> [parent, next sibling] in layout A
+let hudLayout = '';
+function applyHudLayout() {
+  const v = variant('hud', { chosen: settings.hudLayout });
+  $('f-hud-layout').value = v;
+  if (v === hudLayout) return;
+  hudLayout = v;
+  if (!hudHome.size) for (const q of HUD_MOVED) { const el = document.querySelector(q); if (el) hudHome.set(el, [el.parentNode, el.nextSibling]); }
+  if (v === 'b') for (const el of hudHome.keys()) $('hud-strip').appendChild(el);
+  else for (const [el, [parent, next]] of hudHome) parent.insertBefore(el, next && next.parentNode === parent ? next : parent.firstChild);
+  $('hud-strip').hidden = v !== 'b';
+  $('ride').classList.toggle('hud-b', v === 'b');
+}
+applyHudLayout();
+$('f-hud-layout').onchange = () => { settings.hudLayout = $('f-hud-layout').value; saveSettings(); applyHudLayout(); track('exp', `hud-${hudLayout}-picked`); };
+
 $('f-lang').innerHTML = LANGS.map((l) => `<option value="${l.id}">${l.name}</option>`).join('');
 $('f-lang').value = lang;
 $('f-lang').onchange = () => setLang($('f-lang').value);

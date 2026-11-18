@@ -426,6 +426,7 @@
         <h2>App</h2>
         <div class="fields">
           <label>Language <select id="f-lang"></select></label>
+          <label>Ride dashboard <select id="f-hud-layout"><option value="a">A: boards in the corners</option><option value="b">B: every number in a strip at the bottom</option></select></label>
           <label>Power on the board <select id="f-power-avg"><option value="1">1 s (as it is)</option><option value="3">3 s average</option><option value="5">5 s average</option><option value="10">10 s average</option></select></label>
           <h3 class="fields-head">Sound</h3>
           <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
@@ -533,11 +534,11 @@
 
     <div class="hud-center">
       <div class="topbar">
-        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><b id="m-speed">0.0</b><span>km/h</span></div>
-        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><b id="m-time">0:00</b></div>
-        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><b id="m-dist">0.00</b><span>km</span></div>
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/></svg><label class="tb-label">Speed</label><b id="m-speed">0.0</b><span>km/h</span></div>
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M10 2h4M12 2v3"/></svg><label class="tb-label">Time</label><b id="m-time">0:00</b></div>
+        <div class="tb-cell"><svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h7a3 3 0 0 0 0-6H9a3 3 0 0 1 0-6h7"/></svg><label class="tb-label">Distance</label><b id="m-dist">0.00</b><span>km</span></div>
         <!-- the wind: the arrow points the way it blows (up = with you, down = in your face) -->
-        <div id="wind-cell" class="tb-cell wind-cell" hidden><svg viewBox="0 0 24 24" class="ic stroke wind-ic"><g id="wind-arrow"><path d="M12 20V4M6 10l6-6 6 6"/></g></svg><b id="m-wind">0</b><span>km/h</span></div>
+        <div id="wind-cell" class="tb-cell wind-cell" hidden><svg viewBox="0 0 24 24" class="ic stroke wind-ic"><g id="wind-arrow"><path d="M12 20V4M6 10l6-6 6 6"/></g></svg><label class="tb-label">Wind</label><b id="m-wind">0</b><span>km/h</span></div>
       </div>
       <!-- a device the ride started with dropped: always in sight, opens Devices over the ride -->
       <button id="btn-dev-lost" class="pill-btn dev-lost" hidden title="Reconnect without stopping the ride"></button>
@@ -588,6 +589,8 @@
     </div>
 
     <div class="hud-bottom">
+      <!-- dashboard B (Profile > Settings, js/app.js applyHudLayout): the boards move here, one strip of numbers -->
+      <div id="hud-strip" class="hud-strip" hidden></div>
       <div class="bottom-main">
       <div class="bottom-row">
       <div class="bottom-left">
