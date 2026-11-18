@@ -111,13 +111,21 @@ export async function loadActivities() {
   }
 }
 
-/** Writes rides (rows from activityRows), mine. */
+/**
+ * Writes rides (rows from activityRows), mine, 100 at a time. A batch the database refuses goes again ride by
+ * ride, so one ride it will not take (too big, say) does not keep the others out; that one is reported after.
+ */
 export async function saveActivities(rows) {
   if (!user || !rows.length) return;
   const c = await client();
+  const put = (list) => c.from('activities').upsert(list.map((r) => ({ user_id: user.id, ...r })), { onConflict: 'user_id,id' });
+  const failed = [];
   for (let i = 0; i < rows.length; i += 100) {
-    ok(await c.from('activities').upsert(rows.slice(i, i + 100).map((r) => ({ user_id: user.id, ...r })), { onConflict: 'user_id,id' }));
+    const batch = rows.slice(i, i + 100);
+    if (!(await put(batch)).error) continue;
+    for (const r of batch) { const { error } = await put([r]); if (error) failed.push(`${r.id}: ${error.message}`); }
   }
+  if (failed.length) throw new Error(`${failed.length} ride(s) not saved to the account (${failed[0]})`);
 }
 
 // ---------- Results ----------

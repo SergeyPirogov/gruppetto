@@ -424,7 +424,7 @@ async function saveSetup() {
     profileRow = { ...profileRow, ...(await saveProfile(fields)) };
     $('social-setup').hidden = true;
     renderCard();
-    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); sync().catch(() => {}); }
+    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); sync().catch((e) => console.warn('Account sync:', e.message)); }
   } catch (e) { $('ss-error').textContent = e.message; }
 }
 
@@ -438,14 +438,14 @@ export function socialSettingsSaved() {
   ctx.saveSettingsRaw();
   if (!currentUser()) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
+  syncTimer = setTimeout(() => sync().catch((e) => console.warn('Account sync:', e.message)), 3000);
 }
 
 /** After the ride history or your workouts change here: up to the account in 3 s. */
 export function socialDataChanged() {
   if (!on() || !currentUser()) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
+  syncTimer = setTimeout(() => sync().catch((e) => console.warn('Account sync:', e.message)), 3000);
 }
 
 // ---------- Results ----------
@@ -473,7 +473,7 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
   cta.hidden = true;
   results = new Map();
   if (!items.length) {
-    if (currentUser()) sync().catch(() => {});
+    if (currentUser()) sync().catch((e) => console.warn('Account sync:', e.message));
     // laps or segments were timed, but none go to the tables: say why, rather than nothing
     if (timed) {
       $('sum-social-text').textContent = simulated

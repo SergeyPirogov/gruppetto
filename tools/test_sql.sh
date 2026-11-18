@@ -70,3 +70,13 @@ run < supabase/migrations/0004_group_rides.sql
 run < supabase/migrations/0005_group_races.sql
 run < supabase/migrations/0006_leagues.sql
 run < supabase/tests/leagues_test.sql
+# the size of a ride in the full sync (0007)
+run <<'SQL'
+drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
+SQL
+run < supabase/tests/auth_stub.sql
+run < supabase/migrations/0001_social.sql
+run < supabase/migrations/0002_activities.sql
+run < supabase/migrations/0007_activities_size.sql
+run < supabase/migrations/0007_activities_size.sql # applies twice: safe to paste again
+run < supabase/tests/activities_size_test.sql
