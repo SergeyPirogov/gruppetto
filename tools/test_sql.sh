@@ -92,6 +92,15 @@ run < supabase/migrations/0006_leagues.sql
 run < supabase/migrations/0008_race_checks.sql
 run < supabase/migrations/0008_race_checks.sql # applies twice: safe to paste again
 run < supabase/tests/race_checks_test.sql
+# a ride's full record in the account (0009)
+run <<'SQL'
+drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
+SQL
+run < supabase/tests/auth_stub.sql
+run < supabase/migrations/0001_social.sql
+run < supabase/migrations/0009_activity_records.sql
+run < supabase/migrations/0009_activity_records.sql # applies twice: safe to paste again
+run < supabase/tests/activity_records_test.sql
 # a ride started when everyone is ready (0010)
 run <<'SQL'
 drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;

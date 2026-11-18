@@ -64,7 +64,7 @@ Screenshots to attach:
 > Gruppetto is a free indoor cycling app that runs in the browser. Riders connect a smart trainer, heart rate monitor and controllers over Bluetooth, and ride real roads in 3D, structured workouts, or group rides with friends.
 >
 > **How do you use the Strava API?**
-> We use it only to upload. After a ride, the rider's FIT file is sent to `POST /uploads` as a Virtual Ride with power, heart rate, cadence and the route. We then show a "View on Strava" link to the new activity. The scopes are `read,activity:write`: `read` only to show "Connected as <name>", and `activity:write` to upload. We read no activities, segments or other athletes' data.
+> We use it only to upload. After a ride, the rider's FIT file is sent to `POST /uploads` as a Virtual Ride with power, heart rate, cadence and the route. We then show a "View on Strava" link to the new activity. The scopes are `read,read_all,activity:write`: `read` to show "Connected as <name>", `read_all` to list the rider's own routes (private ones too) and export one as GPX to ride it indoors, and `activity:write` to upload. We read no activities, segments or other athletes' data.
 >
 > **Where is data stored?**
 > The access and refresh tokens stay in the rider's own browser (localStorage). Our server, a Supabase Edge Function, only exchanges the code for tokens and refreshes them using the client secret. It keeps and logs nothing. Disconnecting deletes the tokens from the browser.

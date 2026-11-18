@@ -1257,3 +1257,24 @@ test('strava: saved tokens are kept only for the Strava app in use', async () =>
   assert.equal(savedFor({ app: '999' }, '999'), false); // no refresh token
   assert.equal(savedFor(null, '999'), false);
 });
+
+test('sync: a ride record packs small and comes back whole', async () => {
+  const { packRecord, unpackRecord } = await import('../js/social-core.js');
+  const samples = Array.from({ length: 3600 }, (_, i) => ({ power: 150 + (i % 40), cadence: 88, heartRate: 130 + (i % 9), speed: 8.3, distance: i * 8.3, altitude: 100 + Math.sin(i / 60) * 5, elevationGain: i / 50, target: 150, step: 1 }));
+  const text = await packRecord({ id: 'r1', start: 1700000000000, samples, lapStarts: [0, 1800] });
+  assert.ok(text.length < 400000, `an hour packs into ${text.length} chars`);
+  const back = await unpackRecord('r1', text);
+  assert.deepEqual(back, { id: 'r1', start: 1700000000000, samples, lapStarts: [0, 1800] });
+  assert.equal(await unpackRecord('r1', 'not gzip'), null);
+});
+
+test('strava: your routes that are rides, ids kept as text', async () => {
+  const { rideRoutes } = await import('../js/strava.js');
+  const out = rideRoutes([
+    { id: 3344556677889900000, id_str: '3344556677889900123', name: 'Kyiv loop', distance: 42000, elevation_gain: 310, type: 1, starred: true },
+    { id: 1, id_str: '1', name: 'A run', distance: 5000, type: 2 },
+    { name: 'no id', type: 1 },
+  ]);
+  assert.deepEqual(out, [{ id: '3344556677889900123', name: 'Kyiv loop', distance: 42000, gain: 310, starred: true, private: false }]);
+  assert.deepEqual(rideRoutes(null), []);
+});

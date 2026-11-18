@@ -132,6 +132,34 @@ export async function saveActivities(rows) {
   if (failed.length) throw new Error(`${failed.length} ride(s) not saved to the account (${failed[0]})`);
 }
 
+/** The ids of my rides whose full record is in the account. Null when the table is not there yet (0009). */
+export async function recordIds() {
+  if (!user) return [];
+  const c = await client();
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await c.from('activity_records').select('id').range(from, from + 999);
+    if (error) { if (/activity_records/.test(error.message)) return null; throw new Error(error.message); }
+    out.push(...(data || []).map((r) => r.id));
+    if (!data || data.length < 1000) return out;
+  }
+}
+/** One ride's full record, as kept (packRecord), or null. */
+export async function loadRecord(id) {
+  if (!user) return null;
+  const { data, error } = await (await client()).from('activity_records').select('data').eq('id', id).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data?.data || null;
+}
+export async function saveRecord(id, data) {
+  if (!user) return;
+  ok(await (await client()).from('activity_records').upsert({ user_id: user.id, id, data }, { onConflict: 'user_id,id' }));
+}
+export async function deleteRecords(ids) {
+  if (!user || !ids.length) return;
+  ok(await (await client()).from('activity_records').delete().in('id', ids));
+}
+
 // ---------- Results ----------
 
 const readQueue = () => { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]'); } catch { return []; } };

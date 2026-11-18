@@ -1699,3 +1699,9 @@ body.watching { overflow: hidden; }
 .gr-host[hidden] { display: none; }
 .gr-host span { font-size: .85rem; opacity: .8; }
 .gr-host-btns { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+/* your routes on Strava (openStravaRoutes): a list to pick one from */
+.strava-routes-panel { max-width: 520px; }
+.sr-list { display: grid; gap: 8px; max-height: 60vh; overflow: auto; padding: 4px 2px; }
+.sr-row { text-align: left; }
+.sr-row[disabled] { opacity: .5; cursor: default; }
+.rc-strava b { color: #fc5200; }
