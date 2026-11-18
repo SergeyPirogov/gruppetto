@@ -487,6 +487,7 @@ export const UK = {
   "Sign in to write in the chat. Reactions work for everyone.": "Увійди, щоб писати в чат. Реакції доступні всім.",
   "Watching": "Перегляд",
   // group rides hub
+  'On the start line': 'На старті', 'Everyone sees the same countdown. Whoever opens the ride after the start is in it too, timed from the common start.': 'Усі бачать однаковий відлік. Хто відкриє заїзд після старту, теж у ньому: час від спільного старту.', 'Start list': 'Стартовий лист',
   'Now': 'Зараз', 'Later': 'Пізніше', '+ New ride': '+ Нова гонка', 'Could not reach the server: {error}': 'Немає зв’язку із сервером: {error}',
   // lobby: up next, route filter
   'Up next': 'Далі', 'Plan for today': 'План на сьогодні', 'Other workouts': 'Інші тренування', 'this week': 'цього тижня', 'All': 'Усі', 'Mountain': 'Гори',

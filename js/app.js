@@ -1462,6 +1462,23 @@ function groupHostRender() {
     if ($('gr-host-line').textContent !== line) $('gr-host-line').textContent = line;
   }
 }
+/** Before a group ride's start: who is on the line, you first, each with the category of their W/kg. */
+function startListRender() {
+  const G = ride?.group, el = $('gr-startlist');
+  const show = !!G && !G.go;
+  if (!show) { if (!el.hidden) el.hidden = true; return; }
+  el.hidden = false;
+  const catOf = (wkg) => (!(wkg > 0) ? '' : wkg >= 4 ? 'A' : wkg >= 3.2 ? 'B' : wkg >= 2.5 ? 'C' : 'D');
+  const me = { id: 'me', name: G.me?.name || settings.name || tr('you'), color: settings.jersey, cat: categoryOf(settings.ftp, settings.weight), me: true };
+  const rows = [me, ...G.mates.list(Date.now()).map((m) => ({ id: m.id, name: m.name, color: m.color, cat: catOf(m.wkg) }))];
+  const key = rows.map((r) => `${r.id}${r.cat}${r.name}`).join('|');
+  if (el.dataset.key === key) return; // redrawn only when someone comes or goes
+  el.dataset.key = key;
+  $('gr-sl-n').textContent = String(rows.length);
+  $('gr-sl-rows').innerHTML = rows.map((r) => `<li class="${r.me ? 'me' : ''}"><i style="background:${esc(r.color || '#888')}"></i>`
+    + `${r.cat ? `<span class="sl-cat cat-${r.cat}">${r.cat}</span>` : '<span class="sl-cat"></span>'}<span class="sl-name">${esc(r.name || tr('Rider'))}</span>${r.me ? `<small>${tr('you')}</small>` : ''}</li>`).join('');
+}
+
 $('gr-host').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-in]'), G = ride?.group;
   if (!b || !G?.held || !G.host) return;
@@ -1828,6 +1845,7 @@ function frame(now) {
       : ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
     el.classList.toggle('wait', !!G && !G.go && c > 3);
     groupHostRender();
+    startListRender();
     if (el.textContent !== txt) {
       el.textContent = txt; el.hidden = !txt;
       el.classList.remove('pop'); void el.offsetWidth; if (!el.classList.contains('wait')) el.classList.add('pop'); // the wait's clock ticks quietly

@@ -682,10 +682,16 @@
       </div>
     </div>
     <div id="countdown" class="countdown" hidden></div>
+    <!-- a group ride before its start: who is on the line, with their category (js/app.js startListRender) -->
+    <aside id="gr-startlist" class="gr-startlist" hidden aria-label="Start list">
+      <b>On the start line <small id="gr-sl-n"></small></b>
+      <ol id="gr-sl-rows"></ol>
+    </aside>
     <!-- a held group ride's host starts it when everyone is on the line (js/app.js groupHostRender) -->
     <div id="gr-host" class="gr-host" hidden>
       <b>Everyone here? Start the ride</b><span id="gr-host-line"></span>
       <div class="gr-host-btns"><button class="pill-btn" data-in="10">10 s</button><button class="pill-btn" data-in="60">1 min</button><button class="pill-btn" data-in="120">2 min</button><button class="pill-btn" data-in="300">5 min</button><button class="pill-btn" data-in="600">10 min</button></div>
+      <small class="gr-host-note">Everyone sees the same countdown. Whoever opens the ride after the start is in it too, timed from the common start.</small>
     </div>
     <div id="paused" class="paused" hidden>PAUSED</div>
     <div id="keys-help" class="keys-help" hidden>
