@@ -127,7 +127,7 @@ function renderChat() {
 function say(body) {
   const w = W;
   if (!w?.live?.joined || !w.env.canChat) return false;
-  if (!w.gate.ok(Date.now())) { w.env.toast(w.env.tr('Not so fast: a message a second')); return false; }
+  if (!w.gate.ok(Date.now())) { w.env.toast(w.env.tr('Slow down: one message a second')); return false; }
   const msg = { u: w.id, n: w.name, ...body };
   const shown = w.chat.receive(msg, Date.now(), { mine: true });
   if (!shown) return false;

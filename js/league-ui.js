@@ -31,7 +31,7 @@ export function showTab(t) {
 /** The leagues again (also for the form's select: yours). */
 export async function load() {
   try { rows = await leagues(); } catch (e) {
-    if (!$('gr-lg').hidden) $('gr-lg-list').innerHTML = `<li class="muted">${esc(tr('No connection to the tables: {error}', { error: e.message }))}</li>`;
+    if (!$('gr-lg').hidden) $('gr-lg-list').innerHTML = `<li class="muted">${esc(tr('Could not reach the leaderboards: {error}', { error: e.message }))}</li>`;
     return;
   }
   mine = rows.filter((l) => l.mine);
@@ -80,7 +80,7 @@ async function openLeague(id) {
   h.ctx.track('social', 'league-open');
   let st, races;
   try { [st, races] = await Promise.all([leagueStandings(id), leagueRaces(id)]); } catch (e) {
-    $('gr-lg-rows').innerHTML = `<tr><td colspan="5" class="muted">${esc(tr('No connection to the tables: {error}', { error: e.message }))}</td></tr>`;
+    $('gr-lg-rows').innerHTML = `<tr><td colspan="5" class="muted">${esc(tr('Could not reach the leaderboards: {error}', { error: e.message }))}</td></tr>`;
     return;
   }
   if (openId !== id) return;
@@ -106,7 +106,7 @@ async function create(ev) {
     $('gr-lg-title').value = '';
     $('gr-lg-new').open = false;
     await load();
-    h.ctx.toast(tr('League set up: now set up a race in the calendar and pick it'));
+    h.ctx.toast(tr('League created: now schedule a race in the calendar and pick it'));
     openLeague(id);
   } catch (e) { err.textContent = e.message; err.hidden = false; } finally { $('gr-lg-create').disabled = false; }
 }

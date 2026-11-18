@@ -40,7 +40,7 @@
       <button class="rail-btn" data-open="devices" title="Devices"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 7h4"/></svg><i class="rail-dot" id="rail-dev-dot"></i><span>Devices</span></button>
       <button class="rail-btn" id="rail-garage" title="Garage"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 20V9l9-5 9 5v11M7 20v-7h10v7M7 16h10"/></svg><span>Garage</span></button>
       <span class="rail-grow"></span>
-      <button class="rail-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, an icon in the dock, works offline"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span>Install</span></button>
+      <button class="rail-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, a dock icon, and it works offline"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span>Install</span></button>
       <button class="rail-btn rail-me" data-open="profile" id="open-profile" title="Profile"><span class="avatar" id="avatar"></span><span>Profile</span></button>
     </nav>
     <div class="lobby-body">
@@ -48,7 +48,7 @@
       <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
       <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
       <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
-      <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Oblast against oblast: kilometres and climbing">🇺🇦 <span>Ratings of Ukraine</span></button>
+      <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Region vs region: distance and climbing">🇺🇦 <span>Ukraine leaderboard</span></button>
       <button id="hdr-group" class="hdr-account hdr-ua" hidden title="Ride together at a set time, live on the road">👥 <span>Group rides</span></button>
       <span id="hdr-guest" class="hdr-guest" hidden>You are a guest</span>
       <button id="hdr-account" class="hdr-account" hidden></button>
@@ -63,7 +63,7 @@
 
     <div class="lobby-cols">
     <main class="lobby-main">
-      <!-- signed in: your day in the tables and the group rides at a glance -->
+      <!-- signed in: your day on the leaderboards and the group rides at a glance -->
       <section id="me-today" class="me-today" hidden aria-label="Your day"></section>
       <div id="draft-box" class="note draft-box" hidden>
         <span id="draft-text"></span>
@@ -75,10 +75,10 @@
           <h2>Coming from Zwift?</h2>
           <ul class="why-list">
             <li><b>Free.</b> No subscription, no account.</li>
-            <li><b>In the browser.</b> Nothing to install; opened once, it rides offline.</li>
-            <li><b>Your workouts.</b> Zwift's .zwo files open here, and your intervals.icu plan comes in by itself.</li>
+            <li><b>In the browser.</b> Nothing to install. After the first load, it works offline.</li>
+            <li><b>Your workouts.</b> Zwift .zwo files open here, and your intervals.icu plan syncs automatically.</li>
             <li><b>Your devices.</b> Smart trainers, heart rate, Zwift Ride, Play and Click controllers.</li>
-            <li><b>With friends.</b> Send a ride as a link: they race your ghost.</li>
+            <li><b>With friends.</b> Send a ride as a link and friends race your ghost.</li>
             <li><b>Your rides stay yours.</b> On this device, and to intervals.icu or any app as .FIT.</li>
           </ul>
           <div class="why-actions"><button id="why-zwo" class="pill-btn">Import .zwo</button><button id="why-icu" class="pill-btn" data-open="icu">Connect intervals.icu</button></div>
@@ -87,7 +87,7 @@
         <div id="ftp-box" class="ftp-box" hidden>
           <button class="why-close" id="ftp-close" aria-label="Close">✕</button>
           <div class="ftp-text"><b id="ftp-title"></b><span>Workouts in ERG and the bots' pace go by it. A ramp test finds yours in about 20 minutes.</span></div>
-          <div class="why-actions"><button id="ftp-test" class="primary">📈 Take the FTP test</button><button id="ftp-know" class="pill-btn">I know mine</button></div>
+          <div class="why-actions"><button id="ftp-test" class="primary">📈 Take the FTP test</button><button id="ftp-know" class="pill-btn">I know my FTP</button></div>
         </div>
         <!-- a friend's challenge from a link: who, what to beat, and how -->
         <div id="challenge-box" class="challenge-box" hidden>
@@ -123,7 +123,7 @@
     <div class="ride-box">
       <div id="ride-summary" class="ride-summary"></div>
       <!-- shadow ride: a ghost of an earlier ride on this route rides with you -->
-      <div id="ghost-box" class="ghost-box ghost-bar" hidden title="Shadow ride: race a ghost of your earlier ride on this route">
+      <div id="ghost-box" class="ghost-box ghost-bar" hidden title="Ghost ride: race a ghost of your earlier ride on this route">
         <span class="ghost-opts">
           <button data-ghost="off"><b>Off</b><small>ride on your own</small></button>
           <button data-ghost="last"><b>Last ride</b><small id="ghost-last"></small></button>
@@ -213,7 +213,7 @@
           <ol>
             <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
             <li>Set it to <b>Enabled</b> and restart Chrome</li>
-            <li>Connect each sensor here once more</li>
+            <li>Reconnect each sensor here once</li>
           </ol>
           <button id="copy-flag" class="ghost">Copy the address</button>
         </div>
@@ -265,13 +265,13 @@
       <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
       <div class="card" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
         <h2>Account &amp; leaderboards</h2>
-        <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps in the tables with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
+        <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps on the leaderboards with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
         <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
         <div id="social-in" hidden>
           <p class="muted" id="social-who"></p>
-          <label class="check"><input type="checkbox" id="f-social-public"> Show me in the tables</label>
+          <label class="check"><input type="checkbox" id="f-social-public"> Show me on the leaderboards</label>
           <div class="row icu-row">
-            <button id="btn-social-edit">Name in the tables…</button>
+            <button id="btn-social-edit">Leaderboard name…</button>
             <button id="btn-social-out" class="ghost">Sign out</button>
             <button id="btn-social-delete" class="ghost">Delete account</button>
           </div>
@@ -306,7 +306,7 @@
         <button data-sgroup-go="pacer"><b>Pacer</b><small>in workouts and free rides</small></button>
         <button data-sgroup-go="pip"><b>Mini window</b><small>over a film, HUD for Mac</small></button>
         <button data-sgroup-go="app"><b>App</b><small>language, sound, stats</small></button>
-        <span class="set-nav-note">Saved as you go. Esc closes.</span>
+        <span class="set-nav-note">Changes save automatically. Esc closes.</span>
       </nav>
       <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="look">
         <h2>Look &amp; dashboard</h2>
@@ -328,7 +328,7 @@
           </div>
           <div class="set-box">
             <h3>Dashboard</h3>
-            <select id="f-hud-layout" data-seg="cards" aria-label="Ride dashboard"><option value="a" data-short="A · in the corners">A: boards in the corners</option><option value="b" data-short="B · strip at the bottom">B: every number in a strip at the bottom</option></select>
+            <select id="f-hud-layout" data-seg="cards" aria-label="Ride dashboard"><option value="a" data-short="A · in the corners">A: panels in the corners</option><option value="b" data-short="B · strip at the bottom">B: every number in a strip at the bottom</option></select>
             <label class="set-field"><span>Power, averaged over</span>
               <select id="f-power-avg" data-seg><option value="1" data-short="1 s">1 s (as it is)</option><option value="3" data-short="3 s">3 s average</option><option value="5" data-short="5 s">5 s average</option><option value="10" data-short="10 s">10 s average</option></select>
             </label>
@@ -443,7 +443,7 @@
         <div class="set-grid">
           <div class="set-box wide">
             <label class="check set-toggle"><input type="checkbox" id="f-pacer"><span class="st-text"><b>Workout pacer</b><small>A virtual partner riding the target power</small></span></label>
-            <label class="check set-toggle"><input type="checkbox" id="f-free-pacer"><span class="st-text"><b>Free-ride pacer</b><small>Rides at a set W/kg and waits at the foot of climbs</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-free-pacer"><span class="st-text"><b>Free-ride pacer</b><small>Rides at a set W/kg and waits at the bottom of climbs</small></span></label>
             <div class="set-row">
               <label class="set-field"><span>Pacer name</span><input id="f-pacer-name" maxlength="16" placeholder="Pacer"></label>
               <label class="set-field"><span>Free-ride pacer, W/kg</span><input id="f-free-wkg" type="number" min="0.5" max="7" step="0.1"></label>
@@ -476,8 +476,8 @@
           </div>
           <div class="set-box wide">
             <label class="check set-toggle"><input type="checkbox" id="f-sound"><span class="st-text"><b>Workout sounds and voice</b><small>Interval countdowns and cues</small></span></label>
-            <label class="check set-toggle"><input type="checkbox" id="f-crowd"><span class="st-text"><b>Fans on the climbs</b><small>Never with the mini window or the Mac overlay</small></span></label>
-            <label class="check set-toggle"><input type="checkbox" id="f-stats"><span class="st-text"><b>Anonymous usage stats</b><small>Which features are used; never your name, data or place</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-crowd"><span class="st-text"><b>Fans on the climbs</b><small>Never in the mini window or the Mac overlay</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-stats"><span class="st-text"><b>Anonymous usage stats</b><small>Which features are used; never your name, data or location</small></span></label>
           </div>
         </div>
       </div>
@@ -498,7 +498,7 @@
     </div>
       <div class="card" id="strava-card" data-panel="profile" data-ptab="links">
         <h2>Strava</h2>
-        <p class="muted">Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto asks only to upload, it reads nothing of yours.</p>
+        <p class="muted">Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto only asks to upload; it reads nothing of yours.</p>
         <label class="check"><input type="checkbox" id="f-strava-upload"> Upload the ride to Strava when finished</label>
         <div class="row icu-row">
           <!-- Strava's own button, as its brand guidelines ask (icons/strava, from developers.strava.com) -->
@@ -771,7 +771,7 @@
       <div class="drawer-bg"></div>
       <div class="wk-menu-panel preflight-panel">
         <div class="wk-menu-head"><h2>Sensors</h2></div>
-        <p class="muted">Waiting for every sensor. The ride starts by itself once they all have a tick.</p>
+        <p class="muted">Waiting for every sensor. The ride starts by itself once each one has a reading.</p>
         <ul id="preflight-list" class="preflight-list"></ul>
         <div class="wkd-actions"><button id="preflight-cancel" class="pill-btn">Back</button><button id="preflight-go" class="primary wkd-ride">Ride anyway</button></div>
       </div>
@@ -788,7 +788,7 @@
       </div>
     </div>
 
-    <!-- the first sign-in: how you show in the tables -->
+    <!-- the first sign-in: how you show on the leaderboards -->
     <!-- your routes on Strava, to ride one (js/app.js openStravaRoutes) -->
     <div id="strava-routes" class="wk-menu" hidden>
       <div class="drawer-bg" data-sr-close></div>
@@ -800,15 +800,15 @@
     <div id="social-setup" class="wk-menu" hidden>
       <div class="drawer-bg" data-ss-close></div>
       <div class="wk-menu-panel social-setup-panel">
-        <div class="wk-menu-head"><h2>You in the tables</h2><button class="drawer-close" data-ss-close aria-label="Close">✕</button></div>
+        <div class="wk-menu-head"><h2>You on the leaderboards</h2><button class="drawer-close" data-ss-close aria-label="Close">✕</button></div>
         <div class="fields">
-          <label>Name in the tables <input id="ss-name" maxlength="24" autocomplete="nickname"></label>
+          <label>Leaderboard name <input id="ss-name" maxlength="24" autocomplete="nickname"></label>
           <label>Country <select id="ss-country"></select></label>
-          <label id="ss-region-box" hidden>Oblast, for the ratings of Ukraine <select id="ss-region"></select></label>
-          <label>Gender, for the filter <select id="ss-gender"><option value="">Rather not say</option><option value="f">Female</option><option value="m">Male</option></select></label>
+          <label id="ss-region-box" hidden>Region, for the Ukraine leaderboard <select id="ss-region"></select></label>
+          <label>Gender, for the filter <select id="ss-gender"><option value="">Prefer not to say</option><option value="f">Female</option><option value="m">Male</option></select></label>
         </div>
-        <label class="check"><input type="checkbox" id="ss-public" checked> Show me in the tables</label>
-        <p class="hint">Others see your name, country, times and W/kg; never your weight. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+        <label class="check"><input type="checkbox" id="ss-public" checked> Show me on the leaderboards</label>
+        <p class="hint">Others see your name, country, times and W/kg, but never your weight. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
         <p id="ss-error" class="hint c-bad"></p>
         <div class="wkd-actions"><button id="ss-save" class="primary wkd-ride">Save</button></div>
       </div>
@@ -834,24 +834,24 @@
       </div>
     </div>
 
-    <!-- the ratings across Ukraine (0003_regions.sql): oblast against oblast, rider against rider -->
+    <!-- the ratings across Ukraine (0003_regions.sql): region against region, rider against rider -->
     <div id="ua-view" class="wk-menu" hidden>
       <div class="drawer-bg" data-ua-close></div>
       <div class="wk-menu-panel lb-panel">
-        <div class="wk-menu-head"><h2>Ratings of Ukraine</h2><button class="drawer-close" data-ua-close aria-label="Close">✕</button></div>
+        <div class="wk-menu-head"><h2>Ukraine leaderboard</h2><button class="drawer-close" data-ua-close aria-label="Close">✕</button></div>
         <div class="lb-filters">
-          <div class="lb-chips" id="ua-tab"><button class="pill-btn sel" data-v="regions">Oblasts</button><button class="pill-btn" data-v="riders">Riders</button></div>
+          <div class="lb-chips" id="ua-tab"><button class="pill-btn sel" data-v="regions">Regions</button><button class="pill-btn" data-v="riders">Riders</button></div>
           <div class="lb-chips" id="ua-period"><button class="pill-btn sel" data-v="week">This week</button><button class="pill-btn" data-v="month">This month</button><button class="pill-btn" data-v="all">All time</button></div>
           <div class="lb-chips" id="ua-metric"><button class="pill-btn sel" data-v="km">Kilometres</button><button class="pill-btn" data-v="climb">Climbing</button></div>
           <div class="lb-chips" id="ua-gender" hidden><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
-          <select id="ua-region" aria-label="Oblast" hidden></select>
+          <select id="ua-region" aria-label="Region" hidden></select>
         </div>
         <div class="lb-scroll">
           <table class="lb-table ua-table"><thead id="ua-head"></thead><tbody id="ua-rows"></tbody></table>
         </div>
-        <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to put your oblast on the board.</p>
+        <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to get your region on the leaderboard.</p>
         <p id="ua-cta" class="hint" hidden></p>
-        <p class="hint">Rides on a trainer of riders signed in, each by the oblast in their profile. The simulator does not count.</p>
+        <p class="hint">Trainer rides by signed-in riders, each counted for the region in their profile. Simulator rides do not count.</p>
       </div>
     </div>
 
@@ -859,8 +859,8 @@
     <div id="welcome" class="welcome" hidden role="dialog" aria-labelledby="welcome-title">
       <div class="welcome-in">
         <div class="welcome-brand"><img class="mark" src="logo.svg" alt="">Gruppetto</div>
-        <h1 id="welcome-title">Ride at home. Free, right in the browser.</h1>
-        <p class="welcome-sub">You can ride at once, with no sign-up. Signing in is only for what has to do with other riders.</p>
+        <h1 id="welcome-title">Ride indoors. Free, right in your browser.</h1>
+        <p class="welcome-sub">You can ride right away, no sign-up needed. Signing in is only for features that involve other riders.</p>
         <div class="welcome-cards">
           <section class="welcome-card">
             <small>Without signing in</small>
@@ -876,18 +876,18 @@
           </section>
           <section class="welcome-card acc">
             <small>With a Google account</small>
-            <h2>Ride with everyone</h2>
-            <p class="welcome-plus">Everything a guest has, and:</p>
+            <h2>Ride with the community</h2>
+            <p class="welcome-plus">Everything a guest gets, plus:</p>
             <ul class="welcome-list plus">
-              <li>Your times in the tables of climbs, sprints and laps, women and men apart</li>
-              <li>Ratings of Ukraine: you ride for your oblast</li>
+              <li>Your times in the climb, sprint and lap leaderboards, women and men apart</li>
+              <li>Ukraine leaderboard: you ride for your region</li>
               <li>Group rides, live with friends</li>
               <li>Profile, workouts and history on every device</li>
             </ul>
             <button id="welcome-signin" class="google-btn big"></button>
           </section>
         </div>
-        <p class="welcome-foot">You can sign in any time later, from the top bar or in Profile. The rides already on this device go into the account.</p>
+        <p class="welcome-foot">You can sign in at any time from the top bar or in Profile. Rides already on this device will be added to your account.</p>
       </div>
     </div>
 
@@ -913,12 +913,12 @@
         <div id="gr-lg" hidden>
           <div id="gr-lg-home">
             <ul id="gr-lg-list" class="gr-list"></ul>
-            <p id="gr-lg-empty" class="hint" hidden>No leagues yet: set one up, then put your group races in it.</p>
+            <p id="gr-lg-empty" class="hint" hidden>No leagues yet: create one, then add your group races to it.</p>
             <details id="gr-lg-new" class="gr-new">
               <summary>+ New league</summary>
               <form id="gr-lg-form" class="gr-form">
                 <label class="gr-wide">Title<input id="gr-lg-title" maxlength="80" required placeholder="Winter Cup"></label>
-                <button id="gr-lg-create" class="primary gr-wide" type="submit">Set up the league</button>
+                <button id="gr-lg-create" class="primary gr-wide" type="submit">Create the league</button>
                 <p id="gr-lg-err" class="hint gr-wide" hidden></p>
               </form>
             </details>
@@ -936,7 +936,7 @@
         <div id="gr-cal">
         <p id="gr-cta" class="hint" hidden></p>
         <ul id="gr-list" class="gr-list"></ul>
-        <p id="gr-empty" class="hint" hidden>No group rides planned yet: set one up and send the link to your friends.</p>
+        <p id="gr-empty" class="hint" hidden>No group rides planned yet: create one and send the link to your friends.</p>
         <details id="gr-new" class="gr-new">
           <summary>+ New group ride</summary>
           <form id="gr-form" class="gr-form">
@@ -948,11 +948,11 @@
             <label class="gr-wide">Start<select id="gr-start"><option value="time">At a set time</option><option value="ready">When everyone is ready: I start it</option></select></label>
             <label>Date<input id="gr-date" type="date" required></label>
             <label>Time<input id="gr-time" type="time" required></label>
-            <button id="gr-create" class="primary gr-wide" type="submit">Set up the ride</button>
+            <button id="gr-create" class="primary gr-wide" type="submit">Create the ride</button>
             <p id="gr-err" class="hint gr-wide" hidden></p>
           </form>
         </details>
-        <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together (or set it up «when everyone is ready»: you start it from the line, in 10 s to 10 min, once all are there): you see each other live on the road, and ride in each other's shelter. In a race, the first across the line after the laps wins, and the results stay with the ride. Signed in, on a trainer or in the simulator.</p>
+        <p class="hint">At the start time, everyone who opens the ride waits on the start line and you all set off together. Or choose “when everyone is ready”: the host starts it from the line, with a 10 s to 10 min countdown, once all are there. You see each other live on the road and draft each other. In a race, the first across the line after the laps wins, and the results stay with the ride. Sign-in needed; trainer and simulator riders can both join.</p>
         </div>
       </div>
     </div>

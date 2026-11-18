@@ -151,14 +151,14 @@ function buildUi() {
   $('f-lang')?.addEventListener('change', () => { ctx.settings.settingsUpdatedAt = Date.now(); ctx.saveSettingsRaw(); });
 }
 
-/** The way to the account from the lobby: «Sign in with Google», or, signed in, who you are in the tables. */
+/** The way to the account from the lobby: «Sign in with Google», or, signed in, who you are on the leaderboards. */
 function renderHeader() {
   const b = $('hdr-account');
   if (!b) return;
   const u = currentUser();
   b.hidden = false;
   b.classList.toggle('in', !!u);
-  // a guest: who you are now and the way in; signed in: you, your oblast, and that your things are on every device
+  // a guest: who you are now and the way in; signed in: you, your region, and that your things are on every device
   $('hdr-guest').hidden = !!u;
   const name = profileRow?.display_name || u?.email?.split('@')[0] || '';
   // what the last sync did, not a promise: «synced» only once it went through
@@ -167,7 +167,7 @@ function renderHeader() {
   b.innerHTML = u
     ? `<i class="hdr-avatar" style="background:${ctx.esc(ctx.settings.jersey || '#7c3aed')}">${ctx.esc((name[0] || '?').toUpperCase())}</i><span class="hdr-who"><b>${ctx.esc(name)}</b><small>${ctx.esc(sub)}</small></span>`
     : `${GOOGLE_G}<span>${ctx.esc(tr('Sign in'))}</span>`;
-  b.title = u ? tr('Your account and leaderboards') : tr('Sign in to put your times in the tables, and to have your profile on every device');
+  b.title = u ? tr('Your account and leaderboards') : tr('Sign in to put your times on the leaderboards, and to have your profile on every device');
   // what wants an account wears a lock for a guest (looking stays open to anyone)
   for (const id of ['hdr-ua', 'hdr-group']) {
     const el = $(id);
@@ -211,15 +211,15 @@ function accountMenu(ev) {
   m.querySelector('button').focus();
 }
 
-const LOCK_IC = '<svg class="lock-ic" viewBox="0 0 24 24" role="img" aria-label="with an account"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+const LOCK_IC = '<svg class="lock-ic" viewBox="0 0 24 24" role="img" aria-label="sign-in needed"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 
 // ---------- A guest at something that wants an account ----------
 const LOCK_SEEN = 'gruppetto.lockSeen';
 const LOCKS = {
-  ua: { title: 'Ratings of Ukraine: with an account', why: 'So that your kilometres and climbing count for your oblast. Anyone can look at the board.', guest: 'Just look, as a guest' },
-  group: { title: 'Group rides: with an account', why: 'So that the others see who rides beside them. Anyone sees the calendar; joining and riding come after signing in.', guest: 'See the calendar as a guest' },
+  ua: { title: 'Ukraine leaderboard: sign-in needed', why: 'So that your kilometres and climbing count for your region. Anyone can view the leaderboard.', guest: 'Browse as a guest' },
+  group: { title: 'Group rides: sign-in needed', why: 'So that the others see who rides beside them. Anyone sees the calendar; joining and riding come after signing in.', guest: 'See the calendar as a guest' },
 };
-const OPENS = { tables: 'the tables of climbs, sprints and laps', ua: 'Ratings of Ukraine', group: 'group rides', sync: 'your profile and history on every device' };
+const OPENS = { tables: 'the climb, sprint and lap leaderboards', ua: 'Ukraine leaderboard', group: 'group rides', sync: 'your profile and history on every device' };
 
 /**
  * A guest's first tap on something that wants an account: the sheet with what it gives and the two ways on, once
@@ -253,12 +253,12 @@ export function socialSignIn(source = 'welcome') {
 let todayAt = 0;
 let todayData = null;
 
-/** The lobby's strip for a signed-in rider: your oblast this week, the next group ride. Nothing for a guest. */
+/** The lobby's strip for a signed-in rider: your region this week, the next group ride. Nothing for a guest. */
 async function renderToday(force = false) {
   const box = $('me-today');
   if (!box) return;
   const u = currentUser();
-  if (!u || !profileRow) { box.hidden = true; return; } // the profile first (its oblast)
+  if (!u || !profileRow) { box.hidden = true; return; } // the profile first (its region)
   if (force || !todayData || Date.now() - todayAt > 120000) {
     todayAt = Date.now();
     const [regions, rides] = await Promise.all([
@@ -272,11 +272,11 @@ async function renderToday(force = false) {
   const tiles = [];
   if (profileRow?.region) {
     const r = regions?.find((x) => x.region === profileRow.region);
-    tiles.push(`<button class="me-tile" data-today="ua"><small>${tr('Your oblast this week')}</small>`
+    tiles.push(`<button class="me-tile" data-today="ua"><small>${tr('Your region this week')}</small>`
       + `<b>${ctx.esc(regionName(profileRow.region, ctx.lang))}${r ? ` · ${tr('{place} of {n}', { place: r.place, n: regions.length })}` : ''}</b>`
-      + `<span>${r ? tr('{km} km together, {riders} riding', { km: Math.round(Number(r.distance_km)).toLocaleString(ctx.locale), riders: r.riders }) : tr('No kilometres yet this week: yours can be the first')}</span></button>`);
+      + `<span>${r ? tr('{km} km together, {riders} riding', { km: Math.round(Number(r.distance_km)).toLocaleString(ctx.locale), riders: r.riders }) : tr('No distance yet this week: be the first')}</span></button>`);
   } else if (!profileRow.country || profileRow.country === 'UA') {
-    tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ratings of Ukraine')}</small><b>${tr('Pick your oblast')}</b><span>${tr('and your kilometres count for it')}</span></button>`);
+    tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ukraine leaderboard')}</small><b>${tr('Pick your region')}</b><span>${tr('and your kilometres count for it')}</span></button>`);
   }
   const now = Date.now(), next = (rides || []).filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   const g = next.find((x) => x.joined) || next[0];
@@ -287,7 +287,7 @@ async function renderToday(force = false) {
     tiles.push(`<button class="me-tile acc" data-today="group"><small>${g.joined ? tr('Your group ride') : tr('Group ride')}</small><b>${ctx.esc(when)}</b>`
       + `<span>${ctx.esc(g.title)}${route ? ` · ${ctx.esc(route.name)}` : ''} · ${tr('{n} going', { n: g.riders })}</span></button>`);
   } else {
-    tiles.push(`<button class="me-tile" data-today="group"><small>${tr('Group rides')}</small><b>${tr('Nothing planned this week')}</b><span>${tr('Set one up and send the link to friends')}</span></button>`);
+    tiles.push(`<button class="me-tile" data-today="group"><small>${tr('Group rides')}</small><b>${tr('Nothing planned this week')}</b><span>${tr('Create one and send the link to friends')}</span></button>`);
   }
   box.innerHTML = tiles.join('');
   box.hidden = false;
@@ -314,7 +314,7 @@ function renderCard() {
   $('social-pitch').hidden = !!u;
   if (u) {
     const name = profileRow?.display_name;
-    $('social-who').textContent = name ? tr('Signed in as {email} · in the tables: {name}', { email: u.email || '', name }) : tr('Signed in as {email}', { email: u.email || '' });
+    $('social-who').textContent = name ? tr('Signed in as {email} · on the leaderboards: {name}', { email: u.email || '', name }) : tr('Signed in as {email}', { email: u.email || '' });
     $('f-social-public').checked = profileRow?.public !== false;
   }
   renderSync();
@@ -533,7 +533,7 @@ async function flush(items = []) {
 }
 
 /**
- * After a ride (items: its results that may go in the tables). Signed in: they go now (or wait for the
+ * After a ride (items: its results that may go on the leaderboards). Signed in: they go now (or wait for the
  * network) and the finish screen shows the places; signed out: the finish screen asks you to sign in.
  */
 export async function socialAfterRide(items, { firstName, simulated = false, timed = false, ride = null } = {}) {
@@ -545,11 +545,11 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
   results = new Map();
   if (!items.length) {
     if (currentUser()) sync().catch((e) => console.warn('Account sync:', e.message));
-    // laps or segments were timed, but none go to the tables: say why, rather than nothing
+    // laps or segments were timed, but none go to the leaderboards: say why, rather than nothing
     if (timed) {
       $('sum-social-text').textContent = simulated
-        ? tr('Simulator ride: these times stay on this device. The tables take rides on a trainer only.')
-        : tr('These times did not pass the checks (power, speed, weight), so they are not in the tables.');
+        ? tr('Simulator ride: these times stay on this device. Leaderboards take trainer rides only.')
+        : tr('These times did not pass the checks (power, speed, weight), so they are not on the leaderboards.');
       $('btn-social-cta').hidden = true;
       cta.hidden = false;
     }
@@ -557,7 +557,7 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
   }
   if (!currentUser()) {
     $('btn-social-cta').hidden = false;
-    $('btn-social-cta').textContent = tr('Sign in, so your time on {climb} goes into the table', { climb: firstName || tr('this route') });
+    $('btn-social-cta').textContent = tr('Sign in to put your time on {climb} on the leaderboard', { climb: firstName || tr('this route') });
     $('btn-social-cta').dataset.items = JSON.stringify(items);
     $('sum-social-text').textContent = '';
     cta.hidden = false;
@@ -565,7 +565,7 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
   }
   try {
     const answers = await flush(items);
-    if (!answers.length && queued().length) { $('sum-social-text').textContent = tr('No connection: your times go to the tables next time'); $('btn-social-cta').hidden = true; cta.hidden = false; }
+    if (!answers.length && queued().length) { $('sum-social-text').textContent = tr('No connection: your times go to the leaderboards next time'); $('btn-social-cta').hidden = true; cta.hidden = false; }
     decorateSummary();
     await sync();
   } catch (e) { status(e.message); }
@@ -578,7 +578,7 @@ export function decorateSummary() {
     const r = results.get(`${tr0.dataset.seg}|${tr0.dataset.t}`);
     const cell = tr0.querySelector('.lb-cell');
     if (!cell) continue;
-    if (!r || r.status === 'rejected' || !r.place) { cell.innerHTML = r?.status === 'rejected' ? `<small class="muted" title="${ctx.esc(tr('Not believable, so not in the table'))}">—</small>` : ''; continue; }
+    if (!r || r.status === 'rejected' || !r.place) { cell.innerHTML = r?.status === 'rejected' ? `<small class="muted" title="${ctx.esc(tr('Not credible, so not on the leaderboard'))}">—</small>` : ''; continue; }
     const week = r.week_place ? ` · ${tr('week #{n}', { n: r.week_place })}` : '';
     cell.innerHTML = `<button class="lb-place" data-seg="${ctx.esc(tr0.dataset.seg)}">${tr('#{place} of {total}', { place: r.place, total: r.total })}${week}</button>`;
     cell.querySelector('button').onclick = () => openBoard(ctx.routeOfSegment(tr0.dataset.seg), tr0.dataset.seg);
@@ -624,7 +624,7 @@ async function renderBoard() {
       : `<tr class="${r.me ? 'me' : ''}"><td>${r.place}</td><td>${flagOf(r.country)}</td><td>${ctx.esc(r.display_name)}${r.flags?.length ? ` <small class="lb-flag" title="${ctx.esc(tr('Unconfirmed: no heart rate, or close to the limit of the possible'))}">?</small>` : ''}</td>`
         + `<td>${ctx.fmtTime(Number(r.time_s))}</td><td>${Number(r.wkg).toFixed(1)}</td><td>${r.avg_hr || '—'}</td><td>${date(r.ridden_at)}</td></tr>`)).join('');
   } catch (e) {
-    body.innerHTML = `<tr><td colspan="7" class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="muted">${ctx.esc(tr('Could not reach the leaderboards: {error}', { error: e.message }))}</td></tr>`;
   }
 }
 
@@ -649,9 +649,9 @@ export async function renderRoute(route = ctx?.currentRoute()) {
     const who = lead && `${flagOf(lead.country)} ${ctx.esc(lead.display_name)} <b>${ctx.fmtTime(Number(lead.time_s))}</b>`;
     const head = lead
       ? (route.oneWay ? tr('🏆 Best finish: {who}', { who }) : tr('🏆 Best lap: {who}', { who }))
-      : (route.oneWay ? tr('🏆 No finish times in the table yet: ride it on a trainer to be the first') : tr('🏆 No lap times in the table yet: ride a lap on a trainer to be the first'));
+      : (route.oneWay ? tr('🏆 No finish times on the leaderboard yet: ride it on a trainer to be the first') : tr('🏆 No lap times on the leaderboard yet: ride a lap on a trainer to be the first'));
     const html = `<span>${head}${me ? ` · ${tr('yours {time}, {place} of {total}', { time: ctx.fmtTime(Number(me.time_s)), place: me.place, total: b.total })}` : ''}`
-      + `${currentUser() ? '' : ` <button class="link-btn" data-signin>${tr('Sign in so your time is here')}</button>`}</span>`
+      + `${currentUser() ? '' : ` <button class="link-btn" data-signin>${tr('Sign in to see your time here')}</button>`}</span>`
       + `<button class="pill-btn" data-board>${tr('Leaderboards')}</button>`;
     boards.set(route.id, { at: Date.now(), html });
     show(html);
@@ -678,7 +678,7 @@ export function socialSegLeader(climbId) {
 const uaCache = new Map(); // filters -> { at, data }, a minute
 const uaPick = (id) => $(id).querySelector('.sel')?.dataset.v || '';
 
-/** Oblast against oblast, or rider against rider, by kilometres or climbing. */
+/** Region against region, or rider against rider, by kilometres or climbing. */
 export function openUa() {
   if (!on()) return;
   $('ua-view').hidden = false;
@@ -695,15 +695,15 @@ async function renderUa() {
   const up = (x) => `${Number(x).toLocaleString(ctx.locale)} ${tr('m')}`;
   $('ua-head').innerHTML = riders
     ? `<tr><th>#</th><th>${tr('Rider')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Rides')}</th></tr>`
-    : `<tr><th>#</th><th>${tr('Oblast')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
+    : `<tr><th>#</th><th>${tr('Region')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
   const body = $('ua-rows');
   body.innerHTML = `<tr><td colspan="5" class="muted">${tr('Loading…')}</td></tr>`;
   $('ua-empty').hidden = true;
   // who is not on the board yet, and why
   const u = currentUser();
   $('ua-cta').hidden = !!(u && profileRow?.region);
-  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to put your kilometres on the board of your oblast')}`
-    : `<button class="link-btn" data-ua-setup>${tr('Pick your oblast')}</button> ${tr('to ride for it')}`;
+  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to count your kilometres for your region')}`
+    : `<button class="link-btn" data-ua-setup>${tr('Pick your region')}</button> ${tr('to ride for it')}`;
   const si = $('ua-cta').querySelector('[data-ua-signin]'), su = $('ua-cta').querySelector('[data-ua-setup]');
   if (si) si.onclick = () => signIn(redirect()).catch((e) => status(e.message));
   if (su) su.onclick = () => openSetup();
@@ -730,7 +730,7 @@ async function renderUa() {
     }
   } catch (e) {
     uaCache.delete(key);
-    body.innerHTML = `<tr><td colspan="5" class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="5" class="muted">${ctx.esc(tr('Could not reach the leaderboards: {error}', { error: e.message }))}</td></tr>`;
   }
 }
 
@@ -757,7 +757,7 @@ export function openGroups(focus = null) {
   $('gr-view').hidden = false;
   const u = currentUser();
   $('gr-cta').hidden = !!u;
-  $('gr-cta').innerHTML = `<button class="pill-btn" data-gr-signin>${tr('Sign in with Google')}</button> ${tr('to join group rides and set them up')}`;
+  $('gr-cta').innerHTML = `<button class="pill-btn" data-gr-signin>${tr('Sign in with Google')}</button> ${tr('to join and create group rides')}`;
   $('gr-cta').querySelector('[data-gr-signin]').onclick = () => signIn(redirect()).catch((e) => status(e.message));
   // the form: the routes you can ride together (built in: a GPX of your own is only on your device), from the next hour
   const list = ctx.routes(), cur = ctx.currentRoute();
@@ -797,7 +797,7 @@ const raceLabel = (g, route) => (g.kind !== 'race' ? ''
 async function loadGroups() {
   if (!grRows.length) $('gr-list').innerHTML = `<li class="muted">${tr('Loading…')}</li>`;
   try { grRows = await groupRides(); } catch (e) {
-    $('gr-list').innerHTML = `<li class="muted">${ctx.esc(tr('No connection to the tables: {error}', { error: e.message }))}</li>`;
+    $('gr-list').innerHTML = `<li class="muted">${ctx.esc(tr('Could not reach the leaderboards: {error}', { error: e.message }))}</li>`;
     return;
   }
   renderGroups();
@@ -891,7 +891,7 @@ async function groupCreate(ev) {
   if (!profileRow) { openSetup(); return; }
   const held = $('gr-start').value === 'ready';
   const startsAt = new Date(`${$('gr-date').value}T${$('gr-time').value}`);
-  if (!held && !(startsAt.getTime() > Date.now() - 60e3)) { err.textContent = tr('Pick a time to come'); err.hidden = false; return; }
+  if (!held && !(startsAt.getTime() > Date.now() - 60e3)) { err.textContent = tr('Pick a start time'); err.hidden = false; return; }
   $('gr-create').disabled = true;
   try {
     const kind = $('gr-kind').value === 'race' ? 'race' : 'ride';
@@ -906,7 +906,7 @@ async function groupCreate(ev) {
     grFocus = id;
     await loadGroups();
     const url = `${location.origin}${location.pathname}#group=${id}`;
-    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Group ride set up. Link copied: send it to your friends')); } catch { ctx.toast(tr('Group ride set up')); }
+    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Group ride created. Link copied: send it to your friends')); } catch { ctx.toast(tr('Group ride created')); }
   } catch (e) { err.textContent = e.message; err.hidden = false; } finally { $('gr-create').disabled = false; }
 }
 
