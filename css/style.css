@@ -1723,7 +1723,7 @@ body.watching { overflow: hidden; }
 .hud-strip { flex: 1 0 100%; }
 .hud-strip > .board, .hud-strip > .topbar, .hud-strip .stat, .hud-strip .tb-cell { flex-grow: 1; }
 .hud-strip > .board, .hud-strip > .topbar {
-  display: flex; flex-direction: row; flex: 0 1 auto; width: auto; min-width: 0;
+  display: flex; flex-direction: row; flex: 1 1 auto; width: auto; min-width: 0;
   background: none; border: 0; border-radius: 0; box-shadow: none; backdrop-filter: none;
 }
 .hud-strip > * + * { border-left: 1px solid rgba(255, 255, 255, .16); }
@@ -1732,7 +1732,19 @@ body.watching { overflow: hidden; }
 .hud-strip .stat > .ic { display: none; }
 .hud-strip .st-val b { font-size: 1.55rem; }
 .hud-strip .stat.power .st-val b { font-size: 2.3rem; }
-.hud-strip .tb-cell { flex-direction: column; align-items: flex-start; justify-content: flex-end; gap: 0; padding: 7px 10px 8px; }
+.tb-label { display: none; }
+.hud-strip .tb-cell { display: grid; grid-template-columns: auto 1fr; align-content: end; align-items: baseline; column-gap: 5px; padding: 7px 10px 5px; border-bottom: 3px solid #64748b; }
+.hud-strip .tb-label { display: block; grid-column: 1 / -1; font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; color: #9fb0c6; }
+.hud-strip .tb-cell span { font-size: .75rem; }
 .hud-strip .tb-cell .ic { display: none; }
 .hud-strip .tb-cell b { font-size: 1.55rem; text-align: left; min-width: 0; }
 .hud-strip .tb-cell + .tb-cell { border-left: 1px solid rgba(255, 255, 255, .08); }
+/* B, as in the mockup: the controls, then the lap profile across the screen, then the numbers at the very bottom;
+   no power trace (the numbers say it) */
+#ride.hud-b .hud-bottom { gap: 6px; }
+#ride.hud-b .bottom-main { order: 1; flex: 1 0 100%; }
+#ride.hud-b .trace { display: none; }
+#ride.hud-b .bottom-row { min-height: 0; }
+#ride.hud-b .progress { order: 2; flex: 1 0 100%; width: auto; gap: 4px; }
+#ride.hud-b #profile { height: 44px; }
+#ride.hud-b .hud-strip { order: 3; }
