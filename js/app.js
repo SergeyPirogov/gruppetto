@@ -2999,7 +2999,7 @@ function showSummary(e, { live = false } = {}) {
     $('btn-strava-upload').textContent = live ? tr('Upload to Strava') : tr('Send to Strava');
     const st = $('strava-upload-status');
     st.hidden = !e.stravaId;
-    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">View on Strava</a>`;
   };
   files(live);
   uploadUi(live && canUpload(recorder));
@@ -3806,7 +3806,7 @@ async function uploadToStrava() {
     e.stravaId = activityId;
     if (history.includes(e)) saveHistory();
     track('strava', duplicate ? 'duplicate' : 'uploaded');
-    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">View on Strava</a>`;
     btn.hidden = true;
     $('sum-strava').hidden = true;
   } catch (err) {

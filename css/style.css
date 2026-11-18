@@ -1682,3 +1682,11 @@ body.watching { overflow: hidden; }
 #wv-write { display: flex; flex-direction: column; gap: 6px; }
 #wv-write[hidden] { display: none; }
 .chat-watch-link { align-self: flex-start; font-size: .82rem; }
+
+/* Strava, by its brand guidelines: its own «Connect with Strava» button, «View on Strava» links in its orange */
+.strava-connect { padding: 0; border: 0; background: none; line-height: 0; border-radius: 6px; cursor: pointer; }
+.strava-connect img { display: block; height: 48px; width: auto; }
+.strava-connect[hidden] { display: none; }
+.strava-connect:focus-visible { outline: 2px solid #fc5200; outline-offset: 2px; }
+.strava-link { color: #fc5200; font-weight: 700; text-decoration: underline; }
+.strava-compat { display: block; height: 14px; width: auto; margin-top: 12px; opacity: .85; }
