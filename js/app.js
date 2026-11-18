@@ -558,7 +558,7 @@ async function importGpxText(text, fileName) {
       const el = $('lobby-msg');
       el.innerHTML = `<div class="imp"><div class="imp-main"><b class="imp-title">${esc(tr('Importing {name}', { name: track.name || file.name }))}</b>`
         + `<ul class="imp-steps">${rows.map(([st, what, more]) => `<li class="imp-${st}"><i aria-hidden="true"></i><span>${esc(what)}</span>${more ? `<small>${esc(more)}</small>` : ''}</li>`).join('')}</ul></div>`
-        + `${mapState === 'wait' ? `<button class="pill-btn imp-skip" id="imp-skip" title="${esc(tr('The road, heights and bends stay real; buildings, woods and water are made up'))}">${esc(tr('Skip the map'))}</button>` : ''}</div>`;
+        + `${mapState === 'wait' ? `<button class="pill-btn imp-skip" id="imp-skip" title="${esc(tr('The road, elevation and bends are real; buildings, woods and water are generated'))}">${esc(tr('Skip the map'))}</button>` : ''}</div>`;
       el.hidden = false; el.classList.add('info'); clearTimeout(alertBox.t);
       const btn = $('imp-skip');
       if (btn) btn.onclick = () => { mapState = 'skip'; skip.abort(); show(); };
@@ -841,7 +841,7 @@ function renderFtpBox() {
   let closed = false;
   try { closed = !!localStorage.getItem(FTP_BOX_KEY); } catch { /* private mode */ }
   $('ftp-box').hidden = closed || ftpKnown();
-  $('ftp-title').textContent = tr('Your FTP is a guess: {w} W', { w: settings.ftp });
+  $('ftp-title').textContent = tr('Your FTP is an estimate: {w} W', { w: settings.ftp });
 }
 /** The ramp test's card, its Ride button one click away. */
 function openFtpTest(from) {
@@ -1482,7 +1482,7 @@ async function startRide(opts) {
     attacks: !racing && !workout && !group && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
     ghost: racing || group ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
-    // free-ride pacer (#27): steady at the W/kg you set, waiting at the foot of each climb
+    // free-ride pacer (#27): steady at the W/kg you set, waiting at the bottom of each climb
     pacer: racing || group ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
   if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
@@ -1760,13 +1760,13 @@ function attackStep(grade) {
     if (!a || t >= a.fadeEnd) continue;
     if (!a.told && t >= a.start) {
       a.told = true;
-      const msg = a.lead ? tr('⚡ {name} attacks!', { name: b.name }) : tr('⚡ {name} goes across', { name: b.name });
-      toast(msg); cueSay(a.lead ? '{name} attacks!' : '{name} goes across', { name: b.name });
+      const msg = a.lead ? tr('⚡ {name} attacks!', { name: b.name }) : tr('⚡ {name} bridges across', { name: b.name });
+      toast(msg); cueSay(a.lead ? '{name} attacks!' : '{name} bridges across', { name: b.name });
     }
     const gap = b.dist - ride.dist;
     if (gap > 15) a.away = true;
     if (attacking(b, t) && a.away && !a.caught && gap < -2) { a.caught = true; toast(tr('You caught {name}', { name: b.name })); }
-    if (!a.tiring && t >= a.holdEnd) { a.tiring = true; if (a.lead && gap > 30) toast(tr('{name} is tiring: {s} s to close', { name: b.name, s: Math.round(gap / Math.max(ride.v, 3)) })); }
+    if (!a.tiring && t >= a.holdEnd) { a.tiring = true; if (a.lead && gap > 30) toast(tr('{name} is fading: {s} s to close the gap', { name: b.name, s: Math.round(gap / Math.max(ride.v, 3)) })); }
   }
 }
 
@@ -1872,7 +1872,7 @@ function groupRaceFinished() {
   const avgW = s?.avgPower ?? null, wkg = avgW ? Math.round((avgW / Math.max(30, settings.weight)) * 100) / 100 : null;
   groupSent = { id: ride.group.id, p: null };
   groupSent.p = ride.group.sent = groupFinish(ride.group.id, { time: Math.round(ride.race.myTime * 10) / 10, avgW, wkg, sim, ftpWkg: settings.ftp && settings.weight ? Math.round(settings.ftp / settings.weight * 100) / 100 : null })
-    .catch((e) => toast(tr('The result did not reach the table: {error}', { error: e.message })));
+    .catch((e) => toast(tr('The result did not reach the leaderboard: {error}', { error: e.message })));
 }
 
 /**
@@ -2196,7 +2196,7 @@ function updateHud(cadence, hr, grade) {
     const air = 0.5 * DEFAULTS.rho * ride.cda * Math.max(0, ride.v) ** 3; // W pushing the air at this speed
     const saved = Math.round((air * df) / 5) * 5;
     const passing = (ride.heldFor || 0) > PASS_AFTER - 1.5;
-    $('draft-tag').innerHTML = `<b>${tr('Slipstream')}</b><span>${passing ? tr('pulling out to pass…') : saved >= 5 ? tr('saving ~{w} W', { w: saved }) : tr('a little shelter')}</span><i class="dt-bar"><i style="width:${Math.round(Math.min(1, df / 0.33) * 100)}%"></i></i>`;
+    $('draft-tag').innerHTML = `<b>${tr('Slipstream')}</b><span>${passing ? tr('pulling out to pass…') : saved >= 5 ? tr('saving ~{w} W', { w: saved }) : tr('a little draft')}</span><i class="dt-bar"><i style="width:${Math.round(Math.min(1, df / 0.33) * 100)}%"></i></i>`;
     $('draft-tag').title = tr('{n}% less air drag behind the wheel', { n: Math.round(df * 100) });
   }
   if (ride.ghost) {
@@ -3033,7 +3033,7 @@ function renderChallenge() {
 $('ch-ride').onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); updateSummary(); startRide(); };
 $('ch-drop').onclick = () => { track('challenge-dismiss'); challenge = null; saveChallenge(); renderChallenge(); updateSummary(); };
 
-// ---------- Shadow ride (#24) ----------
+// ---------- Ghost ride (#24) ----------
 // Race a ghost of an earlier ride on the same route: it rides where you were at the same moment.
 /** Rides on this route that can ride as a ghost (they carry a distance trace). */
 const ghostRides = (routeId) => history.filter((e) => e.routeId === routeId && e.chart?.d?.length > 1 && e.summary?.distance > 300);
@@ -3276,13 +3276,13 @@ function renderFtpTip(el, e = null) {
     const s = ftpSuggestion(curveEntries(), settings.ftp);
     if (s) {
       const from = s.ramp ? tr('75 % of your best minute in a ramp test ({w} W)', { w: s.w }) : tr('95 % of your best 20 minutes ({w} W, {date})', { w: s.w, date: new Date(s.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) });
-      rows.push({ title: tr('Your rides suggest FTP {w} W', { w: s.ftp }), why: `${from} · ${tr('now {w} W', { w: settings.ftp })}`,
+      rows.push({ title: tr('Your rides suggest an FTP of {w} W', { w: s.ftp }), why: `${from} · ${tr('now {w} W', { w: settings.ftp })}`,
         button: tr('Set FTP to {w} W', { w: s.ftp }), set: () => { settings.ftp = s.ftp; settings.ftpSet = true; $('f-ftp').value = s.ftp; return tr('FTP set to {w} W', { w: s.ftp }); } });
     }
   }
   const wp = wPrimeSuggestion(curveEntries(), settings.wPrimeKj || DEFAULT_W_PRIME / 1000);
   if (wp) {
-    rows.push({ title: tr('Your rides suggest W′ {kj} kJ', { kj: wp.kj }), why: `${tr('from your best 5 and 20 minutes ({a} W, {b} W)', { a: wp.p5, b: wp.p20 })} · ${tr('now {kj} kJ', { kj: settings.wPrimeKj || DEFAULT_W_PRIME / 1000 })}`,
+    rows.push({ title: tr('Your rides suggest a W′ of {kj} kJ', { kj: wp.kj }), why: `${tr('from your best 5 and 20 minutes ({a} W, {b} W)', { a: wp.p5, b: wp.p20 })} · ${tr('now {kj} kJ', { kj: settings.wPrimeKj || DEFAULT_W_PRIME / 1000 })}`,
       button: tr('Set W′ to {kj} kJ', { kj: wp.kj }), set: () => { settings.wPrimeKj = wp.kj; $('f-wprime').value = wp.kj; return tr('W′ set to {kj} kJ', { kj: wp.kj }); } });
   }
   el.hidden = !rows.length;
@@ -3460,7 +3460,8 @@ function renderAvatar() {
 /** «Good evening, Serhii» and the date over the lobby. */
 function renderGreeting() {
   const h = new Date().getHours();
-  const hello = h < 5 ? tr('Good night') : h < 12 ? tr('Good morning') : h < 18 ? tr('Good afternoon') : tr('Good evening');
+  // «Good night» is a goodbye in English: late at night it says good evening there
+  const hello = h < 5 ? (lang === 'en' ? 'Good evening' : tr('Good night')) : h < 12 ? tr('Good morning') : h < 18 ? tr('Good afternoon') : tr('Good evening');
   const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
   $('greet').textContent = named ? `${hello}, ${settings.name.trim()}` : hello;
   $('greet-date').textContent = new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
@@ -3725,7 +3726,7 @@ async function downloadAllRides() {
   let missing = 0;
   try {
     for (const [i, e] of history.entries()) {
-      btn.textContent = tr('Packing… {n} of {total}', { n: i + 1, total: history.length });
+      btn.textContent = tr('Preparing… {n} of {total}', { n: i + 1, total: history.length });
       const r = await getRide(e.id);
       if (!r?.samples?.length) { missing++; continue; }
       const rec = new Recorder();
@@ -4263,7 +4264,7 @@ function chatSend(body) {
   const G = ride?.group;
   if (!G?.live?.joined) { toast(tr('Not connected to the group ride yet')); return false; }
   const msg = { u: G.me.id, n: G.me.name, ...body };
-  if (!G.gate.ok(Date.now())) { toast(tr('Not so fast: a message a second')); return false; }
+  if (!G.gate.ok(Date.now())) { toast(tr('Slow down: one message a second')); return false; }
   const shown = G.chat.receive(msg, Date.now(), { mine: true });
   if (!shown) return false;
   G.live.say('chat', body.q ? msg : { ...msg, m: shown.text });
@@ -4318,7 +4319,7 @@ function pacerOn() {
 }
 
 /**
- * Free-ride pacer: at the foot of a climb, when you are more than 40 m back, he stops and waits
+ * Free-ride pacer: at the bottom of a climb, when you are more than 40 m back, he stops and waits
  * until you are there, so you go up together.
  */
 function pacerRegroup(P, dt) {
@@ -4333,7 +4334,7 @@ function pacerRegroup(P, dt) {
     const foot = R.oneWay ? c.start : c.start + Math.ceil((P.dist - c.start) / L) * L; // the next foot ahead
     if (foot >= P.dist && foot <= P.dist + P.v * dt + 0.01 && ride.dist < foot - 40) {
       P.dist = foot; P.v = 0; P.waitAt = foot;
-      toast(tr('{name} waits for you at the foot of {climb}', { name: P.name, climb: c.name }));
+      toast(tr('{name} waits for you at the bottom of {climb}', { name: P.name, climb: c.name }));
       return;
     }
   }

@@ -1168,7 +1168,7 @@ export class Scene3D {
         }`,
     });
     // soft shading where things meet (AO) from the depth alone: samples in pairs across the pixel, so a plane seen at a
-    // slant (the road ahead) stays clear and only a real crease darkens: grass at the foot of a wall, under a tree,
+    // slant (the road ahead) stays clear and only a real crease darkens: grass at the bottom of a wall, under a tree,
     // a rock in the verge, the eaves of a house
     P.ao = new THREE.ShaderMaterial({
       uniforms: { tDepth: { value: null }, near: { value: 0.1 }, far: { value: 1000 }, proj: { value: new THREE.Vector2(1, 1) } },

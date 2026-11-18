@@ -202,7 +202,7 @@ export function averages(samples, from, to) {
 }
 
 /**
- * What a ride sends to the tables: its best lap (or the finish) and its best on each climb and sprint, on a
+ * What a ride sends to the leaderboards: its best lap (or the finish) and its best on each climb and sprint, on a
  * built-in route, never from the simulator. `efforts` and `laps` come from the ride as { segId, kind, time, length, power, hr,
  * top?, at }. The ones the server would refuse stay here.
  */
