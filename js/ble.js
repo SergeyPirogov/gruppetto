@@ -164,6 +164,12 @@ export function parseRideKeypad(bytes) {
 // ---------- Devices ----------
 
 const RECONNECT_ATTEMPTS = 20;
+/**
+ * During a ride a dropped device is tried again for good, every 10 s once the backoff is spent: a trainer off for
+ * a power cut comes back by itself when it is on again, without a reload that would end the ride.
+ */
+let keepReconnecting = false;
+export function setKeepReconnecting(on) { keepReconnecting = !!on; }
 
 class Device extends EventTarget {
   constructor() {
@@ -209,7 +215,7 @@ class Device extends EventTarget {
       await withTimeout(this.connect(this.device), 15000);
       this.emit('reconnected');
     } catch {
-      if (attempt + 1 < RECONNECT_ATTEMPTS && !this._manual) {
+      if ((attempt + 1 < RECONNECT_ATTEMPTS || keepReconnecting) && !this._manual) {
         setTimeout(() => this._reconnect(attempt + 1), Math.min(10000, 1000 * 2 ** attempt));
       } else {
         this.emit('reconnect-failed');
@@ -503,7 +509,7 @@ export class ZwiftController extends Device {
       await withTimeout(this.connect(unit.device), 15000);
       this.emit('reconnected');
     } catch {
-      if (attempt + 1 < RECONNECT_ATTEMPTS && !this._manual) {
+      if ((attempt + 1 < RECONNECT_ATTEMPTS || keepReconnecting) && !this._manual) {
         setTimeout(() => this._reconnectUnit(unit, attempt + 1), Math.min(10000, 1000 * 2 ** attempt));
       } else {
         this.units = this.units.filter((u) => u !== unit);

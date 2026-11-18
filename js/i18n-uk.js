@@ -306,7 +306,7 @@ export const UK = {
   'Sprint {n}': 'Спринт {n}', 'Sprint record': 'Рекорд спринту', '⚡ {name}: {m} m — sprint!': '⚡ {name}: {m} м — спринт!', '{n} m to the line': '{n} м до лінії',
   'top speed': 'макс. швидкість', 'max': 'макс.', 'SPRINT': 'СПРИНТ', 'LINE': 'ФІНІШ', '{name}: {time} 🏁': '{name}: {time} 🏁',
   // unfinished ride
-  'Unfinished ride: {route}{workout} · {time} · {when}': 'Незавершений заїзд: {route}{workout} · {time} · {when}', 'Save ride': 'Зберегти заїзд', 'Discard': 'Відкинути', 'Tap again to discard': 'Ще раз, щоб відкинути',
+  'Unfinished ride: {route}{workout} · {time} · {when}': 'Незавершений заїзд: {route}{workout} · {time} · {when}', 'Save ride': 'Зберегти заїзд', 'Continue riding': 'Продовжити заїзд', 'Going on from {time}': 'Продовжуємо з {time}', 'Discard': 'Відкинути', 'Tap again to discard': 'Ще раз, щоб відкинути',
   'Camera: drag to turn, pinch to zoom, double-tap to reset': 'Камера: тягни, щоб покрутити, зведи пальці для масштабу, подвійний дотик, щоб скинути',
   // time of day and weather (#41)
   'Time of day': 'Час доби', 'Midday': 'День', 'Morning': 'Ранок', 'Evening (golden hour)': 'Вечір (золота година)', 'Night': 'Ніч', 'By the clock': 'За годинником',

@@ -1,4 +1,4 @@
-import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
+import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
@@ -167,7 +167,7 @@ let lastObcLabel = '';
 const reconnecting = new Map(); // key -> attempt number
 
 for (const d of DEVICES) {
-  d.dev.addEventListener('disconnect', () => { track('device-drop', d.key); updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
+  d.dev.addEventListener('disconnect', () => { track('device-drop', d.key); if (ride) saveDraft(); updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
   d.dev.addEventListener('reconnecting', ({ detail: n }) => { reconnecting.set(d.key, n); updateDeviceUI(); });
   d.dev.addEventListener('reconnected', () => {
     reconnecting.delete(d.key);
@@ -1347,8 +1347,9 @@ async function startRide(opts) {
   if (await wentFull) rideFullscreen = true;
   // a group ride (#84): its route, a free ride with the others live instead of the bots, held on the line till the start
   const group = opts?.group || null;
-  const route = (group && routes.find((r) => r.id === group.routeId)) || routes.find((r) => r.id === settings.routeId) || routes[0];
-  const workout = group ? null : allWorkouts().find((w) => w.id === settings.mode) || null;
+  const resume = opts?.resume || null; // an unfinished ride from before a reload: its route, workout and progress
+  const route = (group && routes.find((r) => r.id === group.routeId)) || (resume && routes.find((r) => r.id === resume.meta.routeId)) || routes.find((r) => r.id === settings.routeId) || routes[0];
+  const workout = group ? null : resume ? allWorkouts().find((w) => w.id === resume.meta.workout?.id) || null : allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   const racing = !group && settings.mode === 'race';
   // a group race: the others live instead of the bots, over the laps the host set, the start at the set time
@@ -1408,6 +1409,8 @@ async function startRide(opts) {
   trainer.resetMode();
   recorder.reset();
   recorder.position = positionFor(route); // the GPS track in the FIT: the real road, or the route's place in the ocean
+  if (resume) resumeFrom(resume);
+  setKeepReconnecting(true);
   updateGear();
   $('lobby').hidden = true;
   if ($('drawer').classList.contains('as-page')) $('drawer').hidden = true; // a lobby page (Devices…) stays in the lobby
@@ -2610,8 +2613,33 @@ function saveDraft() {
       routeId: ride.route.id, routeName: ride.route.name, intensity: settings.intensity,
       workout: w ? { id: w.id, name: w.name, source: w.source || null, eventId: w.eventId || null } : null,
       lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts,
+      // where you were, to go on from there after a reload
+      at: { dist: ride.dist, elapsed: ride.elapsed, workoutT: ride.workoutT, workoutDone: ride.workoutDone, gain: ride.gain, laps: ride.laps, lapStartT: ride.lapStartT, lapStartI: ride.lapStartI },
     },
   });
+}
+
+/** Go on with an unfinished ride: its seconds so far, and you, the bunch and the pacer where you were. */
+function resumeFrom(d) {
+  const at = d.meta.at || { dist: d.samples.at(-1)?.distance || 0, elapsed: d.samples.length, workoutT: d.samples.length };
+  recorder.samples = d.samples.slice();
+  recorder.startTime = new Date(d.start);
+  recorder.lapStarts = d.lapStarts || [0];
+  const shift = Math.max(0, at.dist || 0) - ride.dist;
+  ride.dist = ride.prevDist = Math.max(0, at.dist || 0);
+  for (const o of [...ride.bots, ride.pacer, ride.ghost].filter(Boolean)) o.dist += shift;
+  ride.elapsed = at.elapsed || d.samples.length;
+  ride.workoutT = at.workoutT ?? ride.elapsed;
+  ride.workoutDone = !!at.workoutDone;
+  ride.gain = at.gain || 0;
+  ride.lastElev = ride.route.elevAt(ride.dist);
+  ride.laps = at.laps || 0; ride.lapStartT = at.lapStartT || 0; ride.lapStartI = at.lapStartI || 0;
+  ride.lapTimes = d.meta.lapTimes || []; ride.splits = d.meta.splits || []; ride.efforts = d.meta.efforts || [];
+  ride.splitFrom = { t: ride.elapsed, d: ride.dist, i: recorder.samples.length };
+  ride.draftAt = ride.elapsed;
+  if (d.meta.intensity) settings.intensity = d.meta.intensity;
+  if (ride.workout && !ride.workoutDone) { const t = targetAt(ride.workout, ride.workoutT, settings.ftp); if (t) ride.target = ergTarget(t); }
+  toast(tr('Going on from {time}', { time: fmtTime(ride.elapsed) }));
 }
 
 /** An unfinished ride found on opening the page: save it to history (then upload or download it) or discard it. */
@@ -2625,6 +2653,8 @@ async function offerDraft() {
     route: d.meta.routeName || '', workout: d.meta.workout ? ` · ${d.meta.workout.name}` : '', time: fmtTime(d.samples.length), when,
   });
   box.hidden = false;
+  // go on riding it: the route and the workout it had, from where it stopped (the draft stays till the finish)
+  $('draft-continue').onclick = () => { box.hidden = true; track('draft', 'continue'); startRide({ resume: d }); };
   $('draft-save').onclick = async () => {
     const rec = new Recorder();
     rec.samples = d.samples; rec.startTime = new Date(d.start); rec.lapStarts = d.lapStarts || [0]; rec.position = positionOf(d.meta?.routeId);
@@ -2649,6 +2679,7 @@ async function offerDraft() {
 let rideFullscreen = false; // full screen was ours (installed app): leave it with the ride
 function finishRide() {
   if (!ride) return;
+  setKeepReconnecting(false);
   if (rideFullscreen && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   rideFullscreen = false;
   advance();
@@ -4733,6 +4764,8 @@ $('f-lang').value = lang;
 $('f-lang').onchange = () => setLang($('f-lang').value);
 initLobby();
 offerDraft();
+// the page closing mid-ride (a reload, the lid shut): what was ridden is kept, to go on with
+window.addEventListener('pagehide', () => { if (ride) saveDraft(); });
 // accounts and leaderboards: nothing at all without a project in social-config.js
 initSocialUi({
   settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,
