@@ -5,14 +5,14 @@
 import {
   socialOn, initSocial, currentUser, onUser, signIn, signOut, loadProfile, saveProfile, queueAdd, queued, sendResults, leaderboard, deleteAccount,
   loadActivities, saveActivities, sendRides, regionBoard, riderBoard, groupRides, createGroupRide, cancelGroupRide, joinGroupRide, groupLive,
-  finishGroupRace, groupRaceResults,
+  finishGroupRace, groupRaceResults, recordIds, loadRecord, saveRecord, deleteRecords,
 } from './social.js';
 import { rideWindow } from './group.js';
 import { openWatch, initWatch } from './watch-ui.js';
 import { initLeagues, load as loadLeagues, leagueSelect, chosenLeague } from './league-ui.js';
 import {
   SYNC_FIELDS, profileFields, accountData, mergeData, sameData, categoryOf, routeVersion, withGaps, flagOf, mergeById, workoutsData, activityRows,
-  REGIONS, regionName,
+  REGIONS, regionName, packRecord, unpackRecord,
 } from './social-core.js';
 
 let ctx = null;
@@ -431,11 +431,43 @@ async function syncRides() {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const gone = Object.fromEntries(Object.entries(localDeleted).filter(([id, t]) => { const r = byId.get(id); return !r || !r.deleted || (r.changed_at || 0) < t; }));
   await saveActivities(activityRows(m.push, gone));
+  await syncRecords(items, gone);
   // the rides the account holds now: what it had, and what went up from here
   const there = new Set(rows.filter((r) => !r.deleted).map((r) => r.id));
   for (const e of m.push) there.add(e.id);
   for (const id of Object.keys(gone)) there.delete(id);
   return there.size;
+}
+
+/**
+ * The rides' full records: the ones this device keeps and the account lacks go up (a few a sync, the newest
+ * first), the deleted go from it. Another device fetches one when the ride is opened (accountRecord).
+ */
+async function syncRecords(items, gone) {
+  const have = await recordIds();
+  if (!have) return; // the table is not in the project yet (0009_activity_records.sql)
+  const there = new Set(have);
+  const del = Object.keys(gone || {}).filter((id) => there.has(id));
+  if (del.length) await deleteRecords(del);
+  let sent = 0;
+  for (const e of items) {
+    if (there.has(e.id) || sent >= 10) continue;
+    const rec = await ctx.getRide(e.id);
+    if (!rec?.samples?.length) continue;
+    await saveRecord(e.id, await packRecord(rec));
+    sent++;
+  }
+}
+
+/** A ride's full record from the account, when this device has none (ridden on another): kept here too. */
+export async function accountRecord(id) {
+  if (!on() || !currentUser()) return null;
+  try {
+    const text = await loadRecord(id);
+    const rec = text ? await unpackRecord(id, text) : null;
+    if (rec) await ctx.putRide(rec);
+    return rec;
+  } catch (e) { console.warn('Account record:', e.message); return null; }
 }
 
 function openSetup({ first = false } = {}) {

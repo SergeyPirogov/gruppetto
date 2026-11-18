@@ -27,7 +27,7 @@ import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
-import { initSocialUi, groupChannel, groupFinish, groupResults, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { initSocialUi, groupChannel, groupFinish, groupResults, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, accountRecord, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
 import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
 import { Sampler } from './sampler.js';
 import { unlockAudio, beep, say, speechLang, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
@@ -2977,7 +2977,10 @@ function renderGhostPicker() {
 }
 
 /** The ride summary screen, for the ride just finished (live: downloads available) or one from history. */
-function showSummary(e, { live = false } = {}) {
+let summaryFrom = null; // 'history': the summary was opened from History, and goes back there
+function showSummary(e, { live = false, from = null } = {}) {
+  summaryFrom = live ? null : from;
+  $('btn-again').textContent = summaryFrom === 'history' ? `← ${tr('Back to history')}` : tr('Back to lobby');
   // a lobby page (Devices, Profile…) belongs to the lobby, not over the summary
   if (!$('drawer').classList.contains('in-ride')) $('drawer').hidden = true;
   $('wk-menu').hidden = true;
@@ -3090,7 +3093,8 @@ function showSummary(e, { live = false } = {}) {
   $('btn-delete-ride').textContent = tr('Delete ride');
   if (live) { scheduleUpload('icu', canUpload(recorder)); scheduleUpload('strava', canStrava(recorder) && !e.stravaId); scheduleUpload('garmin', canGarmin(recorder) && !e.garminId); return; }
   scheduleUpload('icu', false); scheduleUpload('strava', false); scheduleUpload('garmin', false);
-  getRide(e.id).then((r) => {
+  // the full record: kept on this device, or (a ride ridden on another) from the account
+  getRide(e.id).then((r) => r || accountRecord(e.id)).then((r) => {
     if (!r || shown.entry !== e) return;
     const rec = new Recorder();
     rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0]; rec.position = positionOf(e.routeId);
@@ -3276,7 +3280,11 @@ function renderHistory() {
   $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
   // (the week's numbers are on the lobby's tiles)
   for (const b of document.querySelectorAll('.hist-row')) {
-    b.onclick = () => { $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e); };
+    b.onclick = () => {
+      const panel = $('drawer').querySelector('.drawer-panel');
+      historyScroll = panel?.scrollTop || 0; // to come back to the same place in the list
+      $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e, { from: 'history' });
+    };
   }
 }
 
@@ -4240,12 +4248,21 @@ $('f-sound').onchange = () => {
 $('f-crowd').checked = settings.crowd !== false;
 $('f-crowd').onchange = () => { settings.crowd = $('f-crowd').checked; saveSettings(); };
 $('btn-download-tcx').onclick = () => download('tcx');
-$('btn-again').onclick = () => { flushUpload(); $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute(); };
+let historyScroll = 0;
+$('btn-again').onclick = () => {
+  flushUpload(); $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute();
+  // a ride opened from History: back to History, where it was in the list
+  if (summaryFrom === 'history') {
+    summaryFrom = null;
+    openDrawer('history');
+    requestAnimationFrame(() => { const p = $('drawer').querySelector('.drawer-panel'); if (p) p.scrollTop = historyScroll; });
+  }
+};
 // The Gruppetto mark goes home: from the summary to the lobby (as «Ride again»), on the lobby it closes what is open
 // over it and scrolls up. No reload: an upload in flight and the state stay.
 for (const a of document.querySelectorAll('[data-home]')) a.addEventListener('click', (e) => {
   e.preventDefault();
-  if (!$('summary').hidden) $('btn-again').onclick();
+  if (!$('summary').hidden) { summaryFrom = null; $('btn-again').onclick(); } // the mark goes home, not back to History
   for (const id of ['drawer', 'wk-menu', 'wk-detail', 'wk-builder']) if ($(id)) $(id).hidden = true;
   window.scrollTo({ top: 0, behavior: 'smooth' });
 });
@@ -4839,7 +4856,7 @@ initSocialUi({
     myWorkouts = list; myWorkoutsDeleted = deleted; writeJson(MY_DEL_KEY, deleted);
     seenWorkouts.clear(); stampChanged(myWorkouts, seenWorkouts); writeMyWorkouts(); renderModes();
   },
-  getHistory: () => history, historyDeleted: () => historyDeleted,
+  getHistory: () => history, historyDeleted: () => historyDeleted, getRide, putRide,
   setHistory: (list, removed) => {
     for (const id of removed) deleteRide(id);
     history = list; seenHistory.clear(); stampChanged(history, seenHistory); writeHistory(); renderHistory(); renderProgress();

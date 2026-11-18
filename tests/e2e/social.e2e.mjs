@@ -8,7 +8,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { chromium } from 'playwright';
-import { checkEffort, boardFrom, categoryOf } from '../../js/social-core.js';
+import { checkEffort, boardFrom, categoryOf, packRecord } from '../../js/social-core.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PORT = Number(process.env.E2E_PORT) || 8765; // E2E_PORT when something else listens on 8765
@@ -53,6 +53,18 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       if (req.method() === 'PATCH' && !db.profile) return send(route, 406, { code: 'PGRST116', message: 'no rows' });
       db.profile = { public: true, data: {}, ...db.profile, ...row, updated_at: new Date().toISOString() };
       return send(route, 201, one ? db.profile : [db.profile]);
+    }
+    if (p === '/rest/v1/activity_records') { // the rides' full records (0009)
+      db.records ||= {};
+      if (req.method() === 'GET') {
+        const one = (req.headers().accept || '').includes('vnd.pgrst.object');
+        const id = new URLSearchParams(url.search).get('id')?.replace(/^eq\./, '');
+        if (id) return send(route, 200, one ? (db.records[id] ? { data: db.records[id] } : null) : (db.records[id] ? [{ data: db.records[id] }] : []));
+        return send(route, 200, Object.keys(db.records).map((k) => ({ id: k })));
+      }
+      if (req.method() === 'DELETE') { for (const k of Object.keys(db.records)) if ((url.search || '').includes(k)) delete db.records[k]; return send(route, 204); }
+      const rows = [].concat(JSON.parse(body)); for (const r of rows) db.records[r.id] = r.data;
+      return send(route, 201, []);
     }
     if (p === '/rest/v1/activities') { // the full sync's rides: read them all, upsert by id
       db.activities ||= [];
@@ -428,6 +440,44 @@ test('the sync says how it went: synced with the rides in the account, or what f
   mock.db.failProfile = false;
   await page.evaluate(() => document.getElementById('btn-social-sync').click());
   await page.waitForFunction(() => /Synced just now/.test(document.getElementById('social-sync-text').textContent), null, { timeout: 10000 });
+  await context.close();
+});
+
+test('a ride ridden on another device: its record comes from the account (FIT, uploads), and Back goes to History', async () => {
+  const id = 'r1700000000000';
+  const samples = Array.from({ length: 120 }, (_, i) => ({ power: 150, cadence: 88, heartRate: 130, speed: 8, distance: i * 8, altitude: 100, elevationGain: 0, target: null, step: null }));
+  const entry = { id, date: new Date(Date.now() - 3600e3).toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', workoutName: null, ftp: 200,
+    summary: { duration: 120, distance: 960, avgPower: 150, normalizedPower: 150, maxPower: 150, avgHr: 130, maxHr: 130, avgCadence: 88, elevationGain: 0, kj: 18 },
+    tss: 2, lapTimes: [], splits: [], efforts: [], chart: { every: 5, pw: Array(24).fill(150), hr: Array(24).fill(130), d: Array.from({ length: 24 }, (_, i) => i * 40), wb: Array(24).fill(20000) }, intervals: [], updatedAt: 5 };
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
+  mock.db.activities = [{ id, entry, deleted: false, changed_at: 5 }];
+  mock.db.records = { [id]: await packRecord({ id, start: Date.now() - 3600e3, samples, lapStarts: [0] }) };
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForFunction((id) => document.querySelector(`.hist-row[data-id="${id}"]`), id, { timeout: 15000 }); // the history came from the account
+  await page.evaluate(() => document.querySelector('[data-open="history"]').click());
+  await page.evaluate((id) => document.querySelector(`.hist-row[data-id="${id}"]`).click(), id);
+  await page.waitForFunction(() => !document.getElementById('btn-download').hidden, null, { timeout: 10000 }); // .FIT: the record is here
+  assert.match(await page.textContent('#btn-again'), /Back to history/);
+  await page.evaluate(() => document.getElementById('btn-again').click());
+  await page.waitForFunction(() => !document.getElementById('drawer').hidden && !document.querySelector('[data-panel="history"]').hidden);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a ride kept on this device: its full record goes up to the account on sync', async () => {
+  const id = 'r1700000099000';
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
+  const entry = { id, date: new Date().toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', summary: { duration: 60, distance: 400 }, chart: { every: 5, pw: [], hr: [], d: [], wb: [] }, lapTimes: [], splits: [], efforts: [], updatedAt: 9 };
+  const { page, context, errors } = await openApp({ mock, local: { ...LOCAL, 'gruppetto.history': [entry] }, signedIn: true });
+  await page.evaluate(async (id) => {
+    const { putRide } = await import('/js/ride-store.js');
+    await putRide({ id, start: Date.now(), samples: Array.from({ length: 60 }, () => ({ power: 140 })), lapStarts: [0] });
+  }, id);
+  await page.evaluate(() => document.getElementById('btn-social-sync').click());
+  await page.waitForFunction(() => /Synced/.test(document.getElementById('social-sync-text').textContent), null, { timeout: 10000 });
+  await page.waitForTimeout(300);
+  assert.ok(mock.db.records?.[id], 'the record went up');
+  assert.deepEqual(errors, []);
   await context.close();
 });
 

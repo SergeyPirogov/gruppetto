@@ -327,3 +327,23 @@ export function rideTotal(entry, { simulated = false, weight, client } = {}) {
     duration_s: Math.round(s.duration), avg_power: Math.round(s.avgPower), weight_kg: weight, client,
   };
 }
+
+// ---------- A ride's full record in the account (0009) ----------
+
+const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(s); };
+const unb64 = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
+const pipe = async (bytes, stream) => new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
+
+/** A ride's record ({ id, start, samples, lapStarts }) as text for the account: JSON, gzip'd, in base64. */
+export async function packRecord(rec) {
+  const json = JSON.stringify({ start: rec.start, samples: rec.samples, lapStarts: rec.lapStarts || [0] });
+  return b64(await pipe(new TextEncoder().encode(json), new CompressionStream('gzip')));
+}
+
+/** The record back from the account's text, for ride `id`; null when it is not one. */
+export async function unpackRecord(id, text) {
+  try {
+    const r = JSON.parse(new TextDecoder().decode(await pipe(unb64(text), new DecompressionStream('gzip'))));
+    return Array.isArray(r?.samples) ? { id, start: r.start, samples: r.samples, lapStarts: r.lapStarts || [0] } : null;
+  } catch { return null; }
+}
