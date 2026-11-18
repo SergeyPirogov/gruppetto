@@ -1,10 +1,16 @@
 // Strava (#32): connect once, then a finished ride goes up as a virtual ride (the FIT says cycling /
 // virtual_activity, which Strava files as a Virtual Ride). Strava will not hand out tokens to a page holding
-// no secret, so the code and the refresh go through a small token function on Vercel that keeps it
-// (Slipstream's, the same Strava app). Tokens live only in this browser.
+// no secret, so the code and the refresh go through a small token function that keeps it (see TOKEN_URL).
+// Tokens live only in this browser.
 
-export const STRAVA_CLIENT_ID = '167103';
-const TOKEN_URL = 'https://slipstream-bice.vercel.app/api/strava-token';
+import { SUPABASE_URL } from './social-config.js';
+
+// Gruppetto's own Strava app, once registered: its client id here, the id and secret in the `strava` function's
+// secrets (supabase/functions/strava). Till then the shared Slipstream app and its token function on Vercel.
+const OWN_APP_ID = '';
+const SHARED_APP_ID = '167103';
+export const STRAVA_CLIENT_ID = OWN_APP_ID || SHARED_APP_ID;
+const TOKEN_URL = OWN_APP_ID && SUPABASE_URL ? `${SUPABASE_URL}/functions/v1/strava` : 'https://slipstream-bice.vercel.app/api/strava-token';
 const API = 'https://www.strava.com/api/v3';
 const KEY = 'gruppetto.strava';
 export const STRAVA_STATE = 'gruppetto-strava';
@@ -47,6 +53,12 @@ export function uploadOutcome(u) {
   return null; // still being processed
 }
 
+/**
+ * Saved tokens that still work here: a refresh token from the Strava app in use (one linked before the move to
+ * Gruppetto's own app, saved with no app, was the shared one's; another app's tokens do not refresh with this one).
+ */
+export const savedFor = (t, appId) => !!t?.refresh && (t.app || SHARED_APP_ID) === appId;
+
 export const stravaActivityUrl = (id) => `https://www.strava.com/activities/${id}`;
 
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } };
@@ -63,13 +75,13 @@ export class StravaClient {
   constructor(tokens) { this.t = tokens; }
 
   /** The account linked in this browser, or null. */
-  static saved() { const t = load(); return t?.refresh ? new StravaClient(t) : null; }
+  static saved() { return savedFor(load(), STRAVA_CLIENT_ID) ? new StravaClient(load()) : null; }
 
   /** Trades the code from Strava's return for tokens, and keeps them. */
   static async connect(code) {
     const j = await tokenRequest({ grant_type: 'authorization_code', code });
     const a = j.athlete || {};
-    const t = { access: j.access_token, refresh: j.refresh_token, expires: j.expires_at, name: [a.firstname, a.lastname].filter(Boolean).join(' '), athleteId: a.id };
+    const t = { access: j.access_token, refresh: j.refresh_token, expires: j.expires_at, name: [a.firstname, a.lastname].filter(Boolean).join(' '), athleteId: a.id, app: STRAVA_CLIENT_ID };
     save(t);
     return new StravaClient(t);
   }

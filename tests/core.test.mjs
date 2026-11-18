@@ -1248,3 +1248,12 @@ test('voice: cue phrases translate into the speech language, whatever the interf
   assert.equal(spokenDuration(90, 'en'), '1 minute 30 seconds');
   assert.equal(spokenDuration(300, 'uk'), '5 хвилин');
 });
+
+test('strava: saved tokens are kept only for the Strava app in use', async () => {
+  const { savedFor } = await import('../js/strava.js');
+  assert.equal(savedFor({ refresh: 'r' }, '167103'), true); // linked before the app was saved: the shared one
+  assert.equal(savedFor({ refresh: 'r' }, '999'), false); // a new app: connect again
+  assert.equal(savedFor({ refresh: 'r', app: '999' }, '999'), true);
+  assert.equal(savedFor({ app: '999' }, '999'), false); // no refresh token
+  assert.equal(savedFor(null, '999'), false);
+});

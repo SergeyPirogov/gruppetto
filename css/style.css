@@ -1683,6 +1683,13 @@ body.watching { overflow: hidden; }
 #wv-write[hidden] { display: none; }
 .chat-watch-link { align-self: flex-start; font-size: .82rem; }
 
+/* Strava, by its brand guidelines: its own «Connect with Strava» button, «View on Strava» links in its orange */
+.strava-connect { padding: 0; border: 0; background: none; line-height: 0; border-radius: 6px; cursor: pointer; }
+.strava-connect img { display: block; height: 48px; width: auto; }
+.strava-connect[hidden] { display: none; }
+.strava-connect:focus-visible { outline: 2px solid #fc5200; outline-offset: 2px; }
+.strava-link { color: #fc5200; font-weight: 700; text-decoration: underline; }
+.strava-compat { display: block; height: 14px; width: auto; margin-top: 12px; opacity: .85; }
 /* the account card's sync line: when it last went through, or what went wrong (#: sync status) */
 .social-sync { margin: 6px 0 0; font-size: .85rem; color: var(--muted); }
 .social-sync.bad { color: #fca5a5; }

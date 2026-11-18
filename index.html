@@ -454,10 +454,12 @@
         <p class="muted">Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto asks only to upload, it reads nothing of yours.</p>
         <label class="check"><input type="checkbox" id="f-strava-upload"> Upload the ride to Strava when finished</label>
         <div class="row icu-row">
-          <button id="btn-strava">Connect Strava</button>
+          <!-- Strava's own button, as its brand guidelines ask (icons/strava, from developers.strava.com) -->
+          <button id="btn-strava" class="strava-connect" aria-label="Connect with Strava"><img src="icons/strava/connect-with-strava.svg" alt="Connect with Strava" width="193" height="48"></button>
           <button id="btn-strava-forget" hidden>Disconnect</button>
           <span id="strava-status" class="muted"></span>
         </div>
+        <img class="strava-compat" src="icons/strava/compatible-with-strava.svg" alt="Compatible with Strava" width="160" height="14">
       </div>
       <div class="card" id="garmin-card" data-panel="profile" data-ptab="links" hidden>
         <h2>Garmin Connect</h2>
