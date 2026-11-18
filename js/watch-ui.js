@@ -42,7 +42,7 @@ export async function openWatch(env) {
       react: (p) => { if (W === w) { const r = w.reacts.receive(p, Date.now()); if (r) floatReact(r); } },
       watch: (p) => { if (W === w) w.watchers.receive(p, Date.now()); },
       start: () => { if (W === w && w.g.held) recheck(w); },
-    });
+    }, { rider: false }); // a spectator sends on the fans' channel only
     if (W === w) w.live = live; else live.leave();
   } catch (e) { env.toast(e.message); }
 }

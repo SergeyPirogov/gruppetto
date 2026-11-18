@@ -114,9 +114,23 @@ run < supabase/migrations/0008_race_checks.sql
 run < supabase/migrations/0010_start_on_demand.sql
 run < supabase/migrations/0010_start_on_demand.sql # applies twice: safe to paste again
 run < supabase/tests/start_on_demand_test.sql
+# the ride's live channel, private: riders send, anyone listens (0011)
+run <<'SQL'
+drop schema if exists realtime cascade; drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
+SQL
+run < supabase/tests/auth_stub.sql
+run < supabase/tests/realtime_stub.sql
+run < supabase/migrations/0001_social.sql
+run < supabase/migrations/0004_group_rides.sql
+run < supabase/migrations/0005_group_races.sql
+run < supabase/migrations/0006_leagues.sql
+run < supabase/migrations/0010_start_on_demand.sql
+run < supabase/migrations/0011_private_channel.sql
+run < supabase/migrations/0011_private_channel.sql # applies twice: safe to paste again
+run < supabase/tests/private_channel_test.sql
 # race categories (0012)
 run <<'SQL'
-drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
+drop schema if exists realtime cascade; drop schema public cascade; drop schema auth cascade; drop role anon; drop role authenticated; create schema public;
 SQL
 run < supabase/tests/auth_stub.sql
 run < supabase/migrations/0001_social.sql
