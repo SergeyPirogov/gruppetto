@@ -501,9 +501,27 @@ function renderRouteList() {
         box.append(st);
       }
     }
+    sec.dataset.group = g.id;
     rl.append(sec);
   }
   markRoute();
+  filterRoutes();
+}
+
+// ---------- the routes' filter: all, or one kind ----------
+const RF_KEY = 'gruppetto.route-filter';
+let routeFilter = (() => { try { return localStorage.getItem(RF_KEY) || 'all'; } catch { return 'all'; } })();
+function filterRoutes() {
+  // a kind with no routes (no mountains yet) has no chip
+  for (const b of document.querySelectorAll('[data-rf]')) {
+    b.hidden = b.dataset.rf !== 'all' && b.dataset.rf !== 'mine' && !document.querySelector(`.route-group[data-group="${b.dataset.rf}"]`);
+    b.classList.toggle('sel', b.dataset.rf === routeFilter);
+  }
+  if (routeFilter !== 'all' && document.querySelector(`[data-rf="${routeFilter}"]`)?.hidden) routeFilter = 'all';
+  for (const sec of document.querySelectorAll('.route-group')) sec.hidden = routeFilter !== 'all' && sec.dataset.group !== routeFilter;
+}
+for (const b of document.querySelectorAll('[data-rf]')) {
+  b.onclick = () => { routeFilter = b.dataset.rf; try { localStorage.setItem(RF_KEY, routeFilter); } catch { /* private mode */ } filterRoutes(); };
 }
 
 /** Climb names in the interface language ("Climb 2" -> "Підйом 2"), and an imported route's description. */
@@ -716,11 +734,26 @@ function renderModes() {
     settings.mode = 'race'; saveSettings(); renderModes();
   };
   ml.append(free, wb, race);
+  renderNextUp(todayPlan);
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
   wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
   if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
   updateSummary();
+}
+
+/** Up next, over the modes: today's planned workout from intervals.icu, its shape, and Start. */
+function renderNextUp(w) {
+  const box = $('next-up');
+  box.hidden = !w;
+  if (!w) return;
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null;
+  box.innerHTML = `<div class="nu-card nu-plan"><small class="nu-tag">${tr('Plan for today')} · intervals.icu</small>`
+    + `<b class="nu-name">${esc(w.name)}</b><span class="nu-meta">${Math.round(totalDuration(w) / 60)} ${U.min}${st?.tss ? ` · ~${st.tss} TSS` : ''}${w.description ? ` · ${esc(w.description)}` : ''}</span>`
+    + `<canvas class="nu-chart"></canvas><span class="nu-actions"><button class="primary" data-nu="go">${tr('Start')}</button><button class="pill-btn" data-nu="other">${tr('Other workouts')}</button></span></div>`;
+  box.querySelector('[data-nu="go"]').onclick = () => { settings.mode = w.id; saveSettings(); renderModes(); startRide(); };
+  box.querySelector('[data-nu="other"]').onclick = () => openWorkoutMenu();
+  requestAnimationFrame(() => drawWorkoutChart(box.querySelector('canvas'), w, -1));
 }
 
 /** The zone a workout spends most of its work in (past Z1, when it has more than recovery). */
@@ -3410,6 +3443,8 @@ function renderWeek() {
     tile(tr('Level {n}', { n: L.level }), `${L.xp} XP`, tr('{left} to level {n}', { left: L.to - L.xp, n: L.level + 1 }), `<span class="lvl-bar"><i style="width:${Math.round(L.frac * 100)}%"></i></span>`),
   ].join('');
   box.lastElementChild?.classList.add('wb-level');
+  // the week in a line under the greeting too
+  $('greet-week').textContent = week.length ? ` · ${tr('this week')} ${week.length} ${lang === 'uk' ? plural(week.length, ['заїзд', 'заїзди', 'заїздів']) : week.length === 1 ? 'ride' : 'rides'} · ${fmtTime(sum((e) => e.summary?.duration))}${sum((e) => e.tss) ? ` · ${sum((e) => e.tss)} TSS` : ''}` : '';
 }
 // the tiles: the level opens Progress, the form and the week too (the form is there); History is only the rides
 $('week-box').addEventListener('click', () => openDrawer('progress'));

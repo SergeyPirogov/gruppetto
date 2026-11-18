@@ -46,7 +46,7 @@
     <div class="lobby-body">
     <header class="lobby-top">
       <div class="brand"><h1><a class="home-link" href="./" data-home><img class="mark" src="logo.svg" alt="">Gruppetto</a></h1></div>
-      <div class="greet"><b id="greet"></b><small id="greet-date"></small></div>
+      <div class="greet"><b id="greet"></b><small><span id="greet-date"></span><span id="greet-week"></span></small></div>
       <!-- accounts: sign in from the lobby itself, not only deep in Profile -->
       <button id="hdr-ua" class="hdr-account hdr-ua" hidden title="Region vs region: distance and climbing">🇺🇦 <span>Ukraine leaderboard</span></button>
       <button id="hdr-group" class="hdr-account hdr-ua" hidden title="Ride together at a set time, live on the road">👥 <span>Group rides</span></button>
@@ -86,7 +86,7 @@
         <!-- FTP still the default guess: find yours, or type it in Profile -->
         <div id="ftp-box" class="ftp-box" hidden>
           <button class="why-close" id="ftp-close" aria-label="Close">✕</button>
-          <div class="ftp-text"><b id="ftp-title"></b><span>Workouts in ERG and the bots' pace go by it. A ramp test finds yours in about 20 minutes.</span></div>
+          <div class="ftp-text"><b id="ftp-title"></b><span>ERG workouts and the bots' pace are based on it. A ramp test finds yours in about 20 minutes.</span></div>
           <div class="why-actions"><button id="ftp-test" class="primary">📈 Take the FTP test</button><button id="ftp-know" class="pill-btn">I know my FTP</button></div>
         </div>
         <!-- a friend's challenge from a link: who, what to beat, and how -->
@@ -100,6 +100,9 @@
       <!-- the rider at a glance: form, this week, level -->
       <button id="week-box" class="week-box" hidden></button>
 
+      <!-- what is next today: the intervals.icu plan, ready to start (js/app.js renderNextUp) -->
+      <section id="next-up" class="next-up" hidden aria-label="Up next"></section>
+
       <section class="lobby-modes" id="sec-modes">
         <div id="plan-box" class="plan-box" hidden>
           <h2>Plan <small>intervals.icu</small></h2>
@@ -110,7 +113,11 @@
       </section>
 
       <section class="lobby-routes" id="sec-routes">
-        <h2>Routes</h2>
+        <div class="routes-head"><h2>Routes</h2>
+          <div class="route-filter" id="route-filter" role="group" aria-label="Routes">
+            <button data-rf="all">All</button><button data-rf="flat">Flat</button><button data-rf="hilly">Hilly</button><button data-rf="mountain">Mountain</button><button data-rf="mine">My routes</button>
+          </div>
+        </div>
         <p id="osm-attr" class="hint osm-attr" hidden>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
         <div id="lobby-msg" class="lobby-msg" hidden></div>
         <div id="route-board" class="route-board" hidden></div>
