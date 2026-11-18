@@ -379,3 +379,31 @@ test('a ride cut off by a reload goes on from where it was: time, distance and t
   assert.deepEqual(errors, []);
   await context.close();
 });
+
+test('a ride on intervals.icu can go up again (deleted there): once more, paired with the planned workout', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: LOCAL });
+  const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await page.evaluate((date) => {
+    window.__planDemo([{ id: 'icu:77', eventId: 77, source: 'intervals', date, name: 'Plan Z2 for the test', description: 'plan', notes: '', steps: [{ dur: 600, free: true, hr: [120, 135] }] }]);
+  }, today);
+  await page.evaluate(() => {
+    document.getElementById('drawer').hidden = true;
+    [...document.querySelectorAll('button, li, [data-id]')].find((e) => e.textContent.includes('Plan Z2 for the test') && (e.onclick || e.tagName === 'BUTTON'))?.click();
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.getElementById('wkd-ride').click());
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  if (!(await page.evaluate(() => window.__ride.workout?.eventId))) { // the plan card did not open: pick it the way the lobby does
+    await context.close(); assert.fail('the planned workout did not start');
+  }
+  await page.waitForFunction(() => window.__ride.elapsed >= 62, null, { timeout: 90000 });
+  await page.evaluate(() => { const b = document.getElementById('btn-finish'); b.click(); b.click(); });
+  await page.waitForFunction(() => (window.__icuUploads || []).length === 1, null, { timeout: 20000 }); // the upload after the finish
+  assert.equal((await page.evaluate(() => window.__icuUploads))[0].eventId, 77);
+  await page.waitForSelector('#icu-upload-status [data-again="icu"]');
+  await page.evaluate(() => document.querySelector('#icu-upload-status [data-again="icu"]').click());
+  await page.waitForFunction(() => window.__icuUploads.length === 2, null, { timeout: 10000 });
+  assert.equal((await page.evaluate(() => window.__icuUploads))[1].eventId, 77);
+  assert.deepEqual(errors, []);
+  await context.close();
+});

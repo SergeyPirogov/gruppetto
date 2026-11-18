@@ -122,12 +122,14 @@ export class IntervalsClient {
       return this.request('/activities', { method: 'POST', body: form, params: { name, description, paired_event_id: pair || undefined } });
     };
     let res;
+    this.unpaired = false;
     try {
       res = await send(eventId);
     } catch (e) {
-      // the planned workout could not be paired (moved or deleted meanwhile): keep the ride, unpaired
+      // the planned workout could not be paired (moved or deleted meanwhile): keep the ride, unpaired, and say so
       if (!eventId || e.status !== 422) throw e;
       res = await send(null);
+      this.unpaired = true;
     }
     const list = Array.isArray(res) ? res : res?.activities || (res ? [res] : []);
     return list[0]?.id || null;

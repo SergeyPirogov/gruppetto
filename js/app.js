@@ -72,7 +72,7 @@ if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__scene', { get: () => scene });
   window.__groupRide = (g) => startRide({ group: g }); // a group ride without an account (the browser tests)
   window.__pretendTrainer = false; // true: a simulator ride counts as a real one for the leaderboards (the browser tests)
-  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async () => null }; renderModes(); }; // try the plan box and uploads without an account
+  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async (_, o) => { (window.__icuUploads ||= []).push(o); return null; } }; renderModes(); }; // try the plan box and uploads without an account
 }
 
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
@@ -3013,7 +3013,7 @@ function showSummary(e, { live = false } = {}) {
     $('btn-icu-upload').textContent = live ? tr('Upload to intervals.icu') : tr('Send to intervals.icu');
     const st = $('icu-upload-status');
     st.hidden = !e.uploadedId;
-    if (e.uploadedId) st.innerHTML = e.uploadedId === true ? tr('Uploaded to intervals.icu ✓') : `${tr('Uploaded to intervals.icu ✓')} · <a href="${activityUrl(e.uploadedId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    if (e.uploadedId) st.innerHTML = (e.uploadedId === true ? tr('Uploaded to intervals.icu ✓') : `${tr('Uploaded to intervals.icu ✓')} · <a href="${activityUrl(e.uploadedId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`) + againLink('icu');
   };
   const canUpload = (rec) => !!(rec && icuClient && sum && sum.duration >= 60);
   const canStrava = (rec) => !!(rec && stravaClient && sum && sum.duration >= 60);
@@ -3024,7 +3024,7 @@ function showSummary(e, { live = false } = {}) {
     $('btn-garmin-upload').textContent = live ? tr('Upload to Garmin') : tr('Send to Garmin');
     const st = $('garmin-upload-status');
     st.hidden = !e.garminId;
-    if (e.garminId) st.innerHTML = e.garminId === true ? tr('On Garmin Connect ✓') : `${tr('On Garmin Connect ✓')} · <a href="${garminActivityUrl(e.garminId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    if (e.garminId) st.innerHTML = (e.garminId === true ? tr('On Garmin Connect ✓') : `${tr('On Garmin Connect ✓')} · <a href="${garminActivityUrl(e.garminId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`) + againLink('garmin');
   };
   const stravaUi = (can) => {
     $('btn-strava-upload').hidden = !can;
@@ -3032,7 +3032,7 @@ function showSummary(e, { live = false } = {}) {
     $('btn-strava-upload').textContent = live ? tr('Upload to Strava') : tr('Send to Strava');
     const st = $('strava-upload-status');
     st.hidden = !e.stravaId;
-    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">${tr('open ride')}</a>${againLink('strava')}`;
   };
   files(live);
   uploadUi(live && canUpload(recorder));
@@ -3056,6 +3056,21 @@ function showSummary(e, { live = false } = {}) {
 }
 /** The ride on the summary screen: its history entry and, when kept, its full record. */
 let shown = { entry: null, rec: null };
+/**
+ * «Upload again» after a ✓: for a ride deleted there (or gone wrong), as long as its full record is still here.
+ * kind: 'icu', 'strava' or 'garmin'.
+ */
+const againLink = (kind) => (shown.rec ? ` · <button class="link-btn up-again" data-again="${kind}" title="${esc(tr('Deleted it there? Send this ride once more'))}">${tr('Upload again')}</button>` : '');
+const AGAIN = { icu: ['uploadedId', () => uploadToIntervals()], strava: ['stravaId', () => uploadToStrava()], garmin: ['garminId', () => uploadToGarmin()] };
+$('summary').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-again]');
+  const e = shown.entry, a = b && AGAIN[b.dataset.again];
+  if (!a || !e || !shown.rec) return;
+  track('upload-again', b.dataset.again);
+  e[a[0]] = null; // forgotten here, so it goes up as a new one
+  if (lastRide && shown.rec === recorder) lastRide[a[0]] = null;
+  a[1]();
+});
 
 /** Time in power zones (and heart rate zones when there are any), as bars. */
 function renderZones(e) {
@@ -3748,8 +3763,8 @@ async function uploadToIntervals() {
     if (lastRide && rec === recorder) lastRide.uploadedId = e.uploadedId;
     if (history.includes(e)) saveHistory();
     status.innerHTML = id
-      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>`
-      : tr('Uploaded to intervals.icu ✓');
+      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${icuClient.unpaired ? tr('not paired with the planned workout (moved or deleted there?)') : tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>${againLink('icu')}`
+      : `${tr('Uploaded to intervals.icu ✓')}${againLink('icu')}`;
     btn.hidden = true;
     $('sum-icu').hidden = true;
   } catch (e) {
@@ -3839,7 +3854,7 @@ async function uploadToStrava() {
     e.stravaId = activityId;
     if (history.includes(e)) saveHistory();
     track('strava', duplicate ? 'duplicate' : 'uploaded');
-    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>${againLink('strava')}`;
     btn.hidden = true;
     $('sum-strava').hidden = true;
   } catch (err) {
@@ -3923,7 +3938,7 @@ async function uploadToGarmin() {
     if (history.includes(e)) saveHistory();
     track('garmin', duplicate ? 'duplicate' : 'uploaded');
     const label = duplicate ? tr('Already on Garmin Connect') : tr('On Garmin Connect ✓');
-    status.innerHTML = activityId ? `${label} · <a href="${garminActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>` : label;
+    status.innerHTML = (activityId ? `${label} · <a href="${garminActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>` : label) + againLink('garmin');
     btn.hidden = true;
     $('sum-garmin').hidden = true;
   } catch (err) {

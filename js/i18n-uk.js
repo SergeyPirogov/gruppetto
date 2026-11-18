@@ -177,6 +177,7 @@ export const UK = {
   'The trainer does not accept wheel circumference — using grade-based gears': 'Тренажер не приймає довжину кола колеса, передачі працюють через нахил',
   'Low cadence — ERG temporarily reduced': 'Низький каденс, ERG тимчасово знижено', 'Power dropped — ERG temporarily reduced': 'Потужність упала, ERG тимчасово знижено',
   'Interval skipped ⏭': 'Інтервал пропущено ⏭',
+  'Upload again': 'Завантажити ще раз', 'not paired with the planned workout (moved or deleted there?)': 'не прив’язано до запланованого тренування (перенесли чи видалили там?)', 'Deleted it there? Send this ride once more': 'Видалили там? Надішліть цей заїзд ще раз',
   '{total} · {left} left': '{total} · ще {left}',
   'No Ukrainian voice on this device: the cues are in English. Add one in the system settings (Windows: Time & language → Speech) or open the app in Edge': 'На цьому пристрої немає українського голосу, тому підказки звучать англійською. Додай голос у налаштуваннях системи (Windows: Час і мова → Мовлення) або відкрий застосунок в Edge',
   'No voice on this device: the cues are beeps': 'На цьому пристрої немає голосу, тому підказки звучать сигналами',
