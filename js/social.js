@@ -277,25 +277,39 @@ export async function cancelGroupRide(id) { ok(await (await client()).rpc('cance
 export async function joinGroupRide(id, on = true) { ok(await (await client()).rpc('join_group_ride', { p_id: id, p_on: on })); }
 
 /**
- * Riding a group ride together, or watching it: a Realtime broadcast channel of its own. Its events: `pos` (each
- * rider's packet, group.js), `chat` (a message or a quick phrase, chat.js), `react` (a spectator's emoji to a rider)
- * `watch` (a spectator saying they are there) and `start` (the host started a held ride: read its time from the
- * database, not from this, which anyone could send). `on` is { pos, chat, react, watch } (a function alone: pos).
+ * Riding a group ride together, or watching it: two Realtime broadcast channels of its own.
+ * - `group:<id>`, private (0011): everyone may listen; only the ride's riders may send. It carries `pos` (each
+ *   rider's packet, group.js), the riders' `chat` (chat.js) and `start` (the host started a held ride; its time
+ *   comes from the database, not from this).
+ * - `fans:<id>`, public: the spectators' `react` (an emoji to a rider), `watch` («I am there») and their `chat`.
+ * `on` is { pos, chat, react, watch, start } (a function alone: pos), heard from both. `rider` says which one you
+ * send on: a rider on the private one (react and watch still on the fans'), a spectator on the fans' only.
  * { joined, send(packet), say(event, payload), leave() }; nothing you send comes back to you.
  */
-export async function groupLive(id, on = {}) {
+export async function groupLive(id, on = {}, { rider = true } = {}) {
   const c = await client();
   const handlers = typeof on === 'function' ? { pos: on } : on;
-  const ch = c.channel(`group:${id}`, { config: { broadcast: { self: false } } });
-  for (const ev of ['pos', 'chat', 'react', 'watch', 'start']) if (handlers[ev]) ch.on('broadcast', { event: ev }, (m) => handlers[ev](m.payload));
-  let joined = false;
-  ch.subscribe((s) => { joined = s === 'SUBSCRIBED'; });
-  const say = (event, payload) => { if (joined) ch.send({ type: 'broadcast', event, payload }).catch(() => {}); };
+  await c.realtime.setAuth().catch(() => {}); // the private channel goes by your session (or the anon key)
+  const open = (topic, priv) => {
+    const ch = c.channel(topic, { config: { private: priv, broadcast: { self: false } } });
+    // on the fans' channel only what spectators send is heard, their chat marked as theirs
+    const events = priv ? ['pos', 'chat', 'start'] : ['react', 'watch', 'chat'];
+    for (const ev of events) {
+      if (handlers[ev]) ch.on('broadcast', { event: ev }, (m) => handlers[ev](priv || !m.payload || typeof m.payload !== 'object' ? m.payload : { ...m.payload, fan: ev === 'chat' }));
+    }
+    const st = { ch, joined: false };
+    ch.subscribe((s, err) => { st.joined = s === 'SUBSCRIBED'; if (err) console.warn(`Live channel ${topic}:`, err.message); });
+    return st;
+  };
+  const riders = open(`group:${id}`, true), fans = open(`fans:${id}`, false);
+  const FANS = new Set(['react', 'watch']);
+  const via = (event) => (rider && !FANS.has(event) ? riders : fans);
+  const say = (event, payload) => { const st = via(event); if (st.joined) st.ch.send({ type: 'broadcast', event, payload }).catch(() => {}); };
   return {
-    get joined() { return joined; },
+    get joined() { return (rider ? riders : fans).joined; },
     send: (p) => say('pos', p),
     say,
-    leave: () => { joined = false; c.removeChannel(ch).catch(() => {}); },
+    leave: () => { riders.joined = fans.joined = false; for (const st of [riders, fans]) c.removeChannel(st.ch).catch(() => {}); },
   };
 }
 

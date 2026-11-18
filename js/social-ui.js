@@ -741,7 +741,7 @@ let grFocus = null; // the ride a link opened, shown first and marked
 let grTimer = null;
 
 /** Riding a group ride together, or watching it: the live channel (social.js groupLive). */
-export const groupChannel = (id, on) => groupLive(id, on);
+export const groupChannel = (id, on, opts) => groupLive(id, on, opts);
 /** A group race: your finish to the results, and the results (social.js). */
 export const groupFinish = (id, result) => finishGroupRace(id, result);
 export const groupResults = (id) => groupRaceResults(id);
