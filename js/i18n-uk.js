@@ -42,7 +42,7 @@ export const UK = {
   'to join and create group rides': 'щоб приєднуватися до групових заїздів і створювати їх',
   '{n} min': '{n} хв', '{n} h': '{n} год', '{n} d': '{n} дн', 'Riding now': 'Їдуть зараз', 'On the line: starts in {t}': 'На старті: рушаємо за {t}', 'in {t}': 'за {t}',
   'Leave this ride': 'Вийти з цього заїзду', 'Going': 'Їду', 'Join': 'Приєднатися', 'Copy the link to send it to friends': 'Скопіювати посилання, щоб надіслати друзям',
-  'Copy the link': 'Скопіювати посилання', 'Call off': 'Скасувати', 'Tap again to call it off': 'Натисніть ще раз, щоб скасувати',
+  'Copy the link': 'Скопіювати посилання', 'Cancel ride': 'Скасувати', 'Tap again to cancel': 'Натисніть ще раз, щоб скасувати',
   'a route this Gruppetto does not have': 'маршрут, якого в цій версії Gruppetto немає', 'a rider': 'райдер',
   'Link copied: send it to your friends': 'Посилання скопійовано: надішліть його друзям', 'Pick a start time': 'Оберіть час у майбутньому',
   'Group ride created. Link copied: send it to your friends': 'Заїзд створено. Посилання скопійовано: надішліть його друзям', 'Group ride created': 'Заїзд створено',
@@ -477,7 +477,7 @@ export const UK = {
   "The riders' chat shows here": "Тут буде чат райдерів",
   "Watch it live: the riders, their power, the chat": "Дивитися наживо: райдери, їхня потужність, чат",
   "Watch": "Дивитися",
-  "This ride is over or was called off": "Цей заїзд завершився або його скасували",
+  "This ride is over or was cancelled": "Цей заїзд завершився або його скасували",
   "← Back": "← Назад",
   "Watching now": "Дивляться зараз",
   "Cheer": "Підтримати",
@@ -486,6 +486,8 @@ export const UK = {
   "Cheer them on…": "Підтримай їх…",
   "Sign in to write in the chat. Reactions work for everyone.": "Увійди, щоб писати в чат. Реакції доступні всім.",
   "Watching": "Перегляд",
+  // group rides hub
+  'Now': 'Зараз', 'Later': 'Пізніше', '+ New ride': '+ Нова гонка', 'Could not reach the server: {error}': 'Немає зв’язку із сервером: {error}',
   // lobby: up next, route filter
   'Up next': 'Далі', 'Plan for today': 'План на сьогодні', 'Other workouts': 'Інші тренування', 'this week': 'цього тижня', 'All': 'Усі', 'Mountain': 'Гори',
   // settings, full screen

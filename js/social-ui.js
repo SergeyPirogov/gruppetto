@@ -120,6 +120,13 @@ function buildUi() {
   $('lock-signin').innerHTML = `${GOOGLE_G}<span>${ctx.esc(tr('Sign in with Google'))}</span>`;
   for (const el of document.querySelectorAll('[data-gr-close]')) el.onclick = () => { $('gr-view').hidden = true; };
   $('gr-list').onclick = groupAction;
+  // + New ride: to the calendar tab, the form open and in view
+  $('gr-new-btn').onclick = () => {
+    document.querySelector('[data-gr-tab="cal"]')?.click();
+    $('gr-new').open = true;
+    $('gr-new').scrollIntoView({ block: 'start', behavior: 'smooth' });
+    $('gr-title').focus({ preventScroll: true });
+  };
   initWatch();
   $('gr-form').onsubmit = groupCreate;
   $('gr-kind').onchange = $('gr-route').onchange = grLapsShow;
@@ -797,7 +804,7 @@ const raceLabel = (g, route) => (g.kind !== 'race' ? ''
 async function loadGroups() {
   if (!grRows.length) $('gr-list').innerHTML = `<li class="muted">${tr('Loading…')}</li>`;
   try { grRows = await groupRides(); } catch (e) {
-    $('gr-list').innerHTML = `<li class="muted">${ctx.esc(tr('Could not reach the leaderboards: {error}', { error: e.message }))}</li>`;
+    $('gr-list').innerHTML = `<li class="muted">${ctx.esc(tr('Could not reach the server: {error}', { error: e.message }))}</li>`;
     return;
   }
   renderGroups();
@@ -810,7 +817,22 @@ const inTime = (s) => (s < 3600 ? tr('{n} min', { n: Math.max(1, Math.ceil(s / 6
 function renderGroups() {
   const now = Date.now(), rows = grRows.filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   $('gr-empty').hidden = !!rows.length;
+  // by when: on the line or riding now, today, this week, later; a heading over each
+  const today = new Date(now).toDateString();
+  const bucket = (g) => {
+    const w = rideWindow(Date.parse(g.starts_at), now, g.held);
+    if (w.state !== 'later') return 'now';
+    const t = Date.parse(g.starts_at);
+    return new Date(t).toDateString() === today ? 'today' : t - now < 7 * 864e5 ? 'week' : 'later';
+  };
+  const HEAD = { now: tr('Now'), today: tr('Today'), week: tr('This week'), later: tr('Later') };
+  let last = '';
   $('gr-list').innerHTML = rows.map((g) => {
+    const b = bucket(g), head = b !== last ? `<li class="gr-sec">${HEAD[b]}</li>` : '';
+    last = b;
+    return head + rowHTML(g);
+  }).join('');
+  function rowHTML(g) {
     const w = rideWindow(Date.parse(g.starts_at), now, g.held), d = new Date(g.starts_at);
     const route = ctx.routes().find((r) => r.id === g.route_id);
     const day = d.toLocaleDateString(ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' });
@@ -826,14 +848,14 @@ function renderGroups() {
           : `<button class="pill-btn" data-act="join" data-id="${g.id}">${tr('Join')}</button>`,
       w.state !== 'later' ? `<button class="pill-btn" data-act="watch" data-id="${g.id}" title="${ctx.esc(tr('Watch it live: the riders, their power, the chat'))}">👀 ${tr('Watch')}</button>` : '',
       `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to send it to friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
-      g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Call off')}</button>` : '',
+      g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Cancel ride')}</button>` : '',
     ].join('');
     return `<li class="gr-row${g.id === grFocus ? ' focus' : ''}${w.state !== 'later' ? ' soon' : ''}" data-row="${g.id}">`
       + (g.held ? `<div class="gr-when"><b>⏳</b><small>${ctx.esc(tr('when ready'))}</small></div>` : `<div class="gr-when"><b>${ctx.esc(time)}</b><small>${ctx.esc(day)}</small></div>`)
       + `<div class="gr-what"><b>${ctx.esc(g.title)}</b>${g.kind === 'race' ? `<span class="gr-race">${ctx.esc(raceLabel(g, route))}</span>` : ''}`
       + `<small>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))} · ${ctx.esc(g.host_name || tr('a rider'))} · 👥 ${g.riders}</small>${state}</div>`
       + `<div class="gr-acts">${acts}</div></li>`;
-  }).join('');
+  }
 }
 
 /** A tap on a ride's button: the link, joining or leaving, calling it off, riding. Signed out: to Google first. */
@@ -853,7 +875,7 @@ async function groupAction(ev) {
   try {
     if (act === 'join' || act === 'leave') { await joinGroupRide(g.id, act === 'join'); ctx.track('social', `group-${act}`); await loadGroups(); }
     if (act === 'cancel') {
-      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Tap again to call it off'); return; }
+      if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Tap again to cancel'); return; }
       await cancelGroupRide(g.id); ctx.track('social', 'group-cancel'); await loadGroups();
     }
     if (act === 'ride') {
@@ -878,7 +900,7 @@ function watch(g, follow = null) {
 async function watchById(id, follow) {
   try {
     const g = (await groupRides()).find((x) => x.id === id);
-    if (!g || rideWindow(Date.parse(g.starts_at), Date.now(), g.held).state === 'over') { ctx.toast(tr('This ride is over or was called off')); openGroups(); return; }
+    if (!g || rideWindow(Date.parse(g.starts_at), Date.now(), g.held).state === 'over') { ctx.toast(tr('This ride is over or was cancelled')); openGroups(); return; }
     watch(g, follow);
   } catch (e) { ctx.toast(e.message); }
 }

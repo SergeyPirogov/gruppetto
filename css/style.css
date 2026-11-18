@@ -1846,3 +1846,25 @@ select.seg-src { display: none; }
 .route-filter button { padding: 6px 14px; border-radius: 999px; background: #131a27; color: #c6d0e0; border: 1px solid var(--line); font-size: .82rem; font-weight: 600; }
 .route-filter button.sel { background: #e8edf5; color: #0b1019; border-color: #e8edf5; font-weight: 800; }
 .route-filter button[hidden], .route-group[hidden] { display: none; }
+
+/* =================== group rides hub, full screen (index.html #gr-view) =================== */
+#gr-view .gr-panel { width: calc(100vw - 80px); max-width: 1180px; height: calc(100vh - 56px); max-height: none; overflow-y: auto; align-content: start; padding: 22px 28px 28px; border-radius: 24px; }
+#gr-view .wk-menu-head { justify-content: flex-start; gap: 14px; position: sticky; top: -22px; z-index: 2; margin: -22px -28px 6px; padding: 18px 28px 12px; background: var(--bg); border-bottom: 1px solid var(--line); }
+#gr-view .wk-menu-head h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; }
+#gr-view .wk-menu-head .drawer-close { margin-left: 0; }
+.gr-new-btn { margin-left: auto; padding: 9px 18px; border-radius: 12px; font-weight: 800; }
+.gr-sec { margin: 14px 0 2px; font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.gr-sec:first-child { margin-top: 0; }
+#gr-view .gr-row { grid-template-columns: 84px minmax(0, 1fr) auto; padding: 14px 16px; border-radius: 16px; background: #121824; border-color: var(--line); }
+#gr-view .gr-row.soon { background: #1a1410; border-color: #4a2a12; }
+#gr-view .gr-row.focus { box-shadow: 0 0 0 2px var(--accent) inset; }
+#gr-view .gr-when { padding: 6px 0; border-radius: 12px; background: #0b1019; }
+#gr-view .gr-row.soon .gr-when { background: #2a1c12; color: #ffb07a; }
+#gr-view .gr-what b { font-size: 1.05rem; }
+#gr-view .gr-new { margin-top: 10px; padding: 14px 16px; border-radius: 16px; background: #121824; border: 1px solid var(--line); }
+#gr-view .gr-new[open] .gr-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+@media (max-width: 760px) {
+  #gr-view .gr-panel { width: 100vw; height: 100vh; border-radius: 0; padding: 16px; }
+  #gr-view .wk-menu-head { margin: -16px -16px 6px; padding: 14px 16px 10px; top: -16px; }
+  #gr-view .gr-row { grid-template-columns: 64px minmax(0, 1fr); } #gr-view .gr-acts { grid-column: 1 / -1; }
+}
