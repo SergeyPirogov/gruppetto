@@ -1682,3 +1682,7 @@ body.watching { overflow: hidden; }
 #wv-write { display: flex; flex-direction: column; gap: 6px; }
 #wv-write[hidden] { display: none; }
 .chat-watch-link { align-self: flex-start; font-size: .82rem; }
+
+/* the account card's sync line: when it last went through, or what went wrong (#: sync status) */
+.social-sync { margin: 6px 0 0; font-size: .85rem; color: var(--muted); }
+.social-sync.bad { color: #fca5a5; }
