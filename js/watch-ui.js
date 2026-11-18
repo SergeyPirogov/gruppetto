@@ -41,6 +41,7 @@ export async function openWatch(env) {
       chat: (p) => { if (W === w && w.chat.receive(p, Date.now())) renderChat(); },
       react: (p) => { if (W === w) { const r = w.reacts.receive(p, Date.now()); if (r) floatReact(r); } },
       watch: (p) => { if (W === w) w.watchers.receive(p, Date.now()); },
+      start: () => { if (W === w && w.g.held) recheck(w); },
     });
     if (W === w) w.live = live; else live.leave();
   } catch (e) { env.toast(e.message); }
@@ -61,8 +62,9 @@ function render() {
   const w = W, { tr, esc } = w.env, now = Date.now();
   // say we are here, every 10 s
   if (w.live?.joined && now - w.pinged > 10000) { w.pinged = now; w.live.say('watch', { u: w.id }); }
-  const win = rideWindow(w.t0, now);
-  $('wv-clock').textContent = win.state === 'later' || win.state === 'open' ? tr('Starts in {t}', { t: fmt(win.in) })
+  if (w.g.held && now - (w.polledAt || 0) > 20000) recheck(w);
+  const win = rideWindow(w.t0, now, w.g.held);
+  $('wv-clock').textContent = win.held ? tr('On the line: waiting for the host to start') : win.state === 'later' || win.state === 'open' ? tr('Starts in {t}', { t: fmt(win.in) })
     : win.state === 'live' ? tr('Riding · {t}', { t: fmt(win.since) }) : tr('Over');
   const n = w.watchers.count(now) + 1; // you too
   $('wv-watchers').textContent = `👀 ${n}`;
@@ -102,6 +104,12 @@ function render() {
     drawProfile(cv, w.route, riders);
   }
   renderChat();
+}
+
+/** A held ride: its start as the database has it now (env.reload), once the host says so or every 20 s. */
+function recheck(w) {
+  w.polledAt = Date.now();
+  w.env.reload?.(w.g.id).then((g) => { if (W === w && g) { w.g = g; w.t0 = Date.parse(g.starts_at); } }).catch(() => {});
 }
 
 function renderChat() {

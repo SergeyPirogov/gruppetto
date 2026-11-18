@@ -90,9 +90,16 @@ function mockSupabase({ profile = null, offline = false } = {}) {
     if (p === '/rest/v1/rpc/create_group_ride') {
       const q = JSON.parse(body), l = (db.leagues || []).find((x) => x.id === q.p_league);
       const id = '11111111-0000-4000-8000-000000000001';
-      (db.rides ||= []).push({ id, title: q.p_title, route_id: q.p_route, starts_at: q.p_starts, host_name: 'Olena', mine: true, riders: 1, joined: true, kind: q.p_kind, laps: q.p_laps, league_id: l?.id || null, league_title: l?.title || null });
+      (db.rides ||= []).push({ id, title: q.p_title, route_id: q.p_route, starts_at: q.p_held ? new Date(Date.now() + 7200e3).toISOString() : q.p_starts, host_name: 'Olena', mine: true, riders: 1, joined: true, kind: q.p_kind, laps: q.p_laps, league_id: l?.id || null, league_title: l?.title || null, held: !!q.p_held });
       if (l) l.races += 1;
       return send(route, 200, id);
+    }
+    if (p === '/rest/v1/rpc/join_group_ride') return send(route, 204);
+    if (p === '/rest/v1/rpc/start_group_ride') { // the host starts a held ride (0010)
+      const q = JSON.parse(body), g = (db.rides || []).find((r) => r.id === q.p_id && r.mine && r.held);
+      if (!g) return send(route, 403, { message: 'not a held ride of yours', code: '42501' });
+      Object.assign(g, { held: false, starts_at: new Date(Date.now() + q.p_in * 1000).toISOString() });
+      return send(route, 200, g.starts_at);
     }
     if (p === '/rest/v1/rpc/league_standings') return send(route, 200, [{ name: 'Taras', points: 45, races: 2, wins: 1, best: 1, me: false }, { name: 'Olena', points: 20, races: 1, wins: 0, best: 2, me: true }]);
     if (p === '/rest/v1/rpc/league_races') return send(route, 200, (db.rides || []).filter((r) => r.league_id === JSON.parse(body).p_id).map((r) => ({ ...r, finishers: 0 })));
@@ -428,5 +435,51 @@ test('the sync says how it went: synced with the rides in the account, or what f
   mock.db.failProfile = false;
   await page.evaluate(() => document.getElementById('btn-social-sync').click());
   await page.waitForFunction(() => /Synced just now/.test(document.getElementById('social-sync-text').textContent), null, { timeout: 10000 });
+  await context.close();
+});
+
+test('a race started when everyone is ready: set up held, its host starts it from the line in 2 min', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#hdr-account.in');
+  await page.evaluate(() => document.getElementById('hdr-group').click());
+  await page.waitForSelector('#gr-view:not([hidden])');
+  await page.click('#gr-new summary');
+  await page.fill('#gr-title', 'Crit now');
+  await page.selectOption('#gr-kind', 'race');
+  await page.selectOption('#gr-start', 'ready');
+  assert.equal(await page.isHidden('#gr-date'), true); // no date and time for it
+  await page.click('#gr-create');
+  await page.waitForSelector('.gr-row [data-act="ride"]'); // open at once
+  assert.equal(JSON.parse(mock.db.requests.filter((r) => r.path === '/rest/v1/rpc/create_group_ride').at(-1).body).p_held, true);
+  assert.match(await page.textContent('.gr-row'), /when ready/);
+  await page.evaluate(() => { window.__pretendTrainer = false; document.querySelector('.gr-row [data-act="ride"]').click(); });
+  await page.waitForSelector('#gr-host:not([hidden])', { timeout: 20000 });
+  assert.match(await page.textContent('#countdown'), /On the line/);
+  const before = await page.evaluate(() => window.__ride.elapsed);
+  await page.click('#gr-host [data-in="120"]');
+  await page.waitForSelector('#gr-host', { state: 'hidden' });
+  await page.waitForFunction(() => /Group start in [12]:/.test(document.getElementById('countdown').textContent));
+  const sent = JSON.parse(mock.db.requests.filter((r) => r.path === '/rest/v1/rpc/start_group_ride').at(-1).body);
+  assert.equal(sent.p_in, 120);
+  assert.ok(await page.evaluate(() => window.__ride.elapsed) - before < 1, 'the clock waits on the line');
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a held ride, not yours: waiting for the host, then off once the database has its start', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  mock.db.rides = [{ id: '22222222-0000-4000-8000-000000000002', title: 'Their crit', route_id: 'rolling', starts_at: new Date(Date.now() + 7200e3).toISOString(), host_name: 'Taras', mine: false, riders: 3, joined: true, kind: 'race', laps: 1, league_id: null, league_title: null, held: true }];
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#hdr-account.in');
+  await page.evaluate(() => document.getElementById('hdr-group').click());
+  await page.waitForSelector('.gr-row [data-act="ride"]');
+  assert.match(await page.textContent('.gr-row'), /starts when Taras starts it/);
+  await page.evaluate(() => { window.__pretendTrainer = false; document.querySelector('.gr-row [data-act="ride"]').click(); });
+  await page.waitForFunction(() => /Waiting for the host/.test(document.getElementById('countdown').textContent), null, { timeout: 20000 });
+  assert.equal(await page.isHidden('#gr-host'), true); // no start buttons for a rider
+  Object.assign(mock.db.rides[0], { held: false, starts_at: new Date(Date.now() + 60e3).toISOString() });
+  await page.waitForFunction(() => /Group start in/.test(document.getElementById('countdown').textContent), null, { timeout: 30000 }); // read within 20 s
+  assert.deepEqual(errors, []);
   await context.close();
 });

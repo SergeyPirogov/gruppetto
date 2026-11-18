@@ -626,6 +626,11 @@
       </div>
     </div>
     <div id="countdown" class="countdown" hidden></div>
+    <!-- a held group ride's host starts it when everyone is on the line (js/app.js groupHostRender) -->
+    <div id="gr-host" class="gr-host" hidden>
+      <b>Everyone here? Start the ride</b><span id="gr-host-line"></span>
+      <div class="gr-host-btns"><button class="pill-btn" data-in="10">10 s</button><button class="pill-btn" data-in="60">1 min</button><button class="pill-btn" data-in="120">2 min</button><button class="pill-btn" data-in="300">5 min</button><button class="pill-btn" data-in="600">10 min</button></div>
+    </div>
     <div id="paused" class="paused" hidden>PAUSED</div>
     <div id="keys-help" class="keys-help" hidden>
       <div class="keys-panel">
@@ -875,13 +880,14 @@
             <label>Kind<select id="gr-kind"><option value="ride">Ride together</option><option value="race">Race</option></select></label>
             <label id="gr-laps-wrap" hidden>Laps<input id="gr-laps" type="number" min="1" max="10" value="3" inputmode="numeric"></label>
             <label id="gr-league-wrap" class="gr-wide" hidden>League<select id="gr-league"></select></label>
+            <label class="gr-wide">Start<select id="gr-start"><option value="time">At a set time</option><option value="ready">When everyone is ready: I start it</option></select></label>
             <label>Date<input id="gr-date" type="date" required></label>
             <label>Time<input id="gr-time" type="time" required></label>
             <button id="gr-create" class="primary gr-wide" type="submit">Set up the ride</button>
             <p id="gr-err" class="hint gr-wide" hidden></p>
           </form>
         </details>
-        <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together: you see each other live on the road, and ride in each other's shelter. In a race, the first across the line after the laps wins, and the results stay with the ride. Signed in, on a trainer or in the simulator.</p>
+        <p class="hint">At the time, everyone who opens the ride waits on the start line, and you all start together (or set it up «when everyone is ready»: you start it from the line, in 10 s to 10 min, once all are there): you see each other live on the road, and ride in each other's shelter. In a race, the first across the line after the laps wins, and the results stay with the ride. Signed in, on a trainer or in the simulator.</p>
         </div>
       </div>
     </div>
