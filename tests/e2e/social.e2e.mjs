@@ -469,6 +469,7 @@ test('a race started when everyone is ready: set up held, its host starts it fro
   await page.evaluate(() => { window.__pretendTrainer = false; document.querySelector('.gr-row [data-act="ride"]').click(); });
   await page.waitForSelector('#gr-host:not([hidden])', { timeout: 20000 });
   assert.match(await page.textContent('#countdown'), /On the line/);
+  assert.equal(await page.isVisible('#gr-startlist'), true);
   const before = await page.evaluate(() => window.__ride.elapsed);
   await page.click('#gr-host [data-in="120"]');
   await page.waitForSelector('#gr-host', { state: 'hidden' });
