@@ -22,7 +22,7 @@ export const stravaRedirect = (loc = location) => `${loc.origin}${loc.pathname}`
 export function stravaAuthorizeUrl(redirect) {
   const q = new URLSearchParams({
     client_id: STRAVA_CLIENT_ID, redirect_uri: redirect, response_type: 'code',
-    approval_prompt: 'auto', scope: 'read,activity:write', state: STRAVA_STATE,
+    approval_prompt: 'auto', scope: 'read,read_all,activity:write', state: STRAVA_STATE, // read_all: your private routes too
   });
   return `https://www.strava.com/oauth/authorize?${q}`;
 }
@@ -39,6 +39,16 @@ export function stravaReturn(search) {
   if (!code) return null;
   const scope = (q.get('scope') || '').split(',');
   return scope.includes('activity:write') ? { code } : { error: 'no-write' };
+}
+
+/**
+ * Your Strava routes that are rides, newest first, as the route list shows them. A route's id is past what a JS
+ * number holds exactly, so it is read as the text Strava also sends (id_str).
+ */
+export function rideRoutes(list) {
+  return (Array.isArray(list) ? list : [])
+    .filter((r) => r && (r.type === 1 || r.type === undefined) && (r.id_str || r.id))
+    .map((r) => ({ id: String(r.id_str || r.id), name: String(r.name || 'Strava route').slice(0, 80), distance: Number(r.distance) || 0, gain: Number(r.elevation_gain) || 0, starred: !!r.starred, private: !!r.private }));
 }
 
 /** The upload's activity on Strava, also when Strava calls it a duplicate of one already there. */
@@ -98,6 +108,24 @@ export class StravaClient {
     save(this.t);
     return this.t.access;
   }
+
+  /** A GET to Strava's API with a live token: the JSON, or the text for a file. */
+  async get(path, { text = false } = {}) {
+    const r = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${await this.token()}` } });
+    if (r.status === 401) throw new Error('Strava: access revoked, connect again');
+    if (!r.ok) throw Object.assign(new Error(`Strava ${r.status}`), { status: r.status });
+    return text ? r.text() : r.json();
+  }
+
+  /** Your routes on Strava that are rides (the first 100). */
+  async routes() {
+    let id = this.t.athleteId;
+    if (!id) { id = (await this.get('/athlete')).id; this.t = { ...this.t, athleteId: id }; save(this.t); }
+    return rideRoutes(await this.get(`/athletes/${id}/routes?per_page=100`));
+  }
+
+  /** One route as a GPX file, with its heights. */
+  routeGpx(id) { return this.get(`/routes/${encodeURIComponent(id)}/export_gpx`, { text: true }); }
 
   /**
    * Uploads a FIT and waits for Strava to make it an activity (a few seconds, up to a minute).

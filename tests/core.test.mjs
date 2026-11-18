@@ -1257,3 +1257,14 @@ test('strava: saved tokens are kept only for the Strava app in use', async () =>
   assert.equal(savedFor({ app: '999' }, '999'), false); // no refresh token
   assert.equal(savedFor(null, '999'), false);
 });
+
+test('strava: your routes that are rides, ids kept as text', async () => {
+  const { rideRoutes } = await import('../js/strava.js');
+  const out = rideRoutes([
+    { id: 3344556677889900000, id_str: '3344556677889900123', name: 'Kyiv loop', distance: 42000, elevation_gain: 310, type: 1, starred: true },
+    { id: 1, id_str: '1', name: 'A run', distance: 5000, type: 2 },
+    { name: 'no id', type: 1 },
+  ]);
+  assert.deepEqual(out, [{ id: '3344556677889900123', name: 'Kyiv loop', distance: 42000, gain: 310, starred: true, private: false }]);
+  assert.deepEqual(rideRoutes(null), []);
+});

@@ -430,3 +430,25 @@ test('the sync says how it went: synced with the rides in the account, or what f
   await page.waitForFunction(() => /Synced just now/.test(document.getElementById('social-sync-text').textContent), null, { timeout: 10000 });
   await context.close();
 });
+
+test('a route of yours on Strava: listed, picked, and in My routes', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: { ...LOCAL, 'gruppetto.strava-on': '1' } });
+  const gpx = `<?xml version="1.0"?><gpx version="1.1"><trk><name>Kyiv loop</name><trkseg>${Array.from({ length: 60 }, (_, i) => `<trkpt lat="${50.45 + i * 0.0009}" lon="${30.52 + Math.sin(i / 9) * 0.002}"><ele>${170 + i}</ele></trkpt>`).join('')}</trkseg></trk></gpx>`;
+  const seen = [];
+  await page.route('https://www.strava.com/api/v3/**', (route) => {
+    const u = new URL(route.request().url()); seen.push(u.pathname);
+    const json = (b) => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(b) });
+    if (u.pathname === '/api/v3/athlete') return json({ id: 42 });
+    if (u.pathname === '/api/v3/athletes/42/routes') return json([{ id: 1, id_str: '9001', name: 'Kyiv loop', distance: 5400, elevation_gain: 60, type: 1 }, { id: 2, id_str: '9002', name: 'Run', distance: 5000, type: 2 }]);
+    if (u.pathname === '/api/v3/routes/9001/export_gpx') return route.fulfill({ status: 200, contentType: 'application/gpx+xml', headers: { 'access-control-allow-origin': '*' }, body: gpx });
+    return route.fulfill({ status: 404, body: '' });
+  });
+  await page.evaluate(() => { document.getElementById('drawer').hidden = true; document.querySelector('.rc-strava').click(); });
+  await page.waitForSelector('#sr-list [data-id="9001"]');
+  assert.equal(await page.locator('#sr-list [data-id]').count(), 1); // the run is left out
+  await page.evaluate(() => document.querySelector('#sr-list [data-id="9001"]').click());
+  await page.waitForFunction(() => [...document.querySelectorAll('#route-list .option[data-id]')].some((e) => e.textContent.includes('Kyiv loop')), null, { timeout: 60000 });
+  assert.ok(seen.includes('/api/v3/routes/9001/export_gpx'));
+  assert.deepEqual(errors, []);
+  await context.close();
+});
