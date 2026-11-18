@@ -1,6 +1,7 @@
 import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { variant } from './experiments.js';
+import { segmentAll } from './settings-ui.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
 import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
@@ -1091,6 +1092,8 @@ function openDrawer(panel, tab) {
   if (panel === 'profile') { showProfileTab(tab || profileTab); renderMeHero(); }
   const drawer = $('drawer');
   drawer.hidden = false;
+  drawer.dataset.panel = panel; // Profile's Settings take the whole screen (css: #drawer[data-panel=profile][data-ptab=settings])
+  if (panel === 'profile') segmentAll(drawer, tr);
   drawer.classList.toggle('in-ride', !!ride);
   // in the lobby a section is a page beside the rail; mid-ride it slides over the road
   drawer.classList.toggle('as-page', !ride);
@@ -1114,6 +1117,20 @@ function showProfileTab(t) {
   $('drawer').querySelector('.drawer-panel').scrollTop = 0;
 }
 for (const b of document.querySelectorAll('[data-ptab-go]')) b.onclick = () => showProfileTab(b.dataset.ptabGo);
+
+// ---------- Settings: one group at a time, its name on the left ----------
+const SGROUP_KEY = 'gruppetto.settings-group';
+const SGROUPS = ['look', 'ride', 'gears', 'pacer', 'pip', 'app'];
+let settingsGroup = (() => { try { return localStorage.getItem(SGROUP_KEY) || 'look'; } catch { return 'look'; } })();
+function showSettingsGroup(g) {
+  if (!SGROUPS.includes(g)) g = 'look';
+  settingsGroup = g;
+  $('drawer').dataset.sgroup = g;
+  for (const b of document.querySelectorAll('[data-sgroup-go]')) b.classList.toggle('sel', b.dataset.sgroupGo === g);
+  try { localStorage.setItem(SGROUP_KEY, g); } catch { /* private mode */ }
+}
+for (const b of document.querySelectorAll('[data-sgroup-go]')) b.onclick = () => showSettingsGroup(b.dataset.sgroupGo);
+showSettingsGroup(settingsGroup);
 
 /** The top of Me: who you are at a glance (initial, name, level) and the numbers the rides go by. */
 function renderMeHero() {
@@ -4966,6 +4983,7 @@ function onRideKey(e) {
 
 // interface language (#31): the static page, the built-in routes, climbs and workouts, power zones
 translateDom();
+segmentAll(document.body, tr); // after the options are translated: the buttons take their words
 for (const r of routes) {
   if (!r.custom) { r.name = tr(r.name); r.description = tr(r.description); }
   localizeClimbs(r);

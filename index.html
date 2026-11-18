@@ -297,143 +297,188 @@
           <button id="btn-garage" class="garage-open wide"><span class="garage-swatches" id="garage-swatches"></span><span><b>Garage</b><small>Kit, bike and helmet colours, on a turntable</small></span></button>
         </div>
       </div>
-      <div class="card" data-panel="profile" data-ptab="settings">
-        <h2>Ride</h2>
-        <div class="fields">
-          <label>3D style
-            <select id="f-style">
-              <option value="cartoon">Cartoon</option>
-              <option value="pixel">Pixel (retro)</option>
+      <!-- Settings, full screen (js/app.js showSettingsGroup): the groups on the left, one at a time on the right.
+           The selects stay (their ids and handlers); js/settings-ui.js draws each as buttons over it -->
+      <nav class="card set-nav" data-panel="profile" data-ptab="settings" aria-label="Settings">
+        <button data-sgroup-go="look"><b>Look &amp; dashboard</b><small>style, camera, weather</small></button>
+        <button data-sgroup-go="ride"><b>Ride</b><small>bunch, wind, climbs, attacks</small></button>
+        <button data-sgroup-go="gears"><b>Gears</b><small>virtual gears, chainring, buttons</small></button>
+        <button data-sgroup-go="pacer"><b>Pacer</b><small>in workouts and free rides</small></button>
+        <button data-sgroup-go="pip"><b>Mini window</b><small>over a film, HUD for Mac</small></button>
+        <button data-sgroup-go="app"><b>App</b><small>language, sound, stats</small></button>
+        <span class="set-nav-note">Saved as you go. Esc closes.</span>
+      </nav>
+      <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="look">
+        <h2>Look &amp; dashboard</h2>
+        <div class="set-grid">
+          <div class="set-box">
+            <h3>Style</h3>
+            <select id="f-style" data-seg="cards" aria-label="3D style">
+              <option value="cartoon" data-short="Cartoon">Cartoon</option>
+              <option value="pixel" data-short="Pixel">Pixel (retro)</option>
             </select>
-          </label>
-          <label>Mini window (I)
-            <select id="f-pip">
-              <option value="sharp">Sharp window (Chrome shows the site's address over it)</option>
-              <option value="clean">Clean, no address bar (drawn as a video, a little softer)</option>
-            </select>
-          </label>
-          <label class="check wide"><input type="checkbox" id="f-overlay"> Mac overlay: the numbers in Gruppetto HUD, a see-through panel over everything (the app runs on this Mac)</label>
-          <small id="hud-get" class="hint time-hint" hidden><a href="https://github.com/SergeyPirogov/gruppetto/releases/latest/download/Gruppetto-HUD.zip">⬇ Download Gruppetto HUD for Mac</a> · macOS 13+. The first time: System Settings → Privacy &amp; Security → Open Anyway.</small>
-          <label>Graphics
-            <select id="f-quality">
-              <option value="auto">Auto (by this device)</option>
-              <option value="low">Low: fast on any laptop</option>
-              <option value="medium">Medium</option>
-              <option value="high">High: glow and colour finish</option>
-            </select>
-          </label>
-          <label>Camera
-            <select id="f-camera">
-              <option value="chase">1 · Chase</option>
-              <option value="eyes">2 · Rider's eyes</option>
-              <option value="iso">3 · Isometric</option>
-              <option value="side">4 · Over the shoulder</option>
-              <option value="front">5 · From the front</option>
-              <option value="far">6 · Far behind</option>
-              <option value="back">7 · Looking back</option>
-              <option value="post">8 · By the road</option>
-              <option value="heli">9 · Helicopter</option>
-              <option value="tv">0 · TV broadcast</option>
-              <option value="top">From above</option>
-              <option value="drone">Drone</option>
-              <option value="tight">Close behind</option>
-              <option value="high">High behind</option>
-              <option value="offset">Behind, to the right</option>
-              <option value="long">Long lens</option>
-              <option value="car">Team car</option>
-            </select>
-          </label>
-          <label>Time of day
-            <select id="f-time">
-              <option value="midday">Midday</option>
-              <option value="morning">Morning</option>
-              <option value="evening">Evening (golden hour)</option>
-              <option value="night">Night</option>
-              <option value="auto">By the sun</option>
-            </select>
-          </label>
-          <label>Weather
-            <select id="f-weather">
-              <option value="clear">Clear</option>
-              <option value="fog">Fog</option>
-              <option value="rain">Rain</option>
-              <option value="changeable">Changeable: rain comes and goes</option>
-            </select>
-          </label>
-          <small id="f-time-hint" class="hint time-hint" hidden></small>
-          <label>Wind in races
-            <select id="f-wind">
-              <option value="off">Calm</option>
-              <option value="light">Light breeze</option>
-              <option value="moderate">Moderate wind</option>
-              <option value="strong">Strong wind</option>
-            </select>
-          </label>
-          <label>Riders in the bunch
-            <select id="f-bots">
-              <option value="0">None</option><option value="3">3</option><option value="5">5</option><option value="8">8</option>
-            </select>
-          </label>
-          <label class="check wide"><input type="checkbox" id="f-attacks"> Attacks in a free ride: now and then a rider goes clear of the bunch, most often on a climb; chase or let him go</label>
-          <label class="wide">Climb difficulty <span id="diff-val" class="range-val"></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
-
-        </div>
-      </div>
-      <div class="card" data-panel="profile" data-ptab="settings">
-        <h2>Gears</h2>
-        <div class="fields">
-          <div class="fields-3 fields-gears">
-          <label>Virtual gears
-            <select id="f-shift">
-              <option value="wheel">Like Zwift</option>
-              <option value="grade">Via grade</option>
-              <option value="off">Off — I shift on the bike</option>
-            </select>
-          </label>
-            <label class="gear-teeth">Chainring
-              <select id="f-chainring">
-                <option value="34">34</option><option value="36">36</option><option value="39">39</option>
-                <option value="42">42</option><option value="46">46</option><option value="50">50</option>
-                <option value="52">52</option><option value="53">53</option>
-              </select>
-            </label>
-            <label class="gear-teeth">Rear cog
-              <select id="f-cog">
-                <option value="11">11</option><option value="12">12</option><option value="13">13</option>
-                <option value="14">14</option><option value="15">15</option><option value="16">16</option>
-                <option value="17">17</option><option value="19">19</option><option value="21">21</option>
-                <option value="23">23</option><option value="25">25</option><option value="28">28</option>
+            <label class="set-field"><span>Graphics</span>
+              <select id="f-quality" data-seg>
+                <option value="auto" data-short="Auto">Auto (by this device)</option>
+                <option value="low" data-short="Low">Low: fast on any laptop</option>
+                <option value="medium" data-short="Medium">Medium</option>
+                <option value="high" data-short="High">High: glow and colour finish</option>
               </select>
             </label>
           </div>
-          <p id="gears-note" class="muted fields-note wide">The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.</p>
-          <label class="check wide"><input type="checkbox" id="f-shift-buttons"> Shift buttons on the screen: + and − on the right, to tap with a finger (with a mouse they show with the menu)</label>
-          <p id="gears-note-off" class="muted fields-note wide" hidden>A cassette and a derailleur on the bike: shift there, as on the road. The trainer gets the real wheel size; the buttons change gears only in a workout (intensity).</p>
-
+          <div class="set-box">
+            <h3>Dashboard</h3>
+            <select id="f-hud-layout" data-seg="cards" aria-label="Ride dashboard"><option value="a" data-short="A · in the corners">A: boards in the corners</option><option value="b" data-short="B · strip at the bottom">B: every number in a strip at the bottom</option></select>
+            <label class="set-field"><span>Power, averaged over</span>
+              <select id="f-power-avg" data-seg><option value="1" data-short="1 s">1 s (as it is)</option><option value="3" data-short="3 s">3 s average</option><option value="5" data-short="5 s">5 s average</option><option value="10" data-short="10 s">10 s average</option></select>
+            </label>
+          </div>
+          <div class="set-box wide">
+            <h3>Camera <small>keys 1–0, C the next one</small></h3>
+            <select id="f-camera" data-seg="tiles" aria-label="Camera">
+              <option value="chase" data-key="1" data-short="Chase">1 · Chase</option>
+              <option value="eyes" data-key="2" data-short="Eyes">2 · Rider's eyes</option>
+              <option value="iso" data-key="3" data-short="Isometric">3 · Isometric</option>
+              <option value="side" data-key="4" data-short="Shoulder">4 · Over the shoulder</option>
+              <option value="front" data-key="5" data-short="Front">5 · From the front</option>
+              <option value="far" data-key="6" data-short="Far">6 · Far behind</option>
+              <option value="back" data-key="7" data-short="Looking back">7 · Looking back</option>
+              <option value="post" data-key="8" data-short="By the road">8 · By the road</option>
+              <option value="heli" data-key="9" data-short="Helicopter">9 · Helicopter</option>
+              <option value="tv" data-key="0" data-short="TV">0 · TV broadcast</option>
+              <option value="top" data-short="Above">From above</option>
+              <option value="drone" data-short="Drone">Drone</option>
+              <option value="tight" data-short="Close behind">Close behind</option>
+              <option value="high" data-short="High">High behind</option>
+              <option value="offset" data-short="To the right">Behind, to the right</option>
+              <option value="long" data-short="Long lens">Long lens</option>
+              <option value="car" data-short="Team car">Team car</option>
+            </select>
+          </div>
+          <div class="set-box wide set-row">
+            <label class="set-field"><span>Time of day</span>
+              <select id="f-time" data-seg>
+                <option value="midday" data-short="Midday">Midday</option>
+                <option value="morning" data-short="Morning">Morning</option>
+                <option value="evening" data-short="Evening">Evening (golden hour)</option>
+                <option value="night" data-short="Night">Night</option>
+                <option value="auto" data-short="By the sun">By the sun</option>
+              </select>
+            </label>
+            <label class="set-field"><span>Weather</span>
+              <select id="f-weather" data-seg>
+                <option value="clear" data-short="Clear">Clear</option>
+                <option value="fog" data-short="Fog">Fog</option>
+                <option value="rain" data-short="Rain">Rain</option>
+                <option value="changeable" data-short="Changeable">Changeable: rain comes and goes</option>
+              </select>
+            </label>
+            <small id="f-time-hint" class="hint time-hint" hidden></small>
+          </div>
         </div>
       </div>
-      <div class="card" data-panel="profile" data-ptab="settings">
+      <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="ride">
+        <h2>Ride</h2>
+        <div class="set-grid">
+          <div class="set-box wide set-row">
+            <label class="set-field"><span>Riders in the bunch</span>
+              <select id="f-bots" data-seg><option value="0" data-short="None">None</option><option value="3">3</option><option value="5">5</option><option value="8">8</option></select>
+            </label>
+            <label class="set-field"><span>Wind in races</span>
+              <select id="f-wind" data-seg>
+                <option value="off" data-short="Calm">Calm</option>
+                <option value="light" data-short="Light">Light breeze</option>
+                <option value="moderate" data-short="Moderate">Moderate wind</option>
+                <option value="strong" data-short="Strong">Strong wind</option>
+              </select>
+            </label>
+          </div>
+          <div class="set-box wide">
+            <label class="set-field set-range"><span>Climb difficulty <b id="diff-val" class="range-val"></b></span><input id="f-diff" type="range" min="0" max="100" step="5"></label>
+            <div class="set-ticks"><span>flat</span><span>half the grade</span><span>as on the road</span></div>
+          </div>
+          <div class="set-box wide">
+            <label class="check set-toggle"><input type="checkbox" id="f-attacks"><span class="st-text"><b>Attacks in a free ride</b><small>Now and then a rider goes clear of the bunch, most often on a climb</small></span></label>
+          </div>
+        </div>
+      </div>
+      <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="gears">
+        <h2>Gears</h2>
+        <div class="set-grid">
+          <div class="set-box wide">
+            <label class="set-field"><span>Virtual gears</span>
+              <select id="f-shift" data-seg>
+                <option value="wheel" data-short="Like Zwift">Like Zwift</option>
+                <option value="grade" data-short="Via grade">Via grade</option>
+                <option value="off" data-short="I shift on the bike">Off — I shift on the bike</option>
+              </select>
+            </label>
+            <div class="set-row">
+              <label class="set-field gear-teeth"><span>Chainring</span>
+                <select id="f-chainring" data-seg="step">
+                  <option value="34">34</option><option value="36">36</option><option value="39">39</option>
+                  <option value="42">42</option><option value="46">46</option><option value="50">50</option>
+                  <option value="52">52</option><option value="53">53</option>
+                </select>
+              </label>
+              <label class="set-field gear-teeth"><span>Rear cog</span>
+                <select id="f-cog" data-seg="step">
+                  <option value="11">11</option><option value="12">12</option><option value="13">13</option>
+                  <option value="14">14</option><option value="15">15</option><option value="16">16</option>
+                  <option value="17">17</option><option value="19">19</option><option value="21">21</option>
+                  <option value="23">23</option><option value="25">25</option><option value="28">28</option>
+                </select>
+              </label>
+            </div>
+            <p id="gears-note" class="muted fields-note">The gear your chain stays in (Zwift Cog: 14); the buttons shift virtual gears on top of it. “Via grade” suits trainers that can’t take a wheel size.</p>
+            <p id="gears-note-off" class="muted fields-note wide" hidden>A cassette and a derailleur on the bike: shift there, as on the road. The trainer gets the real wheel size; the buttons change gears only in a workout (intensity).</p>
+          </div>
+          <div class="set-box wide">
+            <label class="check set-toggle"><input type="checkbox" id="f-shift-buttons"><span class="st-text"><b>Shift buttons on the screen</b><small>+ and − on the right, to tap with a finger; with a mouse they show with the menu</small></span></label>
+          </div>
+        </div>
+      </div>
+      <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="pacer">
         <h2>Pacer</h2>
-        <div class="fields">
-          <label class="check wide"><input type="checkbox" id="f-pacer"> Workout pacer: a virtual partner riding the target power</label>
-          <label class="check wide"><input type="checkbox" id="f-free-pacer"> Free-ride pacer: rides at a set W/kg and waits at the foot of climbs</label>
-          <label>Pacer name <input id="f-pacer-name" maxlength="16" placeholder="Pacer"></label>
-          <label>Free-ride pacer, W/kg <input id="f-free-wkg" type="number" min="0.5" max="7" step="0.1"></label>
-
+        <div class="set-grid">
+          <div class="set-box wide">
+            <label class="check set-toggle"><input type="checkbox" id="f-pacer"><span class="st-text"><b>Workout pacer</b><small>A virtual partner riding the target power</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-free-pacer"><span class="st-text"><b>Free-ride pacer</b><small>Rides at a set W/kg and waits at the foot of climbs</small></span></label>
+            <div class="set-row">
+              <label class="set-field"><span>Pacer name</span><input id="f-pacer-name" maxlength="16" placeholder="Pacer"></label>
+              <label class="set-field"><span>Free-ride pacer, W/kg</span><input id="f-free-wkg" type="number" min="0.5" max="7" step="0.1"></label>
+            </div>
+          </div>
         </div>
       </div>
-      <div class="card" data-panel="profile" data-ptab="settings">
+      <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="pip">
+        <h2>Mini window</h2>
+        <div class="set-grid">
+          <div class="set-box wide">
+            <label class="set-field"><span>Mini window over other apps (I)</span>
+              <select id="f-pip" data-seg>
+                <option value="sharp" data-short="Sharp, with the address">Sharp window (Chrome shows the site's address over it)</option>
+                <option value="clean" data-short="Clean, no address">Clean, no address bar (drawn as a video, a little softer)</option>
+              </select>
+            </label>
+          </div>
+          <div class="set-box wide">
+            <label class="check set-toggle"><input type="checkbox" id="f-overlay"><span class="st-text"><b>Gruppetto HUD for Mac</b><small>The numbers in a see-through panel over everything (the app runs on this Mac)</small></span></label>
+            <small id="hud-get" class="hint time-hint" hidden><a href="https://github.com/SergeyPirogov/gruppetto/releases/latest/download/Gruppetto-HUD.zip">⬇ Download Gruppetto HUD for Mac</a> · macOS 13+. The first time: System Settings → Privacy &amp; Security → Open Anyway.</small>
+          </div>
+        </div>
+      </div>
+      <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="app">
         <h2>App</h2>
-        <div class="fields">
-          <label>Language <select id="f-lang"></select></label>
-          <label>Ride dashboard <select id="f-hud-layout"><option value="a">A: boards in the corners</option><option value="b">B: every number in a strip at the bottom</option></select></label>
-          <label>Power on the board <select id="f-power-avg"><option value="1">1 s (as it is)</option><option value="3">3 s average</option><option value="5">5 s average</option><option value="10">10 s average</option></select></label>
-          <h3 class="fields-head">Sound</h3>
-          <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
-          <label class="check wide"><input type="checkbox" id="f-crowd"> Fans cheering on the climbs (never with the mini window or the Mac overlay)</label>
-
-          <h3 class="fields-head">Privacy</h3>
-          <label class="check wide"><input type="checkbox" id="f-stats"> Send anonymous usage stats: which features are used, never your name, data or place</label>
+        <div class="set-grid">
+          <div class="set-box wide">
+            <label class="set-field"><span>Language</span><select id="f-lang" data-seg></select></label>
+          </div>
+          <div class="set-box wide">
+            <label class="check set-toggle"><input type="checkbox" id="f-sound"><span class="st-text"><b>Workout sounds and voice</b><small>Interval countdowns and cues</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-crowd"><span class="st-text"><b>Fans on the climbs</b><small>Never with the mini window or the Mac overlay</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-stats"><span class="st-text"><b>Anonymous usage stats</b><small>Which features are used; never your name, data or place</small></span></label>
+          </div>
         </div>
       </div>
       <div class="card" id="icu-card" data-panel="profile" data-ptab="links">
