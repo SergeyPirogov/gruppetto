@@ -816,6 +816,11 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .keys-panel dt { white-space: nowrap; text-align: right; }
 .keys-panel dd { margin: 0; color: #c9d4e3; }
 .keys-panel dd small { color: var(--muted); }
+.keys-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 14px; border-radius: 12px; background: rgba(255, 255, 255, .04); border: 1px solid var(--line); }
+.keys-tabs button { flex: 1; padding: 8px 10px; border: 0; border-radius: 9px; background: transparent; color: #c9d4e3; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.keys-tabs button[aria-selected="true"] { background: var(--accent, #ff7a1a); color: #1a0f05; font-weight: 800; }
+.keys-note { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.keys-panel dt.keys-sub { grid-column: 1 / -1; text-align: left; margin-top: 6px; color: var(--muted); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; background: #1a2333; font: 600 .8rem/1.4 inherit; text-align: center; color: var(--fg, #fff); }
 
 /* sprint segments (#38): green where climbs are red */

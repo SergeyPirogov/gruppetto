@@ -4739,10 +4739,56 @@ const KEYS = [
   [['Esc'], 'Menu: Finish and Settings'],
   [['?'], 'This list'],
 ];
+/** The Zwift controllers' buttons (js/controls.js RIDE_TO_INTENT); a string alone is a heading. */
+const ZWIFT_KEYS = [
+  'Zwift Ride and Zwift Play',
+  [['Shift +', 'Shift −'], 'Harder / easier gear, either hand (in ERG ±1 % intensity)'],
+  [['▲', '▼'], 'Harder / easier gear'],
+  [['◀', '▶'], 'Big step easier / harder: workout ±5 %, free ride climbs ±10 %'],
+  [['Left paddle', 'Right paddle'], 'Lane left / right'],
+  [['A'], 'ERG on / off (free ride: hold this power)'],
+  [['B'], 'Pause / resume'],
+  [['Y'], 'Next camera'],
+  [['Z'], 'Skip the interval (free ride: new lap)'],
+  [['Power-up L'], 'Pacer on / off'],
+  [['Power-up R'], 'Hide / show the dashboard'],
+  'Zwift Click',
+  [['+', '−'], 'Harder / easier gear (in ERG ±1 % intensity)'],
+];
+/** OpenBikeControl's standard buttons (js/controls.js OBC_DIGITAL); the BikeControl app maps a device's own to these. */
+const OBC_KEYS = [
+  [['Shift up', 'Shift down'], 'Harder / easier gear'],
+  [['Gear select'], 'Straight to that gear'],
+  [['ERG +', 'ERG −'], 'Harder / easier (in ERG ±1 % intensity)'],
+  [['▲', '▼'], 'Harder / easier gear'],
+  [['◀', '▶', 'Steer'], 'Lane left / right; a steering angle steers smoothly'],
+  [['Skip'], 'Skip the interval (free ride: new lap)'],
+  [['Pause', 'Resume'], 'Pause / resume'],
+  [['HUD'], 'Hide / show the dashboard'],
+];
+const KEYS_NOTES = {
+  keys: '',
+  zwift: 'Connect them in Devices. A Zwift Ride is two units: add the left and the right one. The last button you pressed shows there, to check it.',
+  obc: 'Any controller the BikeControl app knows (Elite, Wahoo, Shimano, a gamepad) comes through as OpenBikeControl. Connect it in Devices.',
+};
+let keysTab = 'keys';
+const keysRows = (rows) => rows.map((r) => typeof r === 'string'
+  ? `<dt class="keys-sub">${esc(tr(r))}</dt>`
+  : `<dt>${r[0].map((x) => `<kbd>${esc(tr(x))}</kbd>`).join(' ')}</dt><dd>${esc(tr(r[1]))}</dd>`).join('');
+function renderKeysHelp() {
+  $('keys-list').innerHTML = keysRows({ keys: KEYS, zwift: ZWIFT_KEYS, obc: OBC_KEYS }[keysTab]);
+  const note = KEYS_NOTES[keysTab];
+  $('keys-note').hidden = !note;
+  $('keys-note').textContent = note ? tr(note) : '';
+  for (const b of document.querySelectorAll('#keys-tabs [data-keys-tab]')) b.setAttribute('aria-selected', String(b.dataset.keysTab === keysTab));
+}
 function toggleKeysHelp(show = $('keys-help').hidden) {
-  $('keys-list').innerHTML = KEYS.map(([k, what]) => `<dt>${k.map((x) => `<kbd>${x}</kbd>`).join(' ')}</dt><dd>${esc(tr(what))}</dd>`).join('');
+  // a rider with a controller on sees its buttons first
+  if (show) keysTab = controller.connected ? 'zwift' : obc.connected ? 'obc' : keysTab;
+  renderKeysHelp();
   $('keys-help').hidden = !show;
 }
+for (const b of document.querySelectorAll('#keys-tabs [data-keys-tab]')) b.onclick = () => { keysTab = b.dataset.keysTab; renderKeysHelp(); };
 $('btn-keys').onclick = () => toggleKeysHelp();
 
 /** Who rides: the man or the woman. The renderer rebuilds your rider as soon as settings.figure changes. */
