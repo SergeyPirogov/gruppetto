@@ -47,8 +47,18 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       const one = (req.headers().accept || '').includes('vnd.pgrst.object');
       if (req.method() === 'GET') return send(route, 200, one ? db.profile : (db.profile ? [db.profile] : []));
       const row = JSON.parse(body);
+      if (db.failProfile) return send(route, 500, { message: 'the account is down' });
+      // like Postgres: an insert (an upsert too) needs the name, NOT NULL, even for a row already there
+      if (req.method() === 'POST' && !row.display_name) return send(route, 400, { code: '23502', message: 'null value in column "display_name" of relation "profiles" violates not-null constraint' });
+      if (req.method() === 'PATCH' && !db.profile) return send(route, 406, { code: 'PGRST116', message: 'no rows' });
       db.profile = { public: true, data: {}, ...db.profile, ...row, updated_at: new Date().toISOString() };
       return send(route, 201, one ? db.profile : [db.profile]);
+    }
+    if (p === '/rest/v1/activities') { // the full sync's rides: read them all, upsert by id
+      db.activities ||= [];
+      if (req.method() === 'GET') return send(route, 200, db.activities);
+      for (const r of JSON.parse(body)) { const i = db.activities.findIndex((x) => x.id === r.id); if (i >= 0) db.activities[i] = r; else db.activities.push(r); }
+      return send(route, 201, []);
     }
     if (p === '/rest/v1/rpc/submit_efforts') {
       if (db.offline) return route.abort('internetdisconnected');
@@ -190,7 +200,7 @@ test('signing in: back from Google, this device\'s profile and the account\'s me
   assert.equal(settings.icuKey, ICU_SECRET); // the key stays here
   // the merge went back up: this device's coast lap and sprint speed are in the account now
   await page.waitForFunction(() => true);
-  const up = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && r.method === 'POST').at(-1);
+  const up = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && ['POST', 'PATCH'].includes(r.method)).at(-1);
   assert.ok(up, 'the merged profile went up');
   assert.equal(JSON.parse(up.body).data.records.lap.coast, 1200);
   assert.equal(JSON.parse(up.body).data.records.top['rolling-s1'], 50);
@@ -198,7 +208,7 @@ test('signing in: back from Google, this device\'s profile and the account\'s me
   // a change to the profile goes up 3 s later
   await page.evaluate(() => { const f = document.getElementById('f-weight'); f.value = '58'; f.oninput(); });
   await page.waitForTimeout(3600);
-  const last = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && r.method === 'POST').at(-1);
+  const last = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && ['POST', 'PATCH'].includes(r.method)).at(-1);
   assert.equal(JSON.parse(last.body).data.profile.weight, 58);
   noSecrets(mock.db);
   assert.deepEqual(errors, []);
@@ -356,5 +366,67 @@ test('signing out from the header: a tap on your name, then Sign out', async () 
   assert.equal(await page.isVisible('#hdr-guest'), true);
   assert.equal(await page.evaluate(() => localStorage.getItem('gruppetto.social.auth')), null);
   assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a ride cut off by a reload goes on from where it was: time, distance and the seconds ridden', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: LOCAL });
+  await page.evaluate(() => document.getElementById('btn-start').click());
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  await page.waitForFunction(() => window.__ride.elapsed >= 32, null, { timeout: 60000 }); // the draft is kept every 30 s
+  const before = await page.evaluate(() => ({ elapsed: window.__ride.elapsed, dist: window.__ride.dist }));
+  await page.reload();
+  await page.waitForFunction(() => document.getElementById('btn-start')?.onclick);
+  await page.waitForFunction(() => !document.getElementById('draft-box').hidden, null, { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('draft-continue').click());
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  const after = await page.evaluate(() => ({ elapsed: window.__ride.elapsed, dist: window.__ride.dist, route: window.__ride.route.id }));
+  assert.ok(after.elapsed >= 30 && after.elapsed <= before.elapsed + 2, `elapsed ${after.elapsed}, was ${before.elapsed}`);
+  assert.ok(after.dist > 0 && after.dist <= before.dist + 30, `dist ${after.dist}, was ${before.dist}`);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a ride on intervals.icu can go up again (deleted there): once more, paired with the planned workout', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: LOCAL });
+  const today = await page.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; });
+  await page.evaluate((date) => {
+    window.__planDemo([{ id: 'icu:77', eventId: 77, source: 'intervals', date, name: 'Plan Z2 for the test', description: 'plan', notes: '', steps: [{ dur: 600, free: true, hr: [120, 135] }] }]);
+  }, today);
+  await page.evaluate(() => {
+    document.getElementById('drawer').hidden = true;
+    [...document.querySelectorAll('button, li, [data-id]')].find((e) => e.textContent.includes('Plan Z2 for the test') && (e.onclick || e.tagName === 'BUTTON'))?.click();
+  });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => document.getElementById('wkd-ride').click());
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  if (!(await page.evaluate(() => window.__ride.workout?.eventId))) { // the plan card did not open: pick it the way the lobby does
+    await context.close(); assert.fail('the planned workout did not start');
+  }
+  await page.waitForFunction(() => window.__ride.elapsed >= 62, null, { timeout: 90000 });
+  await page.evaluate(() => { const b = document.getElementById('btn-finish'); b.click(); b.click(); });
+  await page.waitForFunction(() => (window.__icuUploads || []).length === 1, null, { timeout: 20000 }); // the upload after the finish
+  assert.equal((await page.evaluate(() => window.__icuUploads))[0].eventId, 77);
+  await page.waitForSelector('#icu-upload-status [data-again="icu"]');
+  await page.evaluate(() => document.querySelector('#icu-upload-status [data-again="icu"]').click());
+  await page.waitForFunction(() => window.__icuUploads.length === 2, null, { timeout: 10000 });
+  assert.equal((await page.evaluate(() => window.__icuUploads))[1].eventId, 77);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('the sync says how it went: synced with the rides in the account, or what failed, with Sync now', async () => {
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
+  const { page, context } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForFunction(() => /synced/.test(document.getElementById('hdr-account').textContent), null, { timeout: 10000 });
+  assert.match(await page.textContent('#social-sync-text'), /Synced just now/);
+  // the account refuses the next write: the header and the card say so, and Sync now tries again
+  mock.db.failProfile = true;
+  await page.evaluate(() => { const f = document.getElementById('f-weight'); f.value = '61'; f.oninput(); });
+  await page.waitForFunction(() => /not synced/.test(document.getElementById('hdr-account').textContent), null, { timeout: 10000 });
+  assert.match(await page.textContent('#social-sync-text'), /Not synced:/);
+  mock.db.failProfile = false;
+  await page.evaluate(() => document.getElementById('btn-social-sync').click());
+  await page.waitForFunction(() => /Synced just now/.test(document.getElementById('social-sync-text').textContent), null, { timeout: 10000 });
   await context.close();
 });

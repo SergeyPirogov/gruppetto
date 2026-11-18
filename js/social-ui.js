@@ -17,6 +17,8 @@ import {
 
 let ctx = null;
 let profileRow = null; // my row in profiles, once read
+/** How the last sync went, shown in the header and the account card: never, syncing, ok (when, rides) or error. */
+let syncState = { state: 'never', at: 0, rides: null, error: '' };
 let snapshot = '';      // the synced settings as last seen, to tell when one changes
 let syncTimer = null;
 let syncing = null;
@@ -77,6 +79,7 @@ function buildUi() {
   $('btn-social-in').onclick = () => { ctx.track('social', 'sign-in'); signIn(redirect()).catch((e) => status(e.message)); };
   $('btn-social-out').onclick = async () => { await signOut(); status(tr('Signed out. Everything stays on this device.')); };
   $('btn-social-edit').onclick = () => openSetup();
+  $('btn-social-sync').onclick = () => { ctx.track('social', 'sync-now'); sync({ send: true }).catch(() => {}); };
   $('f-social-public').onchange = async () => {
     try { profileRow = { ...profileRow, ...(await saveProfile({ public: $('f-social-public').checked })) }; } catch (e) { status(e.message); }
   };
@@ -157,7 +160,9 @@ function renderHeader() {
   // a guest: who you are now and the way in; signed in: you, your oblast, and that your things are on every device
   $('hdr-guest').hidden = !!u;
   const name = profileRow?.display_name || u?.email?.split('@')[0] || '';
-  const sub = [profileRow?.region ? regionName(profileRow.region, ctx.lang) : '', tr('synced')].filter(Boolean).join(' · ');
+  // what the last sync did, not a promise: «synced» only once it went through
+  const said = { syncing: tr('syncing…'), ok: tr('synced'), error: `⚠ ${tr('not synced')}` }[syncState.state] || '';
+  const sub = [profileRow?.region ? regionName(profileRow.region, ctx.lang) : '', said].filter(Boolean).join(' · ');
   b.innerHTML = u
     ? `<i class="hdr-avatar" style="background:${ctx.esc(ctx.settings.jersey || '#7c3aed')}">${ctx.esc((name[0] || '?').toUpperCase())}</i><span class="hdr-who"><b>${ctx.esc(name)}</b><small>${ctx.esc(sub)}</small></span>`
     : `${GOOGLE_G}<span>${ctx.esc(tr('Sign in'))}</span>`;
@@ -311,7 +316,28 @@ function renderCard() {
     $('social-who').textContent = name ? tr('Signed in as {email} · in the tables: {name}', { email: u.email || '', name }) : tr('Signed in as {email}', { email: u.email || '' });
     $('f-social-public').checked = profileRow?.public !== false;
   }
+  renderSync();
 }
+
+const ago = (t) => {
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? tr('just now') : m < 60 ? tr('{n} min ago', { n: m }) : new Date(t).toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' });
+};
+
+/** The account card's line on the sync: when it last went through and how many rides the account holds, or what went wrong. */
+function renderSync() {
+  const el = $('social-sync');
+  if (!el) return;
+  const s = syncState, u = currentUser();
+  el.hidden = !u || s.state === 'never';
+  el.classList.toggle('bad', s.state === 'error');
+  $('social-sync-text').textContent = s.state === 'syncing' ? tr('Syncing…')
+    : s.state === 'error' ? tr('Not synced: {error}', { error: s.error })
+      : [tr('Synced {when}', { when: ago(s.at) }), s.rides === null ? '' : tr('{n} rides in the account', { n: s.rides })].filter(Boolean).join(' · ');
+  $('btn-social-sync').disabled = s.state === 'syncing';
+}
+
+function setSync(next) { syncState = { ...syncState, ...next }; renderHeader(); renderSync(); }
 
 // ---------- Profile ----------
 
@@ -348,6 +374,7 @@ function apply(merged) {
 export function sync({ send = false } = {}) {
   if (!on() || !currentUser()) return Promise.resolve();
   if (syncing) return syncing.then(() => sync({ send }));
+  setSync({ state: 'syncing' });
   syncing = (async () => {
     const row = await loadProfile();
     if (!row) {
@@ -362,10 +389,16 @@ export function sync({ send = false } = {}) {
     const merged = mergeData(localData(), row.data);
     merged.workouts = syncWorkouts(row.data?.workouts);
     apply(merged);
-    if (!sameData(merged, row.data)) await saveProfile({ data: merged });
-    await syncRides();
-    if (send) await flush();
-  })().finally(() => { syncing = null; });
+    // each part on its own: the profile failing to save must not keep the rides or the results from syncing
+    const errors = [];
+    const step = async (f) => { try { await f(); } catch (e) { errors.push(e); } };
+    if (!sameData(merged, row.data)) await step(() => saveProfile({ data: merged }));
+    await step(async () => { const n = await syncRides(); if (n !== undefined) syncState.rides = n; });
+    if (send) await step(flush);
+    if (errors.length) throw errors[0];
+  })().then(() => { if (syncState.state === 'syncing') setSync({ state: 'ok', at: Date.now(), error: '' }); },
+    (e) => { setSync({ state: 'error', error: e?.message || String(e) }); throw e; })
+    .finally(() => { syncing = null; });
   return syncing;
 }
 
@@ -382,7 +415,7 @@ function syncWorkouts(remote) {
 /** The ride history, here and in the activities table, as one: new rides both ways, deletions both ways. */
 async function syncRides() {
   const rows = await loadActivities();
-  if (!rows) return; // the table is not in the project yet (0002_activities.sql)
+  if (!rows) return undefined; // the table is not in the project yet (0002_activities.sql)
   const remoteDeleted = {}, remote = [];
   for (const r of rows) {
     if (r.deleted) remoteDeleted[r.id] = r.changed_at || 0;
@@ -398,6 +431,11 @@ async function syncRides() {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const gone = Object.fromEntries(Object.entries(localDeleted).filter(([id, t]) => { const r = byId.get(id); return !r || !r.deleted || (r.changed_at || 0) < t; }));
   await saveActivities(activityRows(m.push, gone));
+  // the rides the account holds now: what it had, and what went up from here
+  const there = new Set(rows.filter((r) => !r.deleted).map((r) => r.id));
+  for (const e of m.push) there.add(e.id);
+  for (const id of Object.keys(gone)) there.delete(id);
+  return there.size;
 }
 
 function openSetup({ first = false } = {}) {
@@ -424,7 +462,7 @@ async function saveSetup() {
     profileRow = { ...profileRow, ...(await saveProfile(fields)) };
     $('social-setup').hidden = true;
     renderCard();
-    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); sync().catch(() => {}); }
+    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); sync().catch((e) => console.warn('Account sync:', e.message)); }
   } catch (e) { $('ss-error').textContent = e.message; }
 }
 
@@ -438,14 +476,14 @@ export function socialSettingsSaved() {
   ctx.saveSettingsRaw();
   if (!currentUser()) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
+  syncTimer = setTimeout(() => sync().catch((e) => console.warn('Account sync:', e.message)), 3000);
 }
 
 /** After the ride history or your workouts change here: up to the account in 3 s. */
 export function socialDataChanged() {
   if (!on() || !currentUser()) return;
   clearTimeout(syncTimer);
-  syncTimer = setTimeout(() => sync().catch(() => {}), 3000);
+  syncTimer = setTimeout(() => sync().catch((e) => console.warn('Account sync:', e.message)), 3000);
 }
 
 // ---------- Results ----------
@@ -473,7 +511,7 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
   cta.hidden = true;
   results = new Map();
   if (!items.length) {
-    if (currentUser()) sync().catch(() => {});
+    if (currentUser()) sync().catch((e) => console.warn('Account sync:', e.message));
     // laps or segments were timed, but none go to the tables: say why, rather than nothing
     if (timed) {
       $('sum-social-text').textContent = simulated

@@ -1,4 +1,4 @@
-import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice } from './ble.js';
+import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
@@ -72,7 +72,7 @@ if (new URLSearchParams(location.search).has('debug')) {
   Object.defineProperty(window, '__scene', { get: () => scene });
   window.__groupRide = (g) => startRide({ group: g }); // a group ride without an account (the browser tests)
   window.__pretendTrainer = false; // true: a simulator ride counts as a real one for the leaderboards (the browser tests)
-  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async () => null }; renderModes(); }; // try the plan box and uploads without an account
+  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async (_, o) => { (window.__icuUploads ||= []).push(o); return null; } }; renderModes(); }; // try the plan box and uploads without an account
 }
 
 // personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
@@ -167,7 +167,7 @@ let lastObcLabel = '';
 const reconnecting = new Map(); // key -> attempt number
 
 for (const d of DEVICES) {
-  d.dev.addEventListener('disconnect', () => { track('device-drop', d.key); updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
+  d.dev.addEventListener('disconnect', () => { track('device-drop', d.key); if (ride) saveDraft(); updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
   d.dev.addEventListener('reconnecting', ({ detail: n }) => { reconnecting.set(d.key, n); updateDeviceUI(); });
   d.dev.addEventListener('reconnected', () => {
     reconnecting.delete(d.key);
@@ -1347,8 +1347,9 @@ async function startRide(opts) {
   if (await wentFull) rideFullscreen = true;
   // a group ride (#84): its route, a free ride with the others live instead of the bots, held on the line till the start
   const group = opts?.group || null;
-  const route = (group && routes.find((r) => r.id === group.routeId)) || routes.find((r) => r.id === settings.routeId) || routes[0];
-  const workout = group ? null : allWorkouts().find((w) => w.id === settings.mode) || null;
+  const resume = opts?.resume || null; // an unfinished ride from before a reload: its route, workout and progress
+  const route = (group && routes.find((r) => r.id === group.routeId)) || (resume && routes.find((r) => r.id === resume.meta.routeId)) || routes.find((r) => r.id === settings.routeId) || routes[0];
+  const workout = group ? null : resume ? allWorkouts().find((w) => w.id === resume.meta.workout?.id) || null : allWorkouts().find((w) => w.id === settings.mode) || null;
   const simulated = $('sim').checked || !trainer.connected;
   const racing = !group && settings.mode === 'race';
   // a group race: the others live instead of the bots, over the laps the host set, the start at the set time
@@ -1408,6 +1409,8 @@ async function startRide(opts) {
   trainer.resetMode();
   recorder.reset();
   recorder.position = positionFor(route); // the GPS track in the FIT: the real road, or the route's place in the ocean
+  if (resume) resumeFrom(resume);
+  setKeepReconnecting(true);
   updateGear();
   $('lobby').hidden = true;
   if ($('drawer').classList.contains('as-page')) $('drawer').hidden = true; // a lobby page (Devices…) stays in the lobby
@@ -1491,7 +1494,8 @@ function advance(now = performance.now()) {
   if (ride.group && !ride.group.go) { // a group ride: on the line till the time it starts, the clock waiting too
     if (Date.now() >= ride.group.t0) {
       ride.group.go = true; cueBeep(1320, 0.45);
-      if (ride.race) { ride.race.go = true; ride.race.t0 = ride.elapsed; }
+      // a group race's clock runs from the set start, also for one who comes late (the server checks start + time)
+      if (ride.race) { ride.race.go = true; ride.race.t0 = ride.elapsed - Math.max(0, (Date.now() - ride.group.t0) / 1000); }
     } else { t += left * 1000; left = 0; }
   }
   groupSend();
@@ -2414,10 +2418,12 @@ function updateProgress() {
   if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} ${U.km} · ${fmtTime(ride.elapsed)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(L < 1000 ? 1 : 0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   if (ride.workout) {
-    const done = Math.min(1, ride.workoutT / totalDuration(ride.workout));
+    const total = totalDuration(ride.workout), done = Math.min(1, ride.workoutT / total);
     $('wk-name').textContent = ride.workout.name;
     $('wk-name').title = ride.workout.name;
-    $('wk-pct').textContent = ride.workoutDone ? tr('done') : `${Math.round(done * 100)}%`;
+    // how long the workout is and how much of it is left, beside how far through it you are
+    $('wk-pct').textContent = ride.workoutDone ? tr('done')
+      : `${tr('{total} · {left} left', { total: fmtTime(total), left: fmtTime(Math.max(0, total - ride.workoutT)) })} · ${Math.round(done * 100)}%`;
   }
 }
 
@@ -2608,8 +2614,33 @@ function saveDraft() {
       routeId: ride.route.id, routeName: ride.route.name, intensity: settings.intensity,
       workout: w ? { id: w.id, name: w.name, source: w.source || null, eventId: w.eventId || null } : null,
       lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts,
+      // where you were, to go on from there after a reload
+      at: { dist: ride.dist, elapsed: ride.elapsed, workoutT: ride.workoutT, workoutDone: ride.workoutDone, gain: ride.gain, laps: ride.laps, lapStartT: ride.lapStartT, lapStartI: ride.lapStartI },
     },
   });
+}
+
+/** Go on with an unfinished ride: its seconds so far, and you, the bunch and the pacer where you were. */
+function resumeFrom(d) {
+  const at = d.meta.at || { dist: d.samples.at(-1)?.distance || 0, elapsed: d.samples.length, workoutT: d.samples.length };
+  recorder.samples = d.samples.slice();
+  recorder.startTime = new Date(d.start);
+  recorder.lapStarts = d.lapStarts || [0];
+  const shift = Math.max(0, at.dist || 0) - ride.dist;
+  ride.dist = ride.prevDist = Math.max(0, at.dist || 0);
+  for (const o of [...ride.bots, ride.pacer, ride.ghost].filter(Boolean)) o.dist += shift;
+  ride.elapsed = at.elapsed || d.samples.length;
+  ride.workoutT = at.workoutT ?? ride.elapsed;
+  ride.workoutDone = !!at.workoutDone;
+  ride.gain = at.gain || 0;
+  ride.lastElev = ride.route.elevAt(ride.dist);
+  ride.laps = at.laps || 0; ride.lapStartT = at.lapStartT || 0; ride.lapStartI = at.lapStartI || 0;
+  ride.lapTimes = d.meta.lapTimes || []; ride.splits = d.meta.splits || []; ride.efforts = d.meta.efforts || [];
+  ride.splitFrom = { t: ride.elapsed, d: ride.dist, i: recorder.samples.length };
+  ride.draftAt = ride.elapsed;
+  if (d.meta.intensity) settings.intensity = d.meta.intensity;
+  if (ride.workout && !ride.workoutDone) { const t = targetAt(ride.workout, ride.workoutT, settings.ftp); if (t) ride.target = ergTarget(t); }
+  toast(tr('Going on from {time}', { time: fmtTime(ride.elapsed) }));
 }
 
 /** An unfinished ride found on opening the page: save it to history (then upload or download it) or discard it. */
@@ -2623,6 +2654,8 @@ async function offerDraft() {
     route: d.meta.routeName || '', workout: d.meta.workout ? ` · ${d.meta.workout.name}` : '', time: fmtTime(d.samples.length), when,
   });
   box.hidden = false;
+  // go on riding it: the route and the workout it had, from where it stopped (the draft stays till the finish)
+  $('draft-continue').onclick = () => { box.hidden = true; track('draft', 'continue'); startRide({ resume: d }); };
   $('draft-save').onclick = async () => {
     const rec = new Recorder();
     rec.samples = d.samples; rec.startTime = new Date(d.start); rec.lapStarts = d.lapStarts || [0]; rec.position = positionOf(d.meta?.routeId);
@@ -2647,6 +2680,7 @@ async function offerDraft() {
 let rideFullscreen = false; // full screen was ours (installed app): leave it with the ride
 function finishRide() {
   if (!ride) return;
+  setKeepReconnecting(false);
   if (rideFullscreen && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
   rideFullscreen = false;
   advance();
@@ -2980,7 +3014,7 @@ function showSummary(e, { live = false } = {}) {
     $('btn-icu-upload').textContent = live ? tr('Upload to intervals.icu') : tr('Send to intervals.icu');
     const st = $('icu-upload-status');
     st.hidden = !e.uploadedId;
-    if (e.uploadedId) st.innerHTML = e.uploadedId === true ? tr('Uploaded to intervals.icu ✓') : `${tr('Uploaded to intervals.icu ✓')} · <a href="${activityUrl(e.uploadedId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    if (e.uploadedId) st.innerHTML = (e.uploadedId === true ? tr('Uploaded to intervals.icu ✓') : `${tr('Uploaded to intervals.icu ✓')} · <a href="${activityUrl(e.uploadedId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`) + againLink('icu');
   };
   const canUpload = (rec) => !!(rec && icuClient && sum && sum.duration >= 60);
   const canStrava = (rec) => !!(rec && stravaClient && sum && sum.duration >= 60);
@@ -2991,7 +3025,7 @@ function showSummary(e, { live = false } = {}) {
     $('btn-garmin-upload').textContent = live ? tr('Upload to Garmin') : tr('Send to Garmin');
     const st = $('garmin-upload-status');
     st.hidden = !e.garminId;
-    if (e.garminId) st.innerHTML = e.garminId === true ? tr('On Garmin Connect ✓') : `${tr('On Garmin Connect ✓')} · <a href="${garminActivityUrl(e.garminId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`;
+    if (e.garminId) st.innerHTML = (e.garminId === true ? tr('On Garmin Connect ✓') : `${tr('On Garmin Connect ✓')} · <a href="${garminActivityUrl(e.garminId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`) + againLink('garmin');
   };
   const stravaUi = (can) => {
     $('btn-strava-upload').hidden = !can;
@@ -2999,7 +3033,7 @@ function showSummary(e, { live = false } = {}) {
     $('btn-strava-upload').textContent = live ? tr('Upload to Strava') : tr('Send to Strava');
     const st = $('strava-upload-status');
     st.hidden = !e.stravaId;
-    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">View on Strava</a>`;
+    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">View on Strava</a>${againLink('strava')}`;
   };
   files(live);
   uploadUi(live && canUpload(recorder));
@@ -3023,6 +3057,21 @@ function showSummary(e, { live = false } = {}) {
 }
 /** The ride on the summary screen: its history entry and, when kept, its full record. */
 let shown = { entry: null, rec: null };
+/**
+ * «Upload again» after a ✓: for a ride deleted there (or gone wrong), as long as its full record is still here.
+ * kind: 'icu', 'strava' or 'garmin'.
+ */
+const againLink = (kind) => (shown.rec ? ` · <button class="link-btn up-again" data-again="${kind}" title="${esc(tr('Deleted it there? Send this ride once more'))}">${tr('Upload again')}</button>` : '');
+const AGAIN = { icu: ['uploadedId', () => uploadToIntervals()], strava: ['stravaId', () => uploadToStrava()], garmin: ['garminId', () => uploadToGarmin()] };
+$('summary').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-again]');
+  const e = shown.entry, a = b && AGAIN[b.dataset.again];
+  if (!a || !e || !shown.rec) return;
+  track('upload-again', b.dataset.again);
+  e[a[0]] = null; // forgotten here, so it goes up as a new one
+  if (lastRide && shown.rec === recorder) lastRide[a[0]] = null;
+  a[1]();
+});
 
 /** Time in power zones (and heart rate zones when there are any), as bars. */
 function renderZones(e) {
@@ -3715,8 +3764,8 @@ async function uploadToIntervals() {
     if (lastRide && rec === recorder) lastRide.uploadedId = e.uploadedId;
     if (history.includes(e)) saveHistory();
     status.innerHTML = id
-      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>`
-      : tr('Uploaded to intervals.icu ✓');
+      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${icuClient.unpaired ? tr('not paired with the planned workout (moved or deleted there?)') : tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>${againLink('icu')}`
+      : `${tr('Uploaded to intervals.icu ✓')}${againLink('icu')}`;
     btn.hidden = true;
     $('sum-icu').hidden = true;
   } catch (e) {
@@ -3806,7 +3855,7 @@ async function uploadToStrava() {
     e.stravaId = activityId;
     if (history.includes(e)) saveHistory();
     track('strava', duplicate ? 'duplicate' : 'uploaded');
-    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">View on Strava</a>`;
+    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">View on Strava</a>${againLink('strava')}`;
     btn.hidden = true;
     $('sum-strava').hidden = true;
   } catch (err) {
@@ -3890,7 +3939,7 @@ async function uploadToGarmin() {
     if (history.includes(e)) saveHistory();
     track('garmin', duplicate ? 'duplicate' : 'uploaded');
     const label = duplicate ? tr('Already on Garmin Connect') : tr('On Garmin Connect ✓');
-    status.innerHTML = activityId ? `${label} · <a href="${garminActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>` : label;
+    status.innerHTML = (activityId ? `${label} · <a href="${garminActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>` : label) + againLink('garmin');
     btn.hidden = true;
     $('sum-garmin').hidden = true;
   } catch (err) {
@@ -4731,6 +4780,8 @@ $('f-lang').value = lang;
 $('f-lang').onchange = () => setLang($('f-lang').value);
 initLobby();
 offerDraft();
+// the page closing mid-ride (a reload, the lid shut): what was ridden is kept, to go on with
+window.addEventListener('pagehide', () => { if (ride) saveDraft(); });
 // accounts and leaderboards: nothing at all without a project in social-config.js
 initSocialUi({
   settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,

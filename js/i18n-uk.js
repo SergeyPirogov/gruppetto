@@ -177,6 +177,11 @@ export const UK = {
   'The trainer does not accept wheel circumference — using grade-based gears': 'Тренажер не приймає довжину кола колеса, передачі працюють через нахил',
   'Low cadence — ERG temporarily reduced': 'Низький каденс, ERG тимчасово знижено', 'Power dropped — ERG temporarily reduced': 'Потужність упала, ERG тимчасово знижено',
   'Interval skipped ⏭': 'Інтервал пропущено ⏭',
+  'Upload again': 'Завантажити ще раз', 'not paired with the planned workout (moved or deleted there?)': 'не прив’язано до запланованого тренування (перенесли чи видалили там?)', 'Deleted it there? Send this ride once more': 'Видалили там? Надішліть цей заїзд ще раз',
+  'syncing…': 'синхронізую…', 'not synced': 'не синхронізовано', 'just now': 'щойно', '{n} min ago': '{n} хв тому',
+  'Syncing…': 'Синхронізую…', 'Not synced: {error}': 'Не синхронізовано: {error}', 'Synced {when}': 'Синхронізовано {when}',
+  '{n} rides in the account': 'заїздів в акаунті: {n}', 'Sync now': 'Синхронізувати зараз',
+  '{total} · {left} left': '{total} · ще {left}',
   'No Ukrainian voice on this device: the cues are in English. Add one in the system settings (Windows: Time & language → Speech) or open the app in Edge': 'На цьому пристрої немає українського голосу, тому підказки звучать англійською. Додай голос у налаштуваннях системи (Windows: Час і мова → Мовлення) або відкрий застосунок в Edge',
   'No voice on this device: the cues are beeps': 'На цьому пристрої немає голосу, тому підказки звучать сигналами',
   'Ramp test. Hold each step as long as you can.': 'Рамп-тест. Тримай кожну сходинку, скільки зможеш.',
@@ -305,7 +310,7 @@ export const UK = {
   'Sprint {n}': 'Спринт {n}', 'Sprint record': 'Рекорд спринту', '⚡ {name}: {m} m — sprint!': '⚡ {name}: {m} м — спринт!', '{n} m to the line': '{n} м до лінії',
   'top speed': 'макс. швидкість', 'max': 'макс.', 'SPRINT': 'СПРИНТ', 'LINE': 'ФІНІШ', '{name}: {time} 🏁': '{name}: {time} 🏁',
   // unfinished ride
-  'Unfinished ride: {route}{workout} · {time} · {when}': 'Незавершений заїзд: {route}{workout} · {time} · {when}', 'Save ride': 'Зберегти заїзд', 'Discard': 'Відкинути', 'Tap again to discard': 'Ще раз, щоб відкинути',
+  'Unfinished ride: {route}{workout} · {time} · {when}': 'Незавершений заїзд: {route}{workout} · {time} · {when}', 'Save ride': 'Зберегти заїзд', 'Continue riding': 'Продовжити заїзд', 'Going on from {time}': 'Продовжуємо з {time}', 'Discard': 'Відкинути', 'Tap again to discard': 'Ще раз, щоб відкинути',
   'Camera: drag to turn, pinch to zoom, double-tap to reset': 'Камера: тягни, щоб покрутити, зведи пальці для масштабу, подвійний дотик, щоб скинути',
   // time of day and weather (#41)
   'Time of day': 'Час доби', 'Midday': 'День', 'Morning': 'Ранок', 'Evening (golden hour)': 'Вечір (золота година)', 'Night': 'Ніч', 'By the clock': 'За годинником',
