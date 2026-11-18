@@ -1442,7 +1442,7 @@ function groupCheckStart() {
   groupRow(G.id).then((g) => {
     if (ride?.group !== G || !G.held) return;
     if (g && !g.held) groupStarted(G, Date.parse(g.starts_at));
-    else if (!g) { toast(tr('This ride is over or was called off')); G.held = false; G.t0 = Date.now(); }
+    else if (!g) { toast(tr('This ride is over or was cancelled')); G.held = false; G.t0 = Date.now(); }
   }).catch(() => {}).finally(() => { G.checking = false; });
 }
 function groupStarted(G, t0) {
