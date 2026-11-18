@@ -55,7 +55,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, hudLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, powerAvg: 3, hudLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -411,6 +411,8 @@ function initLobby() {
   };
   $('f-shift').addEventListener('input', gearFields);
   gearFields();
+  $('f-power-avg').value = String(boardAvg());
+  $('f-power-avg').onchange = () => { settings.powerAvg = +$('f-power-avg').value; saveSettings(); if (ride?.lastHud) updateHud(...ride.lastHud); };
   $('f-shift-buttons').checked = settings.shiftButtons !== false;
   $('f-shift-buttons').onchange = () => { settings.shiftButtons = $('f-shift-buttons').checked; saveSettings(); if (ride) updateGear(); };
   bind('f-style', 'style', false);
@@ -1820,7 +1822,7 @@ function raceStandings() {
 /** The board while racing: your place, laps and distance to go, and the riders round you with gaps in seconds. */
 /** W/kg right now: a bot's power this moment over its weight, yours from the last 3 s. */
 function wkgNow(r) {
-  if (r.me) return ride.powerHist.length ? ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length / Math.max(30, settings.weight) : 0;
+  if (r.me) return powerOver(3) / Math.max(30, settings.weight);
   if (r.mate) return r.wkg || 0; // a group mate: as sent
   return (r.power ?? 0) / Math.max(30, r.weight || 70);
 }
@@ -2098,7 +2100,7 @@ function tick(power, cadence, hr) {
   });
 
   ride.powerHist.push(power);
-  if (ride.powerHist.length > 3) ride.powerHist.shift();
+  if (ride.powerHist.length > 10) ride.powerHist.shift(); // up to the longest average the board can show
   // W′bal: the anaerobic reserve above FTP, drained and refilled second by second
   ride.wbal = wbalStep(ride.wbal ?? wPrimeJ(), power, settings.ftp, wPrimeJ(), 1);
   ride.wbalMin = Math.min(ride.wbalMin ?? wPrimeJ(), ride.wbal);
@@ -2127,9 +2129,18 @@ function updateWbalHud(p3) {
   $('m-wbal-warn').textContent = warn ? tr('~{s} s to empty', { s: Math.max(5, Math.round(left / 5) * 5) }) : `${Math.round(frac * 100)}%`;
 }
 
+/** Your average power over the last n seconds (one sample a second). */
+function powerOver(n) {
+  const h = ride?.powerHist || [], last = h.slice(-n);
+  return last.length ? last.reduce((a, b) => a + b, 0) / last.length : 0;
+}
+/** The power the board shows: averaged over 1, 3, 5 or 10 s (Profile → Settings). */
+const POWER_AVGS = [1, 3, 5, 10];
+const boardAvg = () => (POWER_AVGS.includes(+settings.powerAvg) ? +settings.powerAvg : 3);
+
 function updateHud(cadence, hr, grade) {
   ride.lastHud = [cadence, hr, grade];
-  const p3 = Math.round(ride.powerHist.reduce((a, b) => a + b, 0) / ride.powerHist.length);
+  const p3 = Math.round(powerOver(boardAvg()));
   $('m-power').textContent = p3;
   $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} ${U.wkg}`;
   $('m-ftp-pct').textContent = `${Math.round((p3 / settings.ftp) * 100)}% FTP`;
@@ -4406,7 +4417,7 @@ function toggleHold() {
     ride.lastSentTarget = null; ride.lastSentGrade = null; ride.lastSentWheel = null;
     toast(tr('ERG off: the trainer simulates the road again'));
   } else {
-    const h = ride.powerHist || [], now = h.length ? Math.round(h.reduce((x, y) => x + y, 0) / h.length / 5) * 5 : 0; // the 3 s power
+    const now = Math.round(powerOver(3) / 5) * 5; // the 3 s power
     setHold(now >= 50 ? now : Math.round((settings.ftp * 0.6) / 5) * 5);
     toast(tr('ERG: holding {w} W', { w: ride.hold }));
   }
@@ -4741,10 +4752,56 @@ const KEYS = [
   [['Esc'], 'Menu: Finish and Settings'],
   [['?'], 'This list'],
 ];
+/** The Zwift controllers' buttons (js/controls.js RIDE_TO_INTENT); a string alone is a heading. */
+const ZWIFT_KEYS = [
+  'Zwift Ride and Zwift Play',
+  [['Shift +', 'Shift −'], 'Harder / easier gear, either hand (in ERG ±1 % intensity)'],
+  [['▲', '▼'], 'Harder / easier gear'],
+  [['◀', '▶'], 'Big step easier / harder: workout ±5 %, free ride climbs ±10 %'],
+  [['Left paddle', 'Right paddle'], 'Lane left / right'],
+  [['A'], 'ERG on / off (free ride: hold this power)'],
+  [['B'], 'Pause / resume'],
+  [['Y'], 'Next camera'],
+  [['Z'], 'Skip the interval (free ride: new lap)'],
+  [['Power-up L'], 'Pacer on / off'],
+  [['Power-up R'], 'Hide / show the dashboard'],
+  'Zwift Click',
+  [['+', '−'], 'Harder / easier gear (in ERG ±1 % intensity)'],
+];
+/** OpenBikeControl's standard buttons (js/controls.js OBC_DIGITAL); the BikeControl app maps a device's own to these. */
+const OBC_KEYS = [
+  [['Shift up', 'Shift down'], 'Harder / easier gear'],
+  [['Gear select'], 'Straight to that gear'],
+  [['ERG +', 'ERG −'], 'Harder / easier (in ERG ±1 % intensity)'],
+  [['▲', '▼'], 'Harder / easier gear'],
+  [['◀', '▶', 'Steer'], 'Lane left / right; a steering angle steers smoothly'],
+  [['Skip'], 'Skip the interval (free ride: new lap)'],
+  [['Pause', 'Resume'], 'Pause / resume'],
+  [['HUD'], 'Hide / show the dashboard'],
+];
+const KEYS_NOTES = {
+  keys: '',
+  zwift: 'Connect them in Devices. A Zwift Ride is two units: add the left and the right one. The last button you pressed shows there, to check it.',
+  obc: 'Any controller the BikeControl app knows (Elite, Wahoo, Shimano, a gamepad) comes through as OpenBikeControl. Connect it in Devices.',
+};
+let keysTab = 'keys';
+const keysRows = (rows) => rows.map((r) => typeof r === 'string'
+  ? `<dt class="keys-sub">${esc(tr(r))}</dt>`
+  : `<dt>${r[0].map((x) => `<kbd>${esc(tr(x))}</kbd>`).join(' ')}</dt><dd>${esc(tr(r[1]))}</dd>`).join('');
+function renderKeysHelp() {
+  $('keys-list').innerHTML = keysRows({ keys: KEYS, zwift: ZWIFT_KEYS, obc: OBC_KEYS }[keysTab]);
+  const note = KEYS_NOTES[keysTab];
+  $('keys-note').hidden = !note;
+  $('keys-note').textContent = note ? tr(note) : '';
+  for (const b of document.querySelectorAll('#keys-tabs [data-keys-tab]')) b.setAttribute('aria-selected', String(b.dataset.keysTab === keysTab));
+}
 function toggleKeysHelp(show = $('keys-help').hidden) {
-  $('keys-list').innerHTML = KEYS.map(([k, what]) => `<dt>${k.map((x) => `<kbd>${x}</kbd>`).join(' ')}</dt><dd>${esc(tr(what))}</dd>`).join('');
+  // a rider with a controller on sees its buttons first
+  if (show) keysTab = controller.connected ? 'zwift' : obc.connected ? 'obc' : keysTab;
+  renderKeysHelp();
   $('keys-help').hidden = !show;
 }
+for (const b of document.querySelectorAll('#keys-tabs [data-keys-tab]')) b.onclick = () => { keysTab = b.dataset.keysTab; renderKeysHelp(); };
 $('btn-keys').onclick = () => toggleKeysHelp();
 
 /** Who rides: the man or the woman. The renderer rebuilds your rider as soon as settings.figure changes. */

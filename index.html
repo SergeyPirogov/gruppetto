@@ -427,6 +427,7 @@
         <div class="fields">
           <label>Language <select id="f-lang"></select></label>
           <label>Ride dashboard <select id="f-hud-layout"><option value="a">A: boards in the corners</option><option value="b">B: every number in a strip at the bottom</option></select></label>
+          <label>Power on the board <select id="f-power-avg"><option value="1">1 s (as it is)</option><option value="3">3 s average</option><option value="5">5 s average</option><option value="10">10 s average</option></select></label>
           <h3 class="fields-head">Sound</h3>
           <label class="check wide"><input type="checkbox" id="f-sound"> Workout sounds and voice cues</label>
           <label class="check wide"><input type="checkbox" id="f-crowd"> Fans cheering on the climbs (never with the mini window or the Mac overlay)</label>
@@ -598,7 +599,7 @@
           <button id="btn-finish" class="pill-btn danger">Finish</button>
           <button id="btn-figure" class="pill-btn" title="Switch the rider (R)">Woman</button>
           <button id="btn-chat" class="pill-btn icon-btn" title="Chat (Enter)" aria-label="Chat (Enter)" hidden>💬</button>
-          <button id="btn-keys" class="pill-btn icon-btn" title="Keyboard (?)" aria-label="Keyboard (?)"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
+          <button id="btn-keys" class="pill-btn icon-btn" title="Controls (?)" aria-label="Controls (?)"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></button>
           <button id="btn-pip" class="pill-btn icon-btn" title="Mini window over other apps (I)" aria-label="Mini window over other apps (I)" hidden><svg viewBox="0 0 24 24" class="ic stroke"><rect x="2.5" y="4.5" width="19" height="15" rx="2"/><rect x="12" y="11.5" width="7" height="5.5" rx="1" fill="currentColor"/></svg></button>
           <button id="btn-settings" class="pill-btn icon-btn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></button>
         </div>
@@ -637,7 +638,14 @@
     <div id="paused" class="paused" hidden>PAUSED</div>
     <div id="keys-help" class="keys-help" hidden>
       <div class="keys-panel">
-        <div class="wk-menu-head"><h2>Keyboard</h2><button class="drawer-close" data-keys-close aria-label="Close">✕</button></div>
+        <div class="wk-menu-head"><h2>Controls</h2><button class="drawer-close" data-keys-close aria-label="Close">✕</button></div>
+        <!-- one list per way of riding: the keyboard, the Zwift controllers, OpenBikeControl (js/app.js toggleKeysHelp) -->
+        <div id="keys-tabs" class="keys-tabs" role="tablist" aria-label="Controls">
+          <button role="tab" data-keys-tab="keys" aria-selected="true">Keyboard</button>
+          <button role="tab" data-keys-tab="zwift" aria-selected="false">Zwift Ride / Play / Click</button>
+          <button role="tab" data-keys-tab="obc" aria-selected="false">OpenBikeControl</button>
+        </div>
+        <p id="keys-note" class="keys-note" hidden></p>
         <dl id="keys-list"></dl>
       </div>
     </div>
