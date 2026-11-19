@@ -567,4 +567,17 @@ export const UK = {
   'A league is a series of group races. Simulator rides earn no points. Pick the league when you schedule a race.': 'Ліга — це серія групових гонок. Заїзди на симуляторі очок не дають. Обери лігу, коли плануєш гонку.',
   'Running': 'Тривають',
   'Host {name}': 'Організатор {name}',
+  // ---- Profile, Rider tab as groups of rows (index.html .pgroup / .prow) ----
+  'About you': 'Про тебе', 'On the leaderboards and in group rides': 'У таблицях і в групових заїздах',
+  'Your speed on the climbs': 'Твоя швидкість на підйомах', 'Your drag on the flat': 'Твій опір повітря на рівному',
+  'Power and heart': 'Потужність і пульс', 'Not sure?': 'Не знаєш?', 'Take the ramp test': 'Пройди рамп-тест', '· 20 min': '· 20 хв',
+  'W′ anaerobic reserve': 'W′, анаеробний запас', 'The W′bal bar in a ride': 'Смужка W′bal у заїзді',
+  'Threshold heart rate': 'Пороговий пульс', 'Your heart-rate zones': 'Твої пульсові зони',
+  'On the leaderboards': 'У таблицях', 'Off: your name is hidden, your rides still count': 'Вимкнено: твоє ім’я приховане, заїзди все одно рахуються',
+  'Where your kilometres count': 'Де рахуються твої кілометри', 'Board': 'Таблиця', 'Men or women': 'Чоловіки чи жінки',
+  'Account': 'Акаунт', 'Google': 'Google', 'Sync': 'Синхронізація', '↻ Sync now': '↻ Синхронізувати',
+  'Your rides and name go from the server; this device keeps them': 'Заїзди й ім’я зникнуть із сервера; на цьому пристрої вони лишаться',
+  'Delete…': 'Видалити…',
+  'Post your climb, sprint and lap times to the leaderboards, and keep your rides and settings on every device. Without it everything works, in this browser.': 'Твої часи на підйомах, спринтах і колах — у таблицях, а заїзди й налаштування — на кожному пристрої. Без входу все працює, у цьому браузері.',
+  'Height': 'Зріст', 'cm': 'см', 'Not synced yet': 'Ще не синхронізовано',
 };

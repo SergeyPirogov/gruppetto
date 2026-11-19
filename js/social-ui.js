@@ -78,7 +78,6 @@ function buildUi() {
   $('social-card').hidden = !!document.querySelector('[data-panel="profile"]:not(#social-card)')?.hidden;
   $('btn-social-in').onclick = () => { ctx.track('social', 'sign-in'); signIn(redirect()).catch((e) => status(e.message)); };
   $('btn-social-out').onclick = async () => { await signOut(); status(tr('Signed out. Everything stays on this device.')); };
-  $('btn-social-edit').onclick = () => openSetup();
   $('btn-social-sync').onclick = () => { ctx.track('social', 'sync-now'); sync({ send: true }).catch(() => {}); };
   $('f-social-public').onchange = async () => {
     try { profileRow = { ...profileRow, ...(await saveProfile({ public: $('f-social-public').checked })) }; } catch (e) { status(e.message); }
@@ -86,7 +85,7 @@ function buildUi() {
   const del = $('btn-social-delete');
   del.onclick = async () => {
     if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = tr('Tap again: delete the account and all its results'); return; }
-    del.dataset.armed = ''; del.textContent = tr('Delete account');
+    del.dataset.armed = ''; del.textContent = tr('Delete…');
     try { await deleteAccount(); ctx.track('social', 'delete'); status(tr('Account deleted along with all its results. Your rides on this device are kept.')); } catch (e) { status(e.message); }
   };
   // the first sign-in's window
@@ -98,6 +97,25 @@ function buildUi() {
   const regions = REGIONS.map(([code]) => [code, regionName(code, ctx.lang)]).sort((a, b) => a[1].localeCompare(b[1], ctx.locale));
   $('ss-region').innerHTML = `<option value="">${tr('Not shown')}</option>${regions.map(([c, n]) => `<option value="${c}">${ctx.esc(n)}</option>`).join('')}`;
   $('ss-country').onchange = () => { $('ss-region-box').hidden = $('ss-country').value !== 'UA'; };
+  // the same choices on the Rider tab, saved as they change
+  $('p-country').innerHTML = $('ss-country').innerHTML;
+  $('p-region').innerHTML = $('ss-region').innerHTML;
+  const saveRow = async (fields) => {
+    if (!currentUser() || !profileRow) return;
+    try { profileRow = { ...profileRow, ...(await saveProfile(fields)) }; status(''); } catch (e) { status(e.message); }
+  };
+  $('p-country').onchange = () => {
+    const country = $('p-country').value || null;
+    $('p-region').hidden = country !== 'UA';
+    saveRow(country === 'UA' ? { country } : { country, region: null });
+  };
+  $('p-region').onchange = () => saveRow({ region: $('p-region').value || null });
+  $('p-gender').onchange = () => saveRow({ gender: $('p-gender').value || null });
+  // one name: the one typed on the Rider tab is the one on the leaderboards
+  $('f-name').addEventListener('change', () => {
+    const name = $('f-name').value.trim().slice(0, 24);
+    if (name && name !== 'Me' && name !== profileRow?.display_name) saveRow({ display_name: name });
+  });
   // the ratings across Ukraine
   $('ua-region').innerHTML = `<option value="">${tr('All of Ukraine')}</option>${regions.map(([c, n]) => `<option value="${c}">${ctx.esc(n)}</option>`).join('')}`;
   $('hdr-ua').hidden = false;
@@ -406,8 +424,15 @@ function renderCard() {
   $('social-pitch').hidden = !!u;
   if (u) {
     const name = profileRow?.display_name;
-    $('social-who').textContent = name ? tr('Signed in as {email} · on the leaderboards: {name}', { email: u.email || '', name }) : tr('Signed in as {email}', { email: u.email || '' });
+    $('social-who').textContent = u.email || '';
     $('f-social-public').checked = profileRow?.public !== false;
+    $('p-country').value = profileRow?.country || '';
+    $('p-region').value = profileRow?.region || '';
+    $('p-region').hidden = $('p-country').value !== 'UA';
+    $('p-gender').value = profileRow?.gender || '';
+    // the account's name shows on the Rider tab (one name for both)
+    const f = $('f-name');
+    if (name && f.value !== name && document.activeElement !== f) { f.value = name.slice(0, 16); f.dispatchEvent(new Event('input')); }
   }
   renderSync();
 }
@@ -422,9 +447,9 @@ function renderSync() {
   const el = $('social-sync');
   if (!el) return;
   const s = syncState, u = currentUser();
-  el.hidden = !u || s.state === 'never';
+  el.hidden = !u; // a row of its own on the Rider tab: there even before the first sync
   el.classList.toggle('bad', s.state === 'error');
-  $('social-sync-text').textContent = s.state === 'syncing' ? tr('Syncing…')
+  $('social-sync-text').textContent = s.state === 'never' ? tr('Not synced yet') : s.state === 'syncing' ? tr('Syncing…')
     : s.state === 'error' ? tr('Not synced: {error}', { error: s.error })
       : [tr('Synced {when}', { when: ago(s.at) }), s.rides === null ? '' : tr('{n} rides in the account', { n: s.rides })].filter(Boolean).join(' · ');
   $('btn-social-sync').disabled = s.state === 'syncing';

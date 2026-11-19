@@ -224,7 +224,6 @@ test('signing in: back from Google, this device\'s profile and the account\'s me
   assert.equal(settings.name, 'Olena R');
   assert.equal(settings.icuKey, ICU_SECRET); // the key stays here
   // the merge went back up: this device's coast lap and sprint speed are in the account now
-  await page.waitForFunction(() => true);
   const up = mock.db.requests.filter((r) => r.path === '/rest/v1/profiles' && ['POST', 'PATCH'].includes(r.method)).at(-1);
   assert.ok(up, 'the merged profile went up');
   assert.equal(JSON.parse(up.body).data.records.lap.coast, 1200);
@@ -480,6 +479,40 @@ test('the sync says how it went: synced with the rides in the account, or what f
   mock.db.failProfile = false;
   await page.evaluate(() => document.getElementById('btn-social-sync').click());
   await page.waitForFunction(() => /Synced just now/.test(document.getElementById('social-sync-text').textContent), null, { timeout: 10000 });
+  await context.close();
+});
+
+test('the Rider tab: one name, the boards and the account as rows; no garage or connections repeated', async () => {
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', country: 'UA', region: 'UA-30', gender: 'f', public: true, data: {} } });
+  const { page, context } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForFunction(() => /synced/.test(document.getElementById('hdr-account').textContent), null, { timeout: 10000 });
+  await page.evaluate(() => document.getElementById('open-profile').click());
+  await page.evaluate(() => document.querySelector('[data-ptab-go="me"]').click());
+  // the account's name is the Rider's name; its choices are on the rows
+  assert.equal(await page.inputValue('#f-name'), 'Olena');
+  assert.equal(await page.inputValue('#p-country'), 'UA');
+  assert.equal(await page.isVisible('#p-region'), true);
+  assert.equal(await page.inputValue('#p-gender'), 'f');
+  assert.equal(await page.isVisible('#social-sync'), true);
+  // nothing that lives elsewhere: the garage is in the rail, connections on their own tab
+  assert.equal(await page.$('#me-links'), null);
+  assert.equal(await page.$('#btn-garage'), null);
+  // a change on a row goes to the account; a new name too
+  await page.selectOption('#p-gender', 'm');
+  await page.waitForFunction(() => true);
+  await page.waitForTimeout(300);
+  assert.equal(mock.db.profile.gender, 'm');
+  await page.fill('#f-name', 'Olenka');
+  await page.dispatchEvent('#f-name', 'change');
+  await page.waitForTimeout(300);
+  assert.equal(mock.db.profile.display_name, 'Olenka');
+  // the tabs stay where they are on every tab
+  const ys = [];
+  for (const t of ['me', 'links', 'settings']) {
+    await page.evaluate((t) => document.querySelector(`[data-ptab-go="${t}"]`).click(), t);
+    ys.push(await page.evaluate(() => Math.round(document.querySelector('#drawer .ptabs').getBoundingClientRect().y)));
+  }
+  assert.deepEqual(new Set(ys).size, 1, `tabs at ${ys}`);
   await context.close();
 });
 
