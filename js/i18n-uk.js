@@ -525,11 +525,9 @@ export const UK = {
   'Ride details': 'Подробиці заїзду', 'Host': 'Організатор', 'Riders signed up': 'Записалось', 'Climbing': 'Набір висоти',
   'Ride chat': 'Чат заїзду', '{n} of {m} on the line': '{n} з {m} на старті',
   // account menu
+  'Your leaderboards': 'Твої лідерборди',
+  'Your climb, sprint and lap times': 'Твої часи на підйомах, спринтах і колах',
   'No rides yet': 'Ще без заїздів',
-  'FTP, weight, ride history': 'FTP, вага, історія заїздів',
-  'Climbs, sprints, laps, Ukraine': 'Підйоми, спринти, кола, Україна',
-  'Kit, bike and helmet colors': 'Кольори форми, велосипеда й шолома',
-  'intervals.icu, Garmin': 'intervals.icu, Garmin',
   'Everything stays on this device': 'Усе лишиться на цьому пристрої',
   // Ukraine board
   'Trainer rides by signed-in riders · simulator rides don’t count': 'Заїзди на тренажері зареєстрованих райдерів · симулятор не рахується',

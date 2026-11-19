@@ -204,11 +204,8 @@ function accountMenu(ev) {
     : tr('No rides yet');
   const item = (k, ic, t, sub) => `<button role="menuitem" data-m="${k}"${k === 'out' ? ' class="out"' : ''}>${MENU_IC[ic]}<span><b>${ctx.esc(tr(t))}</b>${sub ? `<small>${ctx.esc(tr(sub))}</small>` : ''}</span></button>`;
   m.innerHTML = `<div class="hdr-menu-week"><small>${ctx.esc(tr('This week'))}</small><b>${ctx.esc(top)}</b></div><hr>`
-    + item('profile', 'me', 'Profile', 'FTP, weight, ride history')
-    + item('boards', 'cup', 'Leaderboards', 'Climbs, sprints, laps, Ukraine')
-    + item('garage', 'bike', 'Garage', 'Kit, bike and helmet colors')
-    + item('links', 'link', 'Connections', 'intervals.icu, Garmin')
-    + item('settings', 'gear', 'Settings')
+    // the profile, garage and settings are in the sidebar already: here only what is the account's
+    + item('boards', 'cup', 'Your leaderboards', 'Your climb, sprint and lap times')
     + '<hr>' + item('out', 'out', 'Sign out', 'Everything stays on this device');
   const r = b.getBoundingClientRect();
   m.style.top = `${Math.round(r.bottom + 6)}px`;
@@ -223,10 +220,7 @@ function accountMenu(ev) {
     const it = e.target.closest('[data-m]');
     if (!it) return;
     close();
-    const go = it.dataset.m;
-    if (go === 'boards') { showAccount(); return; }
-    if (go === 'garage') { ctx.openGarage(); return; }
-    if (go !== 'out') { ctx.openDrawer('profile', go === 'profile' ? 'me' : go); return; }
+    if (it.dataset.m === 'boards') { showAccount(); return; }
     ctx.track('social', 'sign-out-header');
     await signOut();
     ctx.toast(tr('Signed out. Everything stays on this device.'));
@@ -236,11 +230,7 @@ function accountMenu(ev) {
 
 const MI = (d) => `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const MENU_IC = {
-  me: MI('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
   cup: MI('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 6h3a3 3 0 0 1-3 4M7 6H4a3 3 0 0 0 3 4"/>'),
-  bike: MI('<circle cx="5.5" cy="16" r="3.5"/><circle cx="18.5" cy="16" r="3.5"/><path d="M5.5 16 9 8h6l3.5 8M9 8l3 8 3-8M8 5h3"/>'),
-  link: MI('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
-  gear: MI('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>'),
   out: MI('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/>'),
 };
 const LOCK_IC = '<svg class="lock-ic" viewBox="0 0 24 24" role="img" aria-label="sign-in needed"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
