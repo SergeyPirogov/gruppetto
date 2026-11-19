@@ -428,6 +428,88 @@ test('GPX track: the road built from its turns stays on the track (city corners,
   assert.ok(worst < 30, `worst ${worst}`); // the top of the U-turn: no tighter than a 12 m radius
 });
 
+// The road the renderer builds from an imported loop, lap after lap, in map metres (x east, y north)
+function ridden(def, laps) {
+  const SEG = 5, TURN = 2.5, P = [];
+  let h = def.startHeading, x = def.map[0], y = -def.map[1];
+  for (let l = 0; l < laps; l++) for (const c of def.curve) {
+    P.push([x, y, h]);
+    const h1 = h - (c * TURN) / SEG, a = h1 - h;
+    if (Math.abs(a) < 1e-6) { x += Math.cos(h) * SEG; y += Math.sin(h) * SEG; } else { x += (SEG / a) * (Math.sin(h1) - Math.sin(h)); y -= (SEG / a) * (Math.cos(h1) - Math.cos(h)); }
+    h = h1;
+  }
+  P.push([x, y, h]);
+  return P;
+}
+function trackAround(waypoints) { // closed polyline through waypoints (m east/north), a point every 10 m, with GPS jitter
+  const m = 1 / 111320, lat0 = 48.45, lon0 = 24.55, k = Math.cos(lat0 * Math.PI / 180), xy = [];
+  const w = [...waypoints, waypoints[0]];
+  for (let i = 0; i < w.length - 1; i++) { const L = Math.hypot(w[i + 1][0] - w[i][0], w[i + 1][1] - w[i][1]); for (let s = 0; s < L; s += 10) xy.push([w[i][0] + ((w[i + 1][0] - w[i][0]) * s) / L, w[i][1] + ((w[i + 1][1] - w[i][1]) * s) / L]); }
+  xy.push(w[w.length - 1]);
+  return { xy, points: xy.map(([a, b], i) => ({ lat: lat0 + (b + Math.sin(i * 7.3) * 1.5) * m, lon: lon0 + (a + Math.cos(i * 5.1) * 1.5) * m / k, ele: 100 })) };
+}
+
+test('GPX loop: short town loops close, so lap after lap is the same road (they used to drift 50-100 m and 30-40 degrees a lap)', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  const loops = {
+    block: [[0, 0], [300, 0], [300, 300], [0, 300]],                        // a 1.2 km block, started at a corner
+    town: [[0, 0], [400, 0], [400, 150], [700, 150], [700, 500], [300, 500], [300, 350], [0, 350]],
+    eight: [[0, 0], [300, 300], [600, 300], [600, 0], [300, 0], [0, 300]],  // a figure of eight
+    spur: [[0, 0], [500, 0], [500, 200], [800, 200], [800, -200], [500, -200], [500, 0]], // out and back along a street
+  };
+  for (const [name, wp] of Object.entries(loops)) {
+    const def = routeFromTrack({ name, points: trackAround(wp).points });
+    assert.equal(def.oneWay, false, name);
+    const P = ridden(def, 3), n = def.curve.length;
+    for (const lap of [1, 2, 3]) {
+      const [x, y, h] = P[lap * n], d = Math.hypot(x - P[0][0], y - P[0][1]);
+      const turned = (h - P[0][2]) / (2 * Math.PI);
+      assert.ok(d < 2, `${name}: lap ${lap} ends ${d.toFixed(1)} m from the start line`);
+      assert.ok(Math.abs(turned - Math.round(turned)) < 0.01, `${name}: lap ${lap} ends ${((turned - Math.round(turned)) * 360).toFixed(1)} degrees off the start heading`);
+    }
+  }
+});
+
+test('OSM scenery: a house is placed where it stands, however far from the projection origin (centroid in 1e13 cross products lost tens of metres)', async () => {
+  const { landFromOsm } = await import('../js/osm.js');
+  const X = [], Y = [], H = [];
+  for (let i = 0; i <= 400; i++) { X.push(1810000 + i * 5); Y.push(5387400.61); H.push(0); } // 2 km east, at 48.4 N in the import's projection
+  const toXY = (la, lo) => [lo, la]; // the test hands the metres in directly
+  const elements = [];
+  for (let k = 0; k < 30; k++) { // houses 10 m wide, 25 m to the right (south) of the road, a few hundred m apart
+    const cx = 1810050.37 + k * 60 + (k % 7), cy = 5387400.61 - 25 - (k % 5), g = [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]].map(([a, b]) => ({ lat: cy + b, lon: cx + a }));
+    elements.push({ type: 'way', tags: { building: 'house' }, geometry: g });
+  }
+  const { buildings } = landFromOsm({ elements }, toXY, X, Y, H, 5);
+  assert.equal(buildings.length, 30);
+  buildings.forEach(([, off], k) => assert.ok(Math.abs(off - (25 + (k % 5))) < 0.5, `house ${k}: ${off} m off the road, not ${25 + (k % 5)}`));
+});
+
+test('GPX loop: scenery stands where the road is, all the way round (not slid along it by the corners the road cuts)', async () => {
+  const { routeFromTrack } = await import('../js/gpx.js');
+  const { track, wp } = (() => { const wp = [[0, 0], [400, 0], [400, 150], [700, 150], [700, 500], [300, 500], [300, 350], [0, 350]]; return { wp, track: trackAround(wp) }; })();
+  const m = 1 / 111320, k = Math.cos(48.45 * Math.PI / 180);
+  const at = ([a, b]) => ({ lat: 48.45 + b * m, lon: 24.55 + a * m / k });
+  // a 10 m house 30 m outside the loop, beside the middle of each of the 8 sides (the loop runs anticlockwise: outside is right)
+  const houses = [], want = [], lat0 = track.points[0].lat * Math.PI / 180;
+  const proj = (p) => [p.lon * Math.PI / 180 * 6371000 * Math.cos(lat0), p.lat * Math.PI / 180 * 6371000]; // the import's own projection
+  for (let i = 0; i < wp.length; i++) {
+    const a = wp[i], b = wp[(i + 1) % wp.length], L = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const ux = (b[0] - a[0]) / L, uy = (b[1] - a[1]) / L, c = [(a[0] + b[0]) / 2 + uy * 30, (a[1] + b[1]) / 2 - ux * 30];
+    houses.push({ type: 'way', tags: { building: 'house' }, geometry: [[-5, -5], [5, -5], [5, 5], [-5, 5], [-5, -5]].map(([dx, dy]) => at([c[0] + dx, c[1] + dy])) });
+    want.push(proj(at(c)));
+  }
+  const def = routeFromTrack({ name: 'town', points: track.points }, '', { osm: { elements: houses } });
+  assert.equal(def.buildings.length, 8, JSON.stringify(def.buildings));
+  const P = ridden(def, 1), n = def.curve.length;
+  for (const [d, off] of def.buildings) {
+    // the renderer puts a building at the road's point d, off metres to the right (the road's heading rotated clockwise)
+    const [x, y, h] = P[Math.min(n - 1, Math.round(d / 5))], px = x + Math.sin(h) * off, py = y - Math.cos(h) * off;
+    const err = Math.min(...want.map(([a, b]) => Math.hypot(a - px, b - py)));
+    assert.ok(err < 6, `a house at ${d} m stands ${err.toFixed(1)} m from where it is on the map`);
+  }
+});
+
 test('route groups: flat, hilly and mountain', () => {
   const g = Object.fromEntries(routes.map((r) => [r.id, r.group]));
   assert.equal(g.lakes, 'flat');

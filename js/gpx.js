@@ -158,6 +158,13 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
   // did, with the ground, the fences and the houses of one stretch standing on another. So the turns are
   // steered: each segment aims at the track 20 m ahead from where the road has got to (pure pursuit, the
   // same arcs the renderer draws), and the road stays within a metre or two of the track all the way.
+  // The road is not the track: it cuts the corners, so it is shorter, and a lap of it is a few segments short
+  // of the track's length (60 m on a 2 km block of four corners, 300 m on 5 km of town). Everything that sits
+  // on the road is therefore laid out along the ROAD, not the track: the elevation (taken from the track point
+  // the road is at), the scenery (from the road's own positions and headings), the minimap, the length.
+  // Before, all of it was indexed by track distance while the renderer walked the road, so houses and woods
+  // slid up to 300 m along it, and a loop did not close: the next lap began 50-100 m and 30-40 degrees off the
+  // end of the last, and short routes ridden lap after lap drew over themselves.
   const maxTurn = SEG / MIN_RADIUS, LOOK = 4;
   const arcStep = (h0, h1) => {
     const a = h1 - h0;
@@ -165,61 +172,141 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     const k = SEG / a;
     return [k * (Math.sin(h1) - Math.sin(h0)), -k * (Math.cos(h1) - Math.cos(h0))];
   };
-  const dh = new Array(n).fill(0), RX = new Array(n), RY = new Array(n);
-  let px = sx[0], py = sy[0], H = head[0], at = 0; // `at`: the track point nearest to where the road has got to
   const idx = (i) => (loop ? ((i % n) + n) % n : Math.min(n - 1, i));
-  for (let k = 0; k < n - 1; k++) {
-    // the road cuts corners, so it runs ahead of the track's count: find where it is on the track, searching
-    // only a step or two on from last time (a 5 m step of road can't be further on than that: out and back
-    // along a street, the way back lies right beside you and must not be taken for where you are), then aim
-    // 20 m on from there; at the end of a one-way track, ride straight on
-    let bd = Infinity, bi = at;
-    for (let i = at; i <= at + 3; i++) { const q = idx(i), d = (sx[q] - px) ** 2 + (sy[q] - py) ** 2; if (d < bd) { bd = d; bi = i; } }
-    at = bi;
-    const j = idx(at + LOOK), tx = sx[j] - px, ty = sy[j] - py, Ld = Math.hypot(tx, ty);
-    let alpha = Ld > SEG && (loop || at + LOOK < n - 1) ? Math.atan2(ty, tx) - H : 0;
-    while (alpha > Math.PI) alpha -= 2 * Math.PI;
-    while (alpha < -Math.PI) alpha += 2 * Math.PI;
-    // the arc through the target: curvature 2 sin(alpha) / Ld (pure pursuit); a target behind (the top of a
-    // U-turn): as hard as allowed, its way
-    const turn = Math.abs(alpha) > Math.PI / 2 ? Math.sign(alpha) * maxTurn : (2 * Math.sin(alpha) * SEG) / Math.max(Ld, SEG);
-    dh[k] = Math.max(-maxTurn, Math.min(maxTurn, turn));
-    RX[k] = px; RY[k] = py;
-    const [ox, oy] = arcStep(H, H + dh[k]);
-    px += ox; py += oy; H += dh[k];
+  /**
+   * Drive the road from state s = [x, y, heading] over the track `laps` times (once for a one-way track).
+   * States RX/RY/RH are those at the start of each segment, AT the track point (counted on round a loop) the
+   * road is nearest to then; dh the turn of each segment.
+   */
+  const drive = (s, laps) => {
+    let [px, py, H] = s, at = 0;
+    const RX = [], RY = [], RH = [], AT = [], dh = [];
+    for (let k = 0; k < 3 * n * laps; k++) {
+      // the road cuts corners, so it runs ahead of the track's count: find where it is on the track, searching
+      // only a step or two on from last time (a 5 m step of road can't be further on than that: out and back
+      // along a street, the way back lies right beside you and must not be taken for where you are), then aim
+      // 20 m on from there; at the end of a one-way track, ride straight on
+      let bd = Infinity, bi = at;
+      for (let i = at; i <= at + 3; i++) { const q = idx(i), d = (sx[q] - px) ** 2 + (sy[q] - py) ** 2; if (d < bd) { bd = d; bi = i; } }
+      at = bi;
+      RX.push(px); RY.push(py); RH.push(H); AT.push(at);
+      // the whole track is behind the road (a one-way road goes on, straight, to the track's own length: the
+      // rider was promised that many kilometres)
+      if (at >= (loop ? n * laps : n - 1) && (loop || k >= n - 1)) break;
+      const j = idx(at + LOOK), tx = sx[j] - px, ty = sy[j] - py, Ld = Math.hypot(tx, ty);
+      let alpha = Ld > SEG && (loop || at + LOOK < n - 1) ? Math.atan2(ty, tx) - H : 0;
+      while (alpha > Math.PI) alpha -= 2 * Math.PI;
+      while (alpha < -Math.PI) alpha += 2 * Math.PI;
+      // the arc through the target: curvature 2 sin(alpha) / Ld (pure pursuit); a target behind (the top of a
+      // U-turn): as hard as allowed, its way
+      const turn = Math.abs(alpha) > Math.PI / 2 ? Math.sign(alpha) * maxTurn : (2 * Math.sin(alpha) * SEG) / Math.max(Ld, SEG);
+      const d = Math.max(-maxTurn, Math.min(maxTurn, turn));
+      dh.push(d);
+      const [ox, oy] = arcStep(H, H + d);
+      px += ox; py += oy; H += d;
+    }
+    return { RX, RY, RH, AT, dh, m: dh.length };
+  };
+  let road;
+  if (!loop) road = drive([X[0], Y[0], head[0]], 1); // a one-way road starts on the track's first point (the smoothed one is pulled inward at the ends)
+  else {
+    // A loop must close: the lap ends in the state it began in, or the next lap lies on another heading and
+    // another place. So the road is driven three times round, the first two laps settling it onto the track
+    // (it starts from the smoothed track, not from the road's own heading), and one lap is cut from the third.
+    // It is cut on a straight, where a segment more or less along the road makes no difference to heading,
+    // where it ends nearest to where it began; then bent a hair (a few numbers, spread over the whole lap) so
+    // that it closes exactly; and turned round to begin at the start line.
+    const run = drive([sx[0], sy[0], head[0]], 3);
+    const bend = (i) => { let b = 0; for (let k = i - 6; k <= i + 6; k++) b += Math.abs(run.dh[Math.max(0, Math.min(run.m - 1, k))]); return b; };
+    let ks = -1;
+    for (let k = 0; k < run.m; k++) if (run.AT[k] >= n && run.AT[k] < n + n / 2 && (ks < 0 || bend(k) < bend(ks))) ks = k;
+    const s = [run.RX[ks], run.RY[ks], run.RH[ks]];
+    let ke = -1, best = Infinity;
+    for (let k = ks + 1; k < run.m; k++) {
+      if (run.AT[k] < run.AT[ks] + n - 4) continue;
+      if (run.AT[k] > run.AT[ks] + n + 4) break;
+      const dHd = Math.atan2(Math.sin(run.RH[k] - s[2]), Math.cos(run.RH[k] - s[2])) * 20;
+      const e = Math.hypot(run.RX[k] - s[0], run.RY[k] - s[1], dHd);
+      if (e < best) { best = e; ke = k; }
+    }
+    const m = ke - ks, dh = run.dh.slice(ks, ke), turns = Math.round((run.RH[ke] - s[2]) / (2 * Math.PI));
+    const walk = (d, from = s) => { // the lap from a state: its end state, and every state on the way
+      let [x, y, H] = from;
+      const RX = [], RY = [], RH = [];
+      for (let k = 0; k < m; k++) { RX.push(x); RY.push(y); RH.push(H); const [ox, oy] = arcStep(H, H + d[k]); x += ox; y += oy; H += d[k]; }
+      return { RX, RY, RH, end: [x, y, H] };
+    };
+    const bent = (c) => dh.map((d, k) => d + c[0] + c[1] * Math.cos((2 * Math.PI * k) / m) + c[2] * Math.sin((2 * Math.PI * k) / m));
+    const gap = (c) => { const e = walk(bent(c)).end; return [e[0] - s[0], e[1] - s[1], (e[2] - s[2] - turns * 2 * Math.PI) * 20]; };
+    let c = [0, 0, 0];
+    for (let it = 0; it < 8; it++) { // Newton on the three numbers: the end position and heading back to the start's
+      const r = gap(c);
+      if (Math.hypot(...r) < 0.02) break;
+      const J = [0, 1, 2].map((q) => { const c2 = c.slice(); c2[q] += 1e-4; return gap(c2).map((v, i) => (v - r[i]) / 1e-4); }); // J[q][i]
+      const A = [0, 1, 2].map((i) => [J[0][i], J[1][i], J[2][i]]);
+      const det = (M) => M[0][0] * (M[1][1] * M[2][2] - M[1][2] * M[2][1]) - M[0][1] * (M[1][0] * M[2][2] - M[1][2] * M[2][0]) + M[0][2] * (M[1][0] * M[2][1] - M[1][1] * M[2][0]);
+      const D = det(A);
+      if (Math.abs(D) < 1e-12) break;
+      const dc = [0, 1, 2].map((q) => det(A.map((row, i) => row.map((v, j) => (j === q ? -r[i] : v)))) / D); // Cramer's rule
+      // a step that does not shrink the gap is halved (a lap that crosses itself can send the full step far off)
+      const norm = (v) => Math.hypot(...v);
+      let f = 1;
+      while (f > 0.02 && norm(gap(c.map((v, q) => v + f * dc[q]))) >= norm(r)) f /= 2;
+      if (f <= 0.02) break;
+      c = c.map((v, q) => v + f * dc[q]);
+    }
+    const closed = bent(c), lap = walk(closed);
+    // begin at the start line: the segment whose track point is nearest the track's first
+    const T = run.AT.slice(ks, ke);
+    let r0 = 0, rd = Infinity;
+    for (let j = 0; j < m; j++) { const t = T[j] % n, d = Math.min(t, n - t); if (d < rd) { rd = d; r0 = j; } }
+    const turnTo = (a) => a.slice(r0).concat(a.slice(0, r0));
+    const from = [lap.RX[r0], lap.RY[r0], lap.RH[r0]];
+    road = { ...walk(turnTo(closed), from), dh: turnTo(closed), m, AT: T.slice(r0).concat(T.slice(0, r0).map((t) => t + n)).map((t) => t - T[r0]) };
   }
-  RX[n - 1] = px; RY[n - 1] = py;
+  const { RX, RY, RH, dh, m } = road;
+  // the track point each road segment is at, smoothed (it advances in steps of one to three), unrolled round a loop
+  const unroll = (a, off) => (loop ? a.slice(-30).map((v) => v - off).concat(a, a.slice(0, 30).map((v) => v + off)) : a);
+  const ti = loop ? smooth(unroll(road.AT, n), 6).slice(30, 30 + m) : smooth(road.AT, 6);
+  const at = (arr, t) => { // a per-track-segment array at fractional track index t
+    if (loop) t = ((t % n) + n) % n;
+    t = Math.max(0, Math.min(n - 1, t));
+    const i = Math.floor(t), j = loop ? (i + 1) % n : Math.min(n - 1, i + 1);
+    return arr[i] + (arr[j] - arr[i]) * (t - i);
+  };
+  const elevRoad = ti.map((t) => at(elev, t));
   // where the road comes back over itself (out and back along a street, a crossing) the two passes are one
   // place: one height. They were smoothed apart, a metre or two, and the two road surfaces cut through each
   // other. Each point takes the mean of the passes within 7 m of it (fully within 3 m, blending out to 7 m)
   const cell = (x, y) => `${Math.floor(x / 10)},${Math.floor(y / 10)}`, grid = new Map();
-  for (let k = 0; k < n; k++) { const c = cell(RX[k], RY[k]); if (!grid.has(c)) grid.set(c, []); grid.get(c).push(k); }
-  const along = (a, b) => { const d = Math.abs(a - b) * SEG; return loop ? Math.min(d, n * SEG - d) : d; };
-  const flat = elev.slice();
-  for (let k = 0; k < n; k++) {
+  for (let k = 0; k < m; k++) { const c = cell(RX[k], RY[k]); if (!grid.has(c)) grid.set(c, []); grid.get(c).push(k); }
+  const along = (a, b) => { const d = Math.abs(a - b) * SEG; return loop ? Math.min(d, m * SEG - d) : d; };
+  const flat = elevRoad.slice();
+  for (let k = 0; k < m; k++) {
     let sum = 0, wsum = 0;
     const cx = Math.floor(RX[k] / 10), cy = Math.floor(RY[k] / 10);
-    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const m of grid.get(`${cx + i},${cy + j}`) || []) {
-      if (along(k, m) < 60) continue;
-      const w = 1 - Math.min(1, Math.max(0, (Math.hypot(RX[m] - RX[k], RY[m] - RY[k]) - 3) / 4));
-      if (w > 0) { sum += w * elev[m]; wsum += w; }
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const q of grid.get(`${cx + i},${cy + j}`) || []) {
+      if (along(k, q) < 60) continue;
+      const w = 1 - Math.min(1, Math.max(0, (Math.hypot(RX[q] - RX[k], RY[q] - RY[k]) - 3) / 4));
+      if (w > 0) { sum += w * elevRoad[q]; wsum += w; }
     }
-    if (wsum > 0) { const w = Math.min(1, wsum); flat[k] = elev[k] + (sum / wsum - elev[k]) * w * 0.5; }
+    if (wsum > 0) { const w = Math.min(1, wsum); flat[k] = elevRoad[k] + (sum / wsum - elevRoad[k]) * w * 0.5; }
   }
   // map north-up (x east, y north) onto the renderer's heading sense: it turns toward +right for +curve
   const curve = dh.map((a) => (-a * SEG) / TURN);
 
   const title = name || fileName.replace(/\.gpx$/i, '') || 'My route';
-  const scenery = osm ? landFromOsm(osm, (la, lo) => [lo * Math.PI / 180 * R * Math.cos(lat0), la * Math.PI / 180 * R], sx, sy, head, SEG) : null;
+  const length = m * SEG;
+  const scenery = osm ? landFromOsm(osm, (la, lo) => [lo * Math.PI / 180 * R * Math.cos(lat0), la * Math.PI / 180 * R], RX, RY, RH, SEG) : null;
   return {
     ...(scenery || {}),
     id: `gpx-${Date.now().toString(36)}`,
     name: title.slice(0, 40),
-    description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. ${loop ? `A loop of ${(total / 1000).toFixed(1)} km.` : `Point to point, finish at ${(total / 1000).toFixed(1)} km.`}`,
+    description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. ${loop ? `A loop of ${(length / 1000).toFixed(1)} km.` : `Point to point, finish at ${(length / 1000).toFixed(1)} km.`}`,
     elevSource: source,
-    startHeading: Math.round(head[0] * 1000) / 1000, // map radians (from east, anticlockwise)
-    // the real shape for the minimap, every 50 m, north up (x east, y south), in whole metres
-    map: Array.from({ length: Math.ceil(n / 10) + 1 }, (_, i) => Math.min(n - 1, i * 10)).flatMap((k) => [Math.round(sx[k]), Math.round(-sy[k])]),
+    startHeading: Math.round(RH[0] * 1000) / 1000, // map radians (from east, anticlockwise)
+    // the road's shape for the minimap, every 50 m, north up (x east, y south), in whole metres
+    map: Array.from({ length: Math.ceil(m / 10) + 1 }, (_, i) => Math.min(m - 1, i * 10)).flatMap((k) => [Math.round(RX[k]), Math.round(-RY[k])]),
     theme: 'meadow',
     custom: true,
     oneWay: !loop,
