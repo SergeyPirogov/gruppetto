@@ -53,9 +53,11 @@ function noise1(s, period) {
  * Which side the mountain is on, along the road: -1 .. 1, + for the right. On a bend it is the inside (the
  * road winds round the hill); on a straight, a side that holds for a few hundred metres and changes slowly.
  * It is smooth, so the hill passes from one side to the other through a stretch where it is on neither.
- * `curve`: the route's per-segment curvature, `turn`: the factor the renderer turns it by.
+ * `curve`: the route's per-segment curvature, `turn`: the factor the renderer turns it by. With `grade` (the
+ * averaged grade per segment, gradeProfile), a climb keeps its mountain on one side from foot to top: the side
+ * most of it bends toward; a few hundred metres of the other side mid-climb read as the hill jumping the road.
  */
-export function mountainSide(curve, { turn = 2.5, loop = false } = {}) {
+export function mountainSide(curve, { turn = 2.5, loop = false, grade = null } = {}) {
   const n = curve.length, h = 60; // heading change over ±300 m
   const at = (i) => (loop ? curve[((i % n) + n) % n] : curve[Math.max(0, Math.min(n - 1, i))] || 0);
   const out = new Float32Array(n);
@@ -66,7 +68,40 @@ export function mountainSide(curve, { turn = 2.5, loop = false } = {}) {
     const x = dh / 0.5 + 1.2 * noise1(loop ? ((i % n) + n) % n * SEG : i * SEG, 1100);
     out[i] = Math.max(-1, Math.min(1, x * 4)); // quickly through the middle, where the hill is on neither side
   }
+  if (grade && grade.length === n) holdOnClimbs(out, grade, loop);
   return out;
+}
+
+/** Each climb (≥ 2.5 %, climbs under 600 m apart joined) takes one side, eased in and out over 80 m at its ends. */
+function holdOnClimbs(out, grade, loop) {
+  const n = out.length, gap = Math.round(600 / SEG), ease = Math.round(80 / SEG);
+  const up = Array.from(grade, (g) => g > 0.025);
+  // spans of climbing, with short flat bits inside one joined
+  const spans = [];
+  for (let i = 0; i < n; ) {
+    if (!up[i]) { i++; continue; }
+    let j = i;
+    for (let k = i; k < n; k++) { if (up[k]) j = k; else if (k - j > gap) break; }
+    spans.push([i, j]); i = j + 1;
+  }
+  // a loop whose climb runs over its start: one span
+  if (loop && spans.length > 1 && spans[0][0] === 0 && spans[spans.length - 1][1] === n - 1) {
+    const last = spans.pop(); spans[0] = [last[0] - n, spans[0][1]];
+  }
+  const src = Float32Array.from(out);
+  const at = (i) => (loop ? ((i % n) + n) % n : i);
+  for (const [a, b] of spans) {
+    let sum = 0;
+    for (let i = a; i <= b; i++) sum += src[at(i)];
+    const side = sum >= 0 ? 1 : -1;
+    for (let i = a - ease; i <= b + ease; i++) {
+      const k = at(i);
+      if (k < 0 || k >= n) continue;
+      const w = i < a ? (i - (a - ease)) / ease : i > b ? ((b + ease) - i) / ease : 1; // 0..1 at the ends
+      const u = w * w * (3 - 2 * w);
+      out[k] = src[k] + (side - src[k]) * Math.max(u, i >= a && i <= b ? 1 : 0);
+    }
+  }
 }
 
 /** A value of per-segment array `a` at distance d along the road (linear between segments). */
