@@ -266,7 +266,7 @@ async function renderToday(force = false) {
   const box = $('me-today');
   if (!box) return;
   const u = currentUser();
-  if (!u || !profileRow) { box.hidden = true; return; } // the profile first (its region)
+  if (!u || !profileRow) { box.hidden = true; renderRaceCard(null); return; } // the profile first (its region)
   if (force || !todayData || Date.now() - todayAt > 120000) {
     todayAt = Date.now();
     const [regions, rides] = await Promise.all([
@@ -288,21 +288,63 @@ async function renderToday(force = false) {
   }
   const now = Date.now(), next = (rides || []).filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   const g = next.find((x) => x.joined) || next[0];
-  if (g) {
-    const d = new Date(g.starts_at), today = d.toDateString() === new Date().toDateString();
-    const when = `${today ? tr('Today') : d.toLocaleDateString(ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' })}`;
-    const route = ctx.routes().find((r) => r.id === g.route_id);
-    tiles.push(`<button class="me-tile acc" data-today="group"><small>${g.joined ? tr('Your group ride') : tr('Group ride')}</small><b>${ctx.esc(when)}</b>`
-      + `<span>${ctx.esc(g.title)}${route ? ` · ${ctx.esc(route.name)}` : ''} · ${tr('{n} going', { n: g.riders })}</span></button>`);
-  } else {
-    tiles.push(`<button class="me-tile" data-today="group"><small>${tr('Group rides')}</small><b>${tr('Nothing planned this week')}</b><span>${tr('Create one and send the link to friends')}</span></button>`);
-  }
+  // a ride that is planned gets the big card below; the tile is only for "nothing planned"
+  if (!g) tiles.push(`<button class="me-tile" data-today="group"><small>${tr('Group rides')}</small><b>${tr('Nothing planned this week')}</b><span>${tr('Create one and send the link to friends')}</span></button>`);
+  renderRaceCard(g || null);
   box.innerHTML = tiles.join('');
-  box.hidden = false;
+  box.hidden = !tiles.length;
   box.onclick = (ev) => {
     const t = ev.target.closest('[data-today]')?.dataset.today;
     if (t === 'ua') openUa(); else if (t === 'setup') openSetup(); else if (t === 'group') openGroups(g?.id || null);
   };
+}
+
+let raceTimer = null;
+let raceRide = null;
+
+/**
+ * The big card for the next group ride or race: the name, when and how long to go, the route, who is going, and
+ * the button that does what the same button in the Groups hub does. `g` null hides it. It redraws every 20 s so
+ * "in 12 min" keeps up with the clock.
+ */
+function renderRaceCard(g = raceRide) {
+  const box = $('race-card');
+  if (!box) return;
+  raceRide = g;
+  clearInterval(raceTimer);
+  const now = Date.now(), w = g && rideWindow(Date.parse(g.starts_at), now, g.held);
+  if (!g || w.state === 'over') { box.hidden = true; box.innerHTML = ''; return; }
+  const d = new Date(g.starts_at), route = ctx.routes().find((r) => r.id === g.route_id);
+  const today = d.toDateString() === new Date().toDateString();
+  const when = g.held ? tr('when everyone is ready')
+    : `${today ? tr('Today') : d.toLocaleDateString(ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(ctx.locale, { hour: '2-digit', minute: '2-digit' })}`;
+  const badge = w.state === 'live' ? tr('Riding now') : w.state === 'open' ? tr('On the line') : g.kind === 'race' ? tr('Next race') : tr('Next group ride');
+  const left = w.state === 'later' ? tr('in {t}', { t: inTime(w.in) }) : w.state === 'open' && !g.held ? tr('starts in {t}', { t: inTime(w.in) }) : '';
+  const laps = g.kind === 'race' && !route?.oneWay && g.laps > 1 ? ` · ${tr('{n} laps', { n: g.laps })}` : '';
+  const km = route?.length ? ` · ${((route.length * (g.kind === 'race' && !route.oneWay ? g.laps || 1 : 1)) / 1000).toFixed(1)} ${tr('km')}` : '';
+  const can = route && w.state !== 'later';
+  box.className = `race-card${w.state !== 'later' ? ' hot' : ''}`;
+  box.innerHTML = `<div class="rc-top"><span class="rc-badge">${ctx.esc(badge)}</span>${g.kind === 'race' ? `<span class="rc-kind">${ctx.esc(raceLabel(g, route))}</span>` : ''}</div>`
+    + `<h2>${ctx.esc(g.title)}</h2>`
+    + `<div class="rc-meta"><span>${ctx.esc(when)}${left ? ` · <b>${ctx.esc(left)}</b>` : ''}</span><span>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))}${ctx.esc(laps + km)}</span></div>`
+    + `<div class="rc-who">👥 ${tr('{n} going', { n: g.riders })} · ${ctx.esc(g.host_name || tr('a rider'))}</div>`
+    + `<div class="rc-acts">`
+    + (can ? `<button class="primary" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
+      : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
+        : `<button class="primary" data-act="join" data-id="${g.id}">${tr('Join')}</button>`)
+    + (w.state !== 'later' ? `<button class="pill-btn" data-act="watch" data-id="${g.id}">👀 ${tr('Watch')}</button>` : '')
+    + `<button class="pill-btn" data-act="open" data-id="${g.id}">${tr('All group rides')}</button></div>`;
+  box.hidden = false;
+  box.onclick = async (ev) => {
+    const b = ev.target.closest('[data-act]');
+    if (!b) return;
+    if (b.dataset.act === 'open') { openGroups(g.id); return; }
+    // the hub's own handler looks the ride up in its list, which may not be loaded yet
+    if (!grRows.some((x) => x.id === g.id)) grRows = [...grRows, g];
+    await groupAction(ev);
+    renderToday(true);
+  };
+  raceTimer = setInterval(() => renderRaceCard(), 20000);
 }
 
 /** Profile, at the account card. */

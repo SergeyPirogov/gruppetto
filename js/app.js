@@ -726,6 +726,17 @@ function renderPlan() {
   if ($('plan-box')) $('plan-box').hidden = true;
 }
 
+/** The workout the Workout segment would pick (set by renderModes): the chosen one, today's plan, or the last ridden. */
+let modeWorkout = null;
+
+// the segmented control: the cards' own handlers do the same, this is the shorter way to switch
+$('mode-select')?.addEventListener('change', (ev) => {
+  const v = ev.target.value;
+  if (v === 'workout' && !modeWorkout) { renderModes(); openWorkoutMenu(); return; } // nothing to pick yet: choose one (the redraw puts the old mode back)
+  settings.mode = v === 'workout' ? modeWorkout.id : v;
+  saveSettings(); renderModes();
+});
+
 /** Mode: free ride, or a workout picked in its own menu. */
 function renderModes() {
   renderPlan();
@@ -769,6 +780,12 @@ function renderModes() {
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
   wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
+  // the segmented control above shows the mode; only the picked mode's card stays visible (free ride when none is picked)
+  const picked = [free, wb, race].find((o) => o.classList.contains('sel')) || free;
+  picked.classList.add('cur');
+  modeWorkout = w;
+  const seg = $('mode-select');
+  if (seg) seg.value = picked === race ? 'race' : picked === wb ? 'workout' : 'free';
   if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
   updateSummary();
 }

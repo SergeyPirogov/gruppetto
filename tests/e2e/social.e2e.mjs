@@ -107,7 +107,11 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       if (l) l.races += 1;
       return send(route, 200, id);
     }
-    if (p === '/rest/v1/rpc/join_group_ride') { const q = JSON.parse(body || '{}'), g = (db.rides || []).find((r) => r.id === q.p_id); if (g) g.joined = q.p_on !== false; return send(route, 204); }
+    if (p === '/rest/v1/rpc/join_group_ride') {
+      const q = JSON.parse(body || '{}'), g = (db.rides || []).find((r) => r.id === q.p_id), on = q.p_on !== false;
+      if (g && g.joined !== on) { g.joined = on; g.riders += on ? 1 : -1; }
+      return send(route, 204);
+    }
     if (p === '/rest/v1/rpc/start_group_ride') { // the host starts a held ride (0010)
       const q = JSON.parse(body), g = (db.rides || []).find((r) => r.id === q.p_id && r.mine && r.held);
       if (!g) return send(route, 403, { message: 'not a held ride of yours', code: '42501' });
@@ -609,4 +613,34 @@ test('race results by category: yours first, All a tap away, and a copy for the 
   assert.match(await page.evaluate(() => window.__copied), /Club crit[\s\S]*\nA\n1\. Taras[\s\S]*\nB\n1\. Olena[\s\S]*2\. Bo .*\+0:40/);
   assert.deepEqual(errors, []);
   await context.close();
+});
+
+test('the lobby: the next group race as a big card with Join, the mode as segments; no social, no card', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  mock.db.rides = [{ id: '33333333-0000-4000-8000-000000000003', title: 'Winter crit', route_id: 'rolling', starts_at: new Date(Date.now() + 3 * 3600e3).toISOString(), host_name: 'Taras', mine: false, riders: 4, joined: false, kind: 'race', laps: 2, league_id: null, league_title: null, held: false }];
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#race-card:not([hidden]) [data-act="join"]');
+  const card = await page.textContent('#race-card');
+  assert.match(card, /Winter crit/);
+  assert.match(card, /Rolling Hills/);
+  assert.match(card, /4 going/);
+  await page.evaluate(() => document.querySelector('#race-card [data-act="join"]').click()); // the Devices page may be open over the lobby
+  await page.waitForFunction(() => document.querySelector('#race-card [data-act="leave"]')); // joined: the button says so
+  assert.ok(mock.db.requests.some((r) => r.path === '/rest/v1/rpc/join_group_ride'));
+  // the mode: three segments, the picked one's card under them
+  assert.equal(await page.locator('.mode-select + .seg > button').count(), 3);
+  await page.evaluate(() => document.querySelector('.mode-select + .seg > button[data-v="race"]').click());
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('powerup.settings')).mode), 'race');
+  assert.equal(await page.locator('#mode-list .option.cur').count(), 1);
+  assert.equal(await page.isVisible('#mode-list .race-pick'), true);
+  assert.equal(await page.isVisible('#mode-list [data-id="free"]'), false);
+  await page.evaluate(() => document.querySelector('.mode-select + .seg > button[data-v="free"]').click());
+  assert.equal(await page.isVisible('#mode-list [data-id="free"]'), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+  // no Supabase project: the card stays hidden
+  const off = await openApp({ config: false, local: LOCAL });
+  assert.equal(await off.page.isHidden('#race-card'), true);
+  assert.deepEqual(off.errors, []);
+  await off.context.close();
 });
