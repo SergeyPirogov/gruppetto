@@ -602,7 +602,7 @@ test('a held ride, not yours: waiting for the host, then off once the database h
   await context.close();
 });
 
-test('another account signs in on this device: the last account’s rides, links and profile are forgotten, not sent up', async () => {
+test('another account signs in on this device: the last account’s rides, links and profile are put aside, not shown or sent up', async () => {
   const id = 'r1700000088000';
   const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Taras', public: true, data: {} } });
   const entry = { id, date: new Date().toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', summary: { duration: 60, distance: 400 }, chart: { every: 5, pw: [], hr: [], d: [], wb: [] }, lapTimes: [], splits: [] };
@@ -613,9 +613,30 @@ test('another account signs in on this device: the last account’s rides, links
   assert.equal(left.h, 0);
   assert.equal(left.strava, null);
   assert.deepEqual(await page.evaluate(() => [localStorage.getItem('gruppetto-icu-stats'), localStorage.getItem('gruppetto.routes')]), [null, null]);
+  // put aside under the last account, not lost: it comes back when that account signs in here again
+  const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('gruppetto.stash.someone-else') || 'null'));
+  assert.equal(JSON.parse(kept.keys['gruppetto.history']).length, 1);
+  assert.equal(kept.settings.icuKey, ICU_SECRET);
   assert.ok(!left.s.icuKey && left.s.ftp !== 240, 'the old intervals.icu key and FTP are gone');
   assert.ok(!mock.db.requests.some((r) => r.path === '/rest/v1/activities' && r.method === 'POST' && r.body.includes(id)), 'the old ride did not go up');
   noSecrets(mock.db);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('an account back on a device: its rides and links, put aside when another came in, are here again', async () => {
+  const id = 'r1700000066000';
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
+  const entry = { id, date: new Date().toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', summary: { duration: 60, distance: 400 }, chart: { every: 5, pw: [], hr: [], d: [], wb: [] }, lapTimes: [], splits: [] };
+  const stash = { keys: { 'gruppetto.history': JSON.stringify([entry]) }, settings: { icuKey: 'mine-key', ftp: 251 } };
+  const { page, context, errors } = await openApp({ mock, local: { ...LOCAL, 'gruppetto.owner': 'someone-else', [`gruppetto.stash.${USER.id}`]: stash }, signedIn: true });
+  await page.waitForFunction((uid) => localStorage.getItem('gruppetto.owner') === uid, USER.id);
+  await page.waitForFunction(() => /Synced/.test(document.getElementById('social-sync-text')?.textContent || ''), null, { timeout: 15000 });
+  const now = await page.evaluate((uid) => ({ h: JSON.parse(localStorage.getItem('gruppetto.history') || '[]').map((e) => e.id), s: JSON.parse(localStorage.getItem('powerup.settings')), stash: localStorage.getItem(`gruppetto.stash.${uid}`), other: !!localStorage.getItem('gruppetto.stash.someone-else') }), USER.id);
+  assert.deepEqual(now.h, [id]);
+  assert.equal(now.s.icuKey, 'mine-key');
+  assert.equal(now.stash, null);
+  assert.equal(now.other, true); // the other account's, aside in its turn
   assert.deepEqual(errors, []);
   await context.close();
 });

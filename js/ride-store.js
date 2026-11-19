@@ -42,3 +42,12 @@ export const deleteRide = (id) => run('readwrite', (s) => s.delete(id));
 export const putDraft = (rec) => run('readwrite', (s) => s.put({ ...rec, id: 'current' }), DRAFTS);
 export const getDraft = () => run('readonly', (s) => s.get('current'), DRAFTS);
 export const deleteDraft = () => run('readwrite', (s) => s.delete('current'), DRAFTS);
+/** Another account signs in: the cut-off ride goes aside under its account's name, and that account's comes back. */
+export async function swapDraft(from, to) {
+  const cur = await getDraft(), back = await run('readonly', (s) => s.get(`owner:${to}`), DRAFTS);
+  await run('readwrite', (s) => {
+    s.delete('current'); s.delete(`owner:${to}`);
+    if (cur) s.put({ ...cur, id: `owner:${from}` });
+    if (back) s.put({ ...back, id: 'current' });
+  }, DRAFTS);
+}
