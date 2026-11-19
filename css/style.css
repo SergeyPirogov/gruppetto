@@ -2552,3 +2552,11 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
   .lobby-routes .route-filter { margin-left: 0; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
   .route-group h3 .rg-hint { display: none; }
 }
+/* the lobby's last row: Man/Woman and Ride the same height, on one line; the figure picked in a quiet grey,
+   so the only orange there is Ride */
+.lobby-body .lobby-pick .ride-box { align-items: center; }
+.lobby-body .lobby-pick .figure-pick { height: 52px; box-sizing: border-box; align-self: center; border-radius: 12px; background: #0e1420; padding: 3px; gap: 2px; }
+.lobby-body .lobby-pick .figure-pick button { height: 100%; width: 40px; border-radius: 9px; color: var(--muted); }
+.lobby-body .lobby-pick .figure-pick button.sel { background: #2a3550; color: #fff; }
+.lobby-body .lobby-pick .start-split { height: 52px; align-self: center; }
+.lobby-body .lobby-pick .ride-box #btn-start, .lobby-body .lobby-pick .ride-box .start-more { height: 52px; margin-top: 0; margin-bottom: 0; box-sizing: border-box; padding-top: 0 !important; padding-bottom: 0 !important; }
