@@ -2095,3 +2095,7 @@ select.seg-src { display: none; }
 .me-garage .garage-open { margin: 0; border: 0; border-radius: 0; }
 @media (max-width: 900px) { .me-grid { grid-template-columns: minmax(0, 1fr); } }
 .me-garage .garage-open { width: 100%; }
+/* the two charts side by side: each as tall as it needs, the power table on one row */
+.prog-charts { align-items: start; }
+.prog-charts .pc-table { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
+.prog-charts #fit-chart { height: 220px; }
