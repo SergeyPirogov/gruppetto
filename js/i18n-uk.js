@@ -499,6 +499,7 @@ export const UK = {
   "Watching": "Перегляд",
   'Without a trainer': 'Без станка', 'reconnecting…': 'перепідключення…',
   'Manage': 'Керувати',
+  'Sound on/off': 'Звук увімк./вимк.', 'Sound on': 'Звук увімкнено', 'Sound off': 'Звук вимкнено',
   // progress
   'Level': 'Рівень', 'Form today': 'Форма сьогодні', 'Badges': 'Нагороди', '{n} of {m}': '{n} з {m}', 'ramp test on {date}': 'рамп-тест {date}', 'set by you': 'задано тобою', 'an estimate: a ramp test finds yours': 'оцінка: рамп-тест знайде твій', 'Take the test again': 'Пройти тест ще раз', 'Take the ramp test': 'Пройти рамп-тест',
   // devices

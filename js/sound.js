@@ -7,12 +7,27 @@ let ctx = null;
 export function unlockAudio() {
   try {
     ctx ||= new (window.AudioContext || window.webkitAudioContext)();
-    if (ctx.state === 'suspended') ctx.resume();
+    if (ctx.state === 'suspended') ctx.resume().then(() => { unlocked = true; sleepSoon(1500); }).catch(() => {});
+    else { unlocked = true; sleepSoon(1500); }
   } catch { ctx = null; }
 }
 
 /** Sound can play: the browser lets a page start audio only after a click or a key press on it. */
-export const audioReady = () => !!ctx && ctx.state === 'running';
+export const audioReady = () => !!ctx && (ctx.state === 'running' || unlocked);
+let unlocked = false;
+
+// The page lets go of the sound device while it is silent. An open audio stream, even a quiet one, keeps
+// the output busy: on a call the system treats the tab as playing (a Bluetooth headset can drop to its
+// call profile or duck the other side). So the context sleeps a moment after the last sound and wakes for the next.
+let idleTimer = null;
+function wakeCtx() {
+  clearTimeout(idleTimer); idleTimer = null;
+  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+}
+function sleepSoon(ms) {
+  if (!ctx || idleTimer) return;
+  idleTimer = setTimeout(() => { idleTimer = null; if (ctx && busLevel <= 0.01 && ctx.state === 'running') ctx.suspend().catch(() => {}); }, ms);
+}
 // the first click or key anywhere opens the sound (a ride started without one, like the demo, was silent)
 if (typeof window !== 'undefined') {
   const wake = () => { unlockAudio(); if (audioReady()) { window.removeEventListener('pointerdown', wake, true); window.removeEventListener('keydown', wake, true); } };
@@ -22,6 +37,7 @@ if (typeof window !== 'undefined') {
 
 export function beep(freq = 880, dur = 0.12, vol = 0.18) {
   if (!ctx) return;
+  wakeCtx();
   const t = ctx.currentTime;
   const o = ctx.createOscillator(), g = ctx.createGain();
   o.type = 'sine';
@@ -31,6 +47,7 @@ export function beep(freq = 880, dur = 0.12, vol = 0.18) {
   o.connect(g).connect(ctx.destination);
   o.start(t);
   o.stop(t + dur + 0.02);
+  sleepSoon((dur + 1.5) * 1000);
 }
 
 /**
@@ -105,6 +122,7 @@ async function loadCrowd() {
 }
 export function crowd(level) {
   if (!ctx) return;
+  if (level > 0.01) wakeCtx(); else sleepSoon(1500); // no fans near: nothing to hear, let the device go
   if (!crowdBufs) { if (level > 0 && !crowdLoading) loadCrowd(); return; }
   const t = ctx.currentTime;
   if (!crowdBus) {
@@ -168,4 +186,5 @@ export function crowdOff() {
     busLevel = 0;
   }
   bedUntil = 0;
+  sleepSoon(1500);
 }
