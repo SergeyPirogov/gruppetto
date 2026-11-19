@@ -8,6 +8,7 @@ import { sunAt, phaseOf, placeFromZone } from './sun.js';
 import { loadDummyRider, DummyRider } from './dummy-rider.js';
 import { loadRiderModel, ModelRider } from './rider-model.js';
 import { loadNature, natureMaterials } from './nature.js';
+import { RoadGrid, lateralReach, isOwnStretch } from './road-grid.js';
 import { loadBikeModel, ModelBike, setBikeEnvironment } from './bike-model.js';
 import { t, lang } from './i18n.js';
 import { ANISO } from './gltf.js';
@@ -1375,7 +1376,7 @@ export class Scene3D {
     if (route.custom) this.t3 = { ...this.t3, amp: 6, far: 0.2, wall: 0, rock: 0, snow: 0, dip: null, beach: false };
     // a route may bring its own water: a lake or a river beside the road (Alpine Valley's lake under the slopes)
     else if (route.water) this.t3 = { ...this.t3, dip: route.water };
-    this.reach = null;
+    this._grid = null;
     this.archList = null; this.bannerCache = null; this.lineTexCache = null; // arches are per route
     // imported routes with OpenStreetMap data: woods, water and buildings where they really are
     this.land = route.land || null;
@@ -1818,34 +1819,41 @@ export class Scene3D {
     return y;
   }
 
+  /** Whether the chunk of this number (or, on a loop, the same stretch of another lap) is built, or is being built now. */
+  _chunkBuilt(c) {
+    if (c === this._building) return true;
+    if (this.route.oneWay) return this.chunks.has(c);
+    const per = Math.ceil(this.route.length / (CHUNK * SEG));
+    for (const k of this.chunks.keys()) if ((((k - c) % per) + per) % per === 0) return true;
+    return false;
+  }
+
+  /** Every half segment of the road's centre line in a grid, built once per route: what the land and the scenery ask about other stretches. */
+  _roadGrid() {
+    if (this._grid) return this._grid;
+    const grid = new RoadGrid(20), n = this.route.segments.length;
+    for (let b = -40; b < (n + 20) * 2; b++) { const d = b * SEG / 2, g = this.frame(d); grid.add(g.x, g.z, g.y, d); }
+    return this._grid = grid;
+  }
+
   /**
    * How far the land may reach to each side of the road at segment a, so it never covers another
    * stretch of the same road (hairpins, a track that comes back past itself). Imported routes only.
    */
   _reachAt(a, f) {
     if (!this.route.custom && !this.route.nearItself) return null; // an imported road, or a built-in one that passes close to itself
-    if (!this.reach) { // spatial grid of the whole road, 50 m cells
-      const cells = new Map(), n = this.route.segments.length;
-      for (let b = -20; b < n + 20; b += 2) {
-        const g = this.frame(b * SEG), key = `${Math.floor(g.x / 50)},${Math.floor(g.z / 50)}`;
-        if (!cells.has(key)) cells.set(key, []);
-        cells.get(key).push([b, g.x, g.z]);
-      }
-      this.reach = cells;
-    }
-    const far = COLS[COLS.length - 1];
-    const lim = [far, far], other = [null, null]; // per side: reach, and the other road's height there
-    const cx = Math.floor(f.x / 50), cz = Math.floor(f.z / 50);
-    for (let i = -6; i <= 6; i++) for (let j = -6; j <= 6; j++) {
-      for (const [b, x, z] of this.reach.get(`${cx + i},${cz + j}`) || []) {
-        const vx = x - f.x, vz = z - f.z, dist = Math.hypot(vx, vz);
-        if (dist > 300 || Math.abs(b - a) * SEG < dist * 1.4 + 20) continue; // the same stretch of road
-        const along = vx * f.rx + vz * f.rz; // + right, - left
-        const across = Math.abs(vx * Math.cos(f.h) + vz * Math.sin(f.h));
-        if (across > Math.abs(along) * 1.2) continue;
-        const k = along >= 0 ? 1 : 0, m = Math.max(ROAD_HALF + 2, dist * 0.5);
-        if (m < lim[k]) { lim[k] = m; other[k] = this._roadY(b * SEG); }
-      }
+    const far = COLS[COLS.length - 1], grid = this._roadGrid(), loopLen = this.route.oneWay ? 0 : this.route.length;
+    const lim = [far, far], other = [null, null], to = [far, far]; // per side: reach, the other road's height there, and how far out its far side is
+    // out from the centre line each side until another stretch of the road is nearer than this one
+    for (const k of [0, 1]) {
+      const sg = k ? 1 : -1;
+      const r = lateralReach(grid, { x: f.x, z: f.z, dx: f.rx * sg, dz: f.rz * sg, s: a * SEG, far, min: ROAD_HALF + 2, loopLen });
+      if (r.y === null) continue;
+      // another stretch whose land is not built yet is not in the way: the land would end there with nothing beyond.
+      // That chunk is noted, and this one is built again when it comes (see _updateChunks)
+      const c = Math.floor(r.s / SEG / CHUNK);
+      if (!this._chunkBuilt(c)) { this._pending?.add(c); continue; }
+      lim[k] = r.reach; other[k] = r.y; to[k] = r.to;
     }
     // inside a tight bend the land would fold over itself: keep it within the bend's radius
     const k = (this.frame(a * SEG + 10).h - this.frame(a * SEG - 10).h) / 20;
@@ -1853,7 +1861,7 @@ export class Scene3D {
       const inner = k > 0 ? 1 : 0, m = Math.max(ROAD_HALF + 1, 0.9 / Math.abs(k));
       if (m < lim[inner]) { lim[inner] = m; other[inner] = null; }
     }
-    return { lim, other }; // [left, right]
+    return { lim, other, to }; // [left, right]
   }
 
   /**
@@ -1863,29 +1871,9 @@ export class Scene3D {
    */
   _otherRoad(x, z, a, f) {
     if (!this.route.custom && !this.route.nearItself) return null;
-    const n = this.route.segments.length, loop = !this.route.oneWay;
-    if (!this._rg) { // every segment's centre, in 10 m cells
-      const cells = new Map();
-      for (let b = 0; b < n; b++) {
-        const g = this.frame(b * SEG), key = `${Math.floor(g.x / 10)},${Math.floor(g.z / 10)}`;
-        if (!cells.has(key)) cells.set(key, []);
-        cells.get(key).push([b, g.x, g.z, g.y]);
-      }
-      this._rg = cells;
-    }
-    const own = loop ? ((a % n) + n) % n : a, cx = Math.floor(x / 10), cz = Math.floor(z / 10);
-    let best = null;
-    for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) {
-      for (const [b, bx, bz, by] of this._rg.get(`${cx + i},${cz + j}`) || []) {
-        const dist = Math.hypot(bx - x, bz - z);
-        if (dist > 30 || (best && dist >= best.dist)) continue;
-        let gap = Math.abs(b - own);
-        if (loop) gap = Math.min(gap, n - gap);
-        if (gap * SEG < Math.hypot(bx - f.x, bz - f.z) * 1.4 + 20) continue; // the same stretch
-        best = { dist, y: by, b };
-      }
-    }
-    return best;
+    const loopLen = this.route.oneWay ? 0 : this.route.length;
+    const o = this._roadGrid().nearest(x, z, 30, (s, d, qx, qz) => isOwnStretch(a * SEG, s, Math.hypot(qx - f.x, qz - f.z), loopLen));
+    return o && { dist: o.dist, y: o.y, b: o.s / SEG };
   }
 
   /**
@@ -1934,42 +1922,18 @@ export class Scene3D {
    */
   _otherRoadsNear(a0, frames) {
     if (!this.route.custom && !this.route.nearItself) return null;
-    this._otherRoad(0, 0, 0, frames[0]); // builds this._rg
-    const n = this.route.segments.length, loop = !this.route.oneWay, R = 14, reach = COLS[COLS.length - 1] + R;
+    const loopLen = this.route.oneWay ? 0 : this.route.length, R = 14, reach = COLS[COLS.length - 1] + R;
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const f of frames) { x0 = Math.min(x0, f.x); x1 = Math.max(x1, f.x); z0 = Math.min(z0, f.z); z1 = Math.max(z1, f.z); }
-    const cells = new Map();
-    let any = false;
-    for (let cx = Math.floor((x0 - reach) / 10); cx <= Math.floor((x1 + reach) / 10); cx++) {
-      for (let cz = Math.floor((z0 - reach) / 10); cz <= Math.floor((z1 + reach) / 10); cz++) {
-        for (const pt of this._rg.get(`${cx},${cz}`) || []) {
-          const [b, bx, bz] = pt;
-          let r = 0, bd = Infinity;
-          for (let i = 0; i < frames.length; i++) { const d = (frames[i].x - bx) ** 2 + (frames[i].z - bz) ** 2; if (d < bd) { bd = d; r = i; } }
-          const own = loop ? (((a0 + r) % n) + n) % n : a0 + r;
-          let gap = Math.abs(b - own);
-          if (loop) gap = Math.min(gap, n - gap);
-          if (gap * SEG < Math.sqrt(bd) * 1.4 + 20) continue; // the chunk's own stretch
-          const key = Math.floor(bx / R) * 65536 + Math.floor(bz / R);
-          if (!cells.has(key)) cells.set(key, []);
-          cells.get(key).push(pt);
-          any = true;
-        }
-      }
-    }
-    if (!any) return null;
-    return (x, z) => {
-      const kx = Math.floor(x / R), kz = Math.floor(z / R);
-      let best = null;
-      for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
-        const list = cells.get((kx + i) * 65536 + kz + j);
-        if (list) for (const [b, bx, bz, by] of list) {
-          const dist = Math.hypot(bx - x, bz - z);
-          if (dist < R && (!best || dist < best.dist)) best = { dist, y: by, b };
-        }
-      }
-      return best;
-    };
+    const near = new RoadGrid(R);
+    this._roadGrid().inBox(x0 - reach, z0 - reach, x1 + reach, z1 + reach, (bx, bz, by, s) => {
+      let r = 0, bd = Infinity; // the chunk's row nearest to this road point
+      for (let i = 0; i < frames.length; i++) { const d = (frames[i].x - bx) ** 2 + (frames[i].z - bz) ** 2; if (d < bd) { bd = d; r = i; } }
+      if (isOwnStretch((a0 + r) * SEG, s, Math.sqrt(bd), loopLen)) return; // the chunk's own stretch
+      near.add(bx, bz, by, s);
+    });
+    if (!near.size) return null;
+    return (x, z) => { const o = near.nearest(x, z, R); return o && { dist: o.dist, y: o.y, b: o.s / SEG }; };
   }
 
 
@@ -1987,6 +1951,7 @@ export class Scene3D {
 
   _buildChunk(c) {
     const group = new THREE.Group();
+    this._building = c; this._pending = new Set(); // the chunks of other stretches this one needed and did not find built
     const a0 = c * CHUNK, rows = CHUNK + 1, nc = COLS.length;
     const n = this.route.segments.length;
     const T = this.t, T3c = this.t3;
@@ -2021,13 +1986,27 @@ export class Scene3D {
     // terrain grid
     const pos = new Float32Array(rows * nc * 3), colors = new Float32Array(rows * nc * 3);
     const heights = [];
-    const reach = frames.map((f, r) => this._reachAt(a0 + r, f));
+    // how far the land reaches at each row: the least of the row's and its neighbours' (±3 rows, also past the
+    // chunk's ends), so the land's edge never fans from a far column of one row to a near one of the next and
+    // sweeps over the other road in between
+    const raw = [];
+    for (let r = -3; r < rows + 3; r++) raw.push(this._reachAt(a0 + r, r >= 0 && r < rows ? frames[r] : this.frame((a0 + r) * SEG)));
+    const reach = frames.map((f, r) => {
+      if (!raw[r + 3]) return null;
+      const lim = [...raw[r + 3].lim], other = [...raw[r + 3].other], to = [...raw[r + 3].to];
+      for (let q = r; q <= r + 6; q++) for (const k of [0, 1]) if (raw[q].lim[k] < lim[k]) { lim[k] = raw[q].lim[k]; other[k] = raw[q].other[k]; to[k] = raw[q].to[k]; }
+      return { lim, other, to };
+    });
     for (let r = 0; r < rows; r++) {
       const f = frames[r];
       heights.push([]);
       for (let k = 0; k < nc; k++) {
-        const sd = COLS[k] > 0 ? 1 : 0, lim = reach[r] ? reach[r].lim[sd] : Infinity;
-        const o = Math.sign(COLS[k]) * Math.min(Math.abs(COLS[k]), lim);
+        const sd = COLS[k] > 0 ? 1 : 0, lim = reach[r] ? reach[r].lim[sd] : Infinity, oy = reach[r]?.other[sd], ao = Math.abs(COLS[k]);
+        // past where another stretch of the road is nearer the land is not ours; it goes on a little way, flat and
+        // below that road, past its far side, so that it covers nothing of it yet leaves no gap where that
+        // stretch's own land is not built. (A bend's inner limit has no other road: the land stays within it.)
+        const past = ao > lim && oy !== null && oy !== undefined;
+        const o = Math.sign(COLS[k]) * (past ? lim + (ao - lim) / (COLS[COLS.length - 1] - lim) * (reach[r].to[sd] - lim) : Math.min(ao, lim));
         const x = f.x + f.rx * o, z = f.z + f.rz * o;
         let y = this._terrainY(f.y, o, x, z);
         const g = gully((a0 + r) * SEG);
@@ -2037,10 +2016,9 @@ export class Scene3D {
         const lc = this.land ? this._landAt(a0 + r, o) : '.';
         if (lc === 'w') y = Math.min(y, f.y - 1.3); // a lake or a wide river: flat, a little below the road
         // between two stretches of the same road the land slopes to meet halfway, at the mean height
-        const oy = reach[r]?.other[sd];
         if (oy !== null && oy !== undefined) {
-          const mid = (f.y + oy) / 2, t = smooth(ROAD_HALF + 1, lim, Math.abs(o));
-          y = this._terrainY(f.y + (mid - f.y) * t, o, x, z);
+          const mid = (f.y + oy) / 2;
+          y = past ? Math.min(mid, oy) - 1.2 : this._terrainY(f.y + (mid - f.y) * smooth(ROAD_HALF + 1, lim, Math.abs(o)), o, x, z);
         }
         heights[r].push(y);
         const i = (r * nc + k) * 3;
@@ -2093,7 +2071,7 @@ export class Scene3D {
       fine.forEach((f, q) => {
         const a = a0 + Math.floor(q / SUB), o = this._otherRoad(f.x, f.z, a, f);
         if (!o || o.dist > 2 * ROAD_HALF + 1.2) return;
-        f.verge = -0.1;
+        f.verge = -0.1 + Math.max(-1, Math.min(0, o.y - f.y)); // below the other road's asphalt too when that lies lower
         const own = this.route.oneWay ? a : ((a % n) + n) % n;
         if (o.dist < 2 * ROAD_HALF && o.b < own) f.sink = -0.03;
       });
@@ -2421,6 +2399,7 @@ export class Scene3D {
       }
     }
     this.scene.add(group);
+    group.userData.pending = this._pending; this._building = this._pending = null;
     return group;
   }
 
@@ -3036,7 +3015,15 @@ export class Scene3D {
     let built = 0;
     const budget = this.warming ? Infinity : 2; // behind the loading screen: the whole stretch at once
     for (let k = c - BEHIND; k <= c + this._ahead() && built < budget; k++) {
-      if (!this.chunks.has(k)) { const g = this._buildChunk(k); this._csmMaterials(g); this.chunks.set(k, g); built++; }
+      if (!this.chunks.has(k)) {
+        const g = this._buildChunk(k); this._csmMaterials(g); this.chunks.set(k, g); built++;
+        // a chunk built before this one, beside which this one's road runs, held its land back for it: now it has it
+        // to hold back for, and was built without (land over this chunk's road): build it again
+        for (const [j, h] of this.chunks) {
+          if (j === k || !h.userData.pending?.has(k)) continue;
+          this._dispose(h); const g2 = this._buildChunk(j); this._csmMaterials(g2); this.chunks.set(j, g2);
+        }
+      }
     }
     // grass, flowers and little plants only in the chunks near you: further up the road they are smaller than a
     // pixel and lost in the haze, yet each tuft was still drawn and lit with three shadow maps (a third of a frame)
