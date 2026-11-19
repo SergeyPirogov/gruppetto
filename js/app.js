@@ -5060,7 +5060,8 @@ for (const w of workouts) { w.name = tr(w.name); w.description = tr(w.descriptio
  * B moves the boards (power, heart rate, cadence, W′bal; speed, time, distance; grade, gear, climbed)
  * into one strip at the bottom; A puts each back where it was. The elements keep their ids and handlers.
  */
-const HUD_MOVED = ['#ride .hud-left > .board:not(.intensity):not(.wk-steps)', '#ride .hud-center > .topbar', '#ride .hud-right > .board:not(.minimap):not(.race-board):not(.ahead)'];
+// a workout's panel goes first in the strip, across it (the mockup's RideWorkoutB), its intensity at the end
+const HUD_MOVED = ['#workout-panel', '#ride .hud-left > .board:not(.intensity):not(.wk-steps)', '#ride .hud-center > .topbar', '#ride .hud-right > .board:not(.minimap):not(.race-board):not(.ahead)', '#wk-intensity'];
 const hudHome = new Map(); // element -> [parent, next sibling] in layout A
 let hudLayout = '';
 function applyHudLayout() {
