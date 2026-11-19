@@ -15,7 +15,7 @@ import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
 const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNames, lthr: s.lthr });
 import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
-import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft } from './ride-store.js';
+import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft, swapDraft } from './ride-store.js';
 import { Recorder, rideFileName } from './recorder.js';
 import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
@@ -5431,7 +5431,7 @@ initSocialUi({
     myWorkouts = list; myWorkoutsDeleted = deleted; writeJson(MY_DEL_KEY, deleted);
     seenWorkouts.clear(); stampChanged(myWorkouts, seenWorkouts); writeMyWorkouts(); renderModes();
   },
-  getHistory: () => history, historyDeleted: () => historyDeleted, getRide, putRide, deleteRide, deleteDraft,
+  getHistory: () => history, historyDeleted: () => historyDeleted, getRide, putRide, deleteRide, swapDraft,
   setHistory: (list, removed) => {
     for (const id of removed) deleteRide(id);
     history = list; seenHistory.clear(); stampChanged(history, seenHistory); writeHistory(); renderHistory(); renderProgress();

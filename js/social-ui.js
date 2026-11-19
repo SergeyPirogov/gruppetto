@@ -498,30 +498,44 @@ export function sync({ send = false } = {}) {
 
 // ---------- Whose data this device holds ----------
 // The rides, workouts, records and links on this device belong to one account: the one last signed in here (a
-// guest's, before any, go to the first account to sign in). Another account signing in must not get them, nor
-// send them up as its own: this device forgets them first and loads the new account's.
+// guest's, before any, go to the first account to sign in). Another account signing in must not see them, nor
+// send them up as its own: they go aside, under the last account's name, and the new account's own come back
+// (from this device, if it was here before, and from its account by the sync).
 export const OWNER_KEY = 'gruppetto.owner';
+const STASH = (id) => `gruppetto.stash.${id}`;
 const ACCOUNT_KEYS = ['gruppetto.history', 'gruppetto.history.deleted', 'gruppetto.workouts', 'gruppetto.workouts.deleted',
   'gruppetto.records', 'gruppetto-progress', 'gruppetto.social.queue', 'gruppetto.social.rides', 'gruppetto.strava', 'gruppetto.garmin',
   'gruppetto.strava-on', 'gruppetto-icu-stats', 'gruppetto-challenge', 'gruppetto.routes']; // the GPX routes too: they show where someone rides
-// the settings that are the account's links or bound to it (the rest of the settings come from the account's profile)
+// the settings that are the account's links or bound to it, and its profile (the rest is this device's)
 const ACCOUNT_SETTINGS = ['icuKey', 'icuAthlete', 'icuUpload', 'stravaUpload', 'garminUpload', 'settingsUpdatedAt'];
 
-/** Another account than the one whose data is here: forget that data and reload. True when it does. */
+/** Another account than the one whose data is here: put that data aside, bring this account's back, reload. True when it does. */
 function forgetOtherAccount() {
   const id = currentUser().id;
   let owner = null;
   try { owner = localStorage.getItem(OWNER_KEY); } catch { return false; }
   if (!owner) { try { localStorage.setItem(OWNER_KEY, id); } catch { /* private mode */ } return false; }
   if (owner === id) return false;
-  const ids = (ctx.getHistory() || []).map((e) => e.id);
+  const fields = [...ACCOUNT_SETTINGS, ...SYNC_FIELDS.filter((f) => f !== 'lang')];
+  const keys = {}, settings = {};
+  for (const k of ACCOUNT_KEYS) { const v = localStorage.getItem(k); if (v !== null) keys[k] = v; }
+  for (const k of fields) if (ctx.settings[k] !== undefined) settings[k] = ctx.settings[k];
+  // aside first; when the browser has no room for it, the data still goes from view (it is in its account)
+  try { localStorage.setItem(STASH(owner), JSON.stringify({ keys, settings, at: Date.now() })); } catch (e) { console.warn('Account data not kept aside:', e.message); }
   for (const k of ACCOUNT_KEYS) localStorage.removeItem(k);
-  for (const k of [...ACCOUNT_SETTINGS, ...SYNC_FIELDS.filter((f) => f !== 'lang')]) delete ctx.settings[k]; // the defaults come back on reload
+  for (const k of fields) delete ctx.settings[k]; // the defaults come back on reload
+  let back = null;
+  try { back = JSON.parse(localStorage.getItem(STASH(id)) || 'null'); } catch { /* a broken one: from the account */ }
+  if (back) {
+    for (const [k, v] of Object.entries(back.keys || {})) { try { localStorage.setItem(k, v); } catch { /* full: the sync brings it */ } }
+    Object.assign(ctx.settings, back.settings || {});
+    localStorage.removeItem(STASH(id));
+  }
   ctx.saveSettingsRaw();
   localStorage.setItem(OWNER_KEY, id);
   ctx.track('social', 'account-switch');
-  // the rides' full records too, then a fresh start with the new account's data
-  Promise.allSettled([...ids.map((x) => ctx.deleteRide(x)), ctx.deleteDraft()]).finally(() => location.reload()); // and a ride cut off by a reload
+  // the full records of the rides stay (only a history that lists them opens them); the cut-off ride swaps too
+  Promise.resolve(ctx.swapDraft(owner, id)).catch(() => {}).finally(() => location.reload());
   return true;
 }
 
