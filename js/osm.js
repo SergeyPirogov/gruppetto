@@ -176,13 +176,17 @@ export function landFromOsm(osm, toXY, X, Y, H, SEG) {
   }
   const out = [];
   for (const { ring, levels } of buildings) {
+    // the centroid, worked out round the ring's first point: the projection's coordinates are millions of
+    // metres (5.4 million north at 48 degrees), the cross products of two of them are 1e13 and lose their last
+    // two digits, which put a house tens of metres from where it stands, in the road or on another stretch of it
+    const ox = ring[0][0], oy = ring[0][1];
     let cx = 0, cy = 0, area = 0;
     for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-      const f = ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
-      area += f; cx += (ring[j][0] + ring[i][0]) * f; cy += (ring[j][1] + ring[i][1]) * f;
+      const ax = ring[j][0] - ox, ay = ring[j][1] - oy, bx = ring[i][0] - ox, by = ring[i][1] - oy, f = ax * by - bx * ay;
+      area += f; cx += (ax + bx) * f; cy += (ay + by) * f;
     }
     if (Math.abs(area) < 1) continue;
-    cx /= 3 * area; cy /= 3 * area;
+    cx = cx / (3 * area) + ox; cy = cy / (3 * area) + oy;
     let bk = -1, bd = Infinity;
     const gi = Math.floor(cx / NC), gj = Math.floor(cy / NC);
     for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) {
