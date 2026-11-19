@@ -62,8 +62,10 @@ export function obcIntents(changes, prev) {
 // Zwift Ride: the shift buttons go by direction on both units (up = harder, down = easier), ▲ / ▼
 // the same; the paddles (the brake levers) change lane: left paddle left, right paddle right.
 const RIDE_TO_INTENT = {
-  shiftUpR: 'harder', shiftUpL: 'harder', up: 'harder',
-  shiftDownR: 'easier', shiftDownL: 'easier', down: 'easier',
+  // as in Zwift: the right hand's shift buttons make it harder, the left hand's easier (Zwift Play and
+  // Click: + on the right, − on the left), whichever of the side's two buttons sends it
+  shiftUpR: 'harder', shiftDownR: 'harder', up: 'harder',
+  shiftUpL: 'easier', shiftDownL: 'easier', down: 'easier',
   paddleL: 'left', paddleR: 'right', a: 'toggleErg', z: 'skip',
   left: 'bigEasier', right: 'bigHarder', // workout intensity ±5 %, free ride climb difficulty ±10 %
   b: 'togglePause', y: 'camera', powerUpL: 'pacer', powerUpR: 'hud',
