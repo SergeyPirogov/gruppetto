@@ -2162,5 +2162,4 @@ select.seg-src { display: none; }
 .prog-charts .pc-table { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
 .prog-charts #fit-chart { height: 220px; }
 
-/* the next interval's length beside its target, in the workout panel */
-.wk-next-dur { font-size: .7em; font-weight: 700; color: var(--muted); white-space: nowrap; }
+
