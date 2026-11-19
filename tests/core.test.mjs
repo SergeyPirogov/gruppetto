@@ -287,8 +287,8 @@ test('low power starts the bike from standstill on a climb', () => {
 });
 
 test('Zwift Ride: shift buttons by direction, paddles change lane', async () => {
-  for (const b of ['shiftUpR', 'shiftUpL', 'up']) assert.equal(rideIntent(b), 'harder');
-  for (const b of ['shiftDownR', 'shiftDownL', 'down']) assert.equal(rideIntent(b), 'easier');
+  for (const b of ['shiftUpR', 'shiftDownR', 'up']) assert.equal(rideIntent(b), 'harder');
+  for (const b of ['shiftUpL', 'shiftDownL', 'down']) assert.equal(rideIntent(b), 'easier');
   assert.equal(rideIntent('paddleL'), 'left');
   assert.equal(rideIntent('paddleR'), 'right');
   assert.equal(rideIntent('left'), 'bigEasier');

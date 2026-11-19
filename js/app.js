@@ -4652,7 +4652,7 @@ $('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value
 // ---------- Virtual gears & controller actions ----------
 
 const BUTTON_LABELS = {
-  shiftUpL: 'left shift up (gear +)', shiftDownL: 'left shift down (gear −)', shiftUpR: 'right shift up (gear +)', shiftDownR: 'right shift down (gear −)',
+  shiftUpL: 'left shift (gear −)', shiftDownL: 'left shift (gear −)', shiftUpR: 'right shift (gear +)', shiftDownR: 'right shift (gear +)',
   paddleL: 'left paddle (lane ◀)', paddleR: 'right paddle (lane ▶)',
   up: '▲', down: '▼', left: '◀ (easier: −5 % / −10 %)', right: '▶ (harder: +5 % / +10 %)', a: 'A (ERG / hold power)', b: 'B (pause)', y: 'Y (camera)', z: 'Z (skip interval / new lap)',
   powerUpL: 'Power-up left (pacer)', powerUpR: 'Power-up right (HUD)', onOffL: 'on/off left', onOffR: 'on/off right',
@@ -5053,7 +5053,7 @@ const KEYS = [
 /** The Zwift controllers' buttons (js/controls.js RIDE_TO_INTENT); a string alone is a heading. */
 const ZWIFT_KEYS = [
   'Zwift Ride and Zwift Play',
-  [['Shift +', 'Shift −'], 'Harder / easier gear, either hand (in ERG ±1 % intensity)'],
+  [['+ (right)', '− (left)'], 'Harder / easier gear, as in Zwift (in ERG ±1 % intensity)'],
   [['▲', '▼'], 'Harder / easier gear'],
   [['◀', '▶'], 'Big step easier / harder: workout ±5 %, free ride climbs ±10 %'],
   [['Left paddle', 'Right paddle'], 'Lane left / right'],
