@@ -108,8 +108,8 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       return send(route, 200, id);
     }
     if (p === '/rest/v1/rpc/join_group_ride') {
-      const q = JSON.parse(body), g = (db.rides || []).find((r) => r.id === q.p_id);
-      if (g && g.joined !== q.p_on) { g.joined = q.p_on; g.riders += q.p_on ? 1 : -1; }
+      const q = JSON.parse(body || '{}'), g = (db.rides || []).find((r) => r.id === q.p_id), on = q.p_on !== false;
+      if (g && g.joined !== on) { g.joined = on; g.riders += on ? 1 : -1; }
       return send(route, 204);
     }
     if (p === '/rest/v1/rpc/start_group_ride') { // the host starts a held ride (0010)
@@ -506,6 +506,29 @@ test('a ride ridden on another device: its record comes from the account (FIT, u
   await context.close();
 });
 
+test('the groups hub: a ride picked in the list shows its details beside it, on a wide screen only', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  const mk = (n, title, min, route) => ({ id: `22222222-0000-4000-8000-00000000000${n}`, title, route_id: route, starts_at: new Date(Date.now() + min * 60e3).toISOString(), host_name: 'Taras', mine: false, riders: 4 + n, joined: false, kind: 'ride', laps: 1, league_id: null, league_title: null, held: false });
+  mock.db.rides = [mk(1, 'Tempo group', 180, 'rolling'), mk(2, 'Long Saturday', 400, 'rolling')];
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#hdr-account.in');
+  await page.evaluate(() => document.getElementById('hdr-group').click());
+  await page.waitForSelector('.gr-row');
+  assert.match(await page.textContent('#gr-detail h3'), /Tempo group/); // the first one, until another is picked
+  assert.match(await page.textContent('#gr-detail'), /Taras/);
+  assert.match(await page.textContent('#gr-detail'), /\d+(\.\d)? km/); // distance and climb of its route
+  await page.click('[data-row$="2"] .gr-what');
+  assert.match(await page.textContent('#gr-detail h3'), /Long Saturday/);
+  await page.click('#gr-detail [data-act="join"]'); // the pane's Join is the row's Join
+  await page.waitForSelector('#gr-detail [data-act="leave"]');
+  assert.ok(mock.db.requests.some((r) => r.path === '/rest/v1/rpc/join_group_ride'));
+  await page.setViewportSize({ width: 420, height: 800 }); // a phone: no pane
+  await page.click('[data-row$="1"] .gr-what');
+  assert.equal(await page.isHidden('#gr-detail'), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('a held ride, not yours: waiting for the host, then off once the database has its start', async () => {
   const mock = mockSupabase({ profile: PROFILE() });
   mock.db.rides = [{ id: '22222222-0000-4000-8000-000000000002', title: 'Their crit', route_id: 'rolling', starts_at: new Date(Date.now() + 7200e3).toISOString(), host_name: 'Taras', mine: false, riders: 3, joined: true, kind: 'race', laps: 1, league_id: null, league_title: null, held: true }];
@@ -517,6 +540,8 @@ test('a held ride, not yours: waiting for the host, then off once the database h
   await page.evaluate(() => { window.__pretendTrainer = false; document.querySelector('.gr-row [data-act="ride"]').click(); });
   await page.waitForFunction(() => /Waiting for the host/.test(document.getElementById('countdown').textContent), null, { timeout: 20000 });
   assert.equal(await page.isHidden('#gr-host'), true); // no start buttons for a rider
+  assert.match(await page.textContent('#gr-sl-ready'), /\d+ of \d+ on the line/); // the start line's progress
+  assert.equal(await page.isVisible('#chat-box.lobby #chat-input'), true); // the chat beside the list, its field open
   Object.assign(mock.db.rides[0], { held: false, starts_at: new Date(Date.now() + 60e3).toISOString() });
   await page.waitForFunction(() => /Group start in/.test(document.getElementById('countdown').textContent), null, { timeout: 30000 }); // read within 20 s
   assert.deepEqual(errors, []);

@@ -1529,15 +1529,26 @@ function groupHostRender() {
 function startListRender() {
   const G = ride?.group, el = $('gr-startlist');
   const show = !!G && !G.go;
+  // on a wide screen the chat sits beside the list while everyone gathers, its field open (without taking the keys: the
+  // power slider and the arrows still work), and back to the road's small chat at the start
+  const lobby = show && matchMedia('(min-width: 1000px)').matches;
+  if (lobby !== $('chat-box').classList.contains('lobby')) {
+    $('chat-box').classList.toggle('lobby', lobby);
+    chatOpen(lobby, false); // the class is off by now when it closes, so the field really closes
+  }
   if (!show) { if (!el.hidden) el.hidden = true; return; }
   el.hidden = false;
   const catOf = (wkg) => (!(wkg > 0) ? '' : wkg >= 4 ? 'A' : wkg >= 3.2 ? 'B' : wkg >= 2.5 ? 'C' : 'D');
   const me = { id: 'me', name: G.me?.name || settings.name || tr('you'), color: settings.jersey, cat: categoryOf(settings.ftp, settings.weight), me: true };
   const rows = [me, ...G.mates.list(Date.now()).map((m) => ({ id: m.id, name: m.name, color: m.color, cat: catOf(m.wkg) }))];
-  const key = rows.map((r) => `${r.id}${r.cat}${r.name}`).join('|');
+  // there is no «ready» flag: on the line (the channel's riders) against signed up (the calendar's count, at the time you opened it)
+  const signed = Math.max(G.signed || 0, rows.length);
+  const key = rows.map((r) => `${r.id}${r.cat}${r.name}`).join('|') + `/${signed}`;
   if (el.dataset.key === key) return; // redrawn only when someone comes or goes
   el.dataset.key = key;
   $('gr-sl-n').textContent = String(rows.length);
+  $('gr-sl-ready').textContent = tr('{n} of {m} on the line', { n: rows.length, m: signed });
+  $('gr-sl-fill').style.width = `${Math.round(rows.length / signed * 100)}%`;
   $('gr-sl-rows').innerHTML = rows.map((r) => `<li class="${r.me ? 'me' : ''}"><i style="background:${esc(r.color || '#888')}"></i>`
     + `${r.cat ? `<span class="sl-cat cat-${r.cat}">${r.cat}</span>` : '<span class="sl-cat"></span>'}<span class="sl-name">${esc(r.name || tr('Rider'))}</span>${r.me ? `<small>${tr('you')}</small>` : ''}</li>`).join('');
 }
@@ -1606,7 +1617,7 @@ async function startRide(opts) {
     ride.dist = -Math.floor(slot / 4) * 1.9;
     ride.group = {
       id: group.id, title: group.title, t0: group.held ? Infinity : group.startsAt, go: !group.held && Date.now() >= group.startsAt, me: group.me,
-      held: !!group.held, host: !!group.host, polledAt: Date.now(), // held: on the line till its host starts it (0010)
+      held: !!group.held, host: !!group.host, signed: group.signed || 0, polledAt: Date.now(), // held: on the line till its host starts it (0010)
       mates: new Mates(group.me.id), live: null, sentAt: 0,
       chat: new ChatLog(group.me.id), gate: new SendGate(), reacts: new Reactions(), watchers: new Watchers(), shownAt: 0, // chat (#85), spectators (#86)
     };
@@ -4481,15 +4492,17 @@ function chatRender() {
     + ` <span>${esc(m.quick ? tr(m.text) : m.text)}</span></div>`).join('');
 }
 /** The field to write in, with the quick phrases (open), or closed back to the road. */
-function chatOpen(show) {
+function chatOpen(show, focus = true) {
   const bar = $('chat-bar');
   if (!bar) return;
+  // in the wide lobby the field stays open: sending or Esc only clears it (it is a place of its own, not over the road)
+  if (!show && $('chat-box').classList.contains('lobby')) { $('chat-input').value = ''; $('chat-input').blur(); chatRender(); return; }
   if (show && !bar.dataset.ready) {
     bar.dataset.ready = '1';
     $('chat-quick').innerHTML = QUICK.map((q, i) => `<button class="pill-btn chat-q" data-q="${q.id}" title="${i + 1}">${esc(tr(q.text))}</button>`).join('');
   }
   bar.hidden = !show;
-  if (show) $('chat-input').focus(); else { $('chat-input').value = ''; $('chat-input').blur(); }
+  if (show) { if (focus) $('chat-input').focus(); } else { $('chat-input').value = ''; $('chat-input').blur(); }
   chatRender();
 }
 /** Send a message ({ m }) or a quick phrase ({ q }), at the pace the others' screens allow. */
