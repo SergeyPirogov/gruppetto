@@ -382,7 +382,7 @@ async function toggleDevice(d, { add = false } = {}) {
     if (error) {
       const noService = error.name === 'NotFoundError' || /service|characteristic/i.test(error.message);
       $(`${d.key}-status`).textContent = noService && $('show-all').checked
-        ? tr('This device does not have the required service — choose another one')
+        ? tr('This device does not have the required service. Choose another one')
         : tr('Could not connect: {error}', { error: error.message });
     }
   }
@@ -394,7 +394,7 @@ function initLobby() {
   if (bluetoothAvailable() && !navigator.bluetooth.getDevices) {
     $('autoconnect-hint').hidden = false;
     $('copy-flag').onclick = async () => {
-      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = tr('Copied — paste it in the address bar'); } catch { /* clipboard blocked */ }
+      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = tr('Copied. Paste it into the address bar'); } catch { /* clipboard blocked */ }
     };
   }
   if (!bluetoothAvailable()) {
@@ -558,7 +558,7 @@ for (const b of document.querySelectorAll('[data-rf]')) {
 function localizeClimbs(r) {
   if (r.custom) {
     const src = r.elevSource || (/no elevation/.test(r.description) ? 'none' : 'gpx');
-    const from = tr({ none: 'Imported from GPX (no elevation in the file: flat).', terrain: 'Imported from GPX (elevation from a terrain model).', gpx: 'Imported from GPX.' }[src]);
+    const from = tr({ none: 'Imported from GPX (no elevation data in the file, so flat).', terrain: 'Imported from GPX (elevation from a terrain model).', gpx: 'Imported from GPX.' }[src]);
     const km = (r.length / 1000).toFixed(1);
     r.description = `${from} ${r.oneWay ? tr('Point to point, finish at {km} km.', { km }) : tr('A loop of {km} km: ride it lap after lap.', { km })}`;
   }
@@ -654,10 +654,10 @@ async function openStravaRoutes() {
   track('strava', 'routes');
   let routesOnStrava;
   try { routesOnStrava = await stravaClient.routes(); } catch (e) {
-    list.innerHTML = `<p class="muted">${esc(tr('Strava did not give the routes: {error}', { error: e.message }))}</p>`;
+    list.innerHTML = `<p class="muted">${esc(tr('Could not load your Strava routes: {error}', { error: e.message }))}</p>`;
     return;
   }
-  const hint = `<p class="hint">${esc(tr('Only public routes? Your private ones show after connecting Strava again (Profile → Connections).'))}</p>`;
+  const hint = `<p class="hint">${esc(tr('Only seeing public routes? Reconnect Strava to see your private ones (Profile → Connections).'))}</p>`;
   if (!routesOnStrava.length) { list.innerHTML = `<p class="muted">${esc(tr('No ride routes on your Strava yet. Make one in Strava\'s route builder.'))}</p>${hint}`; return; }
   list.innerHTML = routesOnStrava.map((r) => `<button class="option sr-row" data-id="${esc(r.id)}" ${r.distance > 150000 ? 'disabled' : ''}>`
     + `<b>${r.starred ? '★ ' : ''}${esc(r.name)}</b><small>${(r.distance / 1000).toFixed(1)} ${U.km} · ↗ ${Math.round(r.gain)} ${U.m}${r.distance > 150000 ? ` · ${esc(tr('over 150 km'))}` : ''}</small></button>`).join('') + hint;
@@ -665,14 +665,14 @@ async function openStravaRoutes() {
     const b = ev.target.closest('[data-id]');
     if (!b || b.disabled) return;
     const r = routesOnStrava.find((x) => x.id === b.dataset.id);
-    b.disabled = true; b.querySelector('small').textContent = tr('Getting the route…');
+    b.disabled = true; b.querySelector('small').textContent = tr('Loading the route…');
     try {
       const gpx = await stravaClient.routeGpx(r.id);
       box.hidden = true;
       track('strava', 'route-import');
       await importGpxText(gpx, `${r.name}.gpx`);
     } catch (e) {
-      b.disabled = false; b.querySelector('small').textContent = tr('Strava did not give the route: {error}', { error: e.message });
+      b.disabled = false; b.querySelector('small').textContent = tr('Could not load the Strava route: {error}', { error: e.message });
     }
   };
 }
@@ -1399,7 +1399,7 @@ async function ensureScene() {
       scene = new Scene3D(canvas);
     } catch (e) {
       console.warn('3D unavailable, falling back to 2D', e);
-      toast(tr('3D graphics are not available in this browser — using 2D'));
+      toast(tr('3D graphics are not available in this browser. Using 2D'));
       want = '2d';
       const fresh = canvas.cloneNode(false);
       canvas.replaceWith(fresh);
@@ -1512,7 +1512,7 @@ function groupCheckStart() {
 function groupStarted(G, t0) {
   G.held = false; G.t0 = t0;
   $('gr-host').hidden = true;
-  toast(tr('The host started the ride: off in {t}', { t: fmtTime(Math.max(0, Math.ceil((t0 - Date.now()) / 1000))) }));
+  toast(tr('The host started the ride. Starting in {t}', { t: fmtTime(Math.max(0, Math.ceil((t0 - Date.now()) / 1000))) }));
 }
 /** The host's start buttons, while their held ride waits; and who is on the line. */
 function groupHostRender() {
@@ -1522,7 +1522,7 @@ function groupHostRender() {
   el.hidden = !show;
   if (show) {
     const n = G.mates.list(Date.now()).length + 1;
-    const line = tr('{n} on the line, you too', { n });
+    const line = tr('{n} on the line, including you', { n });
     if ($('gr-host-line').textContent !== line) $('gr-host-line').textContent = line;
   }
 }
@@ -1610,7 +1610,7 @@ async function startRide(opts) {
     // free-ride pacer (#27): steady at the W/kg you set, waiting at the bottom of each climb
     pacer: racing || group ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
   };
-  if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto sees when you stop and gives your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
+  if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto detects when you stop and calculates your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
   if (group) {
     // on the line, a place of your own: four across, rows 1.9 m apart, picked by your account (the others' differ)
     const slot = [...String(group.me.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 12;
@@ -1715,7 +1715,7 @@ function advance(now = performance.now()) {
   ride.lastSim = now;
   if (left <= 0 || ride.paused) return;
   if (left > MAX_GAP_S && !ride.simulated && !powerSamples.has(from, now)) {
-    toast(tr('No data from the trainer for {s} s — this gap was skipped', { s: Math.round(left) }));
+    toast(tr('No data from the trainer for {s} s. This gap was skipped', { s: Math.round(left) }));
     return;
   }
   const { route } = ride;
@@ -1998,7 +1998,7 @@ function groupRaceFinished() {
   const avgW = s?.avgPower ?? null, wkg = avgW ? Math.round((avgW / Math.max(30, settings.weight)) * 100) / 100 : null;
   groupSent = { id: ride.group.id, p: null };
   groupSent.p = ride.group.sent = groupFinish(ride.group.id, { time: Math.round(ride.race.myTime * 10) / 10, avgW, wkg, sim, ftpWkg: settings.ftp && settings.weight ? Math.round(settings.ftp / settings.weight * 100) / 100 : null })
-    .catch((e) => toast(tr('The result did not reach the leaderboard: {error}', { error: e.message })));
+    .catch((e) => toast(tr('Could not post your result to the leaderboard: {error}', { error: e.message })));
 }
 
 /**
@@ -2498,7 +2498,7 @@ async function openMini() {
   return ok;
 }
 $('btn-pip').hidden = !pipSupport();
-// the Ride button's menu: Ride, or Watch & ride (the mini window over a film or the match, no 3D world)
+// the Ride button's menu: Ride, or Watch & ride (the mini window over a movie or the game, no 3D world)
 $('btn-start-more').hidden = !pipSupport() && !settings.overlay;
 // the Mac overlay: looked for while it is on in Profile, from the lobby already, so Watch & ride knows at the click
 function overlaySetting() { if (settings.overlay) overlayStart((on) => { if (on) track('overlay'); }); else overlayStop(); }
@@ -2949,7 +2949,7 @@ function resumeFrom(d) {
   ride.draftAt = ride.elapsed;
   if (d.meta.intensity) settings.intensity = d.meta.intensity;
   if (ride.workout && !ride.workoutDone) { const t = targetAt(ride.workout, ride.workoutT, settings.ftp); if (t) ride.target = ergTarget(t); }
-  toast(tr('Going on from {time}', { time: fmtTime(ride.elapsed) }));
+  toast(tr('Continuing from {time}', { time: fmtTime(ride.elapsed) }));
 }
 
 /** An unfinished ride found on opening the page: save it to history (then upload or download it) or discard it. */
@@ -3136,7 +3136,7 @@ function renderProgress() {
     + `<div class="lvl-bar"><i style="width:${pct}%"></i></div>`
     + `<small class="pg-foot">${progress.rides} ${tr('rides')} · ${Math.round(progress.km)} ${U.km} · ${progress.gain} ${tr('m climbed')}</small></article>`
     + `<article class="pg-tile"><small class="pg-label">FTP</small><div class="pg-big"><b>${settings.ftp}</b><span>${U.W}${wkg > 0 ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''} · ${tr('Category')} ${categoryOf(settings.ftp, settings.weight)}</span></div>`
-    + `<small class="pg-foot">${ramp ? tr('ramp test on {date}', { date: new Date(ramp.date).toLocaleDateString(locale, { day: 'numeric', month: 'long' }) }) : ftpKnown() ? tr('set by you') : tr('an estimate: a ramp test finds yours')}</small>`
+    + `<small class="pg-foot">${ramp ? tr('ramp test on {date}', { date: new Date(ramp.date).toLocaleDateString(locale, { day: 'numeric', month: 'long' }) }) : ftpKnown() ? tr('set by you') : tr('an estimate: take a ramp test to find yours')}</small>`
     + `<button type="button" class="ghost pg-btn" id="pg-ftp-test">${tr(ramp ? 'Take the test again' : 'Take the ramp test')}</button></article>`
     + (f ? `<article class="pg-tile"><small class="pg-label">${tr('Form today')}</small><div class="pg-three"><span><b class="c-fit">${Math.round(f.ctl)}</b><small>${tr('Fitness')}</small></span><span><b class="c-fat">${Math.round(f.atl ?? f.ctl - f.form)}</b><small>${tr('Fatigue')}</small></span><span><b class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</b><small>${tr('Form')}</small></span></div>`
       + `<small class="pg-foot">${esc(BAND[formBand(f.form)])}</small></article>` : '');
@@ -3172,12 +3172,12 @@ async function challengeFriend(e) {
   const route = routes.find((r) => r.id === e.routeId);
   // the default name says nothing to a friend: «A friend» then, and a hint to set yours
   const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
-  if (!named) toast(tr('Set your name in Profile, so friends see who challenges them'));
+  if (!named) toast(tr('Set your name in Profile so friends can see who challenges them'));
   const url = `${location.origin}${location.pathname}#challenge=${await encodeChallenge(e, named ? settings.name.trim() : '')}`;
   const text = tr('Race my ghost on {route} in Gruppetto: {km} km in {time}', { route: route?.name || '', km: (e.summary.distance / 1000).toFixed(1), time: fmtTime(e.summary.duration) });
   track('challenge-send');
   if (navigator.share) { try { await navigator.share({ title: 'Gruppetto', text, url }); return; } catch (err) { if (err.name === 'AbortError') return; } }
-  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(tr('Link copied: send it to a friend')); } catch { prompt(tr('Copy the link'), url); }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(tr('Link copied. Send it to a friend')); } catch { prompt(tr('Copy the link'), url); }
 }
 
 /** A page opened from a challenge link: the friend's ride becomes the ghost of its route, which is picked. */
@@ -3187,7 +3187,7 @@ async function openChallenge() {
   window.history.replaceState(null, '', location.pathname + location.search); // not «history»: that is the rides
   const c = await decodeChallenge(code);
   const route = c && routes.find((r) => r.id === c.routeId && !r.custom);
-  if (!route) { alertBox(tr('This challenge link is broken or from a newer Gruppetto: ask for a new one.')); return; }
+  if (!route) { alertBox(tr('This challenge link is broken or from a newer version of Gruppetto. Ask for a new one.')); return; }
   challenge = c; saveChallenge();
   track('challenge-open');
   settings.routeId = route.id;
@@ -3204,7 +3204,7 @@ function renderChallenge() {
   const who = challenge.name && challenge.name !== DEFAULT_SETTINGS.name ? challenge.name : tr('A friend'); // links made before names were checked say «Me»
   $('ch-title').textContent = tr('{name} challenges you on {route}', { name: who, route: route.name });
   $('ch-goal').textContent = tr('To beat: {km} km in {time}', { km: (challenge.summary.distance / 1000).toFixed(1), time: fmtTime(challenge.summary.duration) });
-  $('ch-how').textContent = tr('Their ghost rides beside you exactly as they rode. Be ahead of it at the end, and the summary says by how much.');
+  $('ch-how').textContent = tr('Their ghost rides beside you exactly as they rode. Finish ahead of it, and the summary shows by how much.');
 }
 $('ch-ride').onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); updateSummary(); startRide(); };
 $('ch-drop').onclick = () => { track('challenge-dismiss'); challenge = null; saveChallenge(); renderChallenge(); updateSummary(); };
@@ -3313,7 +3313,7 @@ function showSummary(e, { live = false, from = null } = {}) {
   ] : [];
   // short pauses: how many, how long; older rides from their 5 s chart
   const stops = e.stops || stopsOf(e.chart.pw, e.chart.every);
-  if (sum && stops.sec) stats.push([tr('Not pedalling'), `${fmtTime(stops.sec)} · ${stops.n} ${lang === 'uk' ? plural(stops.n, ['зупинка', 'зупинки', 'зупинок']) : stops.n === 1 ? 'stop' : 'stops'}`]);
+  if (sum && stops.sec) stats.push([tr('Not pedaling'), `${fmtTime(stops.sec)} · ${stops.n} ${lang === 'uk' ? plural(stops.n, ['зупинка', 'зупинки', 'зупинок']) : stops.n === 1 ? 'stop' : 'stops'}`]);
   if (sum) { const low = e.wbalMin ?? Math.min(...wb); stats.push([tr('Lowest W′bal'), `${(low / 1000).toFixed(1)} ${tr('kJ')} · ${Math.round((low / wPrime) * 100)}%`]); }
   if (sum && e.ramp && sum.best1min) stats.push([tr('Estimated FTP'), `${Math.round(sum.best1min * 0.75)} ${U.W}`]);
   if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([tr('vs {name}', { name: e.ghostName || tr('ghost') }), `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} ${U.m} ${e.ghostGap >= 0 ? '🏆' : ''}`]);
@@ -3453,7 +3453,7 @@ function applySummaryLayout() {
  * «Upload again» after a ✓: for a ride deleted there (or gone wrong), as long as its full record is still here.
  * kind: 'icu', 'strava' or 'garmin'.
  */
-const againLink = (kind) => (shown.rec ? ` · <button class="link-btn up-again" data-again="${kind}" title="${esc(tr('Deleted it there? Send this ride once more'))}">${tr('Upload again')}</button>` : '');
+const againLink = (kind) => (shown.rec ? ` · <button class="link-btn up-again" data-again="${kind}" title="${esc(tr('Deleted it there? Upload this ride again'))}">${tr('Upload again')}</button>` : '');
 const AGAIN = { icu: ['uploadedId', () => uploadToIntervals()], strava: ['stravaId', () => uploadToStrava()], garmin: ['garminId', () => uploadToGarmin()] };
 $('summary').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-again]');
@@ -4002,7 +4002,7 @@ async function downloadAllRides() {
       files.push({ name: `${rideFileName(rec.startTime, rideTitle(e))}.fit`, data: rec.toFIT(), date: rec.startTime });
     }
     track('backup', !files.length ? 'empty' : files.length < 10 ? '1-9' : files.length < 30 ? '10-29' : '30+');
-    if (!files.length) { toast(tr('No ride is kept in full on this device yet')); return; }
+    if (!files.length) { toast(tr('No full ride data is stored on this device yet')); return; }
     const d = new Date(), p = (n) => String(n).padStart(2, '0');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([makeZip(files)], { type: 'application/zip' }));
@@ -4069,7 +4069,7 @@ async function connectIntervals({ quiet = false } = {}) {
     const notes = [];
     if (st.otherSport) notes.push(tr('other sports skipped: {n}', { n: st.otherSport }));
     if (st.unstructured) notes.push(tr('without intervals (free ride): {n}', { n: st.unstructured }));
-    const found = n ? tr('cycling workouts in the next 7 days: {n} — listed first in “Workouts”', { n }) : tr('no cycling workouts in your calendar for the next 7 days');
+    const found = n ? tr('cycling workouts in the next 7 days: {n}, listed first in “Workouts”', { n }) : tr('no cycling workouts in your calendar for the next 7 days');
     $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} ${U.W} · ${found}${notes.length ? ` (${notes.join(', ')})` : ''}`;
     $('btn-icu').textContent = tr('Refresh');
     $('btn-icu-forget').hidden = false;
@@ -4191,7 +4191,7 @@ async function uploadToIntervals() {
     if (lastRide && rec === recorder) lastRide.uploadedId = e.uploadedId;
     if (history.includes(e)) saveHistory();
     status.innerHTML = id
-      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${icuClient.unpaired ? tr('not paired with the planned workout (moved or deleted there?)') : tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>${againLink('icu')}`
+      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${icuClient.unpaired ? tr('not matched to the planned workout (moved or deleted?)') : tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>${againLink('icu')}`
       : `${tr('Uploaded to intervals.icu ✓')}${againLink('icu')}`;
     btn.hidden = true;
     $('sum-icu').hidden = true;
@@ -4244,7 +4244,7 @@ function initStrava() {
   openDrawer('profile', 'links');
   requestAnimationFrame(() => $('strava-card').scrollIntoView({ block: 'start' }));
   if (back.error) {
-    $('strava-status').textContent = back.error === 'no-write' ? tr('Strava: tick «Upload your activities» to let Gruppetto send rides') : tr('Strava: not connected');
+    $('strava-status').textContent = back.error === 'no-write' ? tr('Strava: check “Upload your activities” to let Gruppetto upload rides') : tr('Strava: not connected');
     track('strava', back.error);
     return;
   }
@@ -4317,7 +4317,7 @@ async function initGarmin() {
       if (got.mfa) {
         garminMfa = got.mfa;
         $('f-garmin-code').hidden = false; $('f-garmin-code').required = true; $('f-garmin-code').focus();
-        st.textContent = tr('Garmin sent you a code: type it in');
+        st.textContent = tr('Garmin sent you a code. Enter it to continue');
         btn.textContent = tr('Confirm');
         return;
       }
@@ -4329,9 +4329,9 @@ async function initGarmin() {
     } catch (err) {
       // 429: Garmin's gate is limiting sign-ins (its "token 429" said nothing); trying again at once makes it longer
       st.innerHTML = esc(err.status === 429
-        ? tr('Garmin is limiting sign-ins right now (429). Your password was right: wait an hour and try once more, since trying again and again makes the wait longer.')
+        ? tr('Garmin is rate-limiting sign-ins right now (429). Your password was correct. Wait an hour and try again; repeated attempts make the wait longer.')
         : tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') }))
-        + ` <span class="g-hand">${esc(tr('Meanwhile a ride still goes by hand: Download .FIT on the finish screen, then'))} <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a>.</span>`;
+        + ` <span class="g-hand">${esc(tr('Meanwhile you can upload a ride manually: Download .FIT on the finish screen, then'))} <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a>.</span>`;
       track('garmin', err.status === 429 ? 'limited' : 'failed');
     } finally { btn.disabled = false; }
   };
@@ -4372,8 +4372,8 @@ async function uploadToGarmin() {
   } catch (err) {
     track('garmin', 'failed');
     // the way that always works: the file, and Garmin Connect's own import page
-    status.innerHTML = `${esc(tr('Upload failed: {error}', { error: err.status === 429 ? tr('Garmin is limiting requests right now (429), try later') : err.message }))}`
-      + ` <span class="g-hand">${esc(tr('Send it by hand:'))} <button class="link-btn" data-g-fit>${esc(tr('Download .FIT'))}</button> → <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a></span>`;
+    status.innerHTML = `${esc(tr('Upload failed: {error}', { error: err.status === 429 ? tr('Garmin is rate-limiting requests right now (429). Try again later') : err.message }))}`
+      + ` <span class="g-hand">${esc(tr('Upload it manually:'))} <button class="link-btn" data-g-fit>${esc(tr('Download .FIT'))}</button> → <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a></span>`;
     status.querySelector('[data-g-fit]').onclick = () => { track('garmin', 'by-hand'); download('fit'); };
     btn.disabled = false;
     btn.textContent = tr('Try again');
@@ -4732,8 +4732,8 @@ function manualLap() {
 /** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots); the ones after have no key (C and the menu). */
 const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv', 'top', 'drone', 'tight', 'high', 'offset', 'long', 'car'];
 const CAMERA_NAMES = {
-  chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: from the front',
-  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: by the road', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast', top: 'Camera: from above', drone: 'Camera: drone',
+  chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: front view',
+  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: roadside', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast', top: 'Camera: overhead', drone: 'Camera: drone',
   tight: 'Camera: close behind', high: 'Camera: high behind', offset: 'Camera: behind, to the right', long: 'Camera: long lens', car: 'Camera: team car',
 };
 function setCameraView(mode) {
@@ -4798,7 +4798,7 @@ function sendVirtualGear() {
     if (ok) { ride.lastSentWheel = gear; return; }
     ride.shiftMode = 'grade';
     ride.lastSentGrade = null;
-    toast(tr('The trainer does not accept wheel circumference — using grade-based gears'));
+    toast(tr('The trainer does not accept wheel size. Using grade-based gears'));
   });
 }
 
@@ -4852,7 +4852,7 @@ function updateSpiralGuard(power, cadence) {
   ride.lowFor = low ? ride.lowFor + 1 : 0;
   if (ride.lowFor >= 3 && ride.ergFactor > 0.5) {
     ride.ergFactor = 0.5;
-    toast(hasCadence ? tr('Low cadence — ERG temporarily reduced') : tr('Power dropped — ERG temporarily reduced'));
+    toast(hasCadence ? tr('Low cadence: ERG power temporarily reduced') : tr('Power dropped: ERG power temporarily reduced'));
     cueSay('Spin up your cadence');
   } else if (ride.ergFactor < 1) {
     // restore only once the rider has clearly recovered (hysteresis avoids bouncing)
@@ -4888,8 +4888,8 @@ const cueSay = (s, vars) => {
   const L = speechLang();
   if (!voiceTold && L !== lang && typeof speechSynthesis !== 'undefined') {
     voiceTold = true;
-    toast(L ? tr('No Ukrainian voice on this device: the cues are in English. Add one in the system settings (Windows: Time & language → Speech) or open the app in Edge')
-      : tr('No voice on this device: the cues are beeps'));
+    toast(L ? tr('No Ukrainian voice on this device, so cues are in English. Add one in system settings (Windows: Time & language → Speech) or open the app in Edge')
+      : tr('No voice on this device, so cues are beeps'));
   }
   if (L) say(typeof s === 'function' ? s(L) : tIn(L, s, vars), L);
 };
@@ -5037,13 +5037,13 @@ const KEYS = [
   [['V'], 'Sound on/off'],
   [['P'], 'Pacer on / off'],
   [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · over the shoulder · front'],
-  [['6', '–', '9'], 'Camera: far behind · looking back · by the road · helicopter'],
+  [['6', '–', '9'], 'Camera: far behind · looking back · roadside · helicopter'],
   [['0'], 'Camera: TV broadcast, cutting between shots'],
   [['C'], 'Next camera'],
   [['H'], 'Hide / show the dashboard'],
   [['F'], 'Full screen'],
   [['M'], 'Map zoom'],
-  [['I'], 'Mini window over other apps (film, football, YouTube)'],
+  [['I'], 'Mini window over other apps (movie, football, YouTube)'],
   [['R'], 'Switch the rider: man / woman'],
   [['+', '−'], 'Simulator: power ±10 W'],
   [['Enter'], 'Group ride: chat (1–6 with the field empty: a quick phrase)'],
@@ -5072,15 +5072,15 @@ const OBC_KEYS = [
   [['Gear select'], 'Straight to that gear'],
   [['ERG +', 'ERG −'], 'Harder / easier (in ERG ±1 % intensity)'],
   [['▲', '▼'], 'Harder / easier gear'],
-  [['◀', '▶', 'Steer'], 'Lane left / right; a steering angle steers smoothly'],
+  [['◀', '▶', 'Steer'], 'Lane left / right; a steering angle gives smooth steering'],
   [['Skip'], 'Skip the interval (free ride: new lap)'],
   [['Pause', 'Resume'], 'Pause / resume'],
   [['HUD'], 'Hide / show the dashboard'],
 ];
 const KEYS_NOTES = {
   keys: '',
-  zwift: 'Connect them in Devices. A Zwift Ride is two units: add the left and the right one. The last button you pressed shows there, to check it.',
-  obc: 'Any controller the BikeControl app knows (Elite, Wahoo, Shimano, a gamepad) comes through as OpenBikeControl. Connect it in Devices.',
+  zwift: 'Connect them in Devices. A Zwift Ride is two units: add the left and the right one. The last button you pressed appears there so you can check it.',
+  obc: 'Any controller supported by the BikeControl app (Elite, Wahoo, Shimano, a gamepad) connects through OpenBikeControl. Connect it in Devices.',
 };
 let keysTab = 'keys';
 const keysRows = (rows) => rows.map((r) => typeof r === 'string'
@@ -5177,7 +5177,7 @@ async function openGarage() {
     if (!box.hidden) garage.start();
   } catch (e) {
     console.warn('Garage unavailable', e);
-    $('garage-loading').textContent = tr('3D graphics are not available in this browser — using 2D');
+    $('garage-loading').textContent = tr('3D graphics are not available in this browser. Using 2D');
   }
 }
 function closeGarage() {

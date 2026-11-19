@@ -87,7 +87,7 @@ function buildUi() {
   del.onclick = async () => {
     if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = tr('Tap again: delete the account and all its results'); return; }
     del.dataset.armed = ''; del.textContent = tr('Delete account');
-    try { await deleteAccount(); ctx.track('social', 'delete'); status(tr('Account deleted, with all its results. Your rides on this device stay.')); } catch (e) { status(e.message); }
+    try { await deleteAccount(); ctx.track('social', 'delete'); status(tr('Account deleted along with all its results. Your rides on this device are kept.')); } catch (e) { status(e.message); }
   };
   // the first sign-in's window
   for (const el of document.querySelectorAll('[data-ss-close]')) el.onclick = () => { $('social-setup').hidden = true; };
@@ -175,7 +175,7 @@ function renderHeader() {
   b.innerHTML = u
     ? `<i class="hdr-avatar" style="background:${ctx.esc(ctx.settings.jersey || '#7c3aed')}">${ctx.esc((name[0] || '?').toUpperCase())}</i><span class="hdr-who"><b>${ctx.esc(name)}</b><small>${ctx.esc(sub)}</small></span>`
     : `${GOOGLE_G}<span>${ctx.esc(tr('Sign in'))}</span>`;
-  b.title = u ? tr('Your account and leaderboards') : tr('Sign in to put your times on the leaderboards, and to have your profile on every device');
+  b.title = u ? tr('Your account and leaderboards') : tr('Sign in to post your times to the leaderboards and keep your profile on every device');
   // what wants an account wears a lock for a guest (looking stays open to anyone)
   for (const id of ['hdr-ua', 'hdr-group']) {
     const el = $(id);
@@ -224,8 +224,8 @@ const LOCK_IC = '<svg class="lock-ic" viewBox="0 0 24 24" role="img" aria-label=
 // ---------- A guest at something that wants an account ----------
 const LOCK_SEEN = 'gruppetto.lockSeen';
 const LOCKS = {
-  ua: { title: 'Ukraine leaderboard: sign-in needed', why: 'So that your kilometres and climbing count for your region. Anyone can view the leaderboard.', guest: 'Browse as a guest' },
-  group: { title: 'Group rides: sign-in needed', why: 'So that the others see who rides beside them. Anyone sees the calendar; joining and riding come after signing in.', guest: 'See the calendar as a guest' },
+  ua: { title: 'Ukraine leaderboard: sign-in needed', why: 'So your kilometers and climbing count for your region. Anyone can view the leaderboard.', guest: 'Browse as a guest' },
+  group: { title: 'Group rides: sign-in needed', why: 'So other riders can see who is beside them. Anyone can view the calendar; you need to sign in to join and ride.', guest: 'See the calendar as a guest' },
 };
 const OPENS = { tables: 'the climb, sprint and lap leaderboards', ua: 'Ukraine leaderboard', group: 'group rides', sync: 'your profile and history on every device' };
 
@@ -284,7 +284,7 @@ async function renderToday(force = false) {
       + `<b>${ctx.esc(regionName(profileRow.region, ctx.lang))}${r ? ` · ${tr('{place} of {n}', { place: r.place, n: regions.length })}` : ''}</b>`
       + `<span>${r ? tr('{km} km together, {riders} riding', { km: Math.round(Number(r.distance_km)).toLocaleString(ctx.locale), riders: r.riders }) : tr('No distance yet this week: be the first')}</span></button>`);
   } else if (!profileRow.country || profileRow.country === 'UA') {
-    tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ukraine leaderboard')}</small><b>${tr('Pick your region')}</b><span>${tr('and your kilometres count for it')}</span></button>`);
+    tiles.push(`<button class="me-tile" data-today="setup"><small>${tr('Ukraine leaderboard')}</small><b>${tr('Pick your region')}</b><span>${tr('and your kilometers count toward it')}</span></button>`);
   }
   const now = Date.now(), next = (rides || []).filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   const g = next.find((x) => x.joined) || next[0];
@@ -326,7 +326,7 @@ function renderRaceCard(g = raceRide) {
   box.className = `race-card${w.state !== 'later' ? ' hot' : ''}`;
   box.innerHTML = `<div class="rc-top"><span class="rc-badge">${ctx.esc(badge)}</span>${g.kind === 'race' ? `<span class="rc-kind">${ctx.esc(raceLabel(g, route))}</span>` : ''}</div>`
     + `<h2>${ctx.esc(g.title)}</h2>`
-    + `<div class="rc-meta"><span>${ctx.esc(when)}${left ? ` · <b>${ctx.esc(left)}</b>` : ''}</span><span>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))}${ctx.esc(laps + km)}</span></div>`
+    + `<div class="rc-meta"><span>${ctx.esc(when)}${left ? ` · <b>${ctx.esc(left)}</b>` : ''}</span><span>${ctx.esc(route?.name || tr('a route not in this version of Gruppetto'))}${ctx.esc(laps + km)}</span></div>`
     + `<div class="rc-who">👥 ${tr('{n} going', { n: g.riders })} · ${ctx.esc(g.host_name || tr('a rider'))}</div>`
     + `<div class="rc-acts">`
     + (can ? `<button class="primary" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
@@ -545,7 +545,7 @@ async function saveSetup() {
     profileRow = { ...profileRow, ...(await saveProfile(fields)) };
     $('social-setup').hidden = true;
     renderCard();
-    if (first) { status(tr('Your profile is in the account now, on every device you sign in on.')); await flush(); sync().catch((e) => console.warn('Account sync:', e.message)); }
+    if (first) { status(tr('Your profile is now saved to your account and available on every device you sign in on.')); await flush(); sync().catch((e) => console.warn('Account sync:', e.message)); }
   } catch (e) { $('ss-error').textContent = e.message; }
 }
 
@@ -598,7 +598,7 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
     // laps or segments were timed, but none go to the leaderboards: say why, rather than nothing
     if (timed) {
       $('sum-social-text').textContent = simulated
-        ? tr('Simulator ride: these times stay on this device. Leaderboards take trainer rides only.')
+        ? tr('Simulator ride: these times stay on this device. Leaderboards accept trainer rides only.')
         : tr('These times did not pass the checks (power, speed, weight), so they are not on the leaderboards.');
       $('btn-social-cta').hidden = true;
       cta.hidden = false;
@@ -607,7 +607,7 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
   }
   if (!currentUser()) {
     $('btn-social-cta').hidden = false;
-    $('btn-social-cta').textContent = tr('Sign in to put your time on {climb} on the leaderboard', { climb: firstName || tr('this route') });
+    $('btn-social-cta').textContent = tr('Sign in to post your {climb} time to the leaderboard', { climb: firstName || tr('this route') });
     $('btn-social-cta').dataset.items = JSON.stringify(items);
     $('sum-social-text').textContent = '';
     cta.hidden = false;
@@ -615,7 +615,7 @@ export async function socialAfterRide(items, { firstName, simulated = false, tim
   }
   try {
     const answers = await flush(items);
-    if (!answers.length && queued().length) { $('sum-social-text').textContent = tr('No connection: your times go to the leaderboards next time'); $('btn-social-cta').hidden = true; cta.hidden = false; }
+    if (!answers.length && queued().length) { $('sum-social-text').textContent = tr('No connection: your times will be posted next time'); $('btn-social-cta').hidden = true; cta.hidden = false; }
     decorateSummary();
     await sync();
   } catch (e) { status(e.message); }
@@ -628,7 +628,7 @@ export function decorateSummary() {
     const r = results.get(`${tr0.dataset.seg}|${tr0.dataset.t}`);
     const cell = tr0.querySelector('.lb-cell');
     if (!cell) continue;
-    if (!r || r.status === 'rejected' || !r.place) { cell.innerHTML = r?.status === 'rejected' ? `<small class="muted" title="${ctx.esc(tr('Not credible, so not on the leaderboard'))}">—</small>` : ''; continue; }
+    if (!r || r.status === 'rejected' || !r.place) { cell.innerHTML = r?.status === 'rejected' ? `<small class="muted" title="${ctx.esc(tr('Result looks implausible, so it is not on the leaderboard'))}">—</small>` : ''; continue; }
     const week = r.week_place ? ` · ${tr('week #{n}', { n: r.week_place })}` : '';
     cell.innerHTML = `<button class="lb-place" data-seg="${ctx.esc(tr0.dataset.seg)}">${tr('#{place} of {total}', { place: r.place, total: r.total })}${week}</button>`;
     cell.querySelector('button').onclick = () => openBoard(ctx.routeOfSegment(tr0.dataset.seg), tr0.dataset.seg);
@@ -671,7 +671,7 @@ async function renderBoard() {
     $('lb-empty').hidden = !!b.rows.length;
     const date = (iso) => new Date(iso).toLocaleDateString(ctx.locale, { day: 'numeric', month: 'short' });
     body.innerHTML = withGaps(b.rows).map((r) => (r.gap ? '<tr class="lb-gap"><td colspan="7">⋯</td></tr>'
-      : `<tr class="${r.me ? 'me' : ''}"><td>${r.place}</td><td>${flagOf(r.country)}</td><td>${ctx.esc(r.display_name)}${r.flags?.length ? ` <small class="lb-flag" title="${ctx.esc(tr('Unconfirmed: no heart rate, or close to the limit of the possible'))}">?</small>` : ''}</td>`
+      : `<tr class="${r.me ? 'me' : ''}"><td>${r.place}</td><td>${flagOf(r.country)}</td><td>${ctx.esc(r.display_name)}${r.flags?.length ? ` <small class="lb-flag" title="${ctx.esc(tr('Unconfirmed: no heart rate, or close to the limit of what is possible'))}">?</small>` : ''}</td>`
         + `<td>${ctx.fmtTime(Number(r.time_s))}</td><td>${Number(r.wkg).toFixed(1)}</td><td>${r.avg_hr || '—'}</td><td>${date(r.ridden_at)}</td></tr>`)).join('');
   } catch (e) {
     body.innerHTML = `<tr><td colspan="7" class="muted">${ctx.esc(tr('Could not reach the leaderboards: {error}', { error: e.message }))}</td></tr>`;
@@ -744,15 +744,15 @@ async function renderUa() {
   const km = (x) => `${Number(x).toLocaleString(ctx.locale, { maximumFractionDigits: 0 })} ${tr('km')}`;
   const up = (x) => `${Number(x).toLocaleString(ctx.locale)} ${tr('m')}`;
   $('ua-head').innerHTML = riders
-    ? `<tr><th>#</th><th>${tr('Rider')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Rides')}</th></tr>`
-    : `<tr><th>#</th><th>${tr('Region')}</th><th>${tr('Kilometres')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
+    ? `<tr><th>#</th><th>${tr('Rider')}</th><th>${tr('Kilometers')}</th><th>${tr('Climbing')}</th><th>${tr('Rides')}</th></tr>`
+    : `<tr><th>#</th><th>${tr('Region')}</th><th>${tr('Kilometers')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
   const body = $('ua-rows');
   body.innerHTML = `<tr><td colspan="5" class="muted">${tr('Loading…')}</td></tr>`;
   $('ua-empty').hidden = true;
   // who is not on the board yet, and why
   const u = currentUser();
   $('ua-cta').hidden = !!(u && profileRow?.region);
-  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to count your kilometres for your region')}`
+  $('ua-cta').innerHTML = !u ? `<button class="pill-btn" data-ua-signin>${tr('Sign in with Google')}</button> ${tr('to count your kilometers toward your region')}`
     : `<button class="link-btn" data-ua-setup>${tr('Pick your region')}</button> ${tr('to ride for it')}`;
   const si = $('ua-cta').querySelector('[data-ua-signin]'), su = $('ua-cta').querySelector('[data-ua-setup]');
   if (si) si.onclick = () => signIn(redirect()).catch((e) => status(e.message));
@@ -866,7 +866,7 @@ function actsHTML(g, w, route) {
       : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
         : `<button class="pill-btn" data-act="join" data-id="${g.id}">${tr('Join')}</button>`,
     w.state !== 'later' ? `<button class="pill-btn" data-act="watch" data-id="${g.id}" title="${ctx.esc(tr('Watch it live: the riders, their power, the chat'))}">👀 ${tr('Watch')}</button>` : '',
-    `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to send it to friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
+    `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to share with friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
     g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Cancel ride')}</button>` : '',
   ].join('');
 }
@@ -889,7 +889,7 @@ function detailRender(rows, now) {
     + `<p class="gr-d-when"><b>${ctx.esc(when)}</b><span>${ctx.esc(count)}</span></p>`
     + `<div class="gr-d-facts">${fact(tr('Host'), g.host_name || tr('a rider'))}${fact(tr('Riders signed up'), `👥 ${g.riders}`)}`
     + (route ? fact(tr('Distance'), `${(route.length / 1000).toFixed(1)} ${tr('km')}`) + fact(tr('Climbing'), `${Math.round(route.elevationGain || 0)} ${tr('m')}`) : '') + '</div>'
-    + `<p class="gr-d-route"><small>${ctx.esc(tr('Route'))}</small><b>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))}</b>${route?.description ? `<span>${ctx.esc(route.description)}</span>` : ''}</p>`
+    + `<p class="gr-d-route"><small>${ctx.esc(tr('Route'))}</small><b>${ctx.esc(route?.name || tr('a route not in this version of Gruppetto'))}</b>${route?.description ? `<span>${ctx.esc(route.description)}</span>` : ''}</p>`
     + `<div class="gr-acts">${actsHTML(g, w, route)}</div>`;
 }
 
@@ -925,7 +925,7 @@ function renderGroups() {
     return `<li class="gr-row${g.id === grFocus ? ' focus' : ''}${w.state !== 'later' ? ' soon' : ''}" data-row="${g.id}">`
       + (g.held ? `<div class="gr-when"><b>⏳</b><small>${ctx.esc(tr('when ready'))}</small></div>` : `<div class="gr-when"><b>${ctx.esc(time)}</b><small>${ctx.esc(day)}</small></div>`)
       + `<div class="gr-what"><b>${ctx.esc(g.title)}</b>${g.kind === 'race' ? `<span class="gr-race">${ctx.esc(raceLabel(g, route))}</span>` : ''}`
-      + `<small>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))} · ${ctx.esc(g.host_name || tr('a rider'))} · 👥 ${g.riders}</small>${state}</div>`
+      + `<small>${ctx.esc(route?.name || tr('a route not in this version of Gruppetto'))} · ${ctx.esc(g.host_name || tr('a rider'))} · 👥 ${g.riders}</small>${state}</div>`
       + `<div class="gr-acts">${acts}</div></li>`;
   }
 }
@@ -942,7 +942,7 @@ async function groupAction(ev) {
   const act = b.dataset.act;
   if (act === 'link') {
     const url = `${location.origin}${location.pathname}#group=${g.id}`;
-    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Link copied: send it to your friends')); } catch { ctx.toast(url); }
+    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Link copied. Send it to your friends')); } catch { ctx.toast(url); }
     ctx.track('social', 'group-link');
     return;
   }
@@ -1005,7 +1005,7 @@ async function groupCreate(ev) {
     grFocus = id;
     await loadGroups();
     const url = `${location.origin}${location.pathname}#group=${id}`;
-    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Group ride created. Link copied: send it to your friends')); } catch { ctx.toast(tr('Group ride created')); }
+    try { await navigator.clipboard.writeText(url); ctx.toast(tr('Group ride created. Link copied. Send it to your friends')); } catch { ctx.toast(tr('Group ride created')); }
   } catch (e) { err.textContent = e.message; err.hidden = false; } finally { $('gr-create').disabled = false; }
 }
 
