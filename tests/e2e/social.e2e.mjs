@@ -600,6 +600,34 @@ test('a held ride, not yours: waiting for the host, then off once the database h
   await context.close();
 });
 
+test('another account signs in on this device: the last account’s rides, links and profile are forgotten, not sent up', async () => {
+  const id = 'r1700000088000';
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Taras', public: true, data: {} } });
+  const entry = { id, date: new Date().toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', summary: { duration: 60, distance: 400 }, chart: { every: 5, pw: [], hr: [], d: [], wb: [] }, lapTimes: [], splits: [] };
+  const { page, context, errors } = await openApp({ mock, local: { ...LOCAL, 'gruppetto.history': [entry], 'gruppetto.owner': 'someone-else' }, signedIn: true });
+  await page.waitForFunction((uid) => localStorage.getItem('gruppetto.owner') === uid, USER.id);
+  await page.waitForFunction(() => document.getElementById('btn-start')?.onclick && /Synced/.test(document.getElementById('social-sync-text')?.textContent || ''), null, { timeout: 15000 });
+  const left = await page.evaluate(() => ({ h: JSON.parse(localStorage.getItem('gruppetto.history') || '[]').length, strava: localStorage.getItem('gruppetto.strava'), s: JSON.parse(localStorage.getItem('powerup.settings') || '{}') }));
+  assert.equal(left.h, 0);
+  assert.equal(left.strava, null);
+  assert.ok(!left.s.icuKey && left.s.ftp !== 240, 'the old intervals.icu key and FTP are gone');
+  assert.ok(!mock.db.requests.some((r) => r.path === '/rest/v1/activities' && r.method === 'POST' && r.body.includes(id)), 'the old ride did not go up');
+  noSecrets(mock.db);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('the same account again: nothing forgotten', async () => {
+  const id = 'r1700000077000';
+  const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
+  const entry = { id, date: new Date().toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', summary: { duration: 60, distance: 400 }, chart: { every: 5, pw: [], hr: [], d: [], wb: [] }, lapTimes: [], splits: [] };
+  const { page, context, errors } = await openApp({ mock, local: { ...LOCAL, 'gruppetto.history': [entry], 'gruppetto.owner': USER.id }, signedIn: true });
+  await page.waitForFunction(() => /Synced/.test(document.getElementById('social-sync-text')?.textContent || ''), null, { timeout: 15000 });
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gruppetto.history') || '[]').length), 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('a ride kept on this device: its full record goes up to the account on sync', async () => {
   const id = 'r1700000099000';
   const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
