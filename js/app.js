@@ -1456,13 +1456,24 @@ function showProfileTab(t) {
   if (!['me', 'links', 'settings'].includes(t)) t = 'me';
   profileTab = t;
   $('drawer').dataset.ptab = t;
-  for (const b of document.querySelectorAll('[data-ptab-go]')) b.classList.toggle('sel', b.dataset.ptabGo === t);
+  markProfileTabs();
   try { localStorage.setItem(PTAB_KEY, t); } catch { /* private mode */ }
   $('drawer').querySelector('.drawer-panel').scrollTop = 0;
 }
-for (const b of document.querySelectorAll('[data-ptab-go]')) b.onclick = () => showProfileTab(b.dataset.ptabGo);
+/** The one row of tabs: Rider and Connections, then a tab per group of settings. */
+function markProfileTabs() {
+  for (const b of document.querySelectorAll('[data-ptab-go]')) {
+    b.classList.toggle('sel', b.dataset.ptabGo === profileTab && (!b.dataset.sgroupGo || b.dataset.sgroupGo === settingsGroup));
+  }
+  // on a phone the row scrolls: the picked tab into view
+  const bar = document.querySelector('#drawer .ptabs'), sel = bar?.querySelector('.sel');
+  if (sel && (sel.offsetLeft < bar.scrollLeft || sel.offsetLeft + sel.offsetWidth > bar.scrollLeft + bar.clientWidth)) bar.scrollLeft = sel.offsetLeft - 16;
+}
+for (const b of document.querySelectorAll('[data-ptab-go]')) {
+  b.onclick = () => { if (b.dataset.sgroupGo) showSettingsGroup(b.dataset.sgroupGo); showProfileTab(b.dataset.ptabGo); };
+}
 
-// ---------- Settings: one group at a time, its name on the left ----------
+// ---------- Settings: one group at a time, each a tab in the Profile's row ----------
 const SGROUP_KEY = 'gruppetto.settings-group';
 const SGROUPS = ['look', 'ride', 'gears', 'pacer', 'pip', 'app'];
 let settingsGroup = (() => { try { return localStorage.getItem(SGROUP_KEY) || 'look'; } catch { return 'look'; } })();
@@ -1470,10 +1481,9 @@ function showSettingsGroup(g) {
   if (!SGROUPS.includes(g)) g = 'look';
   settingsGroup = g;
   $('drawer').dataset.sgroup = g;
-  for (const b of document.querySelectorAll('[data-sgroup-go]')) b.classList.toggle('sel', b.dataset.sgroupGo === g);
+  markProfileTabs();
   try { localStorage.setItem(SGROUP_KEY, g); } catch { /* private mode */ }
 }
-for (const b of document.querySelectorAll('[data-sgroup-go]')) b.onclick = () => showSettingsGroup(b.dataset.sgroupGo);
 showSettingsGroup(settingsGroup);
 
 /** The top of Me: who you are at a glance (initial, name, level) and the numbers the rides go by. */
