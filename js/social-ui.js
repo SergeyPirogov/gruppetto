@@ -120,6 +120,7 @@ function buildUi() {
   $('lock-signin').innerHTML = `${GOOGLE_G}<span>${ctx.esc(tr('Sign in with Google'))}</span>`;
   for (const el of document.querySelectorAll('[data-gr-close]')) el.onclick = () => { $('gr-view').hidden = true; };
   $('gr-list').onclick = groupAction;
+  $('gr-detail').onclick = groupAction; // the same buttons as the row's, in the pane
   // + New ride: to the calendar tab, the form open and in view
   $('gr-new-btn').onclick = () => {
     document.querySelector('[data-gr-tab="cal"]')?.click();
@@ -814,6 +815,42 @@ async function loadGroups() {
 
 const inTime = (s) => (s < 3600 ? tr('{n} min', { n: Math.max(1, Math.ceil(s / 60)) }) : s < 86400 ? tr('{n} h', { n: Math.round(s / 3600) }) : tr('{n} d', { n: Math.round(s / 86400) }));
 
+
+/** A ride's buttons, for its row and for the detail pane: ride, join or leave, watch, the link, cancel. */
+function actsHTML(g, w, route) {
+  const can = route && w.state !== 'later';
+  return [
+    can ? `<button class="primary gr-ride" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
+      : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
+        : `<button class="pill-btn" data-act="join" data-id="${g.id}">${tr('Join')}</button>`,
+    w.state !== 'later' ? `<button class="pill-btn" data-act="watch" data-id="${g.id}" title="${ctx.esc(tr('Watch it live: the riders, their power, the chat'))}">👀 ${tr('Watch')}</button>` : '',
+    `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to send it to friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
+    g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Cancel ride')}</button>` : '',
+  ].join('');
+}
+
+/** The pane beside the list on a wide screen (a phone has no room: the row keeps its buttons). */
+const wideHub = () => matchMedia('(min-width: 900px)').matches;
+
+/** The picked ride's details: when, the route with its distance and climb, who is going, the description, the actions. */
+function detailRender(rows, now) {
+  const el = $('gr-detail'), g = wideHub() ? rows.find((x) => x.id === grFocus) || rows[0] : null;
+  el.hidden = !g;
+  if (!g) { el.innerHTML = ''; return; }
+  const w = rideWindow(Date.parse(g.starts_at), now, g.held), d = new Date(g.starts_at);
+  const route = ctx.routes().find((r) => r.id === g.route_id);
+  const when = g.held ? tr('when ready') : d.toLocaleString(ctx.locale, { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+  const count = w.state === 'live' ? tr('Riding now') : g.held ? tr('On the line: starts when {host} starts it', { host: g.mine ? tr('you') : g.host_name || tr('the host') })
+    : w.state === 'open' ? tr('On the line: starts in {t}', { t: inTime(w.in) }) : tr('in {t}', { t: inTime(w.in) });
+  const fact = (k, v) => `<div><small>${ctx.esc(k)}</small><b>${ctx.esc(v)}</b></div>`;
+  el.innerHTML = `<h3>${ctx.esc(g.title)}</h3>${g.kind === 'race' ? `<span class="gr-race">${ctx.esc(raceLabel(g, route))}</span>` : ''}`
+    + `<p class="gr-d-when"><b>${ctx.esc(when)}</b><span>${ctx.esc(count)}</span></p>`
+    + `<div class="gr-d-facts">${fact(tr('Host'), g.host_name || tr('a rider'))}${fact(tr('Riders signed up'), `👥 ${g.riders}`)}`
+    + (route ? fact(tr('Distance'), `${(route.length / 1000).toFixed(1)} ${tr('km')}`) + fact(tr('Climbing'), `${Math.round(route.elevationGain || 0)} ${tr('m')}`) : '') + '</div>'
+    + `<p class="gr-d-route"><small>${ctx.esc(tr('Route'))}</small><b>${ctx.esc(route?.name || tr('a route this Gruppetto does not have'))}</b>${route?.description ? `<span>${ctx.esc(route.description)}</span>` : ''}</p>`
+    + `<div class="gr-acts">${actsHTML(g, w, route)}</div>`;
+}
+
 function renderGroups() {
   const now = Date.now(), rows = grRows.filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   $('gr-empty').hidden = !!rows.length;
@@ -832,6 +869,7 @@ function renderGroups() {
     last = b;
     return head + rowHTML(g);
   }).join('');
+  detailRender(rows, now);
   function rowHTML(g) {
     const w = rideWindow(Date.parse(g.starts_at), now, g.held), d = new Date(g.starts_at);
     const route = ctx.routes().find((r) => r.id === g.route_id);
@@ -841,15 +879,7 @@ function renderGroups() {
       : w.held ? `<span class="gr-tag open">${tr('On the line: starts when {host} starts it', { host: g.mine ? tr('you') : g.host_name || tr('the host') })}</span>`
       : w.state === 'open' ? `<span class="gr-tag open">${tr('On the line: starts in {t}', { t: inTime(w.in) })}</span>`
         : `<span class="gr-tag">${tr('in {t}', { t: inTime(w.in) })}</span>`;
-    const can = route && w.state !== 'later';
-    const acts = [
-      can ? `<button class="primary gr-ride" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
-        : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
-          : `<button class="pill-btn" data-act="join" data-id="${g.id}">${tr('Join')}</button>`,
-      w.state !== 'later' ? `<button class="pill-btn" data-act="watch" data-id="${g.id}" title="${ctx.esc(tr('Watch it live: the riders, their power, the chat'))}">👀 ${tr('Watch')}</button>` : '',
-      `<button class="pill-btn gr-icon" data-act="link" data-id="${g.id}" title="${ctx.esc(tr('Copy the link to send it to friends'))}" aria-label="${ctx.esc(tr('Copy the link'))}">🔗</button>`,
-      g.mine && w.state === 'later' ? `<button class="link-btn gr-cancel" data-act="cancel" data-id="${g.id}">${tr('Cancel ride')}</button>` : '',
-    ].join('');
+    const acts = actsHTML(g, w, route);
     return `<li class="gr-row${g.id === grFocus ? ' focus' : ''}${w.state !== 'later' ? ' soon' : ''}" data-row="${g.id}">`
       + (g.held ? `<div class="gr-when"><b>⏳</b><small>${ctx.esc(tr('when ready'))}</small></div>` : `<div class="gr-when"><b>${ctx.esc(time)}</b><small>${ctx.esc(day)}</small></div>`)
       + `<div class="gr-what"><b>${ctx.esc(g.title)}</b>${g.kind === 'race' ? `<span class="gr-race">${ctx.esc(raceLabel(g, route))}</span>` : ''}`
@@ -861,6 +891,11 @@ function renderGroups() {
 /** A tap on a ride's button: the link, joining or leaving, calling it off, riding. Signed out: to Google first. */
 async function groupAction(ev) {
   const b = ev.target.closest('[data-act]'), g = b && grRows.find((x) => x.id === b.dataset.id);
+  if (!b) { // a tap on the row itself: show it in the pane
+    const id = ev.target.closest('[data-row]')?.dataset.row;
+    if (id && id !== grFocus) { grFocus = id; renderGroups(); }
+    return;
+  }
   if (!g) return;
   const act = b.dataset.act;
   if (act === 'link') {
@@ -882,7 +917,7 @@ async function groupAction(ev) {
       if (!g.joined) await joinGroupRide(g.id, true).catch(() => {});
       $('gr-view').hidden = true;
       ctx.track('social', 'group-ride');
-      ctx.startGroupRide({ id: g.id, title: g.title, routeId: g.route_id, startsAt: Date.parse(g.starts_at), held: !!g.held, host: !!g.mine, kind: g.kind || 'ride', laps: g.laps || 1, me: { id: currentUser().id, name: profileRow.display_name || ctx.settings.name || tr('Rider') } });
+      ctx.startGroupRide({ id: g.id, title: g.title, routeId: g.route_id, startsAt: Date.parse(g.starts_at), held: !!g.held, host: !!g.mine, signed: g.riders || 0, kind: g.kind || 'ride', laps: g.laps || 1, me: { id: currentUser().id, name: profileRow.display_name || ctx.settings.name || tr('Rider') } });
     }
   } catch (e) { ctx.toast(e.message); }
 }

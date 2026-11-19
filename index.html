@@ -698,6 +698,7 @@
     <div id="ghost-tag" class="ghost-mini" hidden></div>
     <!-- a group ride's chat (#85, js/chat.js): the last messages over the road, and the field with the quick phrases -->
     <div id="chat-box" class="chat-box" hidden>
+      <b class="chat-title">Ride chat</b>
       <span id="chat-watch" class="chat-watch" hidden></span>
       <div id="chat-feed" class="chat-feed" aria-live="polite"></div>
       <div id="chat-bar" class="chat-bar" hidden>
@@ -710,6 +711,7 @@
     <!-- a group ride before its start: who is on the line, with their category (js/app.js startListRender) -->
     <aside id="gr-startlist" class="gr-startlist" hidden aria-label="Start list">
       <b>On the start line <small id="gr-sl-n"></small></b>
+      <div class="sl-prog"><span id="gr-sl-ready"></span><div class="sl-bar"><i id="gr-sl-fill"></i></div></div>
       <ol id="gr-sl-rows"></ol>
     </aside>
     <!-- a held group ride's host starts it when everyone is on the line (js/app.js groupHostRender) -->
@@ -975,7 +977,11 @@
         </div>
         <div id="gr-cal">
         <p id="gr-cta" class="hint" hidden></p>
-        <ul id="gr-list" class="gr-list"></ul>
+        <div class="gr-split">
+          <ul id="gr-list" class="gr-list"></ul>
+          <!-- the picked ride's details, on a wide screen (js/social-ui.js detailRender) -->
+          <aside id="gr-detail" class="gr-detail" aria-label="Ride details" hidden></aside>
+        </div>
         <p id="gr-empty" class="hint" hidden>No group rides planned yet: create one and send the link to your friends.</p>
         <details id="gr-new" class="gr-new">
           <summary>+ New group ride</summary>
