@@ -356,7 +356,7 @@ test('a league: set up from the Leagues tab, a race put in it, its standings', a
   assert.match(await page.textContent('#gr-lg-rows tr:first-child'), /Taras\s*45/);
   // a race in the calendar, in the league
   await page.click('[data-gr-tab="cal"]');
-  await page.click('#gr-new summary');
+  await page.evaluate(() => { document.getElementById('gr-new').open = true; }); // open already when the calendar is empty
   await page.fill('#gr-title', 'Round 1');
   await page.selectOption('#gr-kind', 'race');
   await page.waitForSelector('#gr-league-wrap:not([hidden])');
@@ -367,7 +367,7 @@ test('a league: set up from the Leagues tab, a race put in it, its standings', a
   const made = mock.db.requests.filter((r) => r.path === '/rest/v1/rpc/create_group_ride').at(-1);
   assert.equal(JSON.parse(made.body).p_league, mock.db.leagues[0].id);
   // a plain ride sends no league at all (a database without leagues takes it)
-  await page.click('#gr-new summary');
+  await page.evaluate(() => { document.getElementById('gr-new').open = true; }); // open already when the calendar is empty
   await page.fill('#gr-title', 'Spin');
   await page.selectOption('#gr-kind', 'ride');
   assert.equal(await page.isHidden('#gr-league-wrap'), true);
@@ -481,13 +481,39 @@ test('the sync says how it went: synced with the rides in the account, or what f
   await context.close();
 });
 
+test('a new group ride from the cards: the form open on an empty calendar, then the link to send', async () => {
+  const mock = mockSupabase({ profile: PROFILE() });
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.waitForSelector('#hdr-account.in');
+  await page.evaluate(() => document.getElementById('hdr-group').click());
+  await page.waitForSelector('#gr-empty:not([hidden])');
+  assert.equal(await page.evaluate(() => document.getElementById('gr-new').open), true);
+  if (process.env.GR_SHOT) await page.screenshot({ path: `${process.env.GR_SHOT}-empty.png` });
+  await page.fill('#gr-title', 'Evening spin');
+  await page.click('.gr-choices[data-for="gr-kind"] [data-v="race"]');
+  assert.equal(await page.inputValue('#gr-kind'), 'race');
+  assert.equal(await page.isVisible('#gr-laps-wrap'), true);
+  await page.click('.gr-choices[data-for="gr-kind"] [data-v="ride"]');
+  await page.click('#gr-routes button:nth-child(2)');
+  const picked = await page.getAttribute('#gr-routes button:nth-child(2)', 'data-v');
+  assert.equal(await page.inputValue('#gr-route'), picked);
+  await page.click('#gr-create');
+  await page.waitForSelector('#gr-made:not([hidden])');
+  assert.match(await page.inputValue('#gr-made-url'), /#group=/);
+  assert.equal(JSON.parse(mock.db.requests.filter((r) => r.path === '/rest/v1/rpc/create_group_ride').at(-1).body).p_route, picked);
+  if (process.env.GR_SHOT) await page.screenshot({ path: `${process.env.GR_SHOT}-made.png` });
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('a race started when everyone is ready: set up held, its host starts it from the line in 2 min', async () => {
   const mock = mockSupabase({ profile: PROFILE() });
   const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
   await page.waitForSelector('#hdr-account.in');
   await page.evaluate(() => document.getElementById('hdr-group').click());
   await page.waitForSelector('#gr-view:not([hidden])');
-  await page.click('#gr-new summary');
+  await page.evaluate(() => { document.getElementById('gr-new').open = true; }); // open already when the calendar is empty
   await page.fill('#gr-title', 'Crit now');
   await page.selectOption('#gr-kind', 'race');
   await page.selectOption('#gr-start', 'ready');

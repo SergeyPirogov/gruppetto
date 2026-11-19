@@ -976,27 +976,48 @@
         <div id="gr-cal">
         <p id="gr-cta" class="hint" hidden></p>
         <div class="gr-split">
-          <ul id="gr-list" class="gr-list"></ul>
-          <!-- the picked ride's details, on a wide screen (js/social-ui.js detailRender) -->
-          <aside id="gr-detail" class="gr-detail" aria-label="Ride details" hidden></aside>
+          <div class="gr-left">
+            <ul id="gr-list" class="gr-list"></ul>
+            <div id="gr-empty" class="gr-empty" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><circle cx="12" cy="15.5" r="2"/></svg>
+              <b>No group rides yet</b><span>Make one and send the link to your friends.</span>
+            </div>
+            <div class="gr-how">
+              <small class="gr-how-h">How it works</small>
+              <ol>
+                <li>Everyone who opens the link waits on the start line: at the start time, or until the host starts it.</li>
+                <li>You set off together, see each other live on the road and draft each other.</li>
+                <li>In a race the first across the line after the laps wins; the results stay with the ride.</li>
+              </ol>
+              <small class="gr-how-note">Sign-in needed · trainer and simulator riders can both join</small>
+            </div>
+          </div>
+          <div class="gr-right">
+            <div id="gr-made" class="gr-made" hidden>
+              <i aria-hidden="true">✓</i>
+              <div><b>Ride created. Send the link to your friends</b><div class="gr-made-link"><input id="gr-made-url" readonly aria-label="Link to the ride"><button id="gr-made-copy" type="button">Copy</button></div></div>
+            </div>
+            <!-- the picked ride's details, on a wide screen (js/social-ui.js detailRender) -->
+            <aside id="gr-detail" class="gr-detail" aria-label="Ride details" hidden></aside>
+            <details id="gr-new" class="gr-new">
+              <summary>+ New group ride</summary>
+              <form id="gr-form" class="gr-form">
+                <label class="gr-wide">Title<input id="gr-title" maxlength="80" required placeholder="Evening spin"></label>
+                <div class="gr-wide gr-field"><span>Route</span><select id="gr-route" class="gr-sr" aria-label="Route"></select><div id="gr-routes" class="gr-routes" role="listbox" aria-label="Route"></div></div>
+                <div class="gr-wide gr-field"><span>Kind</span><select id="gr-kind" class="gr-sr" aria-label="Kind"><option value="ride">Ride together</option><option value="race">Race</option></select>
+                  <div class="gr-choices" data-for="gr-kind"><button type="button" data-v="ride"><b>Ride together</b><small>No winner, ride as a group</small></button><button type="button" data-v="race"><b>Race</b><small>Laps and a finish line</small></button></div></div>
+                <label id="gr-laps-wrap" hidden>Laps<input id="gr-laps" type="number" min="1" max="10" value="3" inputmode="numeric"></label>
+                <label id="gr-league-wrap" class="gr-wide" hidden>League<select id="gr-league"></select></label>
+                <div class="gr-wide gr-field"><span>Start</span><select id="gr-start" class="gr-sr" aria-label="Start"><option value="time">At a set time</option><option value="ready">When everyone is ready: I start it</option></select>
+                  <div class="gr-choices" data-for="gr-start"><button type="button" data-v="time"><b>At a set time</b><small>Starts by itself</small></button><button type="button" data-v="ready"><b>When all are ready</b><small>You start it, 10 s to 10 min countdown</small></button></div></div>
+                <label>Date<input id="gr-date" type="date" required></label>
+                <label>Time<input id="gr-time" type="time" required></label>
+                <button id="gr-create" class="primary gr-wide" type="submit">Create the ride</button>
+                <p id="gr-err" class="hint gr-wide" hidden></p>
+              </form>
+            </details>
+          </div>
         </div>
-        <p id="gr-empty" class="hint" hidden>No group rides scheduled yet. Create one and send the link to your friends.</p>
-        <details id="gr-new" class="gr-new">
-          <summary>+ New group ride</summary>
-          <form id="gr-form" class="gr-form">
-            <label class="gr-wide">Title<input id="gr-title" maxlength="80" required placeholder="Evening spin"></label>
-            <label class="gr-wide">Route<select id="gr-route"></select></label>
-            <label>Kind<select id="gr-kind"><option value="ride">Ride together</option><option value="race">Race</option></select></label>
-            <label id="gr-laps-wrap" hidden>Laps<input id="gr-laps" type="number" min="1" max="10" value="3" inputmode="numeric"></label>
-            <label id="gr-league-wrap" class="gr-wide" hidden>League<select id="gr-league"></select></label>
-            <label class="gr-wide">Start<select id="gr-start"><option value="time">At a set time</option><option value="ready">When everyone is ready: I start it</option></select></label>
-            <label>Date<input id="gr-date" type="date" required></label>
-            <label>Time<input id="gr-time" type="time" required></label>
-            <button id="gr-create" class="primary gr-wide" type="submit">Create the ride</button>
-            <p id="gr-err" class="hint gr-wide" hidden></p>
-          </form>
-        </details>
-        <p class="hint">At the start time, everyone who opens the ride waits on the start line and you all set off together. Or choose “when everyone is ready”: the host starts it from the line, with a 10 s to 10 min countdown, once all are there. You see each other live on the road and draft each other. In a race, the first across the line after the laps wins, and the results stay with the ride. Sign-in needed; trainer and simulator riders can both join.</p>
         </div>
       </div>
     </div>
