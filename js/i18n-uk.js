@@ -524,4 +524,11 @@ export const UK = {
   // group rides: the detail pane and the start line's progress
   'Ride details': 'Подробиці заїзду', 'Host': 'Організатор', 'Riders signed up': 'Записалось', 'Climbing': 'Набір висоти',
   'Ride chat': 'Чат заїзду', '{n} of {m} on the line': '{n} з {m} на старті',
+  // account menu
+  'No rides yet': 'Ще без заїздів',
+  'FTP, weight, ride history': 'FTP, вага, історія заїздів',
+  'Climbs, sprints, laps, Ukraine': 'Підйоми, спринти, кола, Україна',
+  'Kit, bike and helmet colors': 'Кольори форми, велосипеда й шолома',
+  'intervals.icu, Garmin': 'intervals.icu, Garmin',
+  'Everything stays on this device': 'Усе лишиться на цьому пристрої',
 };

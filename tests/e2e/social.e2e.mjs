@@ -381,6 +381,13 @@ test('signing out from the header: a tap on your name, then Sign out', async () 
   const tap = () => page.evaluate(() => document.getElementById('hdr-account').click()); // the Devices page may be open over the lobby on a first visit
   await tap();
   await page.waitForSelector('#hdr-menu');
+  assert.deepEqual(await page.$$eval('#hdr-menu [data-m]', (l) => l.map((x) => x.dataset.m)), ['profile', 'boards', 'garage', 'links', 'settings', 'out']);
+  await page.click('#hdr-menu [data-m="links"]'); // a place in the profile: its tab opens
+  await page.waitForFunction(() => !document.getElementById('drawer').hidden);
+  assert.equal(await page.$('#hdr-menu'), null);
+  await page.evaluate(() => document.querySelector('[data-close], .drawer-close')?.click());
+  await tap();
+  await page.waitForSelector('#hdr-menu');
   await page.keyboard.press('Escape'); // closes without doing anything
   assert.equal(await page.$('#hdr-menu'), null);
   await tap();
