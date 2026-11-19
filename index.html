@@ -877,21 +877,21 @@
     <!-- the ratings across Ukraine (0003_regions.sql): region against region, rider against rider -->
     <div id="ua-view" class="wk-menu" hidden>
       <div class="drawer-bg" data-ua-close></div>
-      <div class="wk-menu-panel lb-panel">
-        <div class="wk-menu-head"><h2>Ukraine leaderboard</h2><button class="drawer-close" data-ua-close aria-label="Close">✕</button></div>
-        <div class="lb-filters">
-          <div class="lb-chips" id="ua-tab"><button class="pill-btn sel" data-v="regions">Regions</button><button class="pill-btn" data-v="riders">Riders</button></div>
-          <div class="lb-chips" id="ua-period"><button class="pill-btn sel" data-v="week">This week</button><button class="pill-btn" data-v="month">This month</button><button class="pill-btn" data-v="all">All time</button></div>
-          <div class="lb-chips" id="ua-metric"><button class="pill-btn sel" data-v="km">Kilometers</button><button class="pill-btn" data-v="climb">Climbing</button></div>
-          <div class="lb-chips" id="ua-gender" hidden><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
+      <div class="wk-menu-panel lb-panel ua-panel">
+        <div class="wk-menu-head"><div class="ua-title"><h2>Ukraine leaderboard</h2><small>Trainer rides by signed-in riders · simulator rides don’t count</small></div><button class="drawer-close" data-ua-close aria-label="Close">✕</button></div>
+        <div class="lb-filters ua-filters">
+          <div class="lb-chips ua-seg" id="ua-tab"><button class="pill-btn sel" data-v="regions">Regions</button><button class="pill-btn" data-v="riders">Riders</button></div>
+          <div class="lb-chips ua-seg" id="ua-period"><button class="pill-btn sel" data-v="week">Week</button><button class="pill-btn" data-v="month">Month</button><button class="pill-btn" data-v="all">All time</button></div>
+          <div class="lb-chips ua-seg ua-metric" id="ua-metric"><button class="pill-btn sel" data-v="km">Kilometers</button><button class="pill-btn" data-v="climb">Climbing</button></div>
+          <div class="lb-chips ua-seg" id="ua-gender" hidden><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
           <select id="ua-region" aria-label="Region" hidden></select>
         </div>
+        <div id="ua-sum" class="ua-sum" hidden></div>
         <div class="lb-scroll">
           <table class="lb-table ua-table"><thead id="ua-head"></thead><tbody id="ua-rows"></tbody></table>
         </div>
         <p id="ua-empty" class="hint" hidden>No rides here yet. Ride on a trainer to put your region on the leaderboard.</p>
         <p id="ua-cta" class="hint" hidden></p>
-        <p class="hint">Trainer rides by signed-in riders, each counted toward the region in their profile. Simulator rides do not count.</p>
       </div>
     </div>
 

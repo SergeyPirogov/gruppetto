@@ -1509,6 +1509,32 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 #ua-region { width: auto; }
 .ua-table td:nth-child(4) { font-weight: 400; }
 .ua-table td.on { font-weight: 700; }
+/* the Ukraine board: a line under the title, segmented filters, a summary over the table, medals */
+.ua-title { display: flex; flex-direction: column; gap: 3px; }
+.ua-title small { font-size: .82rem; color: var(--muted); }
+.ua-filters { align-items: center; }
+.ua-seg { gap: 0; padding: 3px; border-radius: 10px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); }
+.ua-seg .pill-btn { padding: 6px 13px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 600; }
+.ua-seg .pill-btn:hover { background: rgba(255, 255, 255, .05); color: var(--text); }
+.ua-seg .pill-btn.sel { background: #2a3550; color: var(--text); border: 0; }
+.ua-metric { margin-left: auto; }
+.ua-sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+.ua-card { display: flex; flex-direction: column; gap: 3px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); }
+.ua-card small { font-size: .68rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.ua-card b { font-size: 1.05rem; font-weight: 800; }
+.ua-card span { font-size: .8rem; color: var(--muted); }
+.ua-card span.up { color: #4ade80; }
+.ua-table td { vertical-align: middle; padding: 9px 6px; }
+.ua-table th:nth-child(n+3), .ua-table td:nth-child(n+3) { text-align: right; }
+.ua-table td small { font-size: .75em; color: var(--muted); font-weight: 600; }
+.ua-table .ua-bar { height: 5px; margin-top: 6px; border-radius: 3px; }
+.ua-rank { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; font-style: normal; font-size: .8rem; font-weight: 800; color: var(--muted); }
+.ua-rank.m1 { background: #f5c542; color: #1a1300; }
+.ua-rank.m2 { background: #c9d1dc; color: #12161d; }
+.ua-rank.m3 { background: #d08a4e; color: #1a0e04; }
+.ua-you { margin-left: 8px; font-style: normal; font-size: .68rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.ua-table tr.me td { background: rgba(255, 122, 26, .10); }
+@media (max-width: 560px) { .ua-metric { margin-left: 0; } }
 
 /* group rides (#84): the calendar */
 .gr-panel { max-width: 640px; }
