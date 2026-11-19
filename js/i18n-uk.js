@@ -491,6 +491,8 @@ export const UK = {
   "Cheer them on…": "Підтримай їх…",
   "Sign in to write in the chat. Reactions work for everyone.": "Увійди, щоб писати в чат. Реакції доступні всім.",
   "Watching": "Перегляд",
+  // devices
+  'Left unit': 'Лівий блок', 'Right unit': 'Правий блок', 'connected': 'підключено', 'A Zwift Ride is two units: connect the second with “+ controller”, then press a button on each': 'Zwift Ride — це два блоки: підключи другий через «+ контролер» і натисни кнопку на кожному',
   // history
   'Load': 'Навантаження',
   // race results
