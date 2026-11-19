@@ -252,11 +252,10 @@
         <div class="dev-more">
           <!-- what each Zwift controller button does, by device (js/app.js renderCtlMap) -->
           <section id="ctl-map" class="dev-box ctl-map">
-            <div class="ctl-map-head"><b>Controller buttons</b><span id="ctl-map-note"></span></div>
-            <div id="ctl-map-tabs" class="ctl-map-tabs" role="tablist"></div>
-            <p class="hint-sm">Pick what each button does. Press a button on the controller to jump to its row.</p>
-            <div id="ctl-map-rows"></div>
-            <div class="ctl-map-foot"><button id="ctl-map-reset" class="ghost">Reset to Zwift defaults</button></div>
+            <div class="ctl-map-head"><b>Controller buttons</b><div id="ctl-map-tabs" class="ctl-map-tabs" role="tablist"></div></div>
+            <p class="hint-sm"><span id="ctl-map-note"></span> · <span>Press a button on the controller to find it.</span></p>
+            <div id="ctl-map-body" class="ctl-map-body"></div>
+            <div class="ctl-map-foot"><span id="ctl-map-changed" class="hint-sm"></span><button id="ctl-map-reset" class="ghost">Reset to Zwift defaults</button></div>
           </section>
           <div id="autoconnect-hint" class="dev-box dev-auto" hidden>
             <b>Connect automatically next time</b>

@@ -2164,23 +2164,43 @@ select.seg-src { display: none; }
 
 
 
-/* controller buttons: one row per button (or pair), what it does in a select; the row a press lands on lights up */
-.dev-more .ctl-map { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
-.ctl-map-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.ctl-map-head span { color: var(--muted); font-size: 13px; }
-.ctl-map-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
+/* controller buttons: the units drawn in the middle, each side's buttons listed beside it with a bracket to it,
+   as in Zwift's own screen; the button last pressed or picked is lit on both */
+.dev-more .ctl-map { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.ctl-map-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ctl-map-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .ctl-map-tabs button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line, #2e3a50); background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; }
 .ctl-map-tabs button.on { background: var(--text, #e8edf5); color: var(--bg, #0e1420); border-color: transparent; }
-.ctl-row { display: flex; align-items: center; gap: 12px; padding: 7px 8px; margin: 0 -8px; border-bottom: 1px solid var(--line, #263147); border-radius: 8px; transition: box-shadow .2s; }
-.ctl-row.hit { box-shadow: inset 0 0 0 2px #fbbf24; }
-.ctl-key { min-width: 48px; height: 28px; padding: 0 8px; box-sizing: border-box; border-radius: 14px; background: #2a3448; color: #e8edf5; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex: none; }
-.ctl-key.k-a { background: #22a35a; } .ctl-key.k-b { background: #d0358f; } .ctl-key.k-y { background: #1ba6c9; } .ctl-key.k-z { background: #e0582a; }
-.ctl-name { flex: 1; min-width: 0; }
-.ctl-row select { min-width: 0; width: min(240px, 48%); }
-.ctl-map-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.ctl-map-body { --br: #d0358f; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 0; padding: 8px 0; }
+.ctl-col { position: relative; display: flex; flex-direction: column; gap: 8px; }
+.ctl-col.L { margin-right: 36px; } .ctl-col.R { margin-left: 36px; }
+/* the bracket: a stub from each row, a bar down the side, and the line into the drawing (.ctl-mid) */
+.ctl-col::after { content: ''; position: absolute; top: 22px; bottom: 22px; width: 2px; background: var(--br); }
+.ctl-col.L::after { right: -20px; } .ctl-col.R::after { left: -20px; }
+.ctl-row { position: relative; display: flex; align-items: center; gap: 10px; }
+.ctl-col.L .ctl-row { flex-direction: row-reverse; }
+.ctl-row::after { content: ''; position: absolute; top: 50%; width: 20px; height: 2px; background: var(--br); }
+.ctl-col.L .ctl-row::after { right: -20px; } .ctl-col.R .ctl-row::after { left: -20px; }
+.ctl-key { min-width: 30px; height: 26px; padding: 0 6px; box-sizing: border-box; border-radius: 7px; background: #2a3448; color: #e8edf5; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; flex: none; }
+.ctl-key.face { min-width: 26px; border-radius: 50%; padding: 0; }
+.ctl-pick { position: relative; flex: 1; min-width: 0; }
+.ctl-pick small { position: absolute; left: 12px; top: 5px; font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); pointer-events: none; }
+.ctl-pick select { width: 100%; padding: 18px 30px 5px 11px; border-radius: 9px; font-weight: 700; font-size: 13px; }
+.ctl-row.hit select { border-color: #fbbf24; box-shadow: 0 0 0 1px #fbbf24; background-color: #2a2410; color: #fde68a; }
+.ctl-mid { position: relative; display: flex; gap: 14px; align-items: center; }
+.ctl-mid::before, .ctl-mid::after { content: ''; position: absolute; top: 50%; width: 16px; height: 2px; background: var(--br); }
+.ctl-mid::before { left: -16px; } .ctl-mid::after { right: -16px; }
+.ctl-art { width: 150px; height: auto; display: block; }
+.ctl-art.click { width: 120px; }
+.ctl-map-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; }
 .ctl-map-link { font-size: 13px; }
-/* a phone: the select under the button's name, the full width, so the action reads whole */
-@media (max-width: 520px) {
-  .ctl-row { flex-wrap: wrap; }
-  .ctl-row select { width: 100%; }
+/* narrower: the drawing on top, the two lists under it, no brackets */
+@media (max-width: 860px) {
+  .ctl-map-body { grid-template-columns: 1fr; gap: 12px; }
+  .ctl-mid { order: -1; justify-content: center; }
+  .ctl-mid::before, .ctl-mid::after, .ctl-col::after, .ctl-row::after { display: none; }
+  .ctl-col.L, .ctl-col.R { margin: 0; }
+  .ctl-col.L .ctl-row { flex-direction: row; }
+  .ctl-art { width: 120px; }
 }
+
