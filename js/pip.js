@@ -333,11 +333,9 @@ function drawCanvas(s) {
   // the interval: one line across the width, its three parts spread out, over a thin bar of how far into it you are
   if (wk) {
     const soon = (s.stepLeft ?? 99) <= 10 && Math.floor(Date.now() / 500) % 2 === 0;
-    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect?.(pad - 8, y, inner + 16, 50, 8); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect?.(pad - 8, y, inner + 16, wkH, 8); g.fill();
     if (soon) { g.strokeStyle = '#fbbf24'; g.lineWidth = 2; g.stroke(); }
     if (H) { // the target is in the big number's label: here how long is left and what comes next, each named over its value
-      g.beginPath(); g.roundRect?.(pad - 8, y, inner + 16, wkH, 8); g.fillStyle = 'rgba(255,255,255,.06)'; g.fill();
-      if (soon) { g.strokeStyle = '#fbbf24'; g.lineWidth = 2; g.stroke(); }
       [[L.interval, s.left, pad + 8], [s.nextLabel || L.next, s.next, pad + inner * 0.4]].forEach(([lab, v, ix]) => {
         g.font = font(13, 700); g.fillStyle = muted; g.fillText(String(lab || '').toUpperCase(), ix, y + 22);
         g.font = font(28); g.fillStyle = '#e8edf5'; g.fillText(String(v), ix, y + 52);
@@ -350,7 +348,9 @@ function drawCanvas(s) {
         g.font = font(26); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), ix + lw + 10, y + 33);
       });
     }
+    g.save(); g.beginPath(); g.roundRect?.(pad - 8, y, inner + 16, wkH, 8); g.clip();
     g.fillStyle = zc; g.fillRect(pad - 8, y + wkH - 4, (inner + 16) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
+    g.restore();
     y += wkH + gap;
   }
   // the bottom row: time, speed, distance and W′bal, each named
