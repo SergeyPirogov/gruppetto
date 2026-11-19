@@ -502,7 +502,8 @@ export function sync({ send = false } = {}) {
 // send them up as its own: this device forgets them first and loads the new account's.
 export const OWNER_KEY = 'gruppetto.owner';
 const ACCOUNT_KEYS = ['gruppetto.history', 'gruppetto.history.deleted', 'gruppetto.workouts', 'gruppetto.workouts.deleted',
-  'gruppetto.records', 'gruppetto-progress', 'gruppetto.social.queue', 'gruppetto.social.rides', 'gruppetto.strava', 'gruppetto.garmin'];
+  'gruppetto.records', 'gruppetto-progress', 'gruppetto.social.queue', 'gruppetto.social.rides', 'gruppetto.strava', 'gruppetto.garmin',
+  'gruppetto.strava-on', 'gruppetto-icu-stats', 'gruppetto-challenge', 'gruppetto.routes']; // the GPX routes too: they show where someone rides
 // the settings that are the account's links or bound to it (the rest of the settings come from the account's profile)
 const ACCOUNT_SETTINGS = ['icuKey', 'icuAthlete', 'icuUpload', 'stravaUpload', 'garminUpload', 'settingsUpdatedAt'];
 
@@ -520,7 +521,7 @@ function forgetOtherAccount() {
   localStorage.setItem(OWNER_KEY, id);
   ctx.track('social', 'account-switch');
   // the rides' full records too, then a fresh start with the new account's data
-  Promise.allSettled(ids.map((x) => ctx.deleteRide(x))).finally(() => location.reload());
+  Promise.allSettled([...ids.map((x) => ctx.deleteRide(x)), ctx.deleteDraft()]).finally(() => location.reload()); // and a ride cut off by a reload
   return true;
 }
 
