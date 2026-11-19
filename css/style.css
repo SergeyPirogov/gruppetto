@@ -2193,7 +2193,6 @@ select.seg-src { display: none; }
 .ctl-art { width: 150px; height: auto; display: block; }
 .ctl-art.click { width: 120px; }
 .ctl-map-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 4px; }
-.ctl-map-link { font-size: 13px; }
 /* narrower: the drawing on top, the two lists under it, no brackets */
 @media (max-width: 860px) {
   .ctl-map-body { grid-template-columns: 1fr; gap: 12px; }
@@ -2204,3 +2203,36 @@ select.seg-src { display: none; }
   .ctl-art { width: 120px; }
 }
 
+
+/* the controller card's Buttons row: what they do now, Set up to the panel */
+.ctl-setup { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,.04); border: 1px solid var(--line); color: inherit; text-decoration: none; }
+.ctl-setup:hover { border-color: #3a4860; }
+.ctl-setup-ic, .dev-box-ic { width: 34px; height: 34px; border-radius: 9px; background: #222c3e; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ctl-setup-ic .ic, .dev-box-ic .ic { width: 18px; height: 18px; }
+.ctl-setup-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ctl-setup-txt b { font-size: .9rem; }
+.ctl-setup-txt small { color: var(--muted); font-size: .78rem; }
+.ctl-setup-go { padding: 6px 12px; border-radius: 999px; background: var(--text, #e8edf5); color: var(--bg, #0e1420); font-weight: 800; font-size: .8rem; white-space: nowrap; }
+/* Devices, bottom: each box headed by an icon, a title and a line under it */
+.dev-more { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.dev-auto[hidden] + .dev-box { grid-column: 1 / -1; } /* alone, the no-trainer box takes the width */
+@media (max-width: 760px) { .dev-more { grid-template-columns: 1fr; } }
+.dev-box-head { display: flex; gap: 12px; align-items: center; margin-bottom: 4px; }
+.dev-box-head b { display: block; font-size: .95rem; color: var(--text, #e8edf5); }
+.dev-box-head small { display: block; color: var(--muted); font-size: .8rem; margin-top: 2px; }
+.dev-box ol.dev-steps { list-style: none; counter-reset: st; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; color: #c6d0e0; }
+.dev-steps li { counter-increment: st; display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 10px; row-gap: 8px; align-items: start; }
+.dev-steps li::before { content: counter(st); width: 22px; height: 22px; border-radius: 50%; background: #2a3448; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; color: #e8edf5; }
+.dev-steps li > span { line-height: 1.45; padding-top: 1px; }
+.dev-flag { grid-column: 2; display: flex; gap: 8px; min-width: 0; }
+.dev-flag code { flex: 1; min-width: 0; padding: 7px 10px; border-radius: 8px; background: #0b0f17; border: 1px solid var(--line); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: normal; }
+.dev-flag button { flex: none; padding: 6px 14px; border-radius: 8px; background: var(--text, #e8edf5); color: var(--bg, #0e1420); border: 0; font-weight: 800; font-size: 12.5px; cursor: pointer; }
+.dev-opt { display: flex; align-items: center; gap: 14px; padding: 12px 0 2px; border-top: 1px solid var(--line); cursor: pointer; }
+.dev-opt > span { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dev-opt b { font-size: .9rem; color: var(--text, #e8edf5); }
+.dev-opt small { color: var(--muted); font-size: .8rem; line-height: 1.4; }
+input.switch { appearance: none; -webkit-appearance: none; flex: none; width: 40px; height: 22px; border-radius: 11px; background: #2a3448; position: relative; cursor: pointer; margin: 0; transition: background .2s; }
+input.switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #e8edf5; transition: transform .2s; }
+input.switch:checked { background: #22c55e; }
+input.switch:checked::after { transform: translateX(18px); }
+input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

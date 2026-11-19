@@ -267,7 +267,9 @@ function ctlArt(dev, sel) {
     let s = '<path d="M40 250 L40 62 C40 26 60 8 82 8 C106 8 120 26 120 54 L120 118 C120 132 128 140 144 142 L198 150 C216 153 226 166 226 186 L226 222 C226 240 214 250 196 250 Z" fill="url(#ctlg)" stroke="#353e50" stroke-width="1.5"/>';
     s += `<rect x="58" y="26" width="44" height="150" rx="22" fill="#3b4459" stroke="${lever ? '#fbbf24' : '#4d5873'}" stroke-width="${lever ? 4 : 1}"/><rect x="64" y="44" width="10" height="114" rx="5" fill="#465169"/>`;
     s += `<rect x="28" y="72" width="16" height="112" rx="7" fill="#151a24" stroke="${shift ? '#fbbf24' : '#3a4860'}" stroke-width="${shift ? 4 : 1.2}"/><line x1="30" y1="128" x2="42" y2="128" stroke="#3a4860" stroke-width="2"/>`;
-    s += `<rect x="138" y="156" width="52" height="12" rx="6" fill="#1b202b" stroke="${pu ? '#fbbf24' : '#3a4860'}" stroke-width="${pu ? 3 : 1}"/><rect x="126" y="178" width="88" height="62" rx="22" fill="#10141c" stroke="#2a3140" stroke-width="2"/>`;
+    // the grip's ridge on the shoulder, the button pad, and the power-up on top of the horn, above the lever
+    s += '<rect x="138" y="156" width="52" height="12" rx="6" fill="#1b202b" stroke="#2e3646"/><rect x="126" y="178" width="88" height="62" rx="22" fill="#10141c" stroke="#2a3140" stroke-width="2"/>';
+    s += `<rect x="64" y="11" width="36" height="11" rx="5.5" fill="#2a3448" stroke="${pu ? '#fbbf24' : '#4d5873'}" stroke-width="${pu ? 4 : 1.2}"/>`;
     const mir = (x) => (right ? 240 - x : x);
     let k = '';
     if (right) {
@@ -301,6 +303,9 @@ function renderCtlMap() {
   $('ctl-map-body').className = `ctl-map-body ${dev}`;
   const changed = Object.keys(map).filter((k) => [...L.L, ...L.R].some((e) => e.id === k) && map[k] !== CTL_DEFAULTS[k]).length;
   $('ctl-map-changed').textContent = changed ? tr('{n} changed from Zwift', { n: changed }) : tr('As in Zwift');
+  // the card's Buttons row: how they are set, without opening the panel
+  const all = Object.keys(map).filter((k) => map[k] !== CTL_DEFAULTS[k]).length;
+  $('ctl-setup-sub').textContent = all ? tr('{n} changed from Zwift', { n: all }) : tr('As in Zwift · − easier, + harder');
 }
 $('ctl-map-tabs').onclick = (e) => { const b = e.target.closest('[data-dev]'); if (b) { ctlTab = b.dataset.dev; renderCtlMap(); } };
 $('ctl-map-body').onchange = (e) => {
@@ -504,7 +509,7 @@ function initLobby() {
   if (bluetoothAvailable() && !navigator.bluetooth.getDevices) {
     $('autoconnect-hint').hidden = false;
     $('copy-flag').onclick = async () => {
-      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = tr('Copied. Paste it into the address bar'); } catch { /* clipboard blocked */ }
+      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = tr('Copied'); } catch { /* clipboard blocked */ }
     };
   }
   if (!bluetoothAvailable()) {
