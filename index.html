@@ -240,7 +240,7 @@
             <small id="ctl-status" class="dev-note">not connected</small>
             <!-- a Zwift Ride is two units: a slot for each hand, so you see both are on (js/app.js renderCtlUnits) -->
             <ul id="ctl-units" class="ctl-units" hidden></ul>
-            <a href="#ctl-map" class="ctl-map-link">Set up the buttons</a>
+            <a href="#ctl-map" class="ctl-setup"><span class="ctl-setup-ic"><svg viewBox="0 0 24 24" class="ic stroke" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span><span class="ctl-setup-txt"><b>Buttons</b><small id="ctl-setup-sub">As in Zwift · − easier, + harder</small></span><span class="ctl-setup-go">Set up</span></a>
             <div class="btns"><button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button><button id="btn-ctl">Connect</button></div>
           </article>
           <article class="device">
@@ -258,18 +258,18 @@
             <div class="ctl-map-foot"><span id="ctl-map-changed" class="hint-sm"></span><button id="ctl-map-reset" class="ghost">Reset to Zwift defaults</button></div>
           </section>
           <div id="autoconnect-hint" class="dev-box dev-auto" hidden>
-            <b>Connect automatically next time</b>
-            <p>This browser asks you to pick each sensor every time. To connect your trainer, heart rate monitor and controllers automatically when the page opens:</p>
-            <ol>
-              <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
-              <li>Set it to <b>Enabled</b> and restart Chrome</li>
-              <li>Reconnect each sensor here once</li>
+            <div class="dev-box-head"><span class="dev-box-ic"><svg viewBox="0 0 24 24" class="ic stroke" aria-hidden="true"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg></span><div><b>Connect automatically next time</b><small>Chrome asks you to pick each sensor every time. One switch stops that.</small></div></div>
+            <ol class="dev-steps">
+              <li><span>Open the Chrome flag</span>
+                <div class="dev-flag"><code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code><button id="copy-flag" class="pill-btn">Copy</button></div></li>
+              <li><span>Set it to <b>Enabled</b> and restart Chrome</span></li>
+              <li><span>Reconnect each sensor here once</span></li>
             </ol>
-            <button id="copy-flag" class="ghost">Copy the address</button>
           </div>
-          <div class="dev-box"><b>Without a trainer</b>
-            <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer): set power with the slider or + / −; press ? to list all keys</label>
-            <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
+          <div class="dev-box">
+            <div class="dev-box-head"><span class="dev-box-ic"><svg viewBox="0 0 24 24" class="ic stroke" aria-hidden="true"><rect x="3" y="11" width="18" height="6" rx="3"/><path d="M7 11V8m10 3V8"/></svg></span><div><b>Without a trainer</b><small>To try the game, or when Bluetooth will not find yours.</small></div></div>
+            <label class="dev-opt"><span><b>Simulator</b><small>Ride with no trainer: set the power with the slider or + / −. Press ? for all keys.</small></span><input type="checkbox" id="sim" class="switch"></label>
+            <label class="dev-opt"><span><b>Show all Bluetooth devices</b><small>If your sensor is not in the list.</small></span><input type="checkbox" id="show-all" class="switch"></label>
           </div>
         </div>
       </div>
