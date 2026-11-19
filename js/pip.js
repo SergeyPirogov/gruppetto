@@ -105,6 +105,13 @@ body.has-wk .cell b { font-size: clamp(16px, min(20vh, 10.5vw), 130px); }
 .wk .wk-bar { position: absolute; left: 0; bottom: 0; height: max(3px, 1vh); width: 100%; background: var(--zc); transform-origin: left; transition: transform .9s linear; }
 .wk.soon { box-shadow: inset 0 0 0 2px #fbbf24; animation: soon 1s ease-in-out infinite; }
 @keyframes soon { 50% { box-shadow: inset 0 0 0 2px transparent; } }
+/* the band you hold in a workout step, and where you are on it */
+.band { position: relative; height: max(8px, 3.5vh); border-radius: 99px; background: #222c3e; }
+.band-ok { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: #2f6b45; box-shadow: inset 0 0 0 2px #4ade80; }
+.band-mark { position: absolute; top: -30%; bottom: -30%; width: 4px; margin-left: -2px; border-radius: 2px; background: #fff; }
+/* with the band, the interval line names each part over its value: how long is left, what comes next */
+.wk.stacked > div { flex-direction: column; gap: .1em; }
+.wk.stacked i { font-size: .5em; }
 /* the bottom row: time, speed, distance and W′bal, each named */
 .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3vw; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row > div { display: flex; flex-direction: column; min-width: 0; }
@@ -135,11 +142,12 @@ function buildDocument(w, opts) {
   d.head.append(style);
   d.body.innerHTML = `
     <div class="top">
-      <div class="cell power"><label><span data-l="power"></span><span class="tag" data-v="zone"></span></label><b><span data-v="power">0</span><span class="unit" data-l="W"></span></b><small data-v="wkg"></small></div>
-      <div class="cell hr"><label><span data-l="hr"></span><span class="tag" data-v="hrZone" hidden></span></label><b data-v="hr">—</b><small data-v="hrAvg"></small></div>
+      <div class="cell power"><label><span data-l="power" data-v="powerLabel"></span><span class="tag" data-v="zone"></span></label><b><span data-v="power">0</span><span class="unit" data-l="W" data-v="powerUnit"></span></b><small data-v="wkg"></small></div>
+      <div class="cell hr"><label><span data-l="hr" data-v="hrLabel"></span><span class="tag" data-v="hrZone" hidden></span></label><b data-v="hr">—</b><small data-v="hrAvg"></small></div>
       <div class="cell cad"><label data-l="cad"></label><b data-v="cad">0</b><small data-v="cadTarget"></small></div>
     </div>
-    <div class="wk" data-v="wk" hidden><div><i data-l="target"></i><span data-v="target"></span></div><div><i data-l="interval"></i><span data-v="left"></span></div><div><i data-l="next"></i><span data-v="next"></span></div><i class="wk-bar" data-v="wkBar"></i></div>
+    <div class="band" data-v="band" hidden><i class="band-ok" data-v="bandOk"></i><i class="band-mark" data-v="bandMark"></i></div>
+    <div class="wk" data-v="wk" hidden><div data-v="wkTarget"><i data-l="target"></i><span data-v="target"></span></div><div><i data-l="interval"></i><span data-v="left"></span></div><div><i data-l="next" data-v="nextLabel"></i><span data-v="next"></span></div><i class="wk-bar" data-v="wkBar"></i></div>
     <div class="row">
       <div><i data-l="time"></i><b data-v="time">0:00</b></div>
       <div><i data-l="speed"></i><b><span data-v="speed" style="all:unset">0.0</span><span data-l="kmh"></span></b></div>
@@ -179,6 +187,21 @@ function updateDocument(s) {
     E.wkBar.style.transform = `scaleX(${(s.stepF ?? 0).toFixed(3)})`;
     E.wk.classList.toggle('soon', (s.stepLeft ?? 99) <= 10); // the last 10 s before the change
   }
+  // in a workout the number you hold leads (heart rate in a step planned by it), its band under the numbers
+  const H = s.workout ? s.hero : null;
+  E.band.hidden = !H; E.wkTarget.hidden = !!H;
+  E.wk.classList.toggle('stacked', !!H);
+  if (H) {
+    setText(E.powerLabel, H.label); E.zone.hidden = H.byHr;
+    setText(E.power, H.now > 0 ? String(H.now) : '—'); setText(E.powerUnit, H.unit);
+    E.power.className = H.cls || ''; E.power.style.color = '';
+    setText(E.wkg, H.hint);
+    if (H.byHr) { setText(E.hrLabel, s.labels?.power ?? 'Power'); setText(E.hr, `${s.power} ${s.labels?.W ?? 'W'}`); setText(E.hrAvg, s.wkg.split(' · ').pop()); E.hrZone.hidden = true; }
+    const at = (v) => Math.max(0, Math.min(100, ((v - H.min) / H.span) * 100));
+    E.bandOk.style.left = `${at(H.lo)}%`; E.bandOk.style.width = `${at(H.hi) - at(H.lo)}%`;
+    E.bandMark.hidden = !(H.now > 0); E.bandMark.style.left = `${at(H.now)}%`;
+    setText(E.nextLabel, s.nextLabel || s.labels?.next || '');
+  } else E.zone.hidden = false;
   setText(E.time, s.time); setText(E.speed, s.speed); setText(E.dist, s.dist);
   setText(E.wbalKj, s.wbalKj ?? '');
   E.wbal.style.transform = `scaleX(${s.wbalF.toFixed(3)})`;
@@ -238,7 +261,7 @@ function drawCanvas(s) {
   // a free ride has no interval line: a lower frame (640×300) so the window holds no empty band; a workout 640×360
   const want = s && !s.workout ? 300 : 360;
   if (canvas.height !== want * 2) canvas.height = want * 2;
-  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, k = W / 640; // drawn at 640 wide, scaled up
+  const g = canvas.getContext("2d"), W = canvas.width, k = W / 640; // drawn at 640 wide, scaled up
   g.setTransform(k, 0, 0, k, 0, 0);
   const w = 640, h = want, zc = s && s.power > 0 ? s.zoneColor : '#8a94a6';
   // the panel, as the sharp window: dark, the zone's glow from the bottom corner
@@ -268,12 +291,16 @@ function drawCanvas(s) {
     }
     return px;
   };
+  // in a workout the number you hold leads: heart rate in a step planned by it, else power; the other moves to the middle
+  const H = wk ? s.hero : null;
+  const heroVal = H ? (H.now > 0 ? String(H.now) : '—') : String(s.power), heroUnit = H ? H.unit : (L.W || 'W');
+  const midVal = H?.byHr ? String(s.power) : s.hr;
   // as big as the column and the height allow: a free ride has the height of the interval line to spare
-  const pPx = fitPx(String(s.power), wk ? 124 : 210, colW[0], L.W || 'W');
-  const sPx = Math.min(fitPx(String(s.hr), wk ? 76 : 120, colW[1]), fitPx(String(s.cad), wk ? 76 : 120, colW[2]));
-  const numH = 22 + pPx * 0.74 + 30, wkH = wk ? 50 : 0, rowH = 68; // the bottom row with W′bal's bar under it
+  const pPx = fitPx(heroVal, H ? 100 : wk ? 124 : 210, colW[0], heroUnit);
+  const sPx = Math.min(fitPx(midVal, wk ? 70 : 120, colW[1], H?.byHr ? (L.W || 'W') : ''), fitPx(String(s.cad), wk ? 70 : 120, colW[2]));
+  const bandH = H ? 14 : 0, numH = 22 + pPx * 0.74 + 30, wkH = wk ? (H ? 62 : 50) : 0, rowH = 68; // the bottom row with W′bal's bar under it
   // blocks a comfortable gap apart (not stretched over the height), the whole centred top to bottom
-  const blocks = wk ? 3 : 2, spare = h - pad * 2 - numH - wkH - rowH;
+  const blocks = wk ? (H ? 4 : 3) : 2, spare = h - pad * 2 - numH - bandH - wkH - rowH;
   const gap = Math.max(10, Math.min(wk ? 28 : 22, spare / (blocks - 1)));
   const top = pad + Math.max(0, (spare - gap * (blocks - 1)) / 2);
   const vy = top + 22 + pPx * 0.74, subY = vy + 28;
@@ -285,23 +312,46 @@ function drawCanvas(s) {
     if (unit) { const wv = g.measureText(val).width; g.font = font(Math.round(px * 0.3), 700); g.fillStyle = muted; g.fillText(unit, x + wv + 4, vy); }
     if (sub) { g.font = font(17, 600); g.fillStyle = muted; g.fillText(sub, x, subY); }
   };
-  num(cols[0], L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', zc, s.zone, s.zoneColor, pPx);
-  num(cols[1], L.hr || 'HR', s.hr, '', s.hrAvg, null, '#ff6b78', s.hrZone, s.hrZoneColor, sPx);
+  if (H) {
+    num(cols[0], H.label, heroVal, H.unit, H.hint, CLS[H.cls] || '#e8edf5', H.byHr ? '#ff6b78' : zc, H.byHr ? null : s.zone, s.zoneColor, pPx);
+    if (H.byHr) num(cols[1], L.power || 'Power', String(s.power), L.W || 'W', s.wkg.split(' · ').pop(), null, zc, null, null, sPx);
+    else num(cols[1], L.hr || 'HR', s.hr, '', s.hrAvg, null, '#ff6b78', s.hrZone, s.hrZoneColor, sPx);
+  } else {
+    num(cols[0], L.power || 'Power', String(s.power), L.W || 'W', s.wkg, CLS[s.powerCls] || s.powerColor || '#e8edf5', zc, s.zone, s.zoneColor, pPx);
+    num(cols[1], L.hr || 'HR', s.hr, '', s.hrAvg, null, '#ff6b78', s.hrZone, s.hrZoneColor, sPx);
+  }
   num(cols[2], L.cad || 'Cadence', s.cad, '', s.cadTarget || s.cadAvg, CLS[s.cadCls], '#4fdcf2', null, null, sPx);
   let y = top + numH + gap;
+  // the band you hold, across the width, and where you are on it
+  if (H) {
+    const at = (v) => pad + inner * Math.max(0, Math.min(1, (v - H.min) / H.span));
+    g.fillStyle = '#222c3e'; g.beginPath(); g.roundRect?.(pad, y, inner, bandH, 7); g.fill();
+    g.fillStyle = '#2f6b45'; g.strokeStyle = '#4ade80'; g.lineWidth = 2; g.beginPath(); g.roundRect?.(at(H.lo), y, at(H.hi) - at(H.lo), bandH, 7); g.fill(); g.stroke();
+    if (H.now > 0) { g.fillStyle = '#ffffff'; g.beginPath(); g.roundRect?.(at(H.now) - 2, y - 4, 4, bandH + 8, 2); g.fill(); }
+    y += bandH + gap;
+  }
   // the interval: one line across the width, its three parts spread out, over a thin bar of how far into it you are
   if (wk) {
     const soon = (s.stepLeft ?? 99) <= 10 && Math.floor(Date.now() / 500) % 2 === 0;
     g.fillStyle = 'rgba(255,255,255,.06)'; g.beginPath(); g.roundRect?.(pad - 8, y, inner + 16, 50, 8); g.fill();
     if (soon) { g.strokeStyle = '#fbbf24'; g.lineWidth = 2; g.stroke(); }
-    [[L.target, s.target, CLS[s.powerCls]], [L.interval, s.left], [L.next, s.next]].forEach(([lab, v, c], i) => {
-      const ix = cols[i] + 8;
-      g.font = font(14, 600); g.fillStyle = muted; const lt = String(lab || '').toUpperCase(); g.fillText(lt, ix, y + 32);
-      const lw = g.measureText(lt).width;
-      g.font = font(26); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), ix + lw + 10, y + 33);
-    });
-    g.fillStyle = zc; g.fillRect(pad - 8, y + 46, (inner + 16) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
-    y += 50 + gap;
+    if (H) { // the target is in the big number's label: here how long is left and what comes next, each named over its value
+      g.beginPath(); g.roundRect?.(pad - 8, y, inner + 16, wkH, 8); g.fillStyle = 'rgba(255,255,255,.06)'; g.fill();
+      if (soon) { g.strokeStyle = '#fbbf24'; g.lineWidth = 2; g.stroke(); }
+      [[L.interval, s.left, pad + 8], [s.nextLabel || L.next, s.next, pad + inner * 0.4]].forEach(([lab, v, ix]) => {
+        g.font = font(13, 700); g.fillStyle = muted; g.fillText(String(lab || '').toUpperCase(), ix, y + 22);
+        g.font = font(28); g.fillStyle = '#e8edf5'; g.fillText(String(v), ix, y + 52);
+      });
+    } else {
+      [[L.target, s.target, CLS[s.powerCls]], [L.interval, s.left], [L.next, s.next]].forEach(([lab, v, c], i) => {
+        const ix = cols[i] + 8;
+        g.font = font(14, 600); g.fillStyle = muted; const lt = String(lab || '').toUpperCase(); g.fillText(lt, ix, y + 32);
+        const lw = g.measureText(lt).width;
+        g.font = font(26); g.fillStyle = c || '#e8edf5'; g.fillText(String(v), ix + lw + 10, y + 33);
+      });
+    }
+    g.fillStyle = zc; g.fillRect(pad - 8, y + wkH - 4, (inner + 16) * Math.max(0, Math.min(1, s.stepF ?? 0)), 4);
+    y += wkH + gap;
   }
   // the bottom row: time, speed, distance and W′bal, each named
   const cw = inner / 4, rowLabel = y + 16, rowVal = y + 50;
