@@ -384,10 +384,10 @@ function renderRaceCard(g = raceRide) {
   const km = route?.length ? ` · ${((route.length * (g.kind === 'race' && !route.oneWay ? g.laps || 1 : 1)) / 1000).toFixed(1)} ${tr('km')}` : '';
   const can = route && w.state !== 'later';
   box.className = `race-card${w.state !== 'later' ? ' hot' : ''}`;
-  box.innerHTML = `<div class="rc-top"><span class="rc-badge">${ctx.esc(badge)}</span>${g.kind === 'race' ? `<span class="rc-kind">${ctx.esc(raceLabel(g, route))}</span>` : ''}</div>`
+  box.innerHTML = `<div class="rc-info"><div class="rc-top"><span class="rc-badge">${ctx.esc(badge)}</span>${g.kind === 'race' ? `<span class="rc-kind">${ctx.esc(raceLabel(g, route))}</span>` : ''}</div>`
     + `<h2>${ctx.esc(g.title)}</h2>`
     + `<div class="rc-meta"><span>${ctx.esc(when)}${left ? ` · <b>${ctx.esc(left)}</b>` : ''}</span><span>${ctx.esc(route?.name || tr('a route not in this version of Gruppetto'))}${ctx.esc(laps + km)}</span></div>`
-    + `<div class="rc-who">👥 ${tr('{n} going', { n: g.riders })} · ${ctx.esc(g.host_name || tr('a rider'))}</div>`
+    + `<div class="rc-who">👥 ${tr('{n} going', { n: g.riders })} · ${ctx.esc(g.host_name || tr('a rider'))}</div></div>`
     + `<div class="rc-acts">`
     + (can ? `<button class="primary" data-act="ride" data-id="${g.id}">${tr('Ride now')}</button>`
       : g.joined ? `<button class="pill-btn sel" data-act="leave" data-id="${g.id}" title="${ctx.esc(tr('Leave this ride'))}">✓ ${tr('Going')}</button>`
