@@ -2152,8 +2152,8 @@ select.seg-src { display: none; }
 .lobby-body .dev-chip i { display: none; }
 .lobby-body .dev-chip::before { content: "+"; }
 .lobby-body .dev-chip.on { background: #13261f; border: 1px solid #1f4a37; }
-.lobby-body .dev-chip.on i, .lobby-body .dev-chip.sim-chip i, .lobby-body .dev-chip.need i { display: block; }
-.lobby-body .dev-chip.on::before, .lobby-body .dev-chip.sim-chip::before, .lobby-body .dev-chip.need::before { content: none; }
+.lobby-body .dev-chip.on i, .lobby-body .dev-chip.need i { display: block; }
+.lobby-body .dev-chip.on::before, .lobby-body .dev-chip.need::before { content: none; }
 .lobby-body .dev-chip.need { border: 1px dashed rgba(255, 122, 26, .7); }
 @media (max-width: 860px) { .lobby-body .dev-chips { overflow-x: auto; scrollbar-width: none; } .lobby-body .dev-chip { flex: none; } }
 .dev-chip .chip-val::before { content: "·"; margin-right: 7px; color: var(--muted); font-weight: 400; }
@@ -2161,3 +2161,6 @@ select.seg-src { display: none; }
 .prog-charts { align-items: start; }
 .prog-charts .pc-table { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
 .prog-charts #fit-chart { height: 220px; }
+
+/* the next interval's length beside its target, in the workout panel */
+.wk-next-dur { font-size: .7em; font-weight: 700; color: var(--muted); white-space: nowrap; }

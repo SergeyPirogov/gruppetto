@@ -56,7 +56,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: false, voice: false, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -283,7 +283,6 @@ function updateDeviceUI() {
     if (!val) { val = document.createElement('b'); val.className = 'chip-val'; chip.append(val); }
     val.textContent = on && reading[d.key] ? reading[d.key]() : '';
   }
-  document.querySelector('.dev-chip[data-key="sim"]')?.classList.toggle('on', $('sim').checked);
   renderRailDots();
   // nothing to ride on: the trainer's chip asks to be connected
   document.querySelector('.dev-chip[data-key="trainer"]')?.classList.toggle('need', !trainer.connected && !$('sim').checked);
@@ -2433,7 +2432,9 @@ function updateHud(cadence, hr, grade) {
     cadEl.parentElement.hidden = !cad && !ride.workout.steps.some((s) => s.cad); // no cadence targets in this workout: no column
     const next = t && ride.workout.steps[t.index + 1];
     const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
-    $('wk-next').textContent = !next ? '—' : nextW !== null ? `${nextW} ${U.W}` : next.hr ? `${next.hr[0]}–${next.hr[1]} ${U.bpm}` : tr('free');
+    // what comes next and for how long, so you know what you are getting into
+    const nextWhat = !next ? '—' : nextW !== null ? `${nextW} ${U.W}` : next.hr ? `${next.hr[0]}–${next.hr[1]} ${U.bpm}` : tr('free');
+    $('wk-next').innerHTML = next ? `${esc(nextWhat)} <small class="wk-next-dur">· ${esc(fmtDur(next.dur))}</small>` : '—';
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
@@ -2705,12 +2706,10 @@ function updateProgress() {
   if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} ${U.km} · ${fmtTime(ride.elapsed)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(L < 1000 ? 1 : 0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
   if (ride.workout) {
-    const total = totalDuration(ride.workout), done = Math.min(1, ride.workoutT / total);
     $('wk-name').textContent = ride.workout.name;
     $('wk-name').title = ride.workout.name;
-    // how long the workout is and how much of it is left, beside how far through it you are
-    $('wk-pct').textContent = ride.workoutDone ? tr('done')
-      : `${tr('{total} · {left} left', { total: fmtTime(total), left: fmtTime(Math.max(0, total - ride.workoutT)) })} · ${Math.round(done * 100)}%`;
+    // the chart under the panel already shows how far through you are: the header only says when it is done
+    $('wk-pct').textContent = ride.workoutDone ? tr('done') : '';
   }
 }
 
@@ -4847,6 +4846,15 @@ function describeStep(step, watts, L = lang) {
 }
 
 const cueBeep = (f, d) => { if (settings.sound) beep(f, d); };
+/** Sound off or on mid-ride with one key (on a call the cues and the crowd are in your ear). */
+function toggleSound() {
+  settings.sound = settings.voice = !settings.sound;
+  $('f-sound').checked = settings.sound;
+  saveSettings();
+  if (!settings.sound) { crowdOff(); try { speechSynthesis.cancel(); } catch { /* none */ } }
+  else { unlockAudio(); beep(880, 0.1); }
+  toast(settings.sound ? tr('Sound on') : tr('Sound off'));
+}
 let voiceTold = false;
 /**
  * A spoken cue, in Ukrainian or English only: `s` an English phrase (with `vars`) or a function of the language
@@ -5003,6 +5011,7 @@ const KEYS = [
   [['→', 'D'], 'Lane right'],
   [['E'], 'ERG on / off (free ride: hold this power)'],
   [['N'], 'Skip the interval (free ride: new lap)'],
+  [['V'], 'Sound on/off'],
   [['P'], 'Pacer on / off'],
   [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · over the shoulder · front'],
   [['6', '–', '9'], 'Camera: far behind · looking back · by the road · helicopter'],
@@ -5214,6 +5223,7 @@ function onRideKey(e) {
   else if (c === 'ArrowLeft' || c === 'KeyA') { e.preventDefault(); steer(-1); }
   else if (c === 'ArrowRight' || c === 'KeyD') { e.preventDefault(); steer(+1); }
   else if (c === 'KeyN') skipInterval();
+  else if (c === 'KeyV') toggleSound();
   else if (c === 'KeyP') { if (ride.pacer) togglePacer(); }
   else if (c === 'KeyE') toggleErg();
   else if (c === 'KeyC') nextCamera();
