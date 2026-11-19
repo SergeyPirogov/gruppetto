@@ -8,6 +8,8 @@
 export const EXPERIMENTS = {
   // the ride's dashboard: a = boards in the corners, b = every number in one strip at the bottom
   hud: { variants: ['a', 'b'], weights: [1, 0] },
+  // the ride summary: a = the cards in a column, b = the story of the ride first: place, time, gap, records
+  summary: { variants: ['a', 'b'], weights: [1, 0] },
 };
 
 const KEY = 'gruppetto.exp';

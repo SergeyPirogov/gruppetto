@@ -144,6 +144,11 @@ export const UK = {
   'Ride history': 'Історія заїздів', 'Kept in this browser. Open a ride to see its summary.': 'Зберігається в цьому браузері. Відкрий заїзд, щоб побачити підсумки.',
   'No rides yet. Finished rides show up here.': 'Заїздів ще немає. Завершені заїзди з\'являться тут.',
 
+  // ride summary, layout B
+  'Ride summary': 'Підсумок заїзду', 'A · cards in a column': 'A · картки колонкою', 'B · the story first': 'B · спершу історія',
+  'A: numbers and cards in a column': 'A: цифри й картки колонкою', 'B: the story of the ride first, then the numbers': 'B: спершу історія заїзду, потім цифри',
+  'of {m} in the race': 'з {m} у гонці', '{place} in category {cat}': '{place} у категорії {cat}', 'Behind the leader': 'Від лідера', 'Avg W/kg': 'Сер. Вт/кг',
+  'New {d} record: {w} W': 'Новий рекорд {d}: {w} Вт',
   // ride HUD
   'Power': 'Потужність', 'Grade': 'Нахил', 'Gear': 'Передача', 'Climbed': 'Набір', 'Ahead · within 10 s': 'Попереду · до 10 с',
   'Lap 1': 'Коло 1', 'Lap {n}': 'Коло {n}', 'Target, W': 'Ціль, Вт', 'Interval': 'Інтервал', 'Next': 'Далі', 'Intensity': 'Інтенс.',
