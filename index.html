@@ -273,50 +273,59 @@
         </div>
       </div>
       <!-- Profile: three tabs (Me, Connections, Settings); a card shows on the tab its data-ptab names -->
-      <!-- who you are, over the tabs (on Rider and Connections; Settings is full screen) -->
-      <div class="card me-hero" id="me-hero" data-panel="profile"></div>
+      <!-- the tabs first, at the same spot on every tab; who you are under them (not on Settings, full screen) -->
       <nav class="card ptabs" data-panel="profile" aria-label="Profile">
         <button data-ptab-go="me">Rider</button><button data-ptab-go="links">Connections</button><button data-ptab-go="settings">Settings</button>
       </nav>
+      <div class="card me-hero" id="me-hero" data-panel="profile"></div>
+      <!-- Rider: groups of rows, a name and a line on the left, the value on the right. Garage lives in the rail,
+           connections on their own tab: nothing here repeats them -->
       <div class="me-grid" data-panel="profile" data-ptab="me">
-        <div class="card" data-panel="profile" data-ptab="me">
-          <h2>Details</h2>
-          <div class="fields">
-            <label>Your name <input id="f-name" maxlength="16"></label>
-            <div class="fields-3">
-              <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
-              <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
-              <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
-            </div>
-            <small class="hint time-hint ftp-hint">Don't know your FTP? <button id="f-ftp-test" class="link-btn">📈 Take the ramp test</button> (about 20 minutes, to failure)</small>
-            <label>W′ (anaerobic reserve), kJ <input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"></label>
-            <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
-
+        <section class="pgroup">
+          <h3>About you</h3>
+          <div class="pbox">
+            <label class="prow"><span><b>Your name</b><small>On the leaderboards and in group rides</small></span><input id="f-name" maxlength="16"></label>
+            <label class="prow"><span><b>Weight</b><small>Your speed on the climbs</small></span><span class="pin"><input id="f-weight" type="number" min="30" max="200"><i>kg</i></span></label>
+            <label class="prow"><span><b>Height</b><small>Your drag on the flat</small></span><span class="pin"><input id="f-height" type="number" min="140" max="220"><i>cm</i></span></label>
           </div>
-        </div>
-        <aside class="me-aside" data-panel="profile" data-ptab="me">
-          <!-- each connection's state at a glance; the button opens its tab (js/app.js renderMeLinks) -->
-          <div class="card me-links" id="me-links" data-panel="profile" data-ptab="me"></div>
-          <div class="card me-garage" data-panel="profile" data-ptab="me"><button id="btn-garage" class="garage-open wide"><span class="garage-swatches" id="garage-swatches"></span><span><b>Garage</b><small>Kit, bike and helmet colors on a turntable</small></span></button></div>
+        </section>
+        <section class="pgroup">
+          <h3>Power and heart</h3>
+          <div class="pbox">
+            <label class="prow" for="f-ftp"><span><b>FTP</b><small>Not sure? <button id="f-ftp-test" type="button" class="link-btn">Take the ramp test</button> · 20 min</small></span><span class="pin"><input id="f-ftp" type="number" min="50" max="600"><i>W</i></span></label>
+            <label class="prow"><span><b>W′ anaerobic reserve</b><small>The W′bal bar in a ride</small></span><span class="pin"><input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"><i>kJ</i></span></label>
+            <label class="prow"><span><b>Threshold heart rate</b><small>Your heart-rate zones</small></span><span class="pin"><input id="f-lthr" type="number" min="0" max="220" placeholder="—"><i>bpm</i></span></label>
+          </div>
+        </section>
         <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
-        <div class="card" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
-          <h2>Account &amp; leaderboards</h2>
-          <p class="muted" id="social-pitch">Sign in to post your climb, sprint and lap times to the leaderboards and keep your profile and records on every device. Without signing in, everything works as before, in this browser.</p>
-          <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
-          <div id="social-in" hidden>
-            <p class="muted" id="social-who"></p>
-            <label class="check"><input type="checkbox" id="f-social-public"> Show me on the leaderboards</label>
-            <div class="row icu-row">
-              <button id="btn-social-edit">Leaderboard name…</button>
-              <button id="btn-social-out" class="ghost">Sign out</button>
-              <button id="btn-social-delete" class="ghost">Delete account</button>
+        <div class="me-social" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
+          <section class="pgroup pwide" id="social-out">
+            <h3>Account</h3>
+            <div class="pbox">
+              <div class="prow"><span><b>Sign in</b><small id="social-pitch">Post your climb, sprint and lap times to the leaderboards, and keep your rides and settings on every device. Without it everything works, in this browser.</small></span><button id="btn-social-in" class="primary">Sign in with Google</button></div>
             </div>
+          </section>
+          <div class="me-social-in" id="social-in" hidden>
+            <section class="pgroup">
+              <h3>On the leaderboards</h3>
+              <div class="pbox">
+                <label class="prow"><span><b>Show me on the leaderboards</b><small>Off: your name is hidden, your rides still count</small></span><input type="checkbox" id="f-social-public" class="switch"></label>
+                <label class="prow"><span><b>Region</b><small>Where your kilometres count</small></span><span class="psel"><select id="p-country" aria-label="Country"></select><select id="p-region" aria-label="Region" hidden></select></span></label>
+                <label class="prow"><span><b>Board</b><small>Men or women</small></span><select id="p-gender"><option value="">Not shown</option><option value="f">Women</option><option value="m">Men</option></select></label>
+              </div>
+            </section>
+            <section class="pgroup">
+              <h3>Account</h3>
+              <div class="pbox">
+                <div class="prow"><span><b>Google</b><small id="social-who"></small></span><button id="btn-social-out" class="ghost">Sign out</button></div>
+                <div class="prow" id="social-sync"><span><b>Sync</b><small id="social-sync-text"></small></span><button id="btn-social-sync">↻ Sync now</button></div>
+                <div class="prow"><span><b class="c-bad">Delete account</b><small>Your rides and name go from the server; this device keeps them</small></span><button id="btn-social-delete" class="ghost danger">Delete…</button></div>
+              </div>
+            </section>
           </div>
-          <p class="social-sync" id="social-sync" hidden><span id="social-sync-text"></span> <button id="btn-social-sync" class="link-btn">Sync now</button></p>
-          <p class="muted" id="social-status"></p>
-          <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+          <p class="muted pnote" id="social-status"></p>
+          <p class="hint pnote">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
         </div>
-        </aside>
       </div>
       <!-- Settings, full screen (js/app.js showSettingsGroup): the groups on the left, one at a time on the right.
            The selects stay (their ids and handlers); js/settings-ui.js draws each as buttons over it -->

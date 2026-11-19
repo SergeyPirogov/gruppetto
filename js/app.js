@@ -1341,9 +1341,7 @@ function renderMeHero() {
     + `<div><b>${named ? esc(settings.name.trim()) : tr('Your profile')}</b><small>${tr('Level {n}', { n: L.level })} · ${progress?.rides || 0} ${tr('rides')} · ${Math.round(progress?.km || 0)} ${U.km}</small>`
     + `<i class="me-lvl"><i style="width:${Math.round(L.frac * 100)}%"></i></i></div></div>`
     + `<div class="me-stats">${stat('FTP', `${settings.ftp} ${U.W}`)}${stat(U.wkg, wkg > 0 ? wkg.toFixed(1) : '—')}${stat(tr('Category'), categoryOf(settings.ftp, settings.weight))}${stat(tr('Weight'), `${settings.weight} ${tr('kg')}`)}</div>`;
-  // signed in: the account's sync line under the name
-  const synced = !$('social-in').hidden && $('social-sync-text').textContent.trim();
-  if (synced) box.querySelector('.me-who small')?.insertAdjacentHTML('afterend', `<small class="me-sync"><i></i>${esc(synced)}</small>`);
+  // the sync line is the Account group's Sync row, not here too
   renderMeLinks();
 }
 
@@ -5316,7 +5314,7 @@ function renderSpin() {
 }
 $('garage-spin').onclick = () => { garageSpin = !garageSpin; try { localStorage.setItem(SPIN_KEY, garageSpin ? '1' : '0'); } catch { /* private mode */ } renderSpin(); };
 renderSpin();
-$('btn-garage').onclick = openGarage;
+if ($('btn-garage')) $('btn-garage').onclick = openGarage; // the Garage is in the rail; a button here only if the page has one
 $('rail-garage').onclick = openGarage;
 $('garage').addEventListener('click', (e) => { if (e.target.closest('[data-garage-close], #garage-done')) closeGarage(); });
 $('garage-views').addEventListener('click', (e) => {
