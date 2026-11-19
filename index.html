@@ -238,6 +238,8 @@
         </div>
         <div class="device">
           <div><b>Zwift Ride / Play / Click controllers</b><small id="ctl-status">not connected</small>
+            <!-- a Zwift Ride is two units: a slot for each hand, so you see both are on (js/app.js renderCtlUnits) -->
+            <ul id="ctl-units" class="ctl-units" hidden></ul>
             <details class="btn-map"><summary>Buttons</summary>
               <table>
                 <tr><td>Shift up / down (both sides), ▲ ▼</td><td>Gear + / − (in ERG: intensity ±1 %)</td></tr>

@@ -210,13 +210,29 @@ function deviceStatus(d) {
   if (d.dev === controller || d.dev === obc) {
     const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
     const units = d.dev === controller && controller.count > 1 ? ` ×${controller.count}` : '';
-    const hint = d.dev === controller && controller.count === 1 && /ride/i.test(controller.name)
-      ? ` · ${tr('second controller: “+ controller”')}` : '';
+    const hint = ''; // the second Zwift Ride unit has its own slot under the row (renderCtlUnits)
     return `${d.dev.name}${units}${label ? ` · ${tr('pressed: {label}', { label })}` : ` · ${tr('press any button')}`}${hint}`;
   }
   if (d.dev === hrm) { const hr = fresh(live.hr, live.hrAt); return `${d.dev.name} · ${hr ? `❤ ${hr} ${U.bpm}` : tr('waiting for a reading…')}`; }
   if (d.dev === cadenceSensor) return `${d.dev.name} · ${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`;
   return d.dev.name;
+}
+
+/** The controller's units under its row: for a Zwift Ride a slot per hand, each connected or not; any other, a line per unit. */
+function renderCtlUnits() {
+  const box = $('ctl-units'), units = controller.unitsInfo || [];
+  const ride = units.some((u) => /ride/i.test(u.name));
+  box.hidden = !units.length;
+  if (!units.length) { box.innerHTML = ''; return; }
+  const slot = (label, u) => `<li class="${u?.connected ? 'ok' : ''}"><i></i><b>${label}</b><span>${u ? (u.connected ? tr('connected') : tr('not connected')) : tr('not connected')}</span></li>`;
+  if (ride) {
+    // the hand is known once a button on it is pressed; until then the units fill the slots in order
+    const left = units.find((u) => u.side === 'left'), right = units.find((u) => u.side === 'right');
+    const rest = units.filter((u) => u !== left && u !== right);
+    const L = left || rest.shift(), R = right || rest.shift();
+    box.innerHTML = slot(tr('Left unit'), L) + slot(tr('Right unit'), R)
+      + (controller.count === 2 ? '' : `<li class="ctl-tip">${tr('A Zwift Ride is two units: connect the second with “+ controller”, then press a button on each')}</li>`);
+  } else box.innerHTML = units.map((u) => slot(esc(u.name), u)).join('');
 }
 
 /** A live reading, or 0 once it is older than 3 s (the trainer stops sending when you stop pedalling). */
@@ -240,6 +256,9 @@ function updateDeviceUI() {
   }
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
   $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
+  renderCtlUnits();
+  // a card per device on the Devices page: lit when it is connected
+  for (const d of DEVICES) $(`btn-${d.key}`)?.closest('.device')?.classList.toggle('on', d.dev.connected || (d.dev === cadenceSensor && trainer.connected));
   // lobby top bar: a dot per device, lit when connected
   // with the live reading on the chip, so you see at a glance that each one is working
   const reading = { trainer: () => `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`, hr: () => { const v = fresh(live.hr, live.hrAt); return v ? `❤ ${v}` : '—'; }, cad: () => `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}` };
