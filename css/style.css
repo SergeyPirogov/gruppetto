@@ -1900,3 +1900,20 @@ select.seg-src { display: none; }
 .race-table tr.me td { background: rgba(255, 122, 26, .1); color: #ffb07a; }
 .pod-av.cat-A { background: #f87171; } .pod-av.cat-B { background: #4ade80; } .pod-av.cat-C { background: #60a5fa; } .pod-av.cat-D { background: #facc15; }
 .race-table th:nth-child(n+3), .race-table td:nth-child(n+3) { text-align: right; }
+
+/* =================== HUD B with a workout: its panel across the top of the strip, intensity at the end =================== */
+#ride.hud-b .hud-strip > .workout { order: -2; flex: 1 0 70%; width: auto; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "title title title" "chart hero head";
+  column-gap: 22px; align-items: center; padding: 8px 14px 8px; background: none; border: 0; border-bottom: 1px solid rgba(255, 255, 255, .14); border-radius: 0; backdrop-filter: none; }
+#ride.hud-b .hud-strip > .workout[hidden], #ride.hud-b .hud-strip > .intensity[hidden] { display: none; }
+#ride.hud-b .hud-strip > .workout + *, #ride.hud-b .hud-strip > .intensity + * { border-left: 0; }
+#ride.hud-b .hud-strip .wk-title { grid-area: title; margin-bottom: 4px; }
+#ride.hud-b .hud-strip #wk-chart { grid-area: chart; height: 50px; }
+#ride.hud-b .hud-strip .wk-hero { grid-area: hero; margin: 0; }
+#ride.hud-b .hud-strip .wk-scale { width: 200px; }
+#ride.hud-b .hud-strip .wk-head { grid-area: head; margin: 0; gap: 18px; }
+#ride.hud-b .hud-strip > .intensity { order: -1; flex: 0 0 auto; flex-direction: column; justify-content: center; align-items: center; gap: 6px; padding: 8px 14px; border-bottom: 1px solid rgba(255, 255, 255, .14); }
+#ride.hud-b .hud-strip > .intensity > span { white-space: nowrap; }
+#ride.hud-b .hud-strip > .intensity { display: grid; grid-template-columns: auto auto auto; }
+#ride.hud-b .hud-strip > .intensity .int-toggles { grid-column: 1 / -1; justify-content: center; }
+#ride.hud-b .hud-strip > .intensity .int-toggles { display: flex; gap: 6px; }
+@media (max-width: 900px) { #ride.hud-b .hud-strip > .workout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "hero" "head" "chart"; } }
