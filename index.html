@@ -65,6 +65,8 @@
     <main class="lobby-main">
       <!-- signed in: your day on the leaderboards and the group rides at a glance -->
       <section id="me-today" class="me-today" hidden aria-label="Your day"></section>
+      <!-- the next group ride or race, big, with Join (js/social-ui.js renderRaceCard); hidden without the social layer -->
+      <section id="race-card" class="race-card" hidden aria-label="Next group ride"></section>
       <div id="draft-box" class="note draft-box" hidden>
         <span id="draft-text"></span>
         <span class="draft-actions"><button id="draft-continue" class="primary">Continue riding</button><button id="draft-save">Save ride</button><button id="draft-drop" class="ghost">Discard</button></span>
@@ -109,6 +111,8 @@
           <div id="plan-list" class="options mode-list plan-list"></div>
         </div>
         <h2>Mode</h2>
+        <!-- the three modes as a segmented control (settings-ui.js turns it into buttons); the cards under it show the picked one -->
+        <select id="mode-select" class="mode-select" data-seg aria-label="Mode"><option value="free" data-short="Free ride">Free ride</option><option value="workout" data-short="Workout">Workout</option><option value="race" data-short="Race vs bots">Race vs bots</option></select>
         <div id="mode-list" class="options mode-list"></div>
       </section>
 
@@ -214,30 +218,28 @@
       <div class="card" data-panel="devices">
         <h2>Devices</h2>
         <p id="bt-warning" class="warn" hidden>This browser does not support Bluetooth. Use Chrome or Edge on a computer or Android, or the simulator mode.</p>
-        <div id="autoconnect-hint" class="note" hidden>
-          <b>Connect automatically next time</b>
-          <p>This browser asks you to pick each sensor every time. To have the trainer, heart rate monitor and controllers connect by themselves when the page opens:</p>
-          <ol>
-            <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
-            <li>Set it to <b>Enabled</b> and restart Chrome</li>
-            <li>Reconnect each sensor here once</li>
-          </ol>
-          <button id="copy-flag" class="ghost">Copy the address</button>
-        </div>
-        <div class="device">
-          <div><b>Smart trainer / power meter</b><small id="trainer-status">not connected</small></div>
-          <button id="btn-trainer">Connect</button>
-        </div>
-        <div class="device">
-          <div><b>Heart rate monitor</b><small id="hr-status">not connected</small></div>
-          <button id="btn-hr">Connect</button>
-        </div>
-        <div class="device">
-          <div><b>Cadence sensor</b><small id="cad-status">not connected</small></div>
-          <button id="btn-cad">Connect</button>
-        </div>
-        <div class="device">
-          <div><b>Zwift Ride / Play / Click controllers</b><small id="ctl-status">not connected</small>
+        <!-- a card per device, lit when connected; the live reading on the right (js/app.js updateDeviceUI) -->
+        <div class="dev-grid">
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M4 18h16M7 18l3-9h4l3 9M10 9l2-4 2 4"/></svg><div class="dev-name"><b>Smart trainer / power meter</b><span class="dev-state" id="trainer-state">not connected</span></div><b class="dev-live" id="trainer-live"></b></div>
+            <small id="trainer-status" class="dev-note">not connected</small>
+            <div class="btns"><button id="btn-trainer">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg><div class="dev-name"><b>Heart rate monitor</b><span class="dev-state" id="hr-state">not connected</span></div><b class="dev-live" id="hr-live"></b></div>
+            <small id="hr-status" class="dev-note">not connected</small>
+            <div class="btns"><button id="btn-hr">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16M12 12l4-3"/></svg><div class="dev-name"><b>Cadence sensor</b><span class="dev-state" id="cad-state">not connected</span></div><b class="dev-live" id="cad-live"></b></div>
+            <small id="cad-status" class="dev-note">not connected</small>
+            <div class="btns"><button id="btn-cad">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M6 8h12v8H6zM9 12h2M13 12h2"/></svg><div class="dev-name"><b>Zwift Ride / Play / Click controllers</b><span class="dev-state" id="ctl-state">not connected</span></div><b class="dev-live" id="ctl-live"></b></div>
+            <small id="ctl-status" class="dev-note">not connected</small>
+            <!-- a Zwift Ride is two units: a slot for each hand, so you see both are on (js/app.js renderCtlUnits) -->
+            <ul id="ctl-units" class="ctl-units" hidden></ul>
             <details class="btn-map"><summary>Buttons</summary>
               <table>
                 <tr><td>Shift up / down (both sides), ▲ ▼</td><td>Gear + / − (in ERG: intensity ±1 %)</td></tr>
@@ -251,58 +253,76 @@
                 <tr><td>Power-up right</td><td>Hide / show the HUD</td></tr>
               </table>
             </details>
+            <div class="btns"><button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button><button id="btn-ctl">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg><div class="dev-name"><b>OpenBikeControl</b><span class="dev-state" id="obc-state">not connected</span></div><b class="dev-live" id="obc-live"></b></div>
+            <small id="obc-status" class="dev-note">not connected</small><small class="hint-sm">Any controller via the BikeControl app</small>
+            <div class="btns"><button id="btn-obc">Connect</button></div>
+          </article>
+        </div>
+        <div class="dev-more">
+          <div id="autoconnect-hint" class="dev-box dev-auto" hidden>
+            <b>Connect automatically next time</b>
+            <p>This browser asks you to pick each sensor every time. To have the trainer, heart rate monitor and controllers connect by themselves when the page opens:</p>
+            <ol>
+              <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
+              <li>Set it to <b>Enabled</b> and restart Chrome</li>
+              <li>Reconnect each sensor here once</li>
+            </ol>
+            <button id="copy-flag" class="ghost">Copy the address</button>
           </div>
-          <div class="btns">
-            <button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button>
-            <button id="btn-ctl">Connect</button>
+          <div class="dev-box"><b>Without a trainer</b>
+            <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
+            <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
           </div>
         </div>
-        <div class="device">
-          <div><b>OpenBikeControl</b><small id="obc-status">not connected</small><small class="hint-sm">Any controller via the BikeControl app</small></div>
-          <button id="btn-obc">Connect</button>
-        </div>
-        <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
-        <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
       </div>
       <!-- Profile: three tabs (Me, Connections, Settings); a card shows on the tab its data-ptab names -->
+      <!-- who you are, over the tabs (on Rider and Connections; Settings is full screen) -->
+      <div class="card me-hero" id="me-hero" data-panel="profile"></div>
       <nav class="card ptabs" data-panel="profile" aria-label="Profile">
         <button data-ptab-go="me">Rider</button><button data-ptab-go="links">Connections</button><button data-ptab-go="settings">Settings</button>
       </nav>
-      <div class="card me-hero" id="me-hero" data-panel="profile" data-ptab="me"></div>
-      <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
-      <div class="card" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
-        <h2>Account &amp; leaderboards</h2>
-        <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps on the leaderboards with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
-        <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
-        <div id="social-in" hidden>
-          <p class="muted" id="social-who"></p>
-          <label class="check"><input type="checkbox" id="f-social-public"> Show me on the leaderboards</label>
-          <div class="row icu-row">
-            <button id="btn-social-edit">Leaderboard name…</button>
-            <button id="btn-social-out" class="ghost">Sign out</button>
-            <button id="btn-social-delete" class="ghost">Delete account</button>
-          </div>
-        </div>
-        <p class="social-sync" id="social-sync" hidden><span id="social-sync-text"></span> <button id="btn-social-sync" class="link-btn">Sync now</button></p>
-        <p class="muted" id="social-status"></p>
-        <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
-      </div>
-      <div class="card" data-panel="profile" data-ptab="me">
-        <h2>Details</h2>
-        <div class="fields">
-          <label>Your name <input id="f-name" maxlength="16"></label>
-          <div class="fields-3">
-            <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
-            <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
-            <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
-          </div>
-          <small class="hint time-hint ftp-hint">Don't know your FTP? <button id="f-ftp-test" class="link-btn">📈 Take the ramp test</button> (about 20 minutes, to failure)</small>
-          <label>W′ (anaerobic reserve), kJ <input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"></label>
-          <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
+      <div class="me-grid" data-panel="profile" data-ptab="me">
+        <div class="card" data-panel="profile" data-ptab="me">
+          <h2>Details</h2>
+          <div class="fields">
+            <label>Your name <input id="f-name" maxlength="16"></label>
+            <div class="fields-3">
+              <label>Weight, kg <input id="f-weight" type="number" min="30" max="200"></label>
+              <label>Height, cm <input id="f-height" type="number" min="140" max="220"></label>
+              <label>FTP, W <input id="f-ftp" type="number" min="50" max="600"></label>
+            </div>
+            <small class="hint time-hint ftp-hint">Don't know your FTP? <button id="f-ftp-test" class="link-btn">📈 Take the ramp test</button> (about 20 minutes, to failure)</small>
+            <label>W′ (anaerobic reserve), kJ <input id="f-wprime" type="number" min="5" max="60" step="0.5" placeholder="20"></label>
+            <label>Threshold heart rate (LTHR), bpm <input id="f-lthr" type="number" min="0" max="220" placeholder="for heart rate zones"></label>
 
-          <h3 class="fields-head">Look</h3>
-          <button id="btn-garage" class="garage-open wide"><span class="garage-swatches" id="garage-swatches"></span><span><b>Garage</b><small>Kit, bike and helmet colours, on a turntable</small></span></button>
+          </div>
         </div>
+        <aside class="me-aside" data-panel="profile" data-ptab="me">
+          <!-- each connection's state at a glance; the button opens its tab (js/app.js renderMeLinks) -->
+          <div class="card me-links" id="me-links" data-panel="profile" data-ptab="me"></div>
+          <div class="card me-garage" data-panel="profile" data-ptab="me"><button id="btn-garage" class="garage-open wide"><span class="garage-swatches" id="garage-swatches"></span><span><b>Garage</b><small>Kit, bike and helmet colours, on a turntable</small></span></button></div>
+        <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
+        <div class="card" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
+          <h2>Account &amp; leaderboards</h2>
+          <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps on the leaderboards with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
+          <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
+          <div id="social-in" hidden>
+            <p class="muted" id="social-who"></p>
+            <label class="check"><input type="checkbox" id="f-social-public"> Show me on the leaderboards</label>
+            <div class="row icu-row">
+              <button id="btn-social-edit">Leaderboard name…</button>
+              <button id="btn-social-out" class="ghost">Sign out</button>
+              <button id="btn-social-delete" class="ghost">Delete account</button>
+            </div>
+          </div>
+          <p class="social-sync" id="social-sync" hidden><span id="social-sync-text"></span> <button id="btn-social-sync" class="link-btn">Sync now</button></p>
+          <p class="muted" id="social-status"></p>
+          <p class="hint">Your intervals.icu key and Strava link never leave this browser. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
+        </div>
+        </aside>
       </div>
       <!-- Settings, full screen (js/app.js showSettingsGroup): the groups on the left, one at a time on the right.
            The selects stay (their ids and handlers); js/settings-ui.js draws each as buttons over it -->
@@ -538,12 +558,15 @@
         <h2>Ride history</h2>
         <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
         <div class="hist-backup" id="hist-backup" hidden><button id="btn-backup" class="ghost">⬇ Download all rides (.zip)</button><small class="hint">every ride as .FIT, a backup or a move to another app</small></div>
+        <section id="hist-week" class="hist-week" hidden aria-label="This week"></section>
         <div id="history-all" class="hist-list"></div>
       </div>
       <!-- level, badges, form and the power curve: their own tab; History keeps to the list of rides -->
       <div class="card" data-panel="progress" hidden>
         <div id="progress-box" class="progress-box" hidden></div>
         <p id="progress-empty" class="muted">No rides yet. Your level and badges start with your first ride.</p>
+        <!-- the form chart and the power curve side by side on a wide screen -->
+        <div class="prog-charts">
         <div id="fitness-box" class="fitness" hidden>
           <div class="sum-chart-head"><h2>Form <small id="fit-src" hidden>intervals.icu</small></h2><span class="legend"><i class="lg-fit"></i>Fitness <i class="lg-fat"></i>Fatigue <i class="lg-form"></i>Form</span></div>
           <div id="fit-nums" class="fit-nums"></div>
@@ -555,6 +578,8 @@
           <div id="pc-table" class="pc-table"></div>
           <div id="pc-ftp" class="ftp-tip" hidden></div>
         </div>
+        </div>
+        <div id="progress-badges" class="prog-badges" hidden></div>
       </div>
     </div>
   </div>

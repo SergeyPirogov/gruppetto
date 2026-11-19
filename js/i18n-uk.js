@@ -482,6 +482,12 @@ export const UK = {
   "The riders' chat shows here": "Тут буде чат райдерів",
   "Watch it live: the riders, their power, the chat": "Дивитися наживо: райдери, їхня потужність, чат",
   "Watch": "Дивитися",
+  "Next race": "Наступна гонка",
+  "Next group ride": "Наступний груповий заїзд",
+  "starts in {t}": "старт через {t}",
+  "when everyone is ready": "коли всі готові",
+  "All group rides": "Усі групові заїзди",
+  "Race vs bots": "Гонка з ботами",
   "This ride is over or was cancelled": "Цей заїзд завершився або його скасували",
   "← Back": "← Назад",
   "Watching now": "Дивляться зараз",
@@ -491,6 +497,14 @@ export const UK = {
   "Cheer them on…": "Підтримай їх…",
   "Sign in to write in the chat. Reactions work for everyone.": "Увійди, щоб писати в чат. Реакції доступні всім.",
   "Watching": "Перегляд",
+  'Without a trainer': 'Без станка', 'reconnecting…': 'перепідключення…',
+  'Manage': 'Керувати',
+  // progress
+  'Level': 'Рівень', 'Form today': 'Форма сьогодні', 'Badges': 'Нагороди', '{n} of {m}': '{n} з {m}', 'ramp test on {date}': 'рамп-тест {date}', 'set by you': 'задано тобою', 'an estimate: a ramp test finds yours': 'оцінка: рамп-тест знайде твій', 'Take the test again': 'Пройти тест ще раз', 'Take the ramp test': 'Пройти рамп-тест',
+  // devices
+  'Left unit': 'Лівий блок', 'Right unit': 'Правий блок', 'connected': 'підключено', 'A Zwift Ride is two units: connect the second with “+ controller”, then press a button on each': 'Zwift Ride — це два блоки: підключи другий через «+ контролер» і натисни кнопку на кожному',
+  // history
+  'Load': 'Навантаження',
   // race results
   'Gap': 'Відставання', 'Avg power': 'Сер. потужність',
   // group rides hub

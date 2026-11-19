@@ -209,14 +209,30 @@ function deviceStatus(d) {
   }
   if (d.dev === controller || d.dev === obc) {
     const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
-    const units = d.dev === controller && controller.count > 1 ? ` ×${controller.count}` : '';
-    const hint = d.dev === controller && controller.count === 1 && /ride/i.test(controller.name)
-      ? ` · ${tr('second controller: “+ controller”')}` : '';
+    const units = ''; // the units have their own slots
+    const hint = ''; // the second Zwift Ride unit has its own slot under the row (renderCtlUnits)
     return `${d.dev.name}${units}${label ? ` · ${tr('pressed: {label}', { label })}` : ` · ${tr('press any button')}`}${hint}`;
   }
   if (d.dev === hrm) { const hr = fresh(live.hr, live.hrAt); return `${d.dev.name} · ${hr ? `❤ ${hr} ${U.bpm}` : tr('waiting for a reading…')}`; }
   if (d.dev === cadenceSensor) return `${d.dev.name} · ${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`;
   return d.dev.name;
+}
+
+/** The controller's units under its row: for a Zwift Ride a slot per hand, each connected or not; any other, a line per unit. */
+function renderCtlUnits() {
+  const box = $('ctl-units'), units = controller.unitsInfo || [];
+  const ride = units.some((u) => /ride/i.test(u.name));
+  box.hidden = !units.length;
+  if (!units.length) { box.innerHTML = ''; return; }
+  const slot = (label, u) => `<li class="${u?.connected ? 'ok' : ''}"><i></i><b>${label}</b><span>${u ? (u.connected ? tr('connected') : tr('not connected')) : tr('not connected')}</span></li>`;
+  if (ride) {
+    // the hand is known once a button on it is pressed; until then the units fill the slots in order
+    const left = units.find((u) => u.side === 'left'), right = units.find((u) => u.side === 'right');
+    const rest = units.filter((u) => u !== left && u !== right);
+    const L = left || rest.shift(), R = right || rest.shift();
+    box.innerHTML = slot(tr('Left unit'), L) + slot(tr('Right unit'), R)
+      + (controller.count === 2 ? '' : `<li class="ctl-tip">${tr('A Zwift Ride is two units: connect the second with “+ controller”, then press a button on each')}</li>`);
+  } else box.innerHTML = units.map((u) => slot(esc(u.name), u)).join('');
 }
 
 /** A live reading, or 0 once it is older than 3 s (the trainer stops sending when you stop pedalling). */
@@ -240,6 +256,21 @@ function updateDeviceUI() {
   }
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
   $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
+  renderCtlUnits();
+  // a card per device on the Devices page: lit when it is connected
+  for (const d of DEVICES) {
+    const on = d.dev.connected || (d.dev === cadenceSensor && trainer.connected);
+    $(`btn-${d.key}`)?.closest('.device')?.classList.toggle('on', on);
+    const st = $(`${d.key}-state`), lv = $(`${d.key}-live`);
+    if (st) st.textContent = reconnecting.has(d.key) ? tr('reconnecting…') : d.dev.connected ? tr('connected') : on ? tr('from trainer') : tr('not connected');
+    // the live reading, big on the card's right
+    if (lv) lv.textContent = !on ? '' : d.dev === trainer ? `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`
+      : d.dev === hrm ? `${fresh(live.hr, live.hrAt) || '—'}` : d.dev === cadenceSensor ? `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`
+      : '';
+    // the long line only when it says more than the state above it
+    const note = $(`${d.key}-status`);
+    if (note) note.hidden = note.textContent === tr('not connected');
+  }
   // lobby top bar: a dot per device, lit when connected
   // with the live reading on the chip, so you see at a glance that each one is working
   const reading = { trainer: () => `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`, hr: () => { const v = fresh(live.hr, live.hrAt); return v ? `❤ ${v}` : '—'; }, cad: () => `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}` };
@@ -695,6 +726,17 @@ function renderPlan() {
   if ($('plan-box')) $('plan-box').hidden = true;
 }
 
+/** The workout the Workout segment would pick (set by renderModes): the chosen one, today's plan, or the last ridden. */
+let modeWorkout = null;
+
+// the segmented control: the cards' own handlers do the same, this is the shorter way to switch
+$('mode-select')?.addEventListener('change', (ev) => {
+  const v = ev.target.value;
+  if (v === 'workout' && !modeWorkout) { renderModes(); openWorkoutMenu(); return; } // nothing to pick yet: choose one (the redraw puts the old mode back)
+  settings.mode = v === 'workout' ? modeWorkout.id : v;
+  saveSettings(); renderModes();
+});
+
 /** Mode: free ride, or a workout picked in its own menu. */
 function renderModes() {
   renderPlan();
@@ -738,6 +780,12 @@ function renderModes() {
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
   wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
+  // the segmented control above shows the mode; only the picked mode's card stays visible (free ride when none is picked)
+  const picked = [free, wb, race].find((o) => o.classList.contains('sel')) || free;
+  picked.classList.add('cur');
+  modeWorkout = w;
+  const seg = $('mode-select');
+  if (seg) seg.value = picked === race ? 'race' : picked === wb ? 'workout' : 'free';
   if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
   updateSummary();
 }
@@ -1177,6 +1225,21 @@ function renderMeHero() {
     + `<div><b>${named ? esc(settings.name.trim()) : tr('Your profile')}</b><small>${tr('Level {n}', { n: L.level })} · ${progress?.rides || 0} ${tr('rides')} · ${Math.round(progress?.km || 0)} ${U.km}</small>`
     + `<i class="me-lvl"><i style="width:${Math.round(L.frac * 100)}%"></i></i></div></div>`
     + `<div class="me-stats">${stat('FTP', `${settings.ftp} ${U.W}`)}${stat(U.wkg, wkg > 0 ? wkg.toFixed(1) : '—')}${stat(tr('Category'), categoryOf(settings.ftp, settings.weight))}${stat(tr('Weight'), `${settings.weight} ${tr('kg')}`)}</div>`;
+  // signed in: the account's sync line under the name
+  const synced = !$('social-in').hidden && $('social-sync-text').textContent.trim();
+  if (synced) box.querySelector('.me-who small')?.insertAdjacentHTML('afterend', `<small class="me-sync"><i></i>${esc(synced)}</small>`);
+  renderMeLinks();
+}
+
+/** Rider's side card: intervals.icu, Strava and Garmin, each connected or not, a button to its tab. */
+function renderMeLinks() {
+  const box = $('me-links');
+  if (!box) return;
+  const list = [['intervals.icu', !!icuClient && !icuClient.demo, 'icu-card'], ['Strava', !!stravaClient, 'strava-card'], ['Garmin Connect', !!garminClient, 'garmin-card']]
+    .filter(([, , card]) => $(card) && $(card).dataset.off !== '1' && (card !== 'garmin-card' || garminOn())); // only those its tab offers
+  const shown = list;
+  box.innerHTML = `<h2>${tr('Connections')}</h2>` + shown.map(([name, on]) => `<div class="ml-row${on ? ' on' : ''}"><i></i><b>${name}</b><span>${on ? tr('connected') : tr('not connected')}</span><button type="button" class="ghost" data-ml>${on ? tr('Manage') : tr('Connect')}</button></div>`).join('');
+  for (const b of box.querySelectorAll('[data-ml]')) b.onclick = () => showProfileTab('links');
 }
 
 /** The rail lights the section open in the drawer, and Ride again once it closes. */
@@ -3025,12 +3088,27 @@ function renderProgress() {
   const box = $('progress-box');
   box.hidden = !progress.rides;
   $('progress-empty').hidden = !!progress.rides;
+  $('progress-badges').hidden = true;
   if (box.hidden) return;
   const n = Object.keys(progress.badges).length;
-  box.innerHTML = `<div class="sum-chart-head"><h2>${tr('Level {n}', { n: L.level })}</h2><span class="muted">${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</span></div>
-    <div class="lvl-bar"><i style="width:${pct}%"></i></div>
-    <div class="lvl-totals"><span><b>${progress.rides}</b> ${tr('rides')}</span><span><b>${Math.round(progress.km)}</b> ${U.km}</span><span><b>${progress.gain}</b> ${tr('m climbed')}</span><span><b>${n}/${BADGES.length}</b> ${tr('badges')}</span></div>
-    <div class="badges">${BADGES.map((b) => { const at = progress.badges[b.id]; return `<div class="badge${at ? ' got' : ''}" title="${esc(tr(b.how))}"><span>${b.icon}</span><b>${esc(tr(b.name))}</b><small>${at ? new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : esc(tr(b.how))}</small></div>`; }).join('')}</div>`;
+  // three tiles on top: level, FTP, today's form; the badges at the bottom
+  const wkg = settings.weight > 0 ? settings.ftp / settings.weight : 0;
+  const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness.at(-1) : null;
+  const f = icu ? { ctl: icu.ctl, atl: icu.atl, form: icu.ctl - icu.atl } : fitnessSeries(history, { days: 90 }).at(-1);
+  const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
+  const ramp = history.find((e) => e.ramp);
+  box.innerHTML = `<article class="pg-tile"><small class="pg-label">${tr('Level')}</small><div class="pg-big"><b>${L.level}</b><span>${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</span></div>`
+    + `<div class="lvl-bar"><i style="width:${pct}%"></i></div>`
+    + `<small class="pg-foot">${progress.rides} ${tr('rides')} · ${Math.round(progress.km)} ${U.km} · ${progress.gain} ${tr('m climbed')}</small></article>`
+    + `<article class="pg-tile"><small class="pg-label">FTP</small><div class="pg-big"><b>${settings.ftp}</b><span>${U.W}${wkg > 0 ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''} · ${tr('Category')} ${categoryOf(settings.ftp, settings.weight)}</span></div>`
+    + `<small class="pg-foot">${ramp ? tr('ramp test on {date}', { date: new Date(ramp.date).toLocaleDateString(locale, { day: 'numeric', month: 'long' }) }) : ftpKnown() ? tr('set by you') : tr('an estimate: a ramp test finds yours')}</small>`
+    + `<button type="button" class="ghost pg-btn" id="pg-ftp-test">${tr(ramp ? 'Take the test again' : 'Take the ramp test')}</button></article>`
+    + (f ? `<article class="pg-tile"><small class="pg-label">${tr('Form today')}</small><div class="pg-three"><span><b class="c-fit">${Math.round(f.ctl)}</b><small>${tr('Fitness')}</small></span><span><b class="c-fat">${Math.round(f.atl ?? f.ctl - f.form)}</b><small>${tr('Fatigue')}</small></span><span><b class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</b><small>${tr('Form')}</small></span></div>`
+      + `<small class="pg-foot">${esc(BAND[formBand(f.form)])}</small></article>` : '');
+  $('pg-ftp-test').onclick = () => openFtpTest('progress');
+  const pb = $('progress-badges');
+  pb.hidden = false;
+  pb.innerHTML = `<div class="sum-chart-head"><h2>${tr('Badges')}</h2><span class="muted">${tr('{n} of {m}', { n, m: BADGES.length })}</span></div>` + `<div class="badges">${BADGES.map((b) => { const at = progress.badges[b.id]; return `<div class="badge${at ? ' got' : ''}" title="${esc(tr(b.how))}"><span>${b.icon}</span><b>${esc(tr(b.name))}</b><small>${at ? new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : esc(tr(b.how))}</small></div>`; }).join('')}</div>`;
 }
 
 /** What a ride earned, on its summary: a new level and new badges. */
@@ -3499,14 +3577,25 @@ function renderHistory() {
   renderPowerCurve();
   renderFitness();
   const row = (e) => {
-    const s = e.summary || {};
-    const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
-    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
+    const s = e.summary || {}, d = new Date(e.date);
+    const what = e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'));
+    const sent = [e.uploadedId ? 'icu' : '', e.stravaId ? 'Strava' : '', e.garminId ? 'Garmin' : ''].filter(Boolean).map((x) => `<i>${x}</i>`).join('');
+    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date"><b>${d.getDate()}</b><small>${esc(d.toLocaleDateString(locale, { weekday: 'short' }))}</small></span>`
+      + `<span class="hist-name"><b>${what}</b><small>${esc(e.routeName || '')}</small></span>`
+      + `<span class="hist-num"><b>${fmtTime(s.duration || 0)}</b><small>${tr('Time')}</small></span>`
+      + `<span class="hist-num"><b>${((s.distance || 0) / 1000).toFixed(1)}</b><small>${U.km}</small></span>`
+      + `<span class="hist-num"><b>${e.tss || 0}</b><small>TSS</small></span>`
+      + `<span class="hist-num"><b>${s.normalizedPower || s.avgPower || 0}</b><small>${U.W}</small></span>`
+      + `<span class="hist-sent">${sent}</span></button>`;
   };
+  // a heading for each month, the rides under it
+  const month = (e) => new Date(e.date).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const rows = (list) => { let last = ''; return list.map((e) => { const m = month(e), h = m !== last ? `<h3 class="hist-month">${esc(m)}</h3>` : ''; last = m; return h + row(e); }).join(''); };
   // the lobby has no list of rides: they are in History
   renderWeek();
   $('hist-backup').hidden = !history.length;
-  $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
+  $('history-all').innerHTML = history.length ? rows(history) : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
+  renderHistWeek();
   // (the week's numbers are on the lobby's tiles)
   for (const b of document.querySelectorAll('.hist-row')) {
     b.onclick = () => {
@@ -3515,6 +3604,23 @@ function renderHistory() {
       $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e, { from: 'history' });
     };
   }
+}
+
+/** History's top: this week from Monday, a bar a day by its TSS (time when there is none), and the week's totals. */
+function renderHistWeek() {
+  const box = $('hist-week');
+  box.hidden = !history.length;
+  if (box.hidden) return;
+  const now = new Date(), mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const days = Array.from({ length: 7 }, (_, i) => new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i));
+  const of = (d) => history.filter((e) => localDate(new Date(e.date)) === localDate(d));
+  const load = days.map((d) => of(d).reduce((a, e) => a + (e.tss || (e.summary?.duration || 0) / 60), 0));
+  const top = Math.max(1, ...load), week = days.flatMap(of);
+  const sum = (k) => week.reduce((a, e) => a + (k(e) || 0), 0);
+  const today = localDate(now);
+  box.innerHTML = `<div class="hw-days"><small class="hw-label">${tr('This week')}</small><div class="hw-bars">${days.map((d, i) => `<span class="hw-day${localDate(d) === today ? ' hw-now' : ''}${load[i] ? ' hw-ride' : ''}"><i style="height:${Math.round(8 + (load[i] / top) * 52)}px"></i><small>${esc(d.toLocaleDateString(locale, { weekday: 'short' }))}</small></span>`).join('')}</div></div>`
+    + `<div class="hw-tile"><small class="hw-label">${tr('Time')} · ${U.km}</small><b>${fmtTime(sum((e) => e.summary?.duration))}</b><small>${Math.round(sum((e) => e.summary?.distance) / 1000)} ${U.km} · ${week.length} ${lang === 'uk' ? plural(week.length, ['заїзд', 'заїзди', 'заїздів']) : week.length === 1 ? 'ride' : 'rides'}</small></div>`
+    + `<div class="hw-tile"><small class="hw-label">${tr('Load')}</small><b>${sum((e) => e.tss)} <small>TSS</small></b><small>${tr('this week')}</small></div>`;
 }
 
 /** The lobby's card for the rider: level and how far to the next, this week's rides, time, distance and TSS, form. */

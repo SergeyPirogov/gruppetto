@@ -125,6 +125,8 @@ export const RIDE_BUTTONS = {
   shiftUpR: 0x01000, shiftDownR: 0x02000, powerUpR: 0x04000, onOffR: 0x08000,
 };
 const PADDLE_THRESHOLD = 25;
+const LEFT_SIDE = new Set(['left', 'up', 'right', 'down', 'shiftUpL', 'shiftDownL', 'powerUpL', 'onOffL']);
+const RIGHT_SIDE = new Set(['a', 'b', 'y', 'z', 'shiftUpR', 'shiftDownR', 'powerUpR', 'onOffR']);
 
 function readVarint(b, i) {
   let v = 0, shift = 0, byte;
@@ -460,6 +462,10 @@ export class ZwiftController extends Device {
 
   get connected() { return this.units.some((u) => u.device.gatt?.connected); }
   get count() { return this.units.filter((u) => u.device.gatt?.connected).length; }
+  /** Each unit for the Devices page: its name, connected or not, the hand once a button told (left / right / null). */
+  get unitsInfo() {
+    return this.units.map((u) => ({ id: u.device.id, name: u.device.name || 'Controller', connected: !!u.device.gatt?.connected, side: u.sawL ? 'left' : u.sawR ? 'right' : null, last: u.last || null }));
+  }
 
   async connect(known) {
     const device = known || await requestDevice({
@@ -529,6 +535,9 @@ export class ZwiftController extends Device {
     const t = performance.now();
     for (const name of now) {
       if (unit.pressed.has(name)) continue;
+      // which hand this unit is: only the left one sends the left buttons (the right one's come through it too)
+      if (LEFT_SIDE.has(name)) unit.sawL = true; else if (RIGHT_SIDE.has(name)) unit.sawR = true;
+      unit.last = name;
       // The right unit of a Zwift Ride also relays its buttons through the left one, so with both
       // connected one press arrives twice within ~100 ms, once per unit: count it only once.
       const last = this._lastPress.get(name);
