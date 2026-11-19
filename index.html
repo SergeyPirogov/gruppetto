@@ -240,19 +240,7 @@
             <small id="ctl-status" class="dev-note">not connected</small>
             <!-- a Zwift Ride is two units: a slot for each hand, so you see both are on (js/app.js renderCtlUnits) -->
             <ul id="ctl-units" class="ctl-units" hidden></ul>
-            <details class="btn-map"><summary>Buttons</summary>
-              <table>
-                <tr><td>Shift up / down (both sides), ▲ ▼</td><td>Gear + / − (in ERG: intensity ±1 %)</td></tr>
-                <tr><td>Paddles (brake levers)</td><td>Change lane: left / right</td></tr>
-                <tr><td>◀ ▶</td><td>Workout: intensity ∓5 %, free ride: climb difficulty ∓10 %</td></tr>
-                <tr><td>A</td><td>ERG on/off (free ride: hold your power)</td></tr>
-                <tr><td>B</td><td>Pause / resume</td></tr>
-                <tr><td>Y</td><td>Camera</td></tr>
-                <tr><td>Z</td><td>Skip interval (free ride: new lap)</td></tr>
-                <tr><td>Power-up left</td><td>Pacer on/off</td></tr>
-                <tr><td>Power-up right</td><td>Hide / show the HUD</td></tr>
-              </table>
-            </details>
+            <a href="#ctl-map" class="ctl-map-link">Set up the buttons</a>
             <div class="btns"><button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button><button id="btn-ctl">Connect</button></div>
           </article>
           <article class="device">
@@ -262,6 +250,14 @@
           </article>
         </div>
         <div class="dev-more">
+          <!-- what each Zwift controller button does, by device (js/app.js renderCtlMap) -->
+          <section id="ctl-map" class="dev-box ctl-map">
+            <div class="ctl-map-head"><b>Controller buttons</b><span id="ctl-map-note"></span></div>
+            <div id="ctl-map-tabs" class="ctl-map-tabs" role="tablist"></div>
+            <p class="hint-sm">Pick what each button does. Press a button on the controller to jump to its row.</p>
+            <div id="ctl-map-rows"></div>
+            <div class="ctl-map-foot"><button id="ctl-map-reset" class="ghost">Reset to Zwift defaults</button></div>
+          </section>
           <div id="autoconnect-hint" class="dev-box dev-auto" hidden>
             <b>Connect automatically next time</b>
             <p>This browser asks you to pick each sensor every time. To connect your trainer, heart rate monitor and controllers automatically when the page opens:</p>

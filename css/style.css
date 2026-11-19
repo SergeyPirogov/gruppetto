@@ -2163,3 +2163,24 @@ select.seg-src { display: none; }
 .prog-charts #fit-chart { height: 220px; }
 
 
+
+/* controller buttons: one row per button (or pair), what it does in a select; the row a press lands on lights up */
+.dev-more .ctl-map { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; }
+.ctl-map-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.ctl-map-head span { color: var(--muted); font-size: 13px; }
+.ctl-map-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0 2px; }
+.ctl-map-tabs button { padding: 6px 14px; border-radius: 999px; border: 1px solid var(--line, #2e3a50); background: transparent; color: var(--muted); font-weight: 700; cursor: pointer; }
+.ctl-map-tabs button.on { background: var(--text, #e8edf5); color: var(--bg, #0e1420); border-color: transparent; }
+.ctl-row { display: flex; align-items: center; gap: 12px; padding: 7px 8px; margin: 0 -8px; border-bottom: 1px solid var(--line, #263147); border-radius: 8px; transition: box-shadow .2s; }
+.ctl-row.hit { box-shadow: inset 0 0 0 2px #fbbf24; }
+.ctl-key { min-width: 48px; height: 28px; padding: 0 8px; box-sizing: border-box; border-radius: 14px; background: #2a3448; color: #e8edf5; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; flex: none; }
+.ctl-key.k-a { background: #22a35a; } .ctl-key.k-b { background: #d0358f; } .ctl-key.k-y { background: #1ba6c9; } .ctl-key.k-z { background: #e0582a; }
+.ctl-name { flex: 1; min-width: 0; }
+.ctl-row select { min-width: 0; width: min(240px, 48%); }
+.ctl-map-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.ctl-map-link { font-size: 13px; }
+/* a phone: the select under the button's name, the full width, so the action reads whole */
+@media (max-width: 520px) {
+  .ctl-row { flex-wrap: wrap; }
+  .ctl-row select { width: 100%; }
+}

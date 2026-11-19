@@ -61,18 +61,56 @@ export function obcIntents(changes, prev) {
 
 // Zwift Ride: the shift buttons go by direction on both units (up = harder, down = easier), ▲ / ▼
 // the same; the paddles (the brake levers) change lane: left paddle left, right paddle right.
-const RIDE_TO_INTENT = {
-  // as in Zwift: the right hand's shift buttons make it harder, the left hand's easier (Zwift Play and
-  // Click: + on the right, − on the left), whichever of the side's two buttons sends it
-  shiftUpR: 'harder', shiftDownR: 'harder', up: 'harder',
-  shiftUpL: 'easier', shiftDownL: 'easier', down: 'easier',
-  paddleL: 'left', paddleR: 'right', a: 'toggleErg', z: 'skip',
-  left: 'bigEasier', right: 'bigHarder', // workout intensity ±5 %, free ride climb difficulty ±10 %
-  b: 'togglePause', y: 'camera', powerUpL: 'pacer', powerUpR: 'hud',
-  // onOffL / onOffR switch the controller itself off: left alone
-};
+// onOffL / onOffR switch the controller itself off: left alone (in no row below)
 
-export const rideIntent = (button) => RIDE_TO_INTENT[button] || null;
+/**
+ * Rebinding the Zwift controllers' buttons: the rows the Devices page lists, each one button or a pair
+ * (▲ ▼, ◀ ▶, the paddles, power-ups) that takes a pair of actions. Which rows a device has: Click only − and +,
+ * Play no power-ups, Ride all. The buttons send the same names on every device, so one map serves them all.
+ */
+export const CTL_ROWS = [
+  { id: 'minus', key: '−', buttons: ['shiftUpL', 'shiftDownL'], label: { click: 'Minus', play: 'Left: minus', ride: 'Left shifter, both buttons' } },
+  { id: 'plus', key: '+', buttons: ['shiftUpR', 'shiftDownR'], label: { click: 'Plus', play: 'Right: plus', ride: 'Right shifter, both buttons' } },
+  { id: 'updown', key: '▲ ▼', pair: ['up', 'down'], label: { play: 'Left: arrows up / down', ride: 'Arrows up / down' } },
+  { id: 'leftright', key: '◀ ▶', pair: ['left', 'right'], label: { play: 'Left: arrows left / right', ride: 'Arrows left / right' } },
+  { id: 'a', key: 'A', buttons: ['a'], label: { play: 'Right: A', ride: 'A' } },
+  { id: 'b', key: 'B', buttons: ['b'], label: { play: 'Right: B', ride: 'B' } },
+  { id: 'y', key: 'Y', buttons: ['y'], label: { play: 'Right: Y', ride: 'Y' } },
+  { id: 'z', key: 'Z', buttons: ['z'], label: { play: 'Right: Z', ride: 'Z' } },
+  { id: 'paddles', key: '◖ ◗', pair: ['paddleL', 'paddleR'], label: { play: 'Paddles left / right', ride: 'Paddles left / right' } },
+  { id: 'powerup', key: 'PU', pair: ['powerUpL', 'powerUpR'], label: { ride: 'Power-up left / right' } },
+];
+/** One button's actions, and the pairs a two-button row can take (first button, second button). */
+export const CTL_ACTIONS = [
+  ['harder', 'Harder gear'], ['easier', 'Easier gear'], ['bigHarder', 'Big step harder'], ['bigEasier', 'Big step easier'],
+  ['left', 'Lane left'], ['right', 'Lane right'], ['toggleErg', 'ERG on / off'], ['togglePause', 'Pause / resume'],
+  ['camera', 'Next camera'], ['skip', 'Skip interval'], ['pacer', 'Pacer on / off'], ['hud', 'Hide / show the dashboard'], ['none', 'Nothing'],
+];
+export const CTL_PAIRS = [
+  ['harder|easier', 'Harder / easier gear'], ['easier|harder', 'Easier / harder gear'],
+  ['bigEasier|bigHarder', 'Big step easier / harder'], ['bigHarder|bigEasier', 'Big step harder / easier'],
+  ['left|right', 'Lane left / right'], ['pacer|hud', 'Pacer / hide dashboard'], ['camera|camera', 'Next camera'], ['none|none', 'Nothing'],
+];
+/** As in Zwift; what every row does until you change it. */
+export const CTL_DEFAULTS = {
+  minus: 'easier', plus: 'harder', updown: 'harder|easier', leftright: 'bigEasier|bigHarder',
+  a: 'toggleErg', b: 'togglePause', y: 'camera', z: 'skip', paddles: 'left|right', powerup: 'pacer|hud',
+};
+/** The rows a device shows: 'click', 'play' or 'ride'. */
+export const ctlRows = (dev) => CTL_ROWS.filter((r) => r.label[dev]);
+/** The row a button belongs to. */
+export const ctlRowOf = (button) => CTL_ROWS.find((r) => r.buttons?.includes(button) || r.pair?.includes(button)) || null;
+/** Which device a controller is by its name (a Ride by default: it has every button). */
+export const ctlDevice = (name = '') => (/click/i.test(name) ? 'click' : /play/i.test(name) ? 'play' : 'ride');
+
+/** What a button does with your map (rows you never changed keep the Zwift default). */
+export const rideIntent = (button, map = {}) => {
+  const row = ctlRowOf(button);
+  if (!row) return null;
+  const v = map[row.id] || CTL_DEFAULTS[row.id];
+  const a = row.pair ? v.split('|')[row.pair.indexOf(button)] : v;
+  return !a || a === 'none' ? null : a;
+};
 
 export const OBC_LABELS = {
   [OBC.SHIFT_UP]: 'gear +', [OBC.SHIFT_DOWN]: 'gear −', [OBC.GEAR_SET]: 'gear select',
