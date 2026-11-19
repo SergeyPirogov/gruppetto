@@ -340,6 +340,10 @@
               <select id="f-power-avg" data-seg><option value="1" data-short="1 s">1 s (as it is)</option><option value="3" data-short="3 s">3 s average</option><option value="5" data-short="5 s">5 s average</option><option value="10" data-short="10 s">10 s average</option></select>
             </label>
           </div>
+          <div class="set-box">
+            <h3>Ride summary</h3>
+            <select id="f-summary-layout" data-seg="cards" aria-label="Ride summary"><option value="a" data-short="A · cards in a column">A: numbers and cards in a column</option><option value="b" data-short="B · the story first">B: the story of the ride first, then the numbers</option></select>
+          </div>
           <div class="set-box wide">
             <h3>Camera <small>keys 1–0, C the next one</small></h3>
             <select id="f-camera" data-seg="tiles" aria-label="Camera">
@@ -722,6 +726,7 @@
       <div class="sum-title"><small id="sum-kicker">Ride complete</small><b id="sum-name"></b></div>
     </header>
     <main class="sum-main">
+      <section id="sum-story" class="sum-story" hidden></section>
       <div id="sum-hero" class="sum-hero"></div>
       <div class="sum-chart card">
         <div class="sum-chart-head"><h2>Power &amp; heart rate</h2><span class="legend"><i class="lg-power"></i>Power <span id="lg-plan" hidden><i class="lg-plan"></i>Plan</span> <i class="lg-hr"></i>Heart rate <i class="lg-wbal"></i>W′bal <span id="lg-cad" hidden><i class="lg-cad"></i>Cadence</span></span></div>
