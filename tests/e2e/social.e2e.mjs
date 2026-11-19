@@ -605,12 +605,13 @@ test('another account signs in on this device: the last account’s rides, links
   const id = 'r1700000088000';
   const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Taras', public: true, data: {} } });
   const entry = { id, date: new Date().toISOString(), routeId: 'rolling', routeName: 'Rolling Hills', summary: { duration: 60, distance: 400 }, chart: { every: 5, pw: [], hr: [], d: [], wb: [] }, lapTimes: [], splits: [] };
-  const { page, context, errors } = await openApp({ mock, local: { ...LOCAL, 'gruppetto.history': [entry], 'gruppetto.owner': 'someone-else' }, signedIn: true });
+  const { page, context, errors } = await openApp({ mock, local: { ...LOCAL, 'gruppetto.history': [entry], 'gruppetto.owner': 'someone-else', 'gruppetto-icu-stats': { fitness: [1] }, 'gruppetto.routes': [{ id: 'gpx-home' }] }, signedIn: true });
   await page.waitForFunction((uid) => localStorage.getItem('gruppetto.owner') === uid, USER.id);
   await page.waitForFunction(() => document.getElementById('btn-start')?.onclick && /Synced/.test(document.getElementById('social-sync-text')?.textContent || ''), null, { timeout: 15000 });
   const left = await page.evaluate(() => ({ h: JSON.parse(localStorage.getItem('gruppetto.history') || '[]').length, strava: localStorage.getItem('gruppetto.strava'), s: JSON.parse(localStorage.getItem('powerup.settings') || '{}') }));
   assert.equal(left.h, 0);
   assert.equal(left.strava, null);
+  assert.deepEqual(await page.evaluate(() => [localStorage.getItem('gruppetto-icu-stats'), localStorage.getItem('gruppetto.routes')]), [null, null]);
   assert.ok(!left.s.icuKey && left.s.ftp !== 240, 'the old intervals.icu key and FTP are gone');
   assert.ok(!mock.db.requests.some((r) => r.path === '/rest/v1/activities' && r.method === 'POST' && r.body.includes(id)), 'the old ride did not go up');
   noSecrets(mock.db);
