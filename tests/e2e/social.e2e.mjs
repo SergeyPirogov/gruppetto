@@ -400,7 +400,8 @@ test('signing out from the header: a tap on your name, then Sign out', async () 
   const tap = () => page.evaluate(() => document.getElementById('hdr-account').click()); // the Devices page may be open over the lobby on a first visit
   await tap();
   await page.waitForSelector('#hdr-menu');
-  assert.deepEqual(await page.$$eval('#hdr-menu [data-m]', (l) => l.map((x) => x.dataset.m)), ['boards', 'out']);
+  assert.deepEqual(await page.$$eval('#hdr-menu [data-m]', (l) => l.map((x) => x.dataset.m)), ['profile', 'settings', 'boards', 'out']);
+  assert.equal(await page.isHidden('#open-profile'), true); // the rail's Profile is a guest's way in
   await page.click('#hdr-menu [data-m="boards"]'); // your leaderboards: the account card in the profile
   await page.waitForFunction(() => !document.getElementById('drawer').hidden);
   assert.equal(await page.$('#hdr-menu'), null);

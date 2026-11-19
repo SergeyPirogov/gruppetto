@@ -189,6 +189,8 @@ function renderHeader() {
   b.classList.toggle('in', !!u);
   // a guest: who you are now and the way in; signed in: you, your region, and that your things are on every device
   $('hdr-guest').hidden = !!u;
+  // signed in, your name up top is the way to your profile: the rail's Profile is for a guest
+  $('open-profile').hidden = !!u;
   const name = profileRow?.display_name || u?.email?.split('@')[0] || '';
   // what the last sync did, not a promise: «synced» only once it went through
   const said = { syncing: tr('syncing…'), ok: tr('synced'), error: `⚠ ${tr('not synced')}` }[syncState.state] || '';
@@ -226,6 +228,8 @@ function accountMenu(ev) {
   const item = (k, ic, t, sub) => `<button role="menuitem" data-m="${k}"${k === 'out' ? ' class="out"' : ''}>${MENU_IC[ic]}<span><b>${ctx.esc(tr(t))}</b>${sub ? `<small>${ctx.esc(tr(sub))}</small>` : ''}</span></button>`;
   m.innerHTML = `<div class="hdr-menu-week"><small>${ctx.esc(tr('This week'))}</small><b>${ctx.esc(top)}</b></div><hr>`
     // the profile, garage and settings are in the sidebar already: here only what is the account's
+    + item('profile', 'me', 'Profile', 'FTP, weight, zones, connections')
+    + item('settings', 'gear', 'Settings')
     + item('boards', 'cup', 'Your leaderboards', 'Your climb, sprint and lap times')
     + '<hr>' + item('out', 'out', 'Sign out', 'Everything stays on this device');
   const r = b.getBoundingClientRect();
@@ -242,6 +246,7 @@ function accountMenu(ev) {
     if (!it) return;
     close();
     if (it.dataset.m === 'boards') { showAccount(); return; }
+    if (it.dataset.m !== 'out') { ctx.openDrawer('profile', it.dataset.m === 'profile' ? 'me' : 'settings'); return; }
     ctx.track('social', 'sign-out-header');
     await signOut();
     ctx.toast(tr('Signed out. Everything stays on this device.'));
@@ -251,6 +256,8 @@ function accountMenu(ev) {
 
 const MI = (d) => `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const MENU_IC = {
+  me: MI('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/>'),
+  gear: MI('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>'),
   cup: MI('<path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M17 6h3a3 3 0 0 1-3 4M7 6H4a3 3 0 0 0 3 4"/>'),
   out: MI('<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/>'),
 };

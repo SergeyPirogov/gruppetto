@@ -525,6 +525,7 @@ export const UK = {
   'Ride details': 'Подробиці заїзду', 'Host': 'Організатор', 'Riders signed up': 'Записалось', 'Climbing': 'Набір висоти',
   'Ride chat': 'Чат заїзду', '{n} of {m} on the line': '{n} з {m} на старті',
   // account menu
+  'FTP, weight, zones, connections': 'FTP, вага, зони, підключення',
   'Your leaderboards': 'Твої лідерборди',
   'Your climb, sprint and lap times': 'Твої часи на підйомах, спринтах і колах',
   'No rides yet': 'Ще без заїздів',
