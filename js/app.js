@@ -2406,6 +2406,9 @@ function updateHud(cadence, hr, grade) {
       $('wk-c').textContent = ride.ergFactor < 1 ? `ERG ${Math.round(ride.ergFactor * 100)}%` : `${d >= 0 ? '+' : '−'}${Math.abs(d)}`;
     }
     wkTargetTxt = done ? '—' : target ? String(target) : hrR ? `${hrR[0]}–${hrR[1]}` : tr('free');
+    wkHero = done || (!target && !hrR) ? null : byHr
+      ? { byHr: true, lo: hrR[0], hi: hrR[1], now: hrNow, cls: hrCls, min: (hrR[0] + hrR[1] - Math.max(40, (hrR[1] - hrR[0]) * 3)) / 2, span: Math.max(40, (hrR[1] - hrR[0]) * 3) }
+      : { byHr: false, lo: Math.round(target * 0.95), hi: Math.round(target * 1.05), now: Math.round(p3), cls, min: target * 0.8, span: target * 0.4 };
     const P = ride.pacer;
     $('wk-pacer').hidden = !pacerOn();
     if (pacerOn()) {
@@ -2446,6 +2449,7 @@ function updateHud(cadence, hr, grade) {
 
 // ---------- The mini window over other apps (picture-in-picture) ----------
 let wkTargetTxt = '', wkCadTxt = ''; // the workout targets as the board shows them, for the mini window
+let wkHero = null; // what this step is held by (heart rate or power), its band and where you are, for the mini window
 /** What the mini window shows: the same numbers as the board, already formatted. */
 function pipState(p3, zone, hrNow, zs) {
   const hz = zs && hrNow > 0 ? (zs.find((x) => hrNow < x.upTo) || zs[zs.length - 1]) : null;
@@ -2458,7 +2462,14 @@ function pipState(p3, zone, hrNow, zs) {
     hr: $('m-hr').textContent, hrAvg: $('m-hr-avg').textContent, hrZone: hz ? `Z${hz.z}` : '', hrZoneColor: hz?.color,
     cad: $('m-cad').textContent, cadCls: $('m-cad').className, cadAvg: $('m-cad-avg').textContent,
     cadTarget: wk && wkCadTxt ? `→ ${wkCadTxt}` : '',
-    workout: wk, target: wkTargetTxt, left: $('wk-left').textContent, next: $('wk-next').textContent,
+    workout: wk, target: wkTargetTxt, left: $('wk-left').textContent, next: $('wk-next').textContent, nextLabel: $('wk-next-label').textContent,
+    // in a workout the number you hold leads (heart rate in a step planned by it), with its band and how far off you are
+    hero: wk && wkHero ? (() => {
+      const H = wkHero, off = H.now > 0 ? (H.now < H.lo ? H.lo - H.now : H.now > H.hi ? -(H.now - H.hi) : 0) : null;
+      const unit = H.byHr ? U.bpm : U.W;
+      return { ...H, unit, label: `${H.byHr ? tr('Heart rate') : tr('Power')} · ${tr('Target')} ${H.lo}–${H.hi}${H.byHr ? '' : ` ${U.W}`}`,
+        hint: off === null ? '' : off > 0 ? tr('↑ {n} to the band', { n: off }) : off < 0 ? tr('↓ {n} to the band', { n: -off }) : tr('in the band') };
+    })() : null,
     ...(() => { const t = wk ? targetAt(ride.workout, ride.workoutT, settings.ftp) : null; return t ? { stepF: 1 - t.remaining / Math.max(1, t.step.dur), stepLeft: t.remaining } : {}; })(),
     time: $('m-time').textContent, speed: $('m-speed').textContent, dist: $('m-dist').textContent,
     grade: $('grade').textContent, gradeColor: $('grade').style.color,
