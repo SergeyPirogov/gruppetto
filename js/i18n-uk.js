@@ -560,6 +560,7 @@ export const UK = {
   'When all are ready': 'Коли всі готові',
   'You start it, 10 s to 10 min countdown': 'Ти запускаєш, відлік від 10 с до 10 хв',
   // leagues redesign
+  'Place in each race': 'Місце в кожній гонці',
   'No leagues yet': 'Ліг ще немає',
   'Create one, then add your group races to it.': 'Створи лігу, потім додай до неї свої групові гонки.',
   'Points per race': 'Очки за гонку',

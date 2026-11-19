@@ -69,6 +69,8 @@ run < supabase/migrations/0001_social.sql
 run < supabase/migrations/0004_group_rides.sql
 run < supabase/migrations/0005_group_races.sql
 run < supabase/migrations/0006_leagues.sql
+run < supabase/migrations/0013_league_form.sql
+run < supabase/migrations/0013_league_form.sql # applies twice: safe to paste again
 run < supabase/tests/leagues_test.sql
 # the size of a ride in the full sync (0007)
 run <<'SQL'
