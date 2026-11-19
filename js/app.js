@@ -3044,12 +3044,27 @@ function renderProgress() {
   const box = $('progress-box');
   box.hidden = !progress.rides;
   $('progress-empty').hidden = !!progress.rides;
+  $('progress-badges').hidden = true;
   if (box.hidden) return;
   const n = Object.keys(progress.badges).length;
-  box.innerHTML = `<div class="sum-chart-head"><h2>${tr('Level {n}', { n: L.level })}</h2><span class="muted">${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</span></div>
-    <div class="lvl-bar"><i style="width:${pct}%"></i></div>
-    <div class="lvl-totals"><span><b>${progress.rides}</b> ${tr('rides')}</span><span><b>${Math.round(progress.km)}</b> ${U.km}</span><span><b>${progress.gain}</b> ${tr('m climbed')}</span><span><b>${n}/${BADGES.length}</b> ${tr('badges')}</span></div>
-    <div class="badges">${BADGES.map((b) => { const at = progress.badges[b.id]; return `<div class="badge${at ? ' got' : ''}" title="${esc(tr(b.how))}"><span>${b.icon}</span><b>${esc(tr(b.name))}</b><small>${at ? new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : esc(tr(b.how))}</small></div>`; }).join('')}</div>`;
+  // three tiles on top: level, FTP, today's form; the badges at the bottom
+  const wkg = settings.weight > 0 ? settings.ftp / settings.weight : 0;
+  const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness.at(-1) : null;
+  const f = icu ? { ctl: icu.ctl, atl: icu.atl, form: icu.ctl - icu.atl } : fitnessSeries(history, { days: 90 }).at(-1);
+  const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
+  const ramp = history.find((e) => e.ramp);
+  box.innerHTML = `<article class="pg-tile"><small class="pg-label">${tr('Level')}</small><div class="pg-big"><b>${L.level}</b><span>${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</span></div>`
+    + `<div class="lvl-bar"><i style="width:${pct}%"></i></div>`
+    + `<small class="pg-foot">${progress.rides} ${tr('rides')} · ${Math.round(progress.km)} ${U.km} · ${progress.gain} ${tr('m climbed')}</small></article>`
+    + `<article class="pg-tile"><small class="pg-label">FTP</small><div class="pg-big"><b>${settings.ftp}</b><span>${U.W}${wkg > 0 ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''} · ${tr('Category')} ${categoryOf(settings.ftp, settings.weight)}</span></div>`
+    + `<small class="pg-foot">${ramp ? tr('ramp test on {date}', { date: new Date(ramp.date).toLocaleDateString(locale, { day: 'numeric', month: 'long' }) }) : ftpKnown() ? tr('set by you') : tr('an estimate: a ramp test finds yours')}</small>`
+    + `<button type="button" class="ghost pg-btn" id="pg-ftp-test">${tr(ramp ? 'Take the test again' : 'Take the ramp test')}</button></article>`
+    + (f ? `<article class="pg-tile"><small class="pg-label">${tr('Form today')}</small><div class="pg-three"><span><b class="c-fit">${Math.round(f.ctl)}</b><small>${tr('Fitness')}</small></span><span><b class="c-fat">${Math.round(f.atl ?? f.ctl - f.form)}</b><small>${tr('Fatigue')}</small></span><span><b class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</b><small>${tr('Form')}</small></span></div>`
+      + `<small class="pg-foot">${esc(BAND[formBand(f.form)])}</small></article>` : '');
+  $('pg-ftp-test').onclick = () => openFtpTest('progress');
+  const pb = $('progress-badges');
+  pb.hidden = false;
+  pb.innerHTML = `<div class="sum-chart-head"><h2>${tr('Badges')}</h2><span class="muted">${tr('{n} of {m}', { n, m: BADGES.length })}</span></div>` + `<div class="badges">${BADGES.map((b) => { const at = progress.badges[b.id]; return `<div class="badge${at ? ' got' : ''}" title="${esc(tr(b.how))}"><span>${b.icon}</span><b>${esc(tr(b.name))}</b><small>${at ? new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : esc(tr(b.how))}</small></div>`; }).join('')}</div>`;
 }
 
 /** What a ride earned, on its summary: a new level and new badges. */
