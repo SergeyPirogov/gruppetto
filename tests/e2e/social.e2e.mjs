@@ -760,6 +760,44 @@ test('race results by category: yours first, All a tap away, and a copy for the 
   await context.close();
 });
 
+test('the lobby in three steps: how you ride, where, ready; a plan for today opens picked; no page scroll', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: LOCAL });
+  await page.evaluate(() => { document.getElementById('drawer').hidden = true; });
+  // one screen: the route cards scroll inside their column, the page does not
+  assert.ok(await page.evaluate(() => document.getElementById('lobby').scrollHeight <= innerHeight + 1));
+  assert.deepEqual(await page.$$eval('#mode-cards [data-v]', (l) => l.map((x) => x.dataset.v)), ['free', 'workout', 'race']);
+  assert.deepEqual(await page.$$eval('[data-rf]', (l) => l.map((x) => x.dataset.rf)), ['all', 'mine', 'flat', 'hilly', 'mountain']);
+  // a kind: only its cards; My routes holds Import GPX even with none of yours
+  await page.evaluate(() => document.querySelector('[data-rf="flat"]').click());
+  assert.ok(await page.evaluate(() => [...document.querySelectorAll('#route-list .option[data-id]')].filter((e) => e.offsetParent).every((e) => e.dataset.group === 'flat')));
+  await page.evaluate(() => document.querySelector('[data-rf="mine"]').click());
+  assert.equal(await page.isVisible('#route-list .rc-import'), true);
+  await page.evaluate(() => document.querySelector('[data-rf="all"]').click());
+  // the picked route beside the cards, with its climbs on a free ride
+  assert.match(await page.textContent('#route-pick'), /Rolling Hills/);
+  assert.equal(await page.isVisible('#route-pick .rp-climbs'), true);
+  // today's plan from intervals.icu: Workout picked with it, big, its steps in watts
+  await page.evaluate(() => {
+    const d = new Date(), date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    window.__planDemo([{ id: 'icu:88', eventId: 88, source: 'intervals', date, name: 'Plan SS for the test', description: '', notes: 'Spin it.', steps: [{ dur: 600, power: 0.5, to: 0.75 }, { dur: 720, power: 0.9 }, { dur: 240, power: 0.55 }, { dur: 720, power: 0.9 }, { dur: 240, power: 0.55 }, { dur: 720, power: 0.9 }, { dur: 600, power: 0.6, to: 0.4 }] }]);
+  });
+  await page.waitForSelector('#mode-cards [data-v="workout"].sel');
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('powerup.settings')).mode), 'icu:88');
+  const big = await page.textContent('#wk-quick');
+  assert.match(big, /Plan SS for the test/);
+  assert.match(big, /Today · intervals\.icu/i);
+  assert.match(big, /3 × 12 min/);
+  assert.match(big, /Spin it\./);
+  assert.equal(await page.isVisible('#route-pick .rp-climbs'), false); // a workout takes the climbs' place
+  // another mode from its card
+  await page.evaluate(() => document.querySelector('#mode-cards [data-v="race"]').click());
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('powerup.settings')).mode), 'race');
+  assert.equal(await page.isVisible('#mode-list .race-pick'), true);
+  assert.equal(await page.isVisible('#wk-quick'), false);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('the lobby: the next group race as a big card with Join, the mode as segments; no social, no card', async () => {
   const mock = mockSupabase({ profile: PROFILE() });
   mock.db.rides = [{ id: '33333333-0000-4000-8000-000000000003', title: 'Winter crit', route_id: 'rolling', starts_at: new Date(Date.now() + 3 * 3600e3).toISOString(), host_name: 'Taras', mine: false, riders: 4, joined: false, kind: 'race', laps: 2, league_id: null, league_title: null, held: false }];

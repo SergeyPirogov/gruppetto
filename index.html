@@ -61,10 +61,22 @@
       </div>
     </header>
 
+    <!-- the rider at a glance, one strip (Lobby A): form, this week, level, then your region and the group rides -->
+    <div class="lobby-strip" id="lobby-strip">
+      <button id="week-box" class="week-box" hidden></button>
+      <!-- signed in: your region this week and the group rides (js/social-ui.js renderToday) -->
+      <section id="me-today" class="me-today" hidden aria-label="Your day"></section>
+    </div>
+
     <div class="lobby-cols">
     <main class="lobby-main">
-      <!-- signed in: your day on the leaderboards and the group rides at a glance -->
-      <section id="me-today" class="me-today" hidden aria-label="Your day"></section>
+      <!-- step 1, how you ride: three cards (js/app.js renderModeCards); the select under them is the state, its
+           segmented buttons (settings-ui.js) stay for the keyboard and the tests but are not shown -->
+      <section class="lobby-step lobby-how" id="sec-how">
+        <h2 class="step-h"><i>1</i> How you ride</h2>
+        <div class="mode-top"><select id="mode-select" class="mode-select" data-seg aria-label="Mode"><option value="free" data-short="Free ride">Free ride</option><option value="workout" data-short="Workout">Workout</option><option value="race" data-short="Race vs bots">Race vs bots</option></select></div>
+        <div id="mode-cards" class="mode-cards" role="group" aria-label="Mode"></div>
+      </section>
       <!-- the next group ride or race, big, with Join (js/social-ui.js renderRaceCard); hidden without the social layer -->
       <section id="race-card" class="race-card" hidden aria-label="Next group ride"></section>
       <div id="draft-box" class="note draft-box" hidden>
@@ -99,60 +111,64 @@
         </div>
 
 
-      <!-- the rider at a glance: form, this week, level -->
-      <button id="week-box" class="week-box" hidden></button>
 
       <!-- what is next today: the intervals.icu plan, ready to start (js/app.js renderNextUp) -->
       <section id="next-up" class="next-up" hidden aria-label="Up next"></section>
 
-      <section class="lobby-modes" id="sec-modes">
-        <div id="plan-box" class="plan-box" hidden>
-          <h2>Plan <small>intervals.icu</small></h2>
-          <div id="plan-list" class="options mode-list plan-list"></div>
-        </div>
-        <h2>Mode</h2>
-        <!-- the three modes as a segmented control (settings-ui.js turns it into buttons); the cards under it show the picked one -->
-        <select id="mode-select" class="mode-select" data-seg aria-label="Mode"><option value="free" data-short="Free ride">Free ride</option><option value="workout" data-short="Workout">Workout</option><option value="race" data-short="Race vs bots">Race vs bots</option></select>
-        <div id="mode-list" class="options mode-list"></div>
-      </section>
 
       <section class="lobby-routes" id="sec-routes">
-        <div class="routes-head"><h2>Routes</h2>
+        <div class="routes-head"><h2 class="step-h"><i>2</i> Where</h2>
           <div class="route-filter" id="route-filter" role="group" aria-label="Routes">
-            <button data-rf="all">All</button><button data-rf="flat">Flat</button><button data-rf="hilly">Hilly</button><button data-rf="mountain">Mountain</button><button data-rf="mine">My routes</button>
+            <button data-rf="all">All</button><button data-rf="mine">My routes</button><button data-rf="flat">Flat</button><button data-rf="hilly">Hilly</button><button data-rf="mountain">Mountain</button>
           </div>
         </div>
         <p id="osm-attr" class="hint osm-attr" hidden>Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
         <div id="lobby-msg" class="lobby-msg" hidden></div>
-        <div id="route-board" class="route-board" hidden></div>
         <div id="route-list" class="route-list"></div>
         <input id="gpx-file" type="file" accept=".gpx,application/gpx+xml" hidden>
       </section>
     </main>
-    </div>
-    <!-- what is picked and Ride, always at the bottom of the screen -->
-    <div class="ride-box">
-      <div id="ride-summary" class="ride-summary"></div>
-      <!-- shadow ride: a ghost of an earlier ride on this route rides with you -->
-      <div id="ghost-box" class="ghost-box ghost-bar" hidden title="Ghost ride: race a ghost of your earlier ride on this route">
-        <span class="ghost-opts">
-          <button data-ghost="off"><b>Off</b><small>ride on your own</small></button>
-          <button data-ghost="last"><b>Last ride</b><small id="ghost-last"></small></button>
-          <button data-ghost="best" title=""><b>Your best</b><small id="ghost-best"></small></button>
-        </span>
-      </div>
-      <!-- who rides: the man or the woman (also in the ride, R) -->
-      <div id="figure-pick" class="figure-pick" role="group" aria-label="Rider">
-        <button data-figure="male">Man</button>
-        <button data-figure="female">Woman</button>
-      </div>
-      <div class="start-split">
-        <button id="btn-start" class="primary big">Ride</button>
-        <button id="btn-start-more" class="primary big start-more" aria-label="More ways to ride" title="More ways to ride">▾</button>
-        <div id="start-menu" class="start-menu" hidden>
-          <button id="start-watch"><b>📺 Watch &amp; ride</b><small>In a mini window over a movie or the game; the 3D road is not loaded</small></button>
+      <!-- the picked route, what to ride on it, and Ride (Lobby A): js/app.js renderRoutePick -->
+      <aside class="lobby-pick" id="lobby-pick" aria-label="The picked route">
+        <h2 class="step-h"><i>3</i> Ready</h2>
+        <div id="route-pick" class="route-pick"></div>
+        <div id="route-board" class="route-board" hidden></div>
+        <!-- shadow ride: a ghost of an earlier ride on this route rides with you -->
+        <div id="ghost-box" class="ghost-box ghost-bar" hidden title="Ghost ride: race a ghost of your earlier ride on this route">
+          <h2>Ride against</h2>
+          <span class="ghost-opts">
+            <button data-ghost="off"><b>Nobody</b><small>on your own</small></button>
+            <button data-ghost="last"><b>Last ride</b><small id="ghost-last"></small></button>
+            <button data-ghost="best" title=""><b>Your best</b><small id="ghost-best"></small></button>
+          </span>
         </div>
-      </div>
+        <section class="lobby-modes" id="sec-modes">
+          <div id="plan-box" class="plan-box" hidden>
+            <h2>Plan <small>intervals.icu</small></h2>
+            <div id="plan-list" class="options mode-list plan-list"></div>
+          </div>
+          <h2>Mode</h2>
+          <div id="mode-list" class="options mode-list"></div>
+          <!-- with Workout on: the picked workout, big (js/app.js renderWorkoutPick) -->
+          <div id="wk-quick" class="wk-quick"></div>
+        </section>
+        <!-- Ride: at the bottom of the panel (on a phone, of the screen) -->
+        <div class="ride-box">
+          <div id="ride-summary" class="ride-summary"></div>
+          <!-- who rides: the man or the woman (also in the ride, R) -->
+          <div id="figure-pick" class="figure-pick" role="group" aria-label="Rider">
+            <button data-figure="male">Man</button>
+            <button data-figure="female">Woman</button>
+          </div>
+          <div class="start-split">
+            <button id="btn-start" class="primary big">Ride</button>
+            <button id="btn-start-more" class="primary big start-more" aria-label="More ways to ride" title="More ways to ride">▾</button>
+            <div id="start-menu" class="start-menu" hidden>
+              <button id="start-watch"><b>📺 Watch &amp; ride</b><small>In a mini window over a movie or the game; the 3D road is not loaded</small></button>
+            </div>
+          </div>
+        </div>
+      </aside>
     </div>
     </div>
     </div>

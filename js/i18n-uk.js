@@ -580,4 +580,20 @@ export const UK = {
   'Delete…': 'Видалити…',
   'Post your climb, sprint and lap times to the leaderboards, and keep your rides and settings on every device. Without it everything works, in this browser.': 'Твої часи на підйомах, спринтах і колах — у таблицях, а заїзди й налаштування — на кожному пристрої. Без входу все працює, у цьому браузері.',
   'Height': 'Зріст', 'cm': 'см', 'Not synced yet': 'Ще не синхронізовано',
+  // Lobby A: the routes beside the picked route
+  'your GPX: real climbs, buildings and woods from the map': 'твої GPX: справжні підйоми, будинки й ліси з мапи',
+  'Gruppetto routes': 'Маршрути Gruppetto',
+  'Your best finish': 'Твій найкращий фініш', 'Your best lap': 'Твоє найкраще коло',
+  'My route': 'Мій маршрут', 'point to point': 'з точки в точку', 'loop': 'коло',
+  'Ridden': 'Проїхано', 'Climbs on the route': 'Підйоми на маршруті', 'best {t}': 'рекорд {t}',
+  'Ride against': 'Їхати проти', 'Nobody': 'Нікого', 'on your own': 'сам',
+  'yours': 'твоє', 'recent': 'нещодавнє', 'today in your plan': 'сьогодні в плані', 'All workouts': 'Усі тренування',
+  // Lobby: three steps, how you ride, where, ready
+  'How you ride': 'Як їдеш', 'Where': 'Де', 'Ready': 'Готово',
+  'Your pace, the road decides. A ghost of your best can ride along.': 'Твій темп, дорога вирішує. Поруч може їхати привид твого найкращого заїзду.',
+  'The trainer holds the power.': 'Станок тримає потужність.', 'Today in your plan: {name}': 'Сьогодні в плані: {name}', 'Picked: {name}': 'Обрано: {name}',
+  'A bunch of bots at your level, laps and a finish line.': 'Група ботів твого рівня, кола й фініш.',
+  'today': 'сьогодні', 'Other workout': 'Інше тренування', 'Choose a workout': 'Обери тренування', '+{n} more': 'ще {n}',
+  'Free': 'Вільно', '{kind} between': '{kind} між ними',
+
 };
