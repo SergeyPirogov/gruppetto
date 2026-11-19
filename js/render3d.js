@@ -1826,7 +1826,7 @@ export class Scene3D {
     const curve = route.segments.map((q) => q.curve);
     this.mountain = T.wall ? new Float32Array(curve.length).fill(-1)
       : T.dip ? new Float32Array(curve.length).fill(-T.dip.side)
-        : mountainSide(curve, { turn: TURN, loop });
+        : mountainSide(curve, { turn: TURN, loop, grade: this.gradeAvg });
     this.reliefData = route.custom ? decodeRelief(route.relief) : null;
     this._shapeAtD = { d: NaN };
   }
@@ -2404,7 +2404,11 @@ export class Scene3D {
         const f = this.frame(d), s = size / 8;
         // the footprint from the map, the height from the floors: a house up to three, flats above
         const tall = floors >= 4, sy = tall ? floors : Math.min(1.3, 0.75 + floors * 0.25);
-        const m = new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * o, heightAt(r, o) - 0.2, f.z + f.rz * o),
+        // on a slope (the relief of a mountainside) it stands on the lowest corner of its footprint: dug into the
+        // hill uphill rather than hanging over it downhill
+        const hf = size / 2, dr = Math.round(hf / SEG), rr = (k) => Math.max(0, Math.min(rows - 1, k));
+        const ground = Math.min(heightAt(r, o), ...[-1, 1].flatMap((sr) => [-1, 1].map((so) => heightAt(rr(r + sr * dr), o + so * hf))));
+        const m = new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * o, ground - 0.2, f.z + f.rz * o),
           q.setFromAxisAngle(up, -f.h - ang), new THREE.Vector3(s, sy, s));
         put(tall ? 'block' : kind, m);
       }
