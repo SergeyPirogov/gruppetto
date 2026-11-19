@@ -289,9 +289,9 @@
         </div>
       </div>
       <!-- Profile: three tabs (Me, Connections, Settings); a card shows on the tab its data-ptab names -->
-      <!-- the tabs first, at the same spot on every tab; who you are under them (not on Settings, full screen) -->
+      <!-- one row of tabs, at the same spot on every tab: you (Rider, Connections), then each group of settings -->
       <nav class="card ptabs" data-panel="profile" aria-label="Profile">
-        <button data-ptab-go="me">Rider</button><button data-ptab-go="links">Connections</button><button data-ptab-go="settings">Settings</button>
+        <button data-ptab-go="me">Rider</button><button data-ptab-go="links">Connections</button><i class="ptabs-sep" aria-hidden="true"></i><button data-ptab-go="settings" data-sgroup-go="look">Look</button><button data-ptab-go="settings" data-sgroup-go="ride">Ride</button><button data-ptab-go="settings" data-sgroup-go="gears">Gears</button><button data-ptab-go="settings" data-sgroup-go="pacer">Pacer</button><button data-ptab-go="settings" data-sgroup-go="pip">Mini window</button><button data-ptab-go="settings" data-sgroup-go="app">App</button>
       </nav>
       <div class="card me-hero" id="me-hero" data-panel="profile"></div>
       <!-- Rider: groups of rows, a name and a line on the left, the value on the right. Garage lives in the rail,
@@ -345,15 +345,6 @@
       </div>
       <!-- Settings, full screen (js/app.js showSettingsGroup): the groups on the left, one at a time on the right.
            The selects stay (their ids and handlers); js/settings-ui.js draws each as buttons over it -->
-      <nav class="card set-nav" data-panel="profile" data-ptab="settings" aria-label="Settings">
-        <button data-sgroup-go="look"><b>Look &amp; dashboard</b><small>style, camera, weather</small></button>
-        <button data-sgroup-go="ride"><b>Ride</b><small>bunch, wind, climbs, attacks</small></button>
-        <button data-sgroup-go="gears"><b>Gears</b><small>virtual gears, chainring, buttons</small></button>
-        <button data-sgroup-go="pacer"><b>Pacer</b><small>in workouts and free rides</small></button>
-        <button data-sgroup-go="pip"><b>Mini window</b><small>over a movie, HUD for Mac</small></button>
-        <button data-sgroup-go="app"><b>App</b><small>language, sound, stats</small></button>
-        <span class="set-nav-note">Changes save automatically. Esc closes.</span>
-      </nav>
       <div class="card set-group" data-panel="profile" data-ptab="settings" data-sgroup="look">
         <h2>Look &amp; dashboard</h2>
         <div class="set-grid">
