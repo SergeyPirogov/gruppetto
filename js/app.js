@@ -603,6 +603,8 @@ function initLobby() {
   initGarmin();
 }
 
+/** The "From Strava" route import in the route list; hidden until Strava's rate limits are sorted. */
+const STRAVA_ROUTES = false;
 /**
  * The route cards (Lobby A): your own routes first, with Import GPX, then every built-in route in one grid,
  * flat to mountain and shortest first in each. The tabs over them show one kind at a time.
@@ -649,8 +651,9 @@ function renderRouteList() {
   add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 150 km')}</small>`;
   add.htmlFor = 'gpx-file';
   box.append(add);
-  // your own routes on Strava (as in Slipstream): pick one, and it comes in as a GPX would
-  if (!$('strava-card').hidden) {
+  // your own routes on Strava (as in Slipstream): pick one, and it comes in as a GPX would.
+  // Off for now: Strava's API rate limits are not sorted yet; set STRAVA_ROUTES back to true then.
+  if (STRAVA_ROUTES && !$('strava-card').hidden) {
     const st = document.createElement('button');
     st.className = 'option rc-import rc-strava';
     st.innerHTML = `<b>＋ ${tr('From Strava')}</b><small>${stravaClient ? tr('One of your routes on Strava') : tr('Connect Strava, then pick one of your routes')}</small>`;
