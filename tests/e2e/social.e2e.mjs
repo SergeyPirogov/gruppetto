@@ -119,7 +119,7 @@ function mockSupabase({ profile = null, offline = false, regions = [] } = {}) {
       Object.assign(g, { held: false, starts_at: new Date(Date.now() + q.p_in * 1000).toISOString() });
       return send(route, 200, g.starts_at);
     }
-    if (p === '/rest/v1/rpc/league_standings') return send(route, 200, [{ name: 'Taras', points: 45, races: 2, wins: 1, best: 1, me: false }, { name: 'Olena', points: 20, races: 1, wins: 0, best: 2, me: true }]);
+    if (p === '/rest/v1/rpc/league_standings') return send(route, 200, [{ name: 'Taras', points: 45, races: 2, wins: 1, best: 1, me: false, form: [1, 2] }, { name: 'Olena', points: 20, races: 1, wins: 0, best: 2, me: true, form: [2, null] }]);
     if (p === '/rest/v1/rpc/league_races') return send(route, 200, (db.rides || []).filter((r) => r.league_id === JSON.parse(body).p_id).map((r) => ({ ...r, finishers: 0 })));
     if (p === '/rest/v1/rpc/delete_me') { db.profile = null; db.efforts = []; return send(route, 204); }
     return send(route, 404, { message: `mock: no ${p}` });
@@ -354,6 +354,7 @@ test('a league: set up from the Leagues tab, a race put in it, its standings', a
   await page.waitForSelector('#gr-lg-one:not([hidden]) #gr-lg-rows tr.me');
   assert.match(await page.textContent('#gr-lg-name'), /Winter Cup/);
   assert.match(await page.textContent('#gr-lg-rows tr:first-child'), /Taras\s*45/);
+  assert.equal(await page.textContent('#gr-lg-rows tr.me .gr-form-row'), '2–'); // a place per race, a dash for the one missed
   // a race in the calendar, in the league
   await page.click('[data-gr-tab="cal"]');
   await page.evaluate(() => { document.getElementById('gr-new').open = true; }); // open already when the calendar is empty

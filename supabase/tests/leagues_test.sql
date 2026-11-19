@@ -1,4 +1,4 @@
--- Checks of 0006_leagues.sql (tools/test_sql.sh), on a fresh database after 0001, 0004, 0005 and 0006. Each block
+-- Checks of 0006_leagues.sql and 0013_league_form.sql (tools/test_sql.sh), on a fresh database after 0001, 0004, 0005 and 0006. Each block
 -- raises on a failure; psql stops at the first one (ON_ERROR_STOP).
 \set ON_ERROR_STOP on
 set client_min_messages = warning;
@@ -102,6 +102,10 @@ do $$ declare l uuid := (select id from public.league_list() where title = 'Wint
   if (select races || '/' || wins || '/' || best from public.league_standings(l) where name is null) <> '2/1/1' then raise exception 'FAIL: races, wins, best'; end if;
   if (select points from public.league_standings(l) where name = 'Taras') <> 25 then raise exception 'FAIL: a simulator ride counted'; end if;
   if (select name from public.league_standings(l) limit 1) is not null then raise exception 'FAIL: the order (most points first)'; end if;
+  -- each rider's place in every race (0013): Round 1, then Round 2, null where not in it
+  if (select form from public.league_standings(l) where name is null) is distinct from array[1, 2] then raise exception 'FAIL: the hidden rider''s form'; end if;
+  if (select form from public.league_standings(l) where me) is distinct from array[2, null]::int[] then raise exception 'FAIL: my form (no Round 2)'; end if;
+  if (select form from public.league_standings(l) where name = 'Taras') is distinct from array[null, 1]::int[] then raise exception 'FAIL: a simulator ride in the form'; end if;
   if (select finishers from public.league_races(l) where title = 'Round 1') <> 2 then raise exception 'FAIL: the finishers'; end if;
 end $$;
 reset role;

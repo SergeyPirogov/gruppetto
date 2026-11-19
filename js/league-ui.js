@@ -76,6 +76,12 @@ function render() {
   $('gr-lg-list').innerHTML = sec(tr('Running'), live) + sec(tr('Finished'), over);
 }
 
+/** A rider's place in each race, in order (a win gold, a race missed a dash); a database before 0013: the count. */
+function formHTML(r) {
+  if (!Array.isArray(r.form) || !r.form.length) return String(r.races);
+  return `<span class="gr-form-row" title="${esc(tr('Place in each race'))}">${r.form.map((p) => `<span class="${p === 1 ? 'win' : p ? '' : 'out'}">${p || '–'}</span>`).join('')}</span>`;
+}
+
 async function openLeague(id) {
   openId = id;
   const l = rows.find((x) => x.id === id);
@@ -96,7 +102,7 @@ async function openLeague(id) {
   $('gr-lg-none').hidden = !!st.length;
   const rank = (p) => `<i class="ua-rank${p <= 3 ? ` m${p}` : ''}">${p}</i>`;
   $('gr-lg-rows').innerHTML = placed(st).map((r) => `<tr class="${r.me ? 'me' : ''}"><td>${rank(r.place)}</td><td>${esc(r.name || tr('a rider'))}${r.me ? `<em class="ua-you">${esc(tr('you'))}</em>` : ''}</td>`
-    + `<td>${r.points}</td><td>${r.races}</td><td>${r.wins || '–'}</td></tr>`).join('');
+    + `<td>${r.points}</td><td>${formHTML(r)}</td><td>${r.wins || '–'}</td></tr>`).join('');
   const { done, next } = splitRaces(races, Date.now());
   // the races as steps: ridden ones ticked, the next with its time and a way to the calendar
   const item = (r, past, i) => `<li class="${past ? 'done' : ''}"><i>${past ? '✓' : i + 1}</i><div><b>${esc(r.title)}</b> <small>${esc(when(r.starts_at))}</small></div>`
