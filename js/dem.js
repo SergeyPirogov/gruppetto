@@ -35,12 +35,13 @@ async function fetchTile(z, x, y) {
  * `loader(z, x, y)` resolves a tile's elevations (injectable for tests); `onProgress(done, total)`.
  */
 export async function loadTerrain(points, { loader = fetchTile, onProgress, z = ZOOM } = {}) {
-  // every tile the track passes through, plus the neighbour when a point sits near a tile edge
+  // every tile the track passes through, plus the neighbour when a point sits within ~300 m of a tile edge
+  // (the land beside the road is sampled out to 300 m)
   const need = new Set();
   const add = (lat, lon) => {
     const { x, y } = tileXY(lat, lon, z);
     const tx = Math.floor(x), ty = Math.floor(y), fx = x - tx, fy = y - ty;
-    for (const dx of [0, fx > 0.98 ? 1 : 0, fx < 0.02 ? -1 : 0]) for (const dy of [0, fy > 0.98 ? 1 : 0, fy < 0.02 ? -1 : 0]) need.add(`${tx + dx}/${ty + dy}`);
+    for (const dx of [0, fx > 0.9 ? 1 : 0, fx < 0.1 ? -1 : 0]) for (const dy of [0, fy > 0.9 ? 1 : 0, fy < 0.1 ? -1 : 0]) need.add(`${tx + dx}/${ty + dy}`);
   };
   for (let i = 0; i < points.length; i++) {
     add(points[i].lat, points[i].lon);
