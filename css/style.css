@@ -2587,8 +2587,11 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
 .race-card .rc-info { row-gap: 4px; }
 .race-card .rc-top, .race-card h2 { line-height: 1.25; }
 .race-card .rc-top { align-self: center; }
-.race-card .rc-meta, .race-card .rc-who { color: var(--muted); }
-.race-card .rc-meta span:first-child { color: #d8dee8; }
+.lobby-body .race-card h2 { margin: 0; } /* the lobby's section-title margin pushed the name above the badge */
+.race-card .rc-meta, .race-card .rc-who, .race-card .rc-meta span:first-child { color: var(--muted); }
+.race-card .rc-meta { gap: 4px 0; }
+.race-card .rc-meta span + span::before, .race-card .rc-who::before { content: '·'; margin: 0 8px; }
+.race-card .rc-who { margin-left: -10px; }
 .race-card .rc-acts { align-items: center; }
 .race-card .rc-acts button { height: 38px; box-sizing: border-box; padding: 0 14px; margin: 0; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
 .race-card .rc-acts .pill-btn { background: transparent; border: 1px solid rgba(255, 255, 255, .14); color: #e8edf5; }
