@@ -1885,3 +1885,18 @@ select.seg-src { display: none; }
 .sl-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 760px) { .gr-startlist { top: auto; bottom: 120px; transform: none; width: 200px; max-height: 30vh; } }
 .gr-host-note { max-width: 380px; font-size: .75rem; opacity: .7; }
+
+/* =================== race results: the podium and the table head (index.html #sum-podium) =================== */
+.podium { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; max-width: 520px; margin: 6px auto 14px; }
+.podium[hidden] { display: none; }
+.pod { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.pod-av { width: 46px; height: 46px; border-radius: 23px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.1rem; color: #0f1420; background: #c6d0e0; }
+.pod-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pod small { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pod.me .pod-name { color: #ffb07a; }
+.pod-block { width: 100%; margin-top: 4px; border-radius: 10px 10px 0 0; display: flex; justify-content: center; padding-top: 8px; font-size: 1.4rem; font-weight: 900; color: #0f1420; }
+.pod-1 .pod-block { height: 110px; background: #ffc233; } .pod-2 .pod-block { height: 80px; background: #c6d0e0; } .pod-3 .pod-block { height: 58px; background: #d08a4e; }
+.race-table thead th { font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 4px 6px; }
+.race-table tr.me td { background: rgba(255, 122, 26, .1); color: #ffb07a; }
+.pod-av.cat-A { background: #f87171; } .pod-av.cat-B { background: #4ade80; } .pod-av.cat-C { background: #60a5fa; } .pod-av.cat-D { background: #facc15; }
+.race-table th:nth-child(n+3), .race-table td:nth-child(n+3) { text-align: right; }
