@@ -772,6 +772,10 @@ async function renderUa() {
     : `<tr><th>#</th><th>${tr('Region')}</th><th>${tr('Kilometers')}</th><th>${tr('Climbing')}</th><th>${tr('Riders')}</th></tr>`;
   const body = $('ua-rows');
   body.innerHTML = `<tr><td colspan="5" class="muted">${tr('Loading…')}</td></tr>`;
+  $('ua-sum').hidden = true;
+  // the place: a medal for the first three; the value in the board's own unit, the unit small
+  const rank = (p) => `<i class="ua-rank${p <= 3 ? ` m${p}` : ''}">${p}</i>`;
+  const num = (x, unit) => `${Number(x).toLocaleString(ctx.locale, { maximumFractionDigits: 0 })} <small>${unit}</small>`;
   $('ua-empty').hidden = true;
   // who is not on the board yet, and why
   const u = currentUser();
@@ -793,14 +797,28 @@ async function renderUa() {
     $('ua-empty').hidden = !!rows.length;
     if (riders) {
       body.innerHTML = withGaps(rows).map((r) => (r.gap ? '<tr class="lb-gap"><td colspan="5">⋯</td></tr>'
-        : `<tr class="${r.me ? 'me' : ''}"><td>${r.place}</td><td>${ctx.esc(r.display_name)}${r.region ? ` <small class="muted">${ctx.esc(regionName(r.region, ctx.lang))}</small>` : ''}</td>`
-          + `<td class="${metric === 'km' ? 'on' : ''}">${km(r.distance_km)}</td><td class="${metric === 'climb' ? 'on' : ''}">${up(r.climb_m)}</td><td>${r.rides}</td></tr>`)).join('');
+        : `<tr class="${r.me ? 'me' : ''}"><td>${rank(r.place)}</td><td>${ctx.esc(r.display_name)}${r.me ? `<em class="ua-you">${tr('you')}</em>` : ''}${r.region ? ` <small class="muted">${ctx.esc(regionName(r.region, ctx.lang))}</small>` : ''}</td>`
+          + `<td class="${metric === 'km' ? 'on' : ''}">${num(r.distance_km, tr('km'))}</td><td class="${metric === 'climb' ? 'on' : ''}">${num(r.climb_m, tr('m'))}</td><td>${r.rides}</td></tr>`)).join('');
     } else {
       const top = Math.max(1, ...rows.map((r) => Number(metric === 'climb' ? r.climb_m : r.distance_km)));
       const mine = profileRow?.region;
-      body.innerHTML = rows.map((r) => `<tr class="${r.region === mine ? 'me' : ''}"><td>${r.place}</td>`
-        + `<td>${ctx.esc(regionName(r.region, ctx.lang))}<i class="ua-bar" style="width:${Math.max(4, Math.round((Number(metric === 'climb' ? r.climb_m : r.distance_km) / top) * 100))}%"></i></td>`
-        + `<td class="${metric === 'km' ? 'on' : ''}">${km(r.distance_km)}</td><td class="${metric === 'climb' ? 'on' : ''}">${up(r.climb_m)}</td><td>${r.riders}</td></tr>`).join('');
+      const val = (r) => Number(metric === 'climb' ? r.climb_m : r.distance_km);
+      body.innerHTML = rows.map((r) => `<tr class="${r.region === mine ? 'me' : ''}"><td>${rank(r.place)}</td>`
+        + `<td>${ctx.esc(regionName(r.region, ctx.lang))}${r.region === mine ? `<em class="ua-you">${tr('your region')}</em>` : ''}<i class="ua-bar" style="width:${Math.max(4, Math.round((val(r) / top) * 100))}%"></i></td>`
+        + `<td class="${metric === 'km' ? 'on' : ''}">${num(r.distance_km, tr('km'))}</td><td class="${metric === 'climb' ? 'on' : ''}">${num(r.climb_m, tr('m'))}</td><td>${r.riders}</td></tr>`).join('');
+      // over the table: your region's place and the gap, and all of Ukraine for the period
+      if (rows.length) {
+        const unit = metric === 'climb' ? up : km, i = rows.findIndex((r) => r.region === mine), me = rows[i];
+        const gap = !me ? '' : i === 0 ? (rows[1] ? tr('{x} ahead of #2', { x: unit(val(me) - val(rows[1])) }) : tr('the only region riding'))
+          : tr('{x} behind #{n}', { x: unit(val(rows[i - 1]) - val(me)), n: rows[i - 1].place });
+        const all = rows.reduce((a, r) => ({ km: a.km + Number(r.distance_km), m: a.m + Number(r.climb_m), n: a.n + Number(r.riders) }), { km: 0, m: 0, n: 0 });
+        const PER = { week: tr('this week'), month: tr('this month'), all: tr('all time') };
+        const card = (k, v, s, cls = '') => `<div class="ua-card"><small>${ctx.esc(k)}</small><b>${ctx.esc(v)}</b><span class="${cls}">${ctx.esc(s)}</span></div>`;
+        $('ua-sum').innerHTML = (me ? card(tr('Your region'), `${regionName(me.region, ctx.lang)} · #${me.place}`, gap, i === 0 ? 'up' : '') : '')
+          + card(tr('Ukraine {period}', { period: PER[period] }), `${km(all.km)} · ${up(all.m)}`, tr('{n} riders', { n: all.n }))
+          + card(tr('Regions riding'), String(rows.length), rows[0] ? tr('{name} leads', { name: regionName(rows[0].region, ctx.lang) }) : '');
+        $('ua-sum').hidden = false;
+      }
     }
   } catch (e) {
     uaCache.delete(key);

@@ -31,8 +31,8 @@ before(async () => {
 after(async () => { await browser?.close(); server?.kill(); });
 
 /** A mock Supabase: the state, and every request it saw. */
-function mockSupabase({ profile = null, offline = false } = {}) {
-  const db = { profile, efforts: [], requests: [], offline };
+function mockSupabase({ profile = null, offline = false, regions = [] } = {}) {
+  const db = { profile, efforts: [], requests: [], offline, regions };
   const send = (route, status, body, headers = {}) => route.fulfill({ status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', ...headers }, body: body === undefined ? '' : JSON.stringify(body) });
   const handler = async (route) => {
     const req = route.request(), url = new URL(req.url());
@@ -86,6 +86,7 @@ function mockSupabase({ profile = null, offline = false } = {}) {
       });
       return send(route, 200, out);
     }
+    if (p === '/rest/v1/rpc/region_board') return send(route, 200, db.regions || []);
     if (p === '/rest/v1/rpc/leaderboard') {
       const q = JSON.parse(body);
       const b = boardFrom(db.efforts.filter((e) => e.segment_id === q.segment), { me: USER.id, period: q.period, gender: q.gender, category: q.category });
@@ -370,6 +371,24 @@ test('a league: set up from the Leagues tab, a race put in it, its standings', a
   await page.fill('#gr-title', 'Spin');
   await page.selectOption('#gr-kind', 'ride');
   assert.equal(await page.isHidden('#gr-league-wrap'), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('the Ukraine board: your region marked, its place and gap over the table, medals for the first three', async () => {
+  const regions = [
+    { place: 1, region: 'UA-30', distance_km: 72, climb_m: 58, riders: 1 },
+    { place: 2, region: 'UA-71', distance_km: 7, climb_m: 112, riders: 1 },
+  ];
+  const mock = mockSupabase({ profile: { ...PROFILE(), region: 'UA-71' }, regions });
+  const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
+  await page.waitForSelector('#hdr-account.in');
+  await page.evaluate(() => document.getElementById('hdr-ua').click());
+  await page.waitForSelector('#ua-sum:not([hidden])');
+  assert.equal(await page.$$eval('#ua-rows .ua-rank.m1, #ua-rows .ua-rank.m2', (l) => l.length), 2);
+  assert.match(await page.textContent('#ua-rows tr.me'), /Cherkasy/);
+  assert.match(await page.textContent('#ua-sum'), /#2/);
+  assert.match(await page.textContent('#ua-sum'), /65 km behind #1/);
   assert.deepEqual(errors, []);
   await context.close();
 });

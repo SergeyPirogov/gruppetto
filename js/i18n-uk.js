@@ -531,4 +531,18 @@ export const UK = {
   'Kit, bike and helmet colors': 'Кольори форми, велосипеда й шолома',
   'intervals.icu, Garmin': 'intervals.icu, Garmin',
   'Everything stays on this device': 'Усе лишиться на цьому пристрої',
+  // Ukraine board
+  'Trainer rides by signed-in riders · simulator rides don’t count': 'Заїзди на тренажері зареєстрованих райдерів · симулятор не рахується',
+  'Week': 'Тиждень',
+  'Month': 'Місяць',
+  'your region': 'твоя область',
+  '{x} ahead of #2': 'на {x} попереду #2',
+  'the only region riding': 'поки єдина область',
+  '{x} behind #{n}': 'на {x} позаду #{n}',
+  'this month': 'цього місяця',
+  'all time': 'за весь час',
+  'Your region': 'Твоя область',
+  'Ukraine {period}': 'Україна {period}',
+  'Regions riding': 'Областей катає',
+  '{name} leads': 'лідирує {name}',
 };
