@@ -937,17 +937,23 @@ function renderModes() {
 }
 
 /** Step 1 of the lobby: the three ways to ride as cards; the picked one outlined. */
+/** The three ways to ride, drawn in one line style (the rail's), not as emoji that each look different. */
+const MODE_IC = {
+  free: '<svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-8h5l3 8M10 9l-1.5-3H6m9 3l-3 8"/></svg>',
+  workout: '<svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 17h3V9h3v8h3V5h3v12h3v-6h3"/></svg>',
+  race: '<svg viewBox="0 0 24 24" class="ic stroke"><path d="M5 21V4m0 0h13l-2.5 4L18 12H5"/></svg>',
+};
 function renderModeCards(mode, w, todayPlan) {
   const box = $('mode-cards');
   if (!box) return;
   const today = w && w === todayPlan;
   const cards = [
-    ['free', '🚴', tr('Free ride'), tr('Your pace, the road decides. A ghost of your best can ride along.')],
-    ['workout', '📈', tr('Workout'), `${tr('The trainer holds the power.')}${w ? ` ${today ? tr('Today in your plan: {name}', { name: w.name }) : tr('Picked: {name}', { name: w.name })}` : ''}`],
-    ['race', '🏁', tr('Race vs bots'), tr('A bunch of bots at your level, laps and a finish line.')],
+    ['free', MODE_IC.free, tr('Free ride'), tr('Your pace, with a ghost if you like')],
+    ['workout', MODE_IC.workout, tr('Workout'), tr('The trainer holds the power'), w ? (today ? tr('Today in your plan: {name}', { name: w.name }) : tr('Picked: {name}', { name: w.name })) : ''],
+    ['race', MODE_IC.race, tr('Race vs bots'), tr('Bots at your level, laps, a finish')],
   ];
-  box.innerHTML = cards.map(([v, ic, name, line]) => `<button class="mode-card${v === mode ? ' sel' : ''}" data-v="${v}"><span class="mc-ic" aria-hidden="true">${ic}</span>`
-    + `<span class="mc-text"><b>${esc(name)}${v === 'workout' && todayPlan ? ` <em class="mc-today">${tr('today')}</em>` : ''}</b><small>${esc(line)}</small></span></button>`).join('');
+  box.innerHTML = cards.map(([v, ic, name, line, extra = '']) => `<button class="mode-card${v === mode ? ' sel' : ''}" data-v="${v}"><span class="mc-ic" aria-hidden="true">${ic}</span>`
+    + `<span class="mc-text"><b>${esc(name)}${v === 'workout' && todayPlan ? ` <em class="mc-today">${tr('today')}</em>` : ''}</b><small>${esc(line)}</small>${extra ? `<small class="mc-extra">${esc(extra)}</small>` : ''}</span></button>`).join('');
   box.onclick = (ev) => {
     const v = ev.target.closest('[data-v]')?.dataset.v;
     const sel = $('mode-select');
