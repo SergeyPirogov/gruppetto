@@ -596,4 +596,7 @@ export const UK = {
   'today': 'сьогодні', 'Other workout': 'Інше тренування', 'Choose a workout': 'Обери тренування', '+{n} more': 'ще {n}',
   'Free': 'Вільно', '{kind} between': '{kind} між ними',
 
+  // ---- lobby: the three ways to ride, one short line each ----
+  'Your pace, with a ghost if you like': 'Твій темп, за бажання з привидом', 'Bots at your level, laps, a finish': 'Боти твого рівня, кола, фініш',
+  'The trainer holds the power': 'Станок тримає потужність',
 };

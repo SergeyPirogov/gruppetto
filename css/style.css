@@ -2574,3 +2574,23 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
 .race-card .rc-acts button { padding: 8px 14px; font-size: .85rem; white-space: nowrap; }
 .race-card .rc-acts .primary { padding: 9px 18px; font-size: .9rem; }
 @media (max-width: 760px) { .race-card { grid-template-columns: minmax(0, 1fr); } .race-card .rc-acts { flex-wrap: wrap; } }
+/* lobby polish: the three ways to ride as even cards (one line each, an icon tile in the rail's line style) */
+.mode-card { align-items: center; gap: 12px; padding: 12px 14px; min-height: 66px; }
+.mode-card .mc-ic { flex: none; width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: #1c2535; color: #c6d0e0; }
+.mode-card .mc-ic .ic { width: 20px; height: 20px; }
+.mode-card.sel .mc-ic { background: rgba(255, 122, 26, .16); color: #ffb21a; }
+.mode-card .mc-text { gap: 2px; }
+.mode-card .mc-text small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.mode-card .mc-extra { color: #ffb21a; font-weight: 600; }
+/* the group ride row: everything on the centre line, the buttons one height and one kind */
+.race-card { padding: 12px 14px 12px 18px; }
+.race-card .rc-info { row-gap: 4px; }
+.race-card .rc-top, .race-card h2 { line-height: 1.25; }
+.race-card .rc-top { align-self: center; }
+.race-card .rc-meta, .race-card .rc-who { color: var(--muted); }
+.race-card .rc-meta span:first-child { color: #d8dee8; }
+.race-card .rc-acts { align-items: center; }
+.race-card .rc-acts button { height: 38px; box-sizing: border-box; padding: 0 14px; margin: 0; border-radius: 10px; display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.race-card .rc-acts .pill-btn { background: transparent; border: 1px solid rgba(255, 255, 255, .14); color: #e8edf5; }
+.race-card .rc-acts .pill-btn:hover { border-color: rgba(255, 255, 255, .3); }
+.race-card .rc-acts .primary { padding: 0 20px; }
