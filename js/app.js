@@ -603,66 +603,89 @@ function initLobby() {
   initGarmin();
 }
 
-/** The route cards in groups: flat, hilly, mountain, and the routes you imported. */
+/**
+ * The route cards (Lobby A): your own routes first, with Import GPX, then every built-in route in one grid,
+ * flat to mountain and shortest first in each. The tabs over them show one kind at a time.
+ */
 function renderRouteList() {
   const rl = $('route-list');
   rl.innerHTML = '';
   // one height scale for the cards, so a flat route looks flat; at 40 % of the tallest route's rise,
   // so rolling hills still read as hills and only the passes fill the box
   const cardScale = 0.4 * Math.max(...routes.filter((r) => !r.custom).map((r) => r.maxElev - r.minElev));
-  for (const g of ROUTE_GROUPS) {
-    const list = routes.filter((r) => (r.custom ? 'mine' : r.group) === g.id).sort((a, b) => a.length - b.length); // shortest first
-    if (!list.length && g.id !== 'mine') continue;
+  const order = ROUTE_GROUPS.map((g) => g.id);
+  const card = (r) => {
+    const b = document.createElement('button');
+    b.className = 'option';
+    b.dataset.id = r.id;
+    b.dataset.group = r.custom ? 'mine' : r.group;
+    const best = bestLap(r);
+    const tag = r.custom ? '<em class="rc-gpx">GPX</em>'
+      : best ? `<em class="rc-best" title="${esc(r.oneWay ? tr('Your best finish') : tr('Your best lap'))}">🏆 ${fmtTime(best)}</em>` : '';
+    b.innerHTML = `<span class="rc-head"><b>${esc(r.name)}</b>${tag}</span><small>${(r.length / 1000).toFixed(r.custom || r.length < 1000 ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}</small><canvas></canvas>`
+      + (r.custom ? `<span class="rc-del" title="${tr('Delete this route')}" role="button">✕</span>` : '');
+    b.title = r.description || '';
+    b.onclick = (ev) => {
+      if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
+      settings.routeId = r.id; saveSettings(); markRoute(); showRoute(); renderChallenge();
+    };
+    requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], r.custom ? '#8b5cf6aa' : `${themeFor(r.theme).accent}99`, cardScale));
+    return b;
+  };
+  const section = (id, head) => {
     const sec = document.createElement('div');
     sec.className = 'route-group';
-    sec.innerHTML = `<h3>${tr(g.name)}<small>${list.length || ''}</small></h3><div class="options route-cards"></div>`;
-    const box = sec.querySelector('.route-cards');
-    for (const r of list) {
-      const b = document.createElement('button');
-      b.className = 'option';
-      b.dataset.id = r.id;
-      b.innerHTML = `<b>${esc(r.name)}</b><small>${(r.length / 1000).toFixed(r.custom || r.length < 1000 ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}${r.maxGrade >= 0.02 ? ` · ${tr('max {n}%', { n: Math.round(r.maxGrade * 100) })}` : ''}</small><small>${esc(r.description)}</small><canvas></canvas>`
-        + (r.custom ? `<span class="rc-del" title="${tr('Delete this route')}" role="button">✕</span>` : '');
-      b.onclick = (ev) => {
-        if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
-        settings.routeId = r.id; saveSettings(); markRoute(); showRoute(); renderChallenge();
-      };
-      box.append(b);
-      requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], `${themeFor(r.theme).accent}99`, cardScale));
-    }
-    if (g.id === 'mine') {
-      const add = document.createElement('label');
-      add.className = 'option rc-import';
-      add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 150 km')}</small>`;
-      add.htmlFor = 'gpx-file';
-      box.append(add);
-      // your own routes on Strava (as in Slipstream): pick one, and it comes in as a GPX would
-      if (!$('strava-card').hidden) {
-        const st = document.createElement('button');
-        st.className = 'option rc-import rc-strava';
-        st.innerHTML = `<b>＋ ${tr('From Strava')}</b><small>${stravaClient ? tr('One of your routes on Strava') : tr('Connect Strava, then pick one of your routes')}</small>`;
-        st.onclick = () => (stravaClient ? openStravaRoutes() : (location.href = stravaAuthorizeUrl(stravaRedirect())));
-        box.append(st);
-      }
-    }
-    sec.dataset.group = g.id;
+    sec.dataset.group = id;
+    sec.innerHTML = `<h3>${head}</h3><div class="options route-cards"></div>`;
     rl.append(sec);
+    return sec.querySelector('.route-cards');
+  };
+  // yours: a real road from a GPX, with the map's buildings and woods along it
+  const mine = routes.filter((r) => r.custom).sort((a, b) => a.length - b.length);
+  const box = section('mine', `<span>${tr('My routes')}</span><small class="rg-hint">${tr('your GPX: real climbs, buildings and woods from the map')}</small>`);
+  for (const r of mine) box.append(card(r));
+  const add = document.createElement('label');
+  add.className = 'option rc-import';
+  add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 150 km')}</small>`;
+  add.htmlFor = 'gpx-file';
+  box.append(add);
+  // your own routes on Strava (as in Slipstream): pick one, and it comes in as a GPX would
+  if (!$('strava-card').hidden) {
+    const st = document.createElement('button');
+    st.className = 'option rc-import rc-strava';
+    st.innerHTML = `<b>＋ ${tr('From Strava')}</b><small>${stravaClient ? tr('One of your routes on Strava') : tr('Connect Strava, then pick one of your routes')}</small>`;
+    st.onclick = () => (stravaClient ? openStravaRoutes() : (location.href = stravaAuthorizeUrl(stravaRedirect())));
+    box.append(st);
   }
+  const built = routes.filter((r) => !r.custom).sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group) || a.length - b.length);
+  const all = section('built', `<span>${tr('Gruppetto routes')} · <i class="rg-n">${built.length}</i></span>`);
+  for (const r of built) all.append(card(r));
   markRoute();
   filterRoutes();
 }
 
-// ---------- the routes' filter: all, or one kind ----------
+// ---------- the routes' tabs: all, yours, or one kind ----------
 const RF_KEY = 'gruppetto.route-filter';
 let routeFilter = (() => { try { return localStorage.getItem(RF_KEY) || 'all'; } catch { return 'all'; } })();
 function filterRoutes() {
-  // a kind with no routes (no mountains yet) has no chip
+  const count = (g) => document.querySelectorAll(`#route-list .option[data-id][data-group="${g}"]`).length;
   for (const b of document.querySelectorAll('[data-rf]')) {
-    b.hidden = b.dataset.rf !== 'all' && b.dataset.rf !== 'mine' && !document.querySelector(`.route-group[data-group="${b.dataset.rf}"]`);
-    b.classList.toggle('sel', b.dataset.rf === routeFilter);
+    const g = b.dataset.rf, n = g === 'all' ? 0 : count(g);
+    // a kind with no routes (no mountains yet) has no tab; My routes always has one (it holds Import GPX)
+    b.hidden = g !== 'all' && g !== 'mine' && !n;
+    b.dataset.n = n || '';
   }
   if (routeFilter !== 'all' && document.querySelector(`[data-rf="${routeFilter}"]`)?.hidden) routeFilter = 'all';
-  for (const sec of document.querySelectorAll('.route-group')) sec.hidden = routeFilter !== 'all' && sec.dataset.group !== routeFilter;
+  for (const b of document.querySelectorAll('[data-rf]')) b.classList.toggle('sel', b.dataset.rf === routeFilter);
+  const kind = !['all', 'mine'].includes(routeFilter);
+  for (const sec of document.querySelectorAll('.route-group')) sec.hidden = sec.dataset.group === 'mine' ? kind : routeFilter === 'mine';
+  let shown = 0;
+  for (const el of document.querySelectorAll('.route-group[data-group="built"] .option[data-id]')) {
+    el.hidden = kind && el.dataset.group !== routeFilter;
+    if (!el.hidden) shown++;
+  }
+  const n = document.querySelector('.route-group[data-group="built"] .rg-n');
+  if (n) n.textContent = shown;
 }
 for (const b of document.querySelectorAll('[data-rf]')) {
   b.onclick = () => { routeFilter = b.dataset.rf; try { localStorage.setItem(RF_KEY, routeFilter); } catch { /* private mode */ } filterRoutes(); };
@@ -843,6 +866,7 @@ function renderPlan() {
 
 /** The workout the Workout segment would pick (set by renderModes): the chosen one, today's plan, or the last ridden. */
 let modeWorkout = null;
+let planPicked = false;
 
 // the segmented control: the cards' own handlers do the same, this is the shorter way to switch
 $('mode-select')?.addEventListener('change', (ev) => {
@@ -861,6 +885,8 @@ function renderModes() {
   // ... and not one already ridden today here (when intervals.icu has not heard of the ride yet)
   const riddenToday = new Set(history.filter((e) => e.eventId && localDate(new Date(e.date)) === localDate(new Date())).map((e) => String(e.eventId)));
   const todayPlan = icuWorkouts.find((x) => dayLabel(x.date) === 'today' && !riddenToday.has(String(x.eventId))) || null;
+  // a workout planned for today on intervals.icu: the lobby opens with it picked (once a load: you can pick another)
+  if (todayPlan && !planPicked) { planPicked = true; if (settings.mode !== todayPlan.id) { settings.mode = todayPlan.id; saveSettings(); } }
   const w = allWorkouts().find((x) => x.id === settings.mode) || todayPlan
     || allWorkouts().find((x) => x.id === settings.lastWorkout) || null;
   const free = document.createElement('button');
@@ -891,7 +917,7 @@ function renderModes() {
     settings.mode = 'race'; saveSettings(); renderModes();
   };
   ml.append(free, wb, race);
-  renderNextUp(todayPlan);
+  renderNextUp(null); // today's plan is picked in the lobby itself now (step 1, step 3): no card over the routes
   free.classList.toggle('sel', settings.mode === 'free');
   race.classList.toggle('sel', settings.mode === 'race');
   wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
@@ -903,7 +929,86 @@ function renderModes() {
   const seg = $('mode-select');
   if (seg) seg.value = picked === race ? 'race' : picked === wb ? 'workout' : 'free';
   if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
+  // the panel beside the routes says which mode is on: a workout or a race takes the climbs' and the ghost's place
+  $('lobby-pick')?.setAttribute('data-mode', seg?.value || 'free');
+  renderModeCards(seg?.value || 'free', w, todayPlan);
+  renderWorkoutPick(todayPlan, w);
   updateSummary();
+}
+
+/** Step 1 of the lobby: the three ways to ride as cards; the picked one outlined. */
+function renderModeCards(mode, w, todayPlan) {
+  const box = $('mode-cards');
+  if (!box) return;
+  const today = w && w === todayPlan;
+  const cards = [
+    ['free', '🚴', tr('Free ride'), tr('Your pace, the road decides. A ghost of your best can ride along.')],
+    ['workout', '📈', tr('Workout'), `${tr('The trainer holds the power.')}${w ? ` ${today ? tr('Today in your plan: {name}', { name: w.name }) : tr('Picked: {name}', { name: w.name })}` : ''}`],
+    ['race', '🏁', tr('Race vs bots'), tr('A bunch of bots at your level, laps and a finish line.')],
+  ];
+  box.innerHTML = cards.map(([v, ic, name, line]) => `<button class="mode-card${v === mode ? ' sel' : ''}" data-v="${v}"><span class="mc-ic" aria-hidden="true">${ic}</span>`
+    + `<span class="mc-text"><b>${esc(name)}${v === 'workout' && todayPlan ? ` <em class="mc-today">${tr('today')}</em>` : ''}</b><small>${esc(line)}</small></span></button>`).join('');
+  box.onclick = (ev) => {
+    const v = ev.target.closest('[data-v]')?.dataset.v;
+    const sel = $('mode-select');
+    if (!v || !sel) return;
+    if (v === sel.value && v === 'workout') { if (modeWorkout) openWorkoutDetail(modeWorkout); else openWorkoutMenu(); return; } // the picked card again: the workout itself
+    sel.value = v;
+    sel.dispatchEvent(new Event('change'));
+  };
+}
+
+/** The steps of a workout in rows: repeats folded ("3 × 12 min"), the watts at your FTP. */
+function workoutRows(w) {
+  const ftp = settings.ftp;
+  const one = (st, i) => {
+    const a = stepWatts(st, 0, ftp), b = stepWatts(st, 1, ftp);
+    const watts = st.free ? (st.hr ? `${st.hr[0]}–${st.hr[1]} ${tr('bpm')}` : tr('free')) : a === b ? `${a} W` : `${a} → ${b} W`;
+    const mid = stepWatts(st, 0.5, ftp);
+    const kind = i === 0 && b > a ? tr('Warm-up') : i === w.steps.length - 1 && b < a ? tr('Cool-down') : st.free ? tr('Free') : tr(powerZone(mid / ftp).name);
+    return { dur: st.dur, kind, watts };
+  };
+  const rows = w.steps.map(one), out = [];
+  const same = (x, y) => x.dur === y.dur && x.watts === y.watts;
+  for (let i = 0; i < rows.length;) {
+    let done = false;
+    for (const L of [2, 1]) { // a work-and-rest pair, or one step, repeated
+      let k = 1;
+      while (i + (k + 1) * L <= rows.length && rows.slice(i, i + L).every((r, j) => same(r, rows[i + k * L + j]))) k++;
+      // a pair often ends on the effort (work, rest, work, rest, work): that last work counts in too
+      const tail = L === 2 && rows[i + k * L] && same(rows[i], rows[i + k * L]) ? 1 : 0;
+      if (k + tail >= 2) {
+        out.push({ ...rows[i], n: k + tail });
+        if (L === 2) out.push({ ...rows[i + 1], n: k, between: tail > 0 });
+        i += k * L + tail; done = true; break;
+      }
+    }
+    if (!done) { out.push({ ...rows[i], n: 1 }); i++; }
+  }
+  const mins = (d) => (d % 60 ? fmtTime(d) : `${d / 60} ${U.min}`);
+  return out.map((r) => ({ dur: r.between ? mins(r.dur) : `${r.n > 1 ? `${r.n} × ` : ''}${mins(r.dur)}`, kind: r.between ? tr('{kind} between', { kind: r.kind }) : r.kind, watts: r.watts }));
+}
+
+/** With Workout on: the picked workout, big: its shape, its steps in watts, the coach's note; Other workout opens the menu. */
+function renderWorkoutPick(todayPlan, w) {
+  const box = $('wk-quick');
+  if (!box) return;
+  if (!w) { box.innerHTML = `<button class="option wq-card" data-wq="all"><b>${tr('Choose a workout')} ›</b><small>${tr('Structured intervals in ERG: the trainer holds the target power.')}</small></button>`; }
+  else {
+    const st = w.steps?.length ? workoutStats(w, settings.ftp) : null;
+    const tag = w === todayPlan ? `${tr('Today')} · intervals.icu` : w.source === 'intervals' ? 'intervals.icu' : myWorkouts.includes(w) ? tr('yours') : tr('Workout');
+    const rows = w.steps?.length ? workoutRows(w) : [];
+    const shown = rows.slice(0, 6);
+    const note = (w.notes || '').trim();
+    box.innerHTML = `<div class="wq-head"><small class="wq-tag">${esc(tag)}</small><button class="link-btn" data-wq="all">${tr('Other workout')} ›</button></div>`
+      + `<b class="wq-name">${esc(w.name)}</b>`
+      + `<small class="wq-meta">${fmtTime(totalDuration(w))}${st?.tss ? ` · TSS ${st.tss}` : ''}${st?.if ? ` · IF ${st.if.toFixed(2)}` : ''}</small>`
+      + '<canvas class="wq-chart"></canvas>'
+      + (shown.length ? `<ul class="wq-steps">${shown.map((r) => `<li><b>${esc(r.dur)}</b><span>${esc(r.kind)}</span><small>${esc(r.watts)}</small></li>`).join('')}${rows.length > shown.length ? `<li class="wq-more">${tr('+{n} more', { n: rows.length - shown.length })}</li>` : ''}</ul>` : '')
+      + (note ? `<p class="wq-note">${esc(note.length > 160 ? `${note.slice(0, 157)}…` : note)}</p>` : '');
+    requestAnimationFrame(() => { const c = box.querySelector('canvas'); if (c?.clientWidth) drawWorkoutChart(c, w, -1); });
+  }
+  box.onclick = (ev) => { if (ev.target.closest('[data-wq="all"]')) openWorkoutMenu(); };
 }
 
 /** Up next, over the modes: today's planned workout from intervals.icu, its shape, and Start. */
@@ -1257,14 +1362,56 @@ function openWorkoutDetail(w) {
 }
 function closeWorkoutDetail() { $('wk-detail').hidden = true; }
 
-/** The selected route, large, at the top of the lobby. */
+/** The selected route, large, beside the route cards: its map, profile, your times and its climbs. */
 function showRoute() {
   // OpenStreetMap's licence (ODbL) asks for the attribution wherever its data shows: a route built with its map
   const r = routes.find((x) => x.id === settings.routeId) || routes[0];
   $('osm-attr').hidden = !r?.land;
+  renderRoutePick(r);
   socialRoute(r);
   renderGhostPicker();
   updateSummary();
+}
+
+function renderRoutePick(r) {
+  const box = $('route-pick');
+  if (!box || !r) return;
+  const best = bestLap(r), ridden = history.filter((e) => e.routeId === r.id).length;
+  const km = (r.length / 1000).toFixed(r.custom || r.length < 1000 ? 1 : 0);
+  const stat = (k, v) => `<span class="rp-stat"><small>${k}</small><b>${v}</b></span>`;
+  const climbs = r.climbs || [];
+  const steep = (g) => (g >= 0.06 ? 'c-hard' : g >= 0.035 ? 'c-mid' : 'c-easy');
+  box.innerHTML = '<canvas class="rp-map"></canvas>'
+    + `<div class="rp-name"><b>${esc(r.name)}</b>${r.custom ? `<em class="rp-tag">${tr('My route')}</em>` : ''}</div>`
+    + `<small class="rp-meta">${km} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}${r.maxGrade >= 0.02 ? ` · ${tr('max {n}%', { n: Math.round(r.maxGrade * 100) })}` : ''} · ${r.oneWay ? tr('point to point') : tr('loop')}</small>`
+    + '<canvas class="rp-prof"></canvas>'
+    + (best || ridden ? `<div class="rp-stats">${best ? stat(r.oneWay ? tr('Your best finish') : tr('Your best lap'), fmtTime(best)) : ''}${ridden ? stat(tr('Ridden'), `${ridden}×`) : ''}</div>` : '')
+    + (climbs.length ? `<div class="rp-climbs-box"><h2 class="rp-h">${tr('Climbs on the route')} · ${climbs.length}</h2><ul class="rp-climbs">${climbs.map((c) => `<li class="${steep(c.grade)}"><span><b>${esc(c.name)}</b><small>${(c.length / 1000).toFixed(1)} ${U.km} · ${(c.grade * 100).toFixed(1)}%</small></span>${records.seg[c.id] ? `<small>${tr('best {t}', { t: fmtTime(records.seg[c.id]) })}</small>` : ''}</li>`).join('')}</ul></div>` : '');
+  box.classList.toggle('mine', !!r.custom);
+  requestAnimationFrame(() => {
+    drawRouteMap(box.querySelector('.rp-map'), r);
+    drawProfile(box.querySelector('.rp-prof'), r, [], r.custom ? '#8b5cf6cc' : `${themeFor(r.theme).accent}cc`);
+  });
+}
+
+/** The route from above, fitted in its box, the start a green dot. */
+function drawRouteMap(canvas, r) {
+  if (!canvas?.clientWidth) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  const g = canvas.getContext('2d'), { pts } = routeShape(r);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const pad = 18, k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
+  const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+  g.lineWidth = 3.5; g.lineJoin = 'round'; g.lineCap = 'round';
+  g.strokeStyle = r.custom ? '#a78bfa' : themeFor(r.theme).accent;
+  g.beginPath();
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x * k + ox, y * k + oy) : g.moveTo(x * k + ox, y * k + oy)));
+  g.stroke();
+  g.fillStyle = '#4ade80';
+  g.beginPath(); g.arc(pts[0][0] * k + ox, pts[0][1] * k + oy, 5, 0, Math.PI * 2); g.fill();
 }
 
 /** "Rolling Hills · Sweet Spot 3×10" above the Ride button. */
@@ -3358,8 +3505,9 @@ function renderGhostPicker() {
   if (!list.length) return;
   const best = pickGhost(r.id, 'best'), last = list[0];
   const desc = (e) => `${new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · ${(e.summary.distance / 1000).toFixed(1)} km in ${fmtTime(e.summary.duration)}`;
-  $('ghost-best').textContent = desc(best);
-  $('ghost-last').textContent = desc(last);
+  // the time on the card; the date and distance in its hover text
+  $('ghost-best').textContent = fmtTime(best.summary.duration);
+  $('ghost-last').textContent = fmtTime(last.summary.duration);
   // in the bottom bar the times are the buttons' hover text
   document.querySelector('#ghost-box [data-ghost="best"]').title = desc(best);
   document.querySelector('#ghost-box [data-ghost="last"]').title = desc(last);
