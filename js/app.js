@@ -90,6 +90,8 @@ const bestLap = (r) => { const t = records.lap[r.id]; return t && plausibleLap(t
 const ROUTES_KEY = 'gruppetto.routes';
 const customDefs = (() => { try { return JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch { return []; } })();
 for (const d of customDefs) { try { routes.push(new Route(d)); } catch { /* skip a broken entry */ } }
+// the route picked is gone (a GPX route deleted, or another account's put aside): the default one, shown as picked
+if (!routes.some((r) => r.id === settings.routeId)) { settings.routeId = (routes.find((r) => r.id === DEFAULT_SETTINGS.routeId) || routes[0]).id; try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } }
 const saveCustomRoutes = () => {
   try { localStorage.setItem(ROUTES_KEY, JSON.stringify(customDefs)); return true; } catch { return false; }
 };

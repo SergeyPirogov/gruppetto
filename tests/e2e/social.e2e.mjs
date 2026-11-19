@@ -641,6 +641,14 @@ test('an account back on a device: its rides and links, put aside when another c
   await context.close();
 });
 
+test('the route picked is gone: the default one is picked and shown so', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: { ...LOCAL, 'powerup.settings': { ...SETTINGS, routeId: 'gpx-gone' } } });
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('powerup.settings')).routeId), 'rolling');
+  assert.equal(await page.locator('#route-list .option.sel[data-id="rolling"]').count(), 1);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('the same account again: nothing forgotten', async () => {
   const id = 'r1700000077000';
   const mock = mockSupabase({ profile: { id: USER.id, display_name: 'Olena', public: true, data: {} } });
