@@ -1,7 +1,7 @@
 // Gruppetto offline (#30): the app opens without a network once it has been opened online.
 // Code and pages: from the network first (a new version shows up straight away), the saved copy when
 // offline. Models, textures and libraries: from the saved copy at once, refreshed in the background.
-const CACHE = 'gruppetto-v1';
+const CACHE = 'gruppetto-v2';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'logo.svg', 'favicon.svg', 'manifest.webmanifest', 'icons/icon-192.png'];
 
 self.addEventListener('install', (e) => {
@@ -26,7 +26,9 @@ self.addEventListener('fetch', (e) => {
 async function networkFirst(req) {
   const cache = await caches.open(CACHE);
   try {
-    const res = await fetch(req);
+    // past the browser's own cache too (GitHub Pages lets it keep a file 10 minutes): asked again, a file that has
+    // not changed comes back as a short 304, a new version at once, and the page never mixes old CSS with new code
+    const res = await fetch(req, req.mode === 'navigate' ? {} : { cache: 'no-cache' });
     if (res.ok) cache.put(req, res.clone());
     return res;
   } catch {
