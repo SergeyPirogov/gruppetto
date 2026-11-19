@@ -1976,3 +1976,35 @@ select.seg-src { display: none; }
 #ride.hud-b .hud-strip > .intensity .int-toggles { grid-column: 1 / -1; justify-content: center; }
 #ride.hud-b .hud-strip > .intensity .int-toggles { display: flex; gap: 6px; }
 @media (max-width: 900px) { #ride.hud-b .hud-strip > .workout { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "hero" "head" "chart"; } }
+
+/* =================== History: the week on top, rides by month (index.html #hist-week) =================== */
+.hist-week { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin: 10px 0 18px; }
+.hist-week[hidden] { display: none; }
+.hist-week > div { padding: 14px 16px; border-radius: 16px; background: #121824; border: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.hw-label { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.hw-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 82px; margin-top: 6px; }
+.hist-week .hw-day { position: static; padding: 0; background: none; border: 0; box-shadow: none; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+.hw-day i { width: 100%; max-width: 28px; border-radius: 6px; background: #1f2a3d; }
+.hw-day.hw-ride i { background: var(--accent); }
+.hw-day small { font-size: .7rem; color: var(--muted); }
+.hw-day.hw-now small { color: #e8edf5; font-weight: 800; }
+.hw-tile b { font-size: 1.8rem; font-weight: 800; letter-spacing: -.02em; }
+.hw-tile b small { font-size: .9rem; color: var(--muted); }
+.hw-tile > small:last-child { color: var(--muted); font-size: .8rem; }
+.hist-month { margin: 14px 0 4px; font-size: .72rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.hist-month:first-child { margin-top: 0; }
+#history-all .hist-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) repeat(4, 72px) 120px; align-items: center; gap: 12px; padding: 10px 14px; border-radius: 14px; background: #121824; border: 1px solid var(--line); text-align: left; }
+#history-all .hist-date { display: flex; flex-direction: column; align-items: center; padding: 4px 0; border-radius: 10px; background: #0b1019; }
+#history-all .hist-date b { font-size: 1.15rem; color: #e8edf5; }
+#history-all .hist-date small { font-size: .68rem; color: var(--muted); text-transform: uppercase; }
+#history-all .hist-name { min-width: 0; }
+#history-all .hist-name b, #history-all .hist-name small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hist-num { text-align: right; font-variant-numeric: tabular-nums; }
+.hist-num b { display: block; font-size: .95rem; }
+.hist-num small { color: var(--muted); font-size: .7rem; }
+.hist-sent { display: flex; gap: 4px; justify-content: flex-end; flex-wrap: wrap; }
+.hist-sent i { font-style: normal; font-size: .68rem; font-weight: 700; padding: 2px 6px; border-radius: 6px; background: #13261f; color: #3ddc84; border: 1px solid #1f4a37; }
+@media (max-width: 760px) {
+  .hist-week { grid-template-columns: 1fr 1fr; } .hist-week > div:first-child { grid-column: 1 / -1; }
+  #history-all .hist-row { grid-template-columns: 46px minmax(0, 1fr) 64px 56px; } #history-all .hist-row > :nth-child(5), #history-all .hist-row > :nth-child(6), #history-all .hist-sent { display: none; }
+}

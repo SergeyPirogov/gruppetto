@@ -491,6 +491,8 @@ export const UK = {
   "Cheer them on…": "Підтримай їх…",
   "Sign in to write in the chat. Reactions work for everyone.": "Увійди, щоб писати в чат. Реакції доступні всім.",
   "Watching": "Перегляд",
+  // history
+  'Load': 'Навантаження',
   // race results
   'Gap': 'Відставання', 'Avg power': 'Сер. потужність',
   // group rides hub

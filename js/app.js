@@ -3499,14 +3499,25 @@ function renderHistory() {
   renderPowerCurve();
   renderFitness();
   const row = (e) => {
-    const s = e.summary || {};
-    const day = new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
-    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date">${day}</span><span class="hist-name"><b>${esc(e.routeName || '')}</b><small>${e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'))}</small></span><span class="hist-nums"><b>${fmtTime(s.duration || 0)}</b><small>${((s.distance || 0) / 1000).toFixed(1)} ${U.km}</small></span><span class="hist-nums"><b>${s.normalizedPower || s.avgPower || 0} ${U.W}</b><small>TSS ${e.tss || 0}</small></span></button>`;
+    const s = e.summary || {}, d = new Date(e.date);
+    const what = e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'));
+    const sent = [e.uploadedId ? 'icu' : '', e.stravaId ? 'Strava' : '', e.garminId ? 'Garmin' : ''].filter(Boolean).map((x) => `<i>${x}</i>`).join('');
+    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date"><b>${d.getDate()}</b><small>${esc(d.toLocaleDateString(locale, { weekday: 'short' }))}</small></span>`
+      + `<span class="hist-name"><b>${what}</b><small>${esc(e.routeName || '')}</small></span>`
+      + `<span class="hist-num"><b>${fmtTime(s.duration || 0)}</b><small>${tr('Time')}</small></span>`
+      + `<span class="hist-num"><b>${((s.distance || 0) / 1000).toFixed(1)}</b><small>${U.km}</small></span>`
+      + `<span class="hist-num"><b>${e.tss || 0}</b><small>TSS</small></span>`
+      + `<span class="hist-num"><b>${s.normalizedPower || s.avgPower || 0}</b><small>${U.W}</small></span>`
+      + `<span class="hist-sent">${sent}</span></button>`;
   };
+  // a heading for each month, the rides under it
+  const month = (e) => new Date(e.date).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const rows = (list) => { let last = ''; return list.map((e) => { const m = month(e), h = m !== last ? `<h3 class="hist-month">${esc(m)}</h3>` : ''; last = m; return h + row(e); }).join(''); };
   // the lobby has no list of rides: they are in History
   renderWeek();
   $('hist-backup').hidden = !history.length;
-  $('history-all').innerHTML = history.length ? history.map(row).join('') : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
+  $('history-all').innerHTML = history.length ? rows(history) : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
+  renderHistWeek();
   // (the week's numbers are on the lobby's tiles)
   for (const b of document.querySelectorAll('.hist-row')) {
     b.onclick = () => {
@@ -3515,6 +3526,23 @@ function renderHistory() {
       $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e, { from: 'history' });
     };
   }
+}
+
+/** History's top: this week from Monday, a bar a day by its TSS (time when there is none), and the week's totals. */
+function renderHistWeek() {
+  const box = $('hist-week');
+  box.hidden = !history.length;
+  if (box.hidden) return;
+  const now = new Date(), mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const days = Array.from({ length: 7 }, (_, i) => new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i));
+  const of = (d) => history.filter((e) => localDate(new Date(e.date)) === localDate(d));
+  const load = days.map((d) => of(d).reduce((a, e) => a + (e.tss || (e.summary?.duration || 0) / 60), 0));
+  const top = Math.max(1, ...load), week = days.flatMap(of);
+  const sum = (k) => week.reduce((a, e) => a + (k(e) || 0), 0);
+  const today = localDate(now);
+  box.innerHTML = `<div class="hw-days"><small class="hw-label">${tr('This week')}</small><div class="hw-bars">${days.map((d, i) => `<span class="hw-day${localDate(d) === today ? ' hw-now' : ''}${load[i] ? ' hw-ride' : ''}"><i style="height:${Math.round(8 + (load[i] / top) * 52)}px"></i><small>${esc(d.toLocaleDateString(locale, { weekday: 'short' }))}</small></span>`).join('')}</div></div>`
+    + `<div class="hw-tile"><small class="hw-label">${tr('Time')} · ${U.km}</small><b>${fmtTime(sum((e) => e.summary?.duration))}</b><small>${Math.round(sum((e) => e.summary?.distance) / 1000)} ${U.km} · ${week.length} ${lang === 'uk' ? plural(week.length, ['заїзд', 'заїзди', 'заїздів']) : week.length === 1 ? 'ride' : 'rides'}</small></div>`
+    + `<div class="hw-tile"><small class="hw-label">${tr('Load')}</small><b>${sum((e) => e.tss)} <small>TSS</small></b><small>${tr('this week')}</small></div>`;
 }
 
 /** The lobby's card for the rider: level and how far to the next, this week's rides, time, distance and TSS, form. */
