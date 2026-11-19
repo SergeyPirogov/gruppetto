@@ -303,9 +303,6 @@ function renderCtlMap() {
   $('ctl-map-body').className = `ctl-map-body ${dev}`;
   const changed = Object.keys(map).filter((k) => [...L.L, ...L.R].some((e) => e.id === k) && map[k] !== CTL_DEFAULTS[k]).length;
   $('ctl-map-changed').textContent = changed ? tr('{n} changed from Zwift', { n: changed }) : tr('As in Zwift');
-  // the card's Buttons row: how they are set, without opening the panel
-  const all = Object.keys(map).filter((k) => map[k] !== CTL_DEFAULTS[k]).length;
-  $('ctl-setup-sub').textContent = all ? tr('{n} changed from Zwift', { n: all }) : tr('As in Zwift · − easier, + harder');
 }
 $('ctl-map-tabs').onclick = (e) => { const b = e.target.closest('[data-dev]'); if (b) { ctlTab = b.dataset.dev; renderCtlMap(); } };
 $('ctl-map-body').onchange = (e) => {
@@ -4417,7 +4414,10 @@ async function initGarmin() {
   garminClient = GarminClient.saved();
   // the card shows once the function answers (it is deployed apart from the page)
   if (!garminClient && !(await garminAvailable())) return;
-  $('garmin-card').hidden = false;
+  // on: from now the Profile page shows it with the others; on screen at once only if that page is open
+  // (this answer comes late, often with Devices open, where the card does not belong)
+  $('garmin-card').dataset.off = '';
+  $('garmin-card').hidden = $('drawer').hidden || !$('drawer').querySelector('.drawer-tabs [data-open="profile"]')?.classList.contains('sel');
   $('f-garmin-upload').checked = settings.garminUpload;
   $('f-garmin-upload').onchange = () => { settings.garminUpload = $('f-garmin-upload').checked; saveSettings(); };
   $('garmin-login').onsubmit = async (ev) => {
