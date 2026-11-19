@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseIndoorBikeData, parseCyclingPower, parseHeartRate, cadenceFromCrank, parseCSC, wahoo, parseRideKeypad } from '../js/ble.js';
 import { steadySpeed, stepSpeed } from '../js/physics.js';
-import { rideIntent, ctlRows, ctlDevice } from '../js/controls.js';
+import { rideIntent, CTL_LAYOUT, ctlDevice, ctlMigrate } from '../js/controls.js';
 import { routes } from '../js/routes.js';
 import { workouts, targetAt, totalDuration } from '../js/workouts.js';
 import { Recorder, normalizedPower, bestAverage } from '../js/recorder.js';
@@ -1361,17 +1361,19 @@ test('strava: your routes that are rides, ids kept as text', async () => {
   assert.deepEqual(rideRoutes(null), []);
 });
 
-test('controller buttons: your map wins, a pair row takes a pair, untouched rows keep the Zwift default', () => {
-  const map = { y: 'skip', updown: 'easier|harder', powerup: 'none|none' };
+test('controller buttons: one by one, your map wins, untouched ones keep the Zwift default', () => {
+  const map = { y: 'skip', down: 'harder', powerUpR: 'none' };
   assert.equal(rideIntent('y', map), 'skip');
-  assert.equal(rideIntent('up', map), 'easier');
   assert.equal(rideIntent('down', map), 'harder');
+  assert.equal(rideIntent('up', map), 'harder');
   assert.equal(rideIntent('powerUpR', map), null);
-  assert.equal(rideIntent('shiftUpL', map), 'easier');
+  assert.equal(rideIntent('shiftDownL', map), 'easier');
   assert.equal(rideIntent('onOffR', map), null);
-  assert.deepEqual(ctlRows('click').map((r) => r.id), ['minus', 'plus']);
-  assert.ok(!ctlRows('play').some((r) => r.id === 'powerup'));
+  assert.deepEqual(CTL_LAYOUT.click.L.map((e) => e.id), ['minus']);
+  assert.ok(!CTL_LAYOUT.play.R.some((e) => e.id === 'powerUpR'));
   assert.equal(ctlDevice('Zwift Click'), 'click');
   assert.equal(ctlDevice('Zwift Play'), 'play');
   assert.equal(ctlDevice('Zwift Ride'), 'ride');
+  // the first version's pairs spread over their buttons; defaults drop out
+  assert.deepEqual(ctlMigrate({ updown: 'easier|harder', y: 'skip', powerup: 'pacer|none' }), { up: 'easier', down: 'harder', y: 'skip', powerUpR: 'none' });
 });

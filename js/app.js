@@ -1,5 +1,5 @@
 import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
-import { obcIntents, rideIntent, OBC_LABELS, ctlRows, ctlRowOf, ctlDevice, CTL_ACTIONS, CTL_PAIRS, CTL_DEFAULTS } from './controls.js';
+import { obcIntents, rideIntent, OBC_LABELS, ctlEntryOf, ctlDevice, ctlMigrate, CTL_LAYOUT, CTL_ACTIONS, CTL_DEFAULTS } from './controls.js';
 import { variant } from './experiments.js';
 import { segmentAll } from './settings-ui.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
@@ -55,12 +55,13 @@ const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
-  ctlMap: {}, // the Zwift controller rows you changed (js/controls.js CTL_ROWS); the rest keep the Zwift default
+  ctlMap: {}, // the Zwift controller buttons you changed (js/controls.js CTL_LAYOUT); the rest keep the Zwift default
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
   intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: false, voice: false, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
+settings.ctlMap = ctlMigrate(settings.ctlMap); // the first version kept pairs (▲ ▼ as one)
 initStats(settings.stats);
 // what breaks in riders' browsers: the message only (no stack, no address)
 window.addEventListener('error', (ev) => track('error', String(ev.message || 'unknown').replace(/https?:\/\/\S+/g, '').slice(0, 80)));
@@ -221,45 +222,110 @@ function deviceStatus(d) {
 
 /** The controller's units under its row: for a Zwift Ride a slot per hand, each connected or not; any other, a line per unit. */
 // ---------- Controller buttons: what each does, by device ----------
+// the controllers drawn in the middle, the left unit's buttons listed on the left, the right unit's on the
+// right, each with what it does in a select; the button you last pressed (or picked) is lit on both
 let ctlTab = null; // 'click' | 'play' | 'ride'; null: the connected one's
+let ctlSel = null; // the entry lit up
 const CTL_DEV_NAMES = { click: 'Zwift Click', play: 'Zwift Play', ride: 'Zwift Ride' };
+const CTL_FACE = { Y: '#1ba6c9', A: '#22a35a', B: '#d0358f', Z: '#e0582a' };
+const ctlConnectedDev = () => { const u = controller.unitsInfo || []; return u.length ? ctlDevice(u[0].name) : null; };
+/** The units as SVG, with the lit button ringed. */
+function ctlArt(dev, sel) {
+  const ring = (cx, cy, r) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#fbbf24" stroke-width="4"/>`;
+  const defs = '<defs><linearGradient id="ctlg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b3240"/><stop offset="1" stop-color="#161a23"/></linearGradient></defs>';
+  if (dev === 'click') {
+    let s = '<rect x="20" y="10" width="160" height="230" rx="80" fill="url(#ctlg)" stroke="#353e50"/><rect x="88" y="26" width="24" height="6" rx="3" fill="#4fdcf2"/>';
+    for (const [t, cy, id] of [['+', 95, 'plus'], ['−', 170, 'minus']]) {
+      s += `<circle cx="100" cy="${cy}" r="30" fill="#2a3448" stroke="#3a4860"/><text x="100" y="${cy + 10}" text-anchor="middle" font-size="30" font-weight="800" fill="#e8edf5">${t}</text>`;
+      if (sel === id) s += ring(100, cy, 37);
+    }
+    return `<svg viewBox="0 0 200 250" class="ctl-art click" aria-hidden="true">${defs}${s}</svg>`;
+  }
+  const unit = (right) => {
+    if (dev === 'play') {
+      let s = [[46, 58, -45], [194, 58, 45], [46, 186, 45], [194, 186, -45]].map(([x, y, r]) => `<rect x="${x - 22}" y="${y - 14}" width="44" height="28" rx="7" fill="#1a1f2a" stroke="#2c3444" transform="rotate(${r} ${x} ${y})"/>`).join('');
+      s += '<path d="M120 22 C 178 22 212 62 212 116 C 212 158 190 176 176 196 C 166 212 166 250 120 254 C 74 250 74 212 64 196 C 50 176 28 158 28 116 C 28 62 62 22 120 22 Z" fill="url(#ctlg)" stroke="#353e50"/>';
+      s += '<rect x="108" y="38" width="24" height="6" rx="3" fill="#4fdcf2"/><rect x="72" y="66" width="96" height="96" rx="22" fill="#10141c" stroke="#2a3140" stroke-width="2" transform="rotate(45 120 114)"/>';
+      if (right) {
+        for (const [t, cx, cy] of [['Y', 120, 76], ['A', 158, 114], ['B', 120, 152], ['Z', 82, 114]]) {
+          s += `<circle cx="${cx}" cy="${cy}" r="17" fill="${CTL_FACE[t]}"/><text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="17" font-weight="800" fill="#f2f5fa">${t}</text>`;
+          if (sel === t.toLowerCase()) s += ring(cx, cy, 24);
+        }
+        s += '<path d="M120 222 v16 M112 230 h16" stroke="#e8edf5" stroke-width="3.5" stroke-linecap="round"/>';
+        if (sel === 'plus') s += ring(120, 230, 20);
+      } else {
+        const A = { up: [120, 80], down: [120, 148], left: [86, 114], right: [154, 114] };
+        s += '<path d="M112 84 l8 -7 l8 7 M112 144 l8 7 l8 -7 M90 106 l-7 8 l7 8 M150 106 l7 8 l-7 8" fill="none" stroke="#e8edf5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>';
+        if (A[sel]) s += ring(...A[sel], 15);
+        s += '<path d="M112 230 h16" stroke="#e8edf5" stroke-width="3.5" stroke-linecap="round"/>';
+        if (sel === 'minus') s += ring(120, 230, 20);
+      }
+      return `<svg viewBox="0 0 240 270" class="ctl-art" aria-hidden="true">${defs}${s}</svg>`;
+    }
+    // a Ride hood, side on: the horn with its lever outside, the flat base with the buttons inside; the right one mirrored
+    const shift = sel === (right ? 'plus' : 'minus'), lever = sel === (right ? 'paddleR' : 'paddleL'), pu = sel === (right ? 'powerUpR' : 'powerUpL');
+    let s = '<path d="M40 250 L40 62 C40 26 60 8 82 8 C106 8 120 26 120 54 L120 118 C120 132 128 140 144 142 L198 150 C216 153 226 166 226 186 L226 222 C226 240 214 250 196 250 Z" fill="url(#ctlg)" stroke="#353e50" stroke-width="1.5"/>';
+    s += `<rect x="58" y="26" width="44" height="150" rx="22" fill="#3b4459" stroke="${lever ? '#fbbf24' : '#4d5873'}" stroke-width="${lever ? 4 : 1}"/><rect x="64" y="44" width="10" height="114" rx="5" fill="#465169"/>`;
+    s += `<rect x="28" y="72" width="16" height="112" rx="7" fill="#151a24" stroke="${shift ? '#fbbf24' : '#3a4860'}" stroke-width="${shift ? 4 : 1.2}"/><line x1="30" y1="128" x2="42" y2="128" stroke="#3a4860" stroke-width="2"/>`;
+    s += `<rect x="138" y="156" width="52" height="12" rx="6" fill="#1b202b" stroke="${pu ? '#fbbf24' : '#3a4860'}" stroke-width="${pu ? 3 : 1}"/><rect x="126" y="178" width="88" height="62" rx="22" fill="#10141c" stroke="#2a3140" stroke-width="2"/>`;
+    const mir = (x) => (right ? 240 - x : x);
+    let k = '';
+    if (right) {
+      for (const [t, dx, dy] of [['Y', 0, -17], ['A', 22, 0], ['B', 0, 17], ['Z', -22, 0]]) {
+        const cx = mir(170) + dx, cy = 209 + dy;
+        k += `<circle cx="${cx}" cy="${cy}" r="10" fill="${CTL_FACE[t]}"/><text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="11" font-weight="800" fill="#f2f5fa">${t}</text>`;
+        if (sel === t.toLowerCase()) k += ring(cx, cy, 14);
+      }
+    } else {
+      k += '<path transform="translate(170 209)" d="M-5 -12 l5 -5 l5 5 M-5 12 l5 5 l5 -5 M-18 -5 l-5 5 l5 5 M18 -5 l5 5 l-5 5" fill="none" stroke="#e8edf5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>';
+      const A = { up: [170, 194], down: [170, 224], left: [151, 209], right: [189, 209] };
+      if (A[sel]) k += ring(...A[sel], 10);
+    }
+    return `<svg viewBox="0 0 240 260" class="ctl-art" aria-hidden="true">${defs}${right ? `<g transform="translate(240 0) scale(-1 1)">${s}</g>` : s}${k}</svg>`;
+  };
+  return unit(false) + unit(true);
+}
 function renderCtlMap() {
   const units = controller.unitsInfo || [], on = units.filter((u) => u.connected);
-  const connectedDev = units.length ? ctlDevice(units[0].name) : null;
+  const connectedDev = ctlConnectedDev();
   const dev = ctlTab || connectedDev || 'play';
-  const map = settings.ctlMap || {};
+  const map = settings.ctlMap || {}, L = CTL_LAYOUT[dev];
   $('ctl-map-tabs').innerHTML = Object.entries(CTL_DEV_NAMES).map(([d, n]) => `<button role="tab" data-dev="${d}" class="${d === dev ? 'on' : ''}" aria-selected="${d === dev}">${n}</button>`).join('');
   $('ctl-map-note').textContent = dev === connectedDev && on.length
     ? `${CTL_DEV_NAMES[dev]} · ${on.length > 1 ? tr('{n} units connected', { n: on.length }) : tr('connected')}`
     : tr('Not connected: you can set it up ahead');
-  $('ctl-map-rows').innerHTML = ctlRows(dev).map((r) => {
-    const v = map[r.id] || CTL_DEFAULTS[r.id];
-    const opts = (r.pair ? CTL_PAIRS : CTL_ACTIONS).map(([id, label]) => `<option value="${id}"${id === v ? ' selected' : ''}>${esc(tr(label))}</option>`).join('');
-    return `<div class="ctl-row" data-row="${r.id}"><span class="ctl-key k-${r.id}">${r.key}</span><span class="ctl-name">${esc(tr(r.label[dev]))}</span><select data-row="${r.id}" aria-label="${esc(tr(r.label[dev]))}">${opts}</select></div>`;
-  }).join('');
+  const opts = (v) => CTL_ACTIONS.map(([id, label]) => `<option value="${id}"${id === v ? ' selected' : ''}>${esc(tr(label))}</option>`).join('');
+  const mark = (e) => `<span class="ctl-key${CTL_FACE[e.mark] ? ` face` : ''}"${CTL_FACE[e.mark] ? ` style="background:${CTL_FACE[e.mark]}"` : ''}>${e.mark}</span>`;
+  const col = (side, list) => `<div class="ctl-col ${side}">${list.map((e) => `<label class="ctl-row${ctlSel === e.id ? ' hit' : ''}" data-id="${e.id}">${mark(e)}<span class="ctl-pick"><small>${esc(tr(e.name))}</small><select data-id="${e.id}">${opts(map[e.id] || CTL_DEFAULTS[e.id])}</select></span></label>`).join('')}</div>`;
+  $('ctl-map-body').innerHTML = col('L', L.L) + `<div class="ctl-mid ${dev}">${ctlArt(dev, ctlSel)}</div>` + col('R', L.R);
+  $('ctl-map-body').className = `ctl-map-body ${dev}`;
+  const changed = Object.keys(map).filter((k) => [...L.L, ...L.R].some((e) => e.id === k) && map[k] !== CTL_DEFAULTS[k]).length;
+  $('ctl-map-changed').textContent = changed ? tr('{n} changed from Zwift', { n: changed }) : tr('As in Zwift');
 }
 $('ctl-map-tabs').onclick = (e) => { const b = e.target.closest('[data-dev]'); if (b) { ctlTab = b.dataset.dev; renderCtlMap(); } };
-$('ctl-map-rows').onchange = (e) => {
-  const sel = e.target.closest('select[data-row]');
+$('ctl-map-body').onchange = (e) => {
+  const sel = e.target.closest('select[data-id]');
   if (!sel) return;
   const map = { ...(settings.ctlMap || {}) };
-  if (sel.value === CTL_DEFAULTS[sel.dataset.row]) delete map[sel.dataset.row]; else map[sel.dataset.row] = sel.value;
+  if (sel.value === CTL_DEFAULTS[sel.dataset.id]) delete map[sel.dataset.id]; else map[sel.dataset.id] = sel.value;
   settings.ctlMap = map; saveSettings();
+  ctlSel = sel.dataset.id; renderCtlMap();
 };
+$('ctl-map-body').addEventListener('focusin', (e) => {
+  const sel = e.target.closest('select[data-id]');
+  if (sel && ctlSel !== sel.dataset.id) { ctlSel = sel.dataset.id; for (const r of $('ctl-map-body').querySelectorAll('.ctl-row')) r.classList.toggle('hit', r.dataset.id === ctlSel); $('ctl-map-body').querySelector('.ctl-mid').innerHTML = ctlArt(ctlTab || ctlConnectedDev() || 'play', ctlSel); }
+});
 $('ctl-map-reset').onclick = () => { settings.ctlMap = {}; saveSettings(); renderCtlMap(); toast(tr('Buttons back to the Zwift defaults')); };
-/** A press while the panel is on screen: its row lights up (on the device's tab), to find and change it. */
+/** A press while the panel is on screen: the button lights up, on the drawing and in its list. */
 function ctlMapHit(button) {
   const box = $('ctl-map');
   if (!box || !box.offsetParent) return;
-  const row = ctlRowOf(button);
-  if (!row) return;
-  const units = controller.unitsInfo || [], dev = units.length ? ctlDevice(units[0].name) : null;
-  if (!$('ctl-map-rows').querySelector(`[data-row="${row.id}"]`) || (dev && ctlTab && ctlTab !== dev)) { ctlTab = dev; renderCtlMap(); }
-  const el = $('ctl-map-rows').querySelector(`.ctl-row[data-row="${row.id}"]`);
-  if (!el) return;
-  for (const x of $('ctl-map-rows').querySelectorAll('.hit')) x.classList.remove('hit');
-  el.classList.add('hit'); el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  clearTimeout(ctlMapHit.t); ctlMapHit.t = setTimeout(() => el.classList.remove('hit'), 2500);
+  const e = ctlEntryOf(button);
+  if (!e) return;
+  const dev = ctlConnectedDev();
+  if (dev && ctlTab && ctlTab !== dev) ctlTab = dev;
+  ctlSel = e.id; renderCtlMap();
+  $('ctl-map-body').querySelector(`.ctl-row[data-id="${e.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 function renderCtlUnits() {

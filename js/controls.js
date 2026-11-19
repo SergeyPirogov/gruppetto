@@ -64,51 +64,54 @@ export function obcIntents(changes, prev) {
 // onOffL / onOffR switch the controller itself off: left alone (in no row below)
 
 /**
- * Rebinding the Zwift controllers' buttons: the rows the Devices page lists, each one button or a pair
- * (▲ ▼, ◀ ▶, the paddles, power-ups) that takes a pair of actions. Which rows a device has: Click only − and +,
- * Play no power-ups, Ride all. The buttons send the same names on every device, so one map serves them all.
+ * Rebinding the Zwift controllers' buttons, one by one. Each device lists its buttons by hand, the left
+ * unit's and the right unit's (Click: − and +; Play adds the arrows, A B Y Z and the paddles; Ride the
+ * power-ups). The buttons send the same names on every device, so one map serves them all; a side's two
+ * shift buttons on a Ride are one entry.
  */
-export const CTL_ROWS = [
-  { id: 'minus', key: '−', buttons: ['shiftUpL', 'shiftDownL'], label: { click: 'Minus', play: 'Left: minus', ride: 'Left shifter, both buttons' } },
-  { id: 'plus', key: '+', buttons: ['shiftUpR', 'shiftDownR'], label: { click: 'Plus', play: 'Right: plus', ride: 'Right shifter, both buttons' } },
-  { id: 'updown', key: '▲ ▼', pair: ['up', 'down'], label: { play: 'Left: arrows up / down', ride: 'Arrows up / down' } },
-  { id: 'leftright', key: '◀ ▶', pair: ['left', 'right'], label: { play: 'Left: arrows left / right', ride: 'Arrows left / right' } },
-  { id: 'a', key: 'A', buttons: ['a'], label: { play: 'Right: A', ride: 'A' } },
-  { id: 'b', key: 'B', buttons: ['b'], label: { play: 'Right: B', ride: 'B' } },
-  { id: 'y', key: 'Y', buttons: ['y'], label: { play: 'Right: Y', ride: 'Y' } },
-  { id: 'z', key: 'Z', buttons: ['z'], label: { play: 'Right: Z', ride: 'Z' } },
-  { id: 'paddles', key: '◖ ◗', pair: ['paddleL', 'paddleR'], label: { play: 'Paddles left / right', ride: 'Paddles left / right' } },
-  { id: 'powerup', key: 'PU', pair: ['powerUpL', 'powerUpR'], label: { ride: 'Power-up left / right' } },
-];
-/** One button's actions, and the pairs a two-button row can take (first button, second button). */
+const B = (id, mark, name, buttons = [id]) => ({ id, mark, name, buttons });
+const MINUS = B('minus', '−', 'Minus', ['shiftUpL', 'shiftDownL']), PLUS = B('plus', '+', 'Plus', ['shiftUpR', 'shiftDownR']);
+const ARROWS = [B('up', '▲', 'Up'), B('down', '▼', 'Down'), B('left', '◀', 'Left'), B('right', '▶', 'Right')];
+const FACE = [B('y', 'Y', 'Y'), B('a', 'A', 'A'), B('b', 'B', 'B'), B('z', 'Z', 'Z')];
+export const CTL_LAYOUT = {
+  click: { L: [MINUS], R: [PLUS] },
+  play: { L: [...ARROWS, MINUS, B('paddleL', '◖', 'Paddle (back)')], R: [...FACE, PLUS, B('paddleR', '◗', 'Paddle (back)')] },
+  ride: {
+    L: [...ARROWS, { ...MINUS, name: 'Shift, both buttons' }, B('paddleL', 'L', 'Lever'), B('powerUpL', '⚡', 'Power-up')],
+    R: [...FACE, { ...PLUS, name: 'Shift, both buttons' }, B('paddleR', 'L', 'Lever'), B('powerUpR', '⚡', 'Power-up')],
+  },
+};
+/** What one button can do. */
 export const CTL_ACTIONS = [
   ['harder', 'Harder gear'], ['easier', 'Easier gear'], ['bigHarder', 'Big step harder'], ['bigEasier', 'Big step easier'],
   ['left', 'Lane left'], ['right', 'Lane right'], ['toggleErg', 'ERG on / off'], ['togglePause', 'Pause / resume'],
   ['camera', 'Next camera'], ['skip', 'Skip interval'], ['pacer', 'Pacer on / off'], ['hud', 'Hide / show the dashboard'], ['none', 'Nothing'],
 ];
-export const CTL_PAIRS = [
-  ['harder|easier', 'Harder / easier gear'], ['easier|harder', 'Easier / harder gear'],
-  ['bigEasier|bigHarder', 'Big step easier / harder'], ['bigHarder|bigEasier', 'Big step harder / easier'],
-  ['left|right', 'Lane left / right'], ['pacer|hud', 'Pacer / hide dashboard'], ['camera|camera', 'Next camera'], ['none|none', 'Nothing'],
-];
-/** As in Zwift; what every row does until you change it. */
+/** As in Zwift; what every button does until you change it. */
 export const CTL_DEFAULTS = {
-  minus: 'easier', plus: 'harder', updown: 'harder|easier', leftright: 'bigEasier|bigHarder',
-  a: 'toggleErg', b: 'togglePause', y: 'camera', z: 'skip', paddles: 'left|right', powerup: 'pacer|hud',
+  minus: 'easier', plus: 'harder', up: 'harder', down: 'easier', left: 'bigEasier', right: 'bigHarder',
+  a: 'toggleErg', b: 'togglePause', y: 'camera', z: 'skip', paddleL: 'left', paddleR: 'right', powerUpL: 'pacer', powerUpR: 'hud',
 };
-/** The rows a device shows: 'click', 'play' or 'ride'. */
-export const ctlRows = (dev) => CTL_ROWS.filter((r) => r.label[dev]);
-/** The row a button belongs to. */
-export const ctlRowOf = (button) => CTL_ROWS.find((r) => r.buttons?.includes(button) || r.pair?.includes(button)) || null;
+const ALL = Object.values(CTL_LAYOUT.ride).flat();
+/** The entry a button belongs to (onOffL / onOffR switch the unit off: in none). */
+export const ctlEntryOf = (button) => ALL.find((e) => e.buttons.includes(button)) || null;
 /** Which device a controller is by its name (a Ride by default: it has every button). */
 export const ctlDevice = (name = '') => (/click/i.test(name) ? 'click' : /play/i.test(name) ? 'play' : 'ride');
+/** A map saved by the first version (pairs: "updown": "harder|easier"), spread over its buttons. */
+export function ctlMigrate(map = {}) {
+  const out = {}, PAIRS = { updown: ['up', 'down'], leftright: ['left', 'right'], paddles: ['paddleL', 'paddleR'], powerup: ['powerUpL', 'powerUpR'] };
+  for (const [k, v] of Object.entries(map || {})) {
+    if (PAIRS[k] && typeof v === 'string') v.split('|').forEach((a, i) => { if (a && a !== CTL_DEFAULTS[PAIRS[k][i]]) out[PAIRS[k][i]] = a; });
+    else if (k in CTL_DEFAULTS && v !== CTL_DEFAULTS[k]) out[k] = v;
+  }
+  return out;
+}
 
-/** What a button does with your map (rows you never changed keep the Zwift default). */
+/** What a button does with your map (buttons you never changed keep the Zwift default). */
 export const rideIntent = (button, map = {}) => {
-  const row = ctlRowOf(button);
-  if (!row) return null;
-  const v = map[row.id] || CTL_DEFAULTS[row.id];
-  const a = row.pair ? v.split('|')[row.pair.indexOf(button)] : v;
+  const e = ctlEntryOf(button);
+  if (!e) return null;
+  const a = map[e.id] || CTL_DEFAULTS[e.id];
   return !a || a === 'none' ? null : a;
 };
 
