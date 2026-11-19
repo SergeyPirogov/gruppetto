@@ -130,8 +130,28 @@ function buildUi() {
   };
   initWatch();
   $('gr-form').onsubmit = groupCreate;
-  $('gr-kind').onchange = $('gr-route').onchange = grLapsShow;
-  $('gr-start').onchange = grStartShow;
+  $('gr-kind').onchange = $('gr-route').onchange = () => { grLapsShow(); grChoicesShow(); };
+  $('gr-start').onchange = () => { grStartShow(); grChoicesShow(); };
+  // the kind and the start as two cards each, the route as a strip of cards with its profile: each sets its select
+  for (const box of document.querySelectorAll('#gr-form .gr-choices')) {
+    box.onclick = (ev) => {
+      const b = ev.target.closest('[data-v]'), sel = $(box.dataset.for);
+      if (!b || sel.value === b.dataset.v) return;
+      sel.value = b.dataset.v;
+      sel.dispatchEvent(new Event('change'));
+    };
+  }
+  $('gr-routes').onclick = (ev) => {
+    const b = ev.target.closest('[data-v]');
+    if (!b || $('gr-route').value === b.dataset.v) return;
+    $('gr-route').value = b.dataset.v;
+    $('gr-route').dispatchEvent(new Event('change'));
+  };
+  // the form open or shut: on a wide screen it takes the pane where the picked ride shows
+  $('gr-new').ontoggle = () => { $('gr-view').classList.toggle('gr-forming', $('gr-new').open); if ($('gr-new').open) $('gr-made').hidden = true; };
+  $('gr-made-copy').onclick = async () => {
+    try { await navigator.clipboard.writeText($('gr-made-url').value); ctx.toast(tr('Link copied. Send it to your friends')); } catch { $('gr-made-url').select(); }
+  };
   initLeagues({
     ctx, signedIn: () => !!currentUser(), hasProfile: () => !!profileRow,
     needAccount: () => { if (!currentUser()) signIn(redirect()).catch((e) => status(e.message)); else openSetup(); },
@@ -845,8 +865,12 @@ export function openGroups(focus = null) {
   const list = ctx.routes(), cur = ctx.currentRoute();
   $('gr-route').innerHTML = list.map((r) => `<option value="${ctx.esc(r.id)}">${ctx.esc(r.name)}</option>`).join('');
   $('gr-route').value = list.some((r) => r.id === cur?.id) ? cur.id : list[0]?.id || '';
+  $('gr-routes').innerHTML = list.map((r) => `<button type="button" role="option" data-v="${ctx.esc(r.id)}">${profileSvg(r)}<b>${ctx.esc(r.name)}</b>`
+    + `<small>${(r.length / 1000).toFixed(0)} ${tr('km')} · ${Math.round(r.elevationGain || 0)} ${tr('m')}</small></button>`).join('');
   grLapsShow();
   grStartShow();
+  grChoicesShow();
+  $('gr-routes').querySelector('.sel')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   if (!$('gr-date').value) {
     const t = new Date(Date.now() + 3600e3); t.setMinutes(0, 0, 0);
     const pad = (n) => String(n).padStart(2, '0');
@@ -857,6 +881,26 @@ export function openGroups(focus = null) {
   loadLeagues(); // the league select in the form, and the Leagues tab
   clearInterval(grTimer); // the «starts in» and the Ride buttons keep up with the clock while the calendar is open
   grTimer = setInterval(() => { if ($('gr-view').hidden) clearInterval(grTimer); else renderGroups(); }, 15000);
+}
+
+/** The cards in the form follow their selects. */
+function grChoicesShow() {
+  for (const box of document.querySelectorAll('#gr-form .gr-choices')) {
+    const v = $(box.dataset.for).value;
+    for (const b of box.querySelectorAll('[data-v]')) { b.classList.toggle('sel', b.dataset.v === v); b.setAttribute('aria-pressed', String(b.dataset.v === v)); }
+  }
+  for (const b of $('gr-routes').querySelectorAll('[data-v]')) { b.classList.toggle('sel', b.dataset.v === $('gr-route').value); b.setAttribute('aria-selected', String(b.dataset.v === $('gr-route').value)); }
+}
+
+/** A route's height along it, small: the shape of the ride at a glance. */
+function profileSvg(r, h = 26) {
+  const e = (r.segments || []).map((q) => q.elev), n = 48;
+  if (e.length < 2) return '';
+  const pts = Array.from({ length: n + 1 }, (_, i) => e[Math.min(e.length - 1, Math.round((i / n) * (e.length - 1)))]);
+  const lo = Math.min(...pts), hi = Math.max(...pts), span = Math.max(hi - lo, 40); // a flat route stays flat
+  const y = (v) => (h - 3 - ((v - lo) / span) * (h - 6)).toFixed(1);
+  const hilly = (r.elevationGain || 0) / Math.max(1, r.length / 1000) > 15;
+  return `<svg class="gr-prof${hilly ? ' hilly' : ''}" viewBox="0 0 ${n} ${h}" preserveAspectRatio="none" aria-hidden="true"><path d="M0 ${h} ${pts.map((v, i) => `L${i} ${y(v)}`).join(' ')} L${n} ${h}z"/></svg>`;
 }
 
 /** The date and time: only for a ride at a set time (not one started when everyone is ready). */
@@ -919,15 +963,16 @@ function detailRender(rows, now) {
   const fact = (k, v) => `<div><small>${ctx.esc(k)}</small><b>${ctx.esc(v)}</b></div>`;
   el.innerHTML = `<h3>${ctx.esc(g.title)}</h3>${g.kind === 'race' ? `<span class="gr-race">${ctx.esc(raceLabel(g, route))}</span>` : ''}`
     + `<p class="gr-d-when"><b>${ctx.esc(when)}</b><span>${ctx.esc(count)}</span></p>`
-    + `<div class="gr-d-facts">${fact(tr('Host'), g.host_name || tr('a rider'))}${fact(tr('Riders signed up'), `👥 ${g.riders}`)}`
+    + `<div class="gr-d-facts">${fact(tr('Host'), g.mine ? tr('you').replace(/^./, (c) => c.toUpperCase()) : g.host_name || tr('a rider'))}${fact(tr('Going'), String(g.riders))}`
     + (route ? fact(tr('Distance'), `${(route.length / 1000).toFixed(1)} ${tr('km')}`) + fact(tr('Climbing'), `${Math.round(route.elevationGain || 0)} ${tr('m')}`) : '') + '</div>'
-    + `<p class="gr-d-route"><small>${ctx.esc(tr('Route'))}</small><b>${ctx.esc(route?.name || tr('a route not in this version of Gruppetto'))}</b>${route?.description ? `<span>${ctx.esc(route.description)}</span>` : ''}</p>`
+    + `<div class="gr-d-route"><small>${ctx.esc(tr('Route'))} · ${ctx.esc(route?.name || tr('a route not in this version of Gruppetto'))}</small>${route ? profileSvg(route, 40) : ''}${route?.description ? `<span>${ctx.esc(route.description)}</span>` : ''}</div>`
     + `<div class="gr-acts">${actsHTML(g, w, route)}</div>`;
 }
 
 function renderGroups() {
   const now = Date.now(), rows = grRows.filter((g) => rideWindow(Date.parse(g.starts_at), now, g.held).state !== 'over');
   $('gr-empty').hidden = !!rows.length;
+  if (!rows.length && !$('gr-new').dataset.auto) { $('gr-new').dataset.auto = '1'; $('gr-new').open = true; } // nothing planned: the form is what there is to do
   // by when: on the line or riding now, today, this week, later; a heading over each
   const today = new Date(now).toDateString();
   const bucket = (g) => {
@@ -1037,6 +1082,8 @@ async function groupCreate(ev) {
     grFocus = id;
     await loadGroups();
     const url = `${location.origin}${location.pathname}#group=${id}`;
+    $('gr-made-url').value = url;
+    $('gr-made').hidden = false; // over the new ride: its link, to copy and send
     try { await navigator.clipboard.writeText(url); ctx.toast(tr('Group ride created. Link copied. Send it to your friends')); } catch { ctx.toast(tr('Group ride created')); }
   } catch (e) { err.textContent = e.message; err.hidden = false; } finally { $('gr-create').disabled = false; }
 }

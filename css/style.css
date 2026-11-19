@@ -2270,3 +2270,60 @@ input.switch::after { content: ''; position: absolute; top: 3px; left: 3px; widt
 input.switch:checked { background: #22c55e; }
 input.switch:checked::after { transform: translateX(18px); }
 input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* =================== group rides, redesigned: segmented tabs, list beside the form, choices as cards =================== */
+.gr-panel { max-width: 1040px; width: min(1040px, calc(100vw - 24px)); }
+.gr-tabs { display: inline-flex; gap: 0; padding: 3px; border-radius: 10px; background: rgba(0, 0, 0, .25); border: 1px solid var(--line); justify-self: start; }
+.gr-tabs .pill-btn, .gr-tabs .pill-btn.sel { border: 0; border-radius: 7px; padding: 6px 14px; font-weight: 600; }
+.gr-tabs .pill-btn.sel { background: #2a3550; color: var(--text); }
+.gr-tabs .pill-btn:not(.sel):hover { background: rgba(255, 255, 255, .05); color: var(--text); }
+.gr-left, .gr-right { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.gr-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 36px 20px; border-radius: 14px; border: 1.5px dashed var(--line); text-align: center; }
+.gr-empty[hidden] { display: none; }
+.gr-empty svg { width: 52px; height: 52px; fill: none; stroke: #4b5a75; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.gr-empty span { font-size: .88rem; color: var(--muted); max-width: 280px; }
+.gr-how { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 14px; background: rgba(255, 255, 255, .03); border: 1px solid var(--line); }
+.gr-how-h { font-size: .68rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.gr-how ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: how; }
+.gr-how li { counter-increment: how; display: grid; grid-template-columns: 22px 1fr; gap: 10px; font-size: .84rem; line-height: 1.45; color: #c6d0e0; }
+.gr-how li::before { content: counter(how); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #243049; font-size: .75rem; font-weight: 800; }
+.gr-how-note { font-size: .76rem; color: var(--muted); }
+.gr-new { margin: 0; padding: 18px 20px; border-radius: 14px; background: #121824; border: 1px solid var(--line); }
+.gr-new summary { color: var(--text); font-size: 1.05rem; padding: 0; list-style: none; }
+.gr-new summary::-webkit-details-marker { display: none; }
+.gr-new[open] summary { margin-bottom: 6px; }
+.gr-form { gap: 14px; }
+.gr-form label, .gr-field { display: grid; gap: 6px; font-size: .8rem; font-weight: 600; color: var(--muted); }
+.gr-field > span { font-size: .8rem; }
+.gr-form input:not([type="checkbox"]) { height: 42px; box-sizing: border-box; padding: 0 12px; border-radius: 10px; background: #0b1019; border: 1px solid var(--line); color: var(--text); font: inherit; font-size: .92rem; color-scheme: dark; }
+.gr-form input:focus-visible { outline: none; border-color: var(--accent); }
+.gr-sr { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden; clip: rect(0 0 0 0); border: 0 !important; opacity: 0; }
+.gr-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.gr-choices button, .gr-routes button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 11px 13px; border-radius: 10px; border: 1.5px solid var(--line); background: #0b1019; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.gr-choices button b, .gr-routes button b { font-size: .9rem; }
+.gr-choices button small, .gr-routes button small { font-size: .75rem; color: var(--muted); font-weight: 500; }
+.gr-choices button:hover, .gr-routes button:hover { border-color: #3a4a66; }
+.gr-choices button.sel, .gr-routes button.sel { border-color: var(--accent); background: rgba(255, 122, 26, .08); }
+.gr-routes { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 8px; overflow-x: auto; padding-bottom: 4px; scroll-snap-type: x proximity; }
+.gr-routes button { scroll-snap-align: start; gap: 4px; }
+.gr-prof { display: block; width: 100%; height: 26px; }
+.gr-prof path { fill: #3b6f4a; }
+.gr-prof.hilly path { fill: #7a5232; }
+.gr-d-route .gr-prof { height: 44px; margin: 6px 0 4px; }
+.gr-made { display: flex; gap: 12px; align-items: center; padding: 12px 14px; border-radius: 12px; background: rgba(74, 222, 128, .08); border: 1px solid rgba(74, 222, 128, .35); }
+.gr-made[hidden] { display: none; }
+.gr-made > i { flex: none; width: 28px; height: 28px; border-radius: 50%; background: #2f6b45; color: #4ade80; display: grid; place-items: center; font-style: normal; font-weight: 800; }
+.gr-made > div { flex: 1; min-width: 0; display: grid; gap: 8px; font-size: .9rem; }
+.gr-made-link { display: flex; border-radius: 9px; border: 1px solid var(--line); background: #0b1019; overflow: hidden; }
+.gr-made-link input { flex: 1; min-width: 0; padding: 8px 12px; border: 0; background: transparent; color: #c6d0e0; font: .82rem ui-monospace, monospace; }
+.gr-made-link button { padding: 8px 16px; border: 0; border-left: 1px solid var(--line); background: #243049; color: var(--text); font: inherit; font-weight: 700; cursor: pointer; }
+.gr-made-link button:hover { background: #2d3b58; }
+@media (min-width: 900px) {
+  .gr-split { grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr); }
+  .gr-detail:not([hidden]) { position: static; }
+  #gr-view.gr-forming .gr-detail { display: none; }
+  #gr-view .gr-row .gr-acts > :not(.gr-ride) { display: none; } /* the pane beside has them; Ride now stays at hand */
+  #gr-view .gr-row { grid-template-columns: 78px 1fr auto; }
+  #gr-new:not([open]) { display: none; } /* + New ride in the head opens it */
+  .gr-d-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
