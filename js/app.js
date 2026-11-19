@@ -1208,6 +1208,21 @@ function renderMeHero() {
     + `<div><b>${named ? esc(settings.name.trim()) : tr('Your profile')}</b><small>${tr('Level {n}', { n: L.level })} · ${progress?.rides || 0} ${tr('rides')} · ${Math.round(progress?.km || 0)} ${U.km}</small>`
     + `<i class="me-lvl"><i style="width:${Math.round(L.frac * 100)}%"></i></i></div></div>`
     + `<div class="me-stats">${stat('FTP', `${settings.ftp} ${U.W}`)}${stat(U.wkg, wkg > 0 ? wkg.toFixed(1) : '—')}${stat(tr('Category'), categoryOf(settings.ftp, settings.weight))}${stat(tr('Weight'), `${settings.weight} ${tr('kg')}`)}</div>`;
+  // signed in: the account's sync line under the name
+  const synced = !$('social-in').hidden && $('social-sync-text').textContent.trim();
+  if (synced) box.querySelector('.me-who small')?.insertAdjacentHTML('afterend', `<small class="me-sync"><i></i>${esc(synced)}</small>`);
+  renderMeLinks();
+}
+
+/** Rider's side card: intervals.icu, Strava and Garmin, each connected or not, a button to its tab. */
+function renderMeLinks() {
+  const box = $('me-links');
+  if (!box) return;
+  const list = [['intervals.icu', !!icuClient && !icuClient.demo, 'icu-card'], ['Strava', !!stravaClient, 'strava-card'], ['Garmin Connect', !!garminClient, 'garmin-card']]
+    .filter(([, , card]) => $(card) && $(card).dataset.off !== '1' && (card !== 'garmin-card' || garminOn())); // only those its tab offers
+  const shown = list;
+  box.innerHTML = `<h2>${tr('Connections')}</h2>` + shown.map(([name, on]) => `<div class="ml-row${on ? ' on' : ''}"><i></i><b>${name}</b><span>${on ? tr('connected') : tr('not connected')}</span><button type="button" class="ghost" data-ml>${on ? tr('Manage') : tr('Connect')}</button></div>`).join('');
+  for (const b of box.querySelectorAll('[data-ml]')) b.onclick = () => showProfileTab('links');
 }
 
 /** The rail lights the section open in the drawer, and Ride again once it closes. */

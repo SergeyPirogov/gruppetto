@@ -2071,3 +2071,27 @@ select.seg-src { display: none; }
 .dev-auto #copy-flag { align-self: flex-start; width: auto; }
 .dev-grid .ctl-units li { flex-wrap: wrap; row-gap: 0; }
 .dev-grid .ctl-units li span { margin-left: 18px; flex-basis: 100%; }
+
+/* =================== Profile: who you are over the tabs; Rider = details left, connections and garage right =================== */
+#drawer[data-ptab="settings"] #me-hero { display: none; }
+#me-hero .me-sync { display: flex; align-items: center; gap: 6px; color: #3ddc84; font-size: .8rem; font-weight: 600; }
+#me-hero .me-sync i { width: 8px; height: 8px; border-radius: 4px; background: #3ddc84; }
+@media (min-width: 900px) { #me-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center; gap: 18px; } #me-hero .me-stats { margin: 0; } }
+.me-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.me-grid[hidden] { display: none; }
+.me-grid > .card { margin: 0; }
+.me-aside { display: flex; flex-direction: column; gap: 14px; }
+.me-aside[hidden] { display: none; }
+.me-aside > .card { margin: 0; }
+.me-links { display: flex; flex-direction: column; gap: 8px; }
+.ml-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #0b1019; border: 1px solid var(--line); }
+.ml-row i { width: 10px; height: 10px; border-radius: 5px; background: #3a4458; }
+.ml-row.on { border-color: #1f4a37; background: #0f1d18; }
+.ml-row.on i { background: #3ddc84; }
+.ml-row span { color: var(--muted); font-size: .8rem; }
+.ml-row.on span { color: #3ddc84; }
+.ml-row button { padding: 6px 12px; font-size: .8rem; }
+.me-garage { padding: 0; overflow: hidden; }
+.me-garage .garage-open { margin: 0; border: 0; border-radius: 0; }
+@media (max-width: 900px) { .me-grid { grid-template-columns: minmax(0, 1fr); } }
+.me-garage .garage-open { width: 100%; }
