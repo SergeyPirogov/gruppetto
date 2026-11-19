@@ -123,6 +123,7 @@ function buildUi() {
   $('gr-detail').onclick = groupAction; // the same buttons as the row's, in the pane
   // + New ride: to the calendar tab, the form open and in view
   $('gr-new-btn').onclick = () => {
+    if (!$('gr-lg').hidden) { $('gr-lg-new').open = true; $('gr-lg-new').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); $('gr-lg-title').focus({ preventScroll: true }); return; } // on the Leagues tab: a new league
     document.querySelector('[data-gr-tab="cal"]')?.click();
     $('gr-new').open = true;
     $('gr-new').scrollIntoView({ block: 'start', behavior: 'smooth' });
