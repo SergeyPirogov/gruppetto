@@ -459,6 +459,7 @@ function apply(merged) {
  */
 export function sync({ send = false } = {}) {
   if (!on() || !currentUser()) return Promise.resolve();
+  if (forgetOtherAccount()) return new Promise(() => {}); // the page reloads clean
   if (syncing) return syncing.then(() => sync({ send }));
   setSync({ state: 'syncing' });
   syncing = (async () => {
@@ -486,6 +487,34 @@ export function sync({ send = false } = {}) {
     (e) => { setSync({ state: 'error', error: e?.message || String(e) }); throw e; })
     .finally(() => { syncing = null; });
   return syncing;
+}
+
+// ---------- Whose data this device holds ----------
+// The rides, workouts, records and links on this device belong to one account: the one last signed in here (a
+// guest's, before any, go to the first account to sign in). Another account signing in must not get them, nor
+// send them up as its own: this device forgets them first and loads the new account's.
+export const OWNER_KEY = 'gruppetto.owner';
+const ACCOUNT_KEYS = ['gruppetto.history', 'gruppetto.history.deleted', 'gruppetto.workouts', 'gruppetto.workouts.deleted',
+  'gruppetto.records', 'gruppetto-progress', 'gruppetto.social.queue', 'gruppetto.social.rides', 'gruppetto.strava', 'gruppetto.garmin'];
+// the settings that are the account's links or bound to it (the rest of the settings come from the account's profile)
+const ACCOUNT_SETTINGS = ['icuKey', 'icuAthlete', 'icuUpload', 'stravaUpload', 'garminUpload', 'settingsUpdatedAt'];
+
+/** Another account than the one whose data is here: forget that data and reload. True when it does. */
+function forgetOtherAccount() {
+  const id = currentUser().id;
+  let owner = null;
+  try { owner = localStorage.getItem(OWNER_KEY); } catch { return false; }
+  if (!owner) { try { localStorage.setItem(OWNER_KEY, id); } catch { /* private mode */ } return false; }
+  if (owner === id) return false;
+  const ids = (ctx.getHistory() || []).map((e) => e.id);
+  for (const k of ACCOUNT_KEYS) localStorage.removeItem(k);
+  for (const k of [...ACCOUNT_SETTINGS, ...SYNC_FIELDS.filter((f) => f !== 'lang')]) delete ctx.settings[k]; // the defaults come back on reload
+  ctx.saveSettingsRaw();
+  localStorage.setItem(OWNER_KEY, id);
+  ctx.track('social', 'account-switch');
+  // the rides' full records too, then a fresh start with the new account's data
+  Promise.allSettled(ids.map((x) => ctx.deleteRide(x))).finally(() => location.reload());
+  return true;
 }
 
 const unionDeleted = (a, b) => { const out = { ...(a || {}) }; for (const [id, t] of Object.entries(b || {})) if (!(out[id] >= t)) out[id] = t; return out; };

@@ -5430,7 +5430,7 @@ initSocialUi({
     myWorkouts = list; myWorkoutsDeleted = deleted; writeJson(MY_DEL_KEY, deleted);
     seenWorkouts.clear(); stampChanged(myWorkouts, seenWorkouts); writeMyWorkouts(); renderModes();
   },
-  getHistory: () => history, historyDeleted: () => historyDeleted, getRide, putRide,
+  getHistory: () => history, historyDeleted: () => historyDeleted, getRide, putRide, deleteRide,
   setHistory: (list, removed) => {
     for (const id of removed) deleteRide(id);
     history = list; seenHistory.clear(); stampChanged(history, seenHistory); writeHistory(); renderHistory(); renderProgress();
