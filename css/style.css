@@ -2095,6 +2095,41 @@ select.seg-src { display: none; }
 .me-garage .garage-open { margin: 0; border: 0; border-radius: 0; }
 @media (max-width: 900px) { .me-grid { grid-template-columns: minmax(0, 1fr); } }
 .me-garage .garage-open { width: 100%; }
+
+/* lobby, the rest of the redesign: the next group ride as a big card, the mode as segments, live values on the device chips */
+.race-card { position: relative; display: grid; gap: 10px; padding: 22px 26px; border-radius: 20px; background: #121a28; border: 1px solid #22304a; }
+.race-card[hidden] { display: none; }
+.race-card.hot { background: #1a1410; border-color: #4a2a12; }
+.race-card .rc-top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.race-card .rc-badge { padding: 4px 10px; border-radius: 999px; background: #2a3346; color: #e8edf5; font-size: .72rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.race-card.hot .rc-badge { background: #ff7a1a; color: #1a0f05; }
+.race-card .rc-kind { color: #f2c9a8; font-size: .85rem; }
+.race-card h2 { margin: 0; font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; text-transform: none; color: #fff; }
+.race-card .rc-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; color: #d8dee8; font-size: .95rem; }
+.race-card .rc-meta b { color: #fff; }
+.race-card .rc-who { color: var(--muted); font-size: .9rem; }
+.race-card .rc-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+.race-card .rc-acts .primary { padding: 12px 26px; font-size: 1rem; font-weight: 800; }
+@media (max-width: 560px) { .race-card { padding: 16px; } .race-card h2 { font-size: 1.45rem; } .race-card .rc-acts .primary { flex: 1; } }
+
+.lobby-modes .mode-select + .seg { width: max-content; max-width: 100%; margin-bottom: 12px; }
+.lobby-modes .mode-select + .seg > button { flex: none; padding: 10px 18px; }
+.lobby-modes .mode-list .option:not(.cur) { display: none; }
+.lobby-modes .mode-list { grid-template-columns: minmax(0, 560px); }
+@media (max-width: 560px) { .lobby-modes .mode-select + .seg { width: 100%; } .lobby-modes .mode-select + .seg > button { flex: 1 1 auto; padding: 10px 8px; font-size: .8rem; } .lobby-modes .mode-list { grid-template-columns: minmax(0, 1fr); } }
+
+/* chips: a pill each, green with the reading when connected, dashed "+ name" when not */
+.lobby-body .dev-chips { gap: 8px; padding: 0; background: none; border: 0; }
+.lobby-body .dev-chip { padding: 7px 14px; border-radius: 999px; border: 1px dashed #2e3a50; background: transparent; font-weight: 600; }
+.lobby-body .dev-chip + .dev-chip { border-left: 1px dashed #2e3a50; border-radius: 999px; }
+.lobby-body .dev-chip i { display: none; }
+.lobby-body .dev-chip::before { content: "+"; }
+.lobby-body .dev-chip.on { background: #13261f; border: 1px solid #1f4a37; }
+.lobby-body .dev-chip.on i, .lobby-body .dev-chip.sim-chip i, .lobby-body .dev-chip.need i { display: block; }
+.lobby-body .dev-chip.on::before, .lobby-body .dev-chip.sim-chip::before, .lobby-body .dev-chip.need::before { content: none; }
+.lobby-body .dev-chip.need { border: 1px dashed rgba(255, 122, 26, .7); }
+@media (max-width: 860px) { .lobby-body .dev-chips { overflow-x: auto; scrollbar-width: none; } .lobby-body .dev-chip { flex: none; } }
+.dev-chip .chip-val::before { content: "·"; margin-right: 7px; color: var(--muted); font-weight: 400; }
 /* the two charts side by side: each as tall as it needs, the power table on one row */
 .prog-charts { align-items: start; }
 .prog-charts .pc-table { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
