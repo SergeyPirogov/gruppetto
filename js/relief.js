@@ -74,8 +74,8 @@ export function mountainSide(curve, { turn = 2.5, loop = false, grade = null } =
 
 /** Each climb (≥ 2.5 %, climbs under 600 m apart joined) takes one side, eased in and out over 80 m at its ends. */
 function holdOnClimbs(out, grade, loop) {
-  const n = out.length, gap = Math.round(600 / SEG), ease = Math.round(80 / SEG);
-  const up = Array.from(grade, (g) => g > 0.025);
+  const n = out.length, gap = Math.round(600 / SEG), ease = Math.round(100 / SEG), lead = Math.round(200 / SEG);
+  const up = Array.from(grade, (g) => Math.abs(g) > 0.025); // a descent too: it is the same mountainside
   // spans of climbing, with short flat bits inside one joined
   const spans = [];
   for (let i = 0; i < n; ) {
@@ -90,9 +90,10 @@ function holdOnClimbs(out, grade, loop) {
   }
   const src = Float32Array.from(out);
   const at = (i) => (loop ? ((i % n) + n) % n : i);
-  for (const [a, b] of spans) {
+  for (const [a0, b0] of spans) {
     let sum = 0;
-    for (let i = a; i <= b; i++) sum += src[at(i)];
+    for (let i = a0; i <= b0; i++) sum += src[at(i)];
+    const a = a0 - lead, b = b0 + lead; // the side settles on the flat before the climb, not as it starts
     const side = sum >= 0 ? 1 : -1;
     for (let i = a - ease; i <= b + ease; i++) {
       const k = at(i);
@@ -100,6 +101,25 @@ function holdOnClimbs(out, grade, loop) {
       const w = i < a ? (i - (a - ease)) / ease : i > b ? ((b + ease) - i) / ease : 1; // 0..1 at the ends
       const u = w * w * (3 - 2 * w);
       out[k] = src[k] + (side - src[k]) * Math.max(u, i >= a && i <= b ? 1 : 0);
+    }
+  }
+  noShortRuns(out, loop);
+}
+
+/** A side held under 500 m between two stretches of the other: the hill stays on that other side through it. */
+function noShortRuns(out, loop) {
+  const n = out.length, min = Math.round(500 / SEG);
+  const sg = (i) => (out[((i % n) + n) % n] >= 0 ? 1 : -1);
+  for (let pass = 0; pass < 2; pass++) {
+    const runs = [];
+    for (let i = 0; i < n; ) { let j = i; while (j + 1 < n && sg(j + 1) === sg(i)) j++; runs.push([i, j]); i = j + 1; }
+    for (let r = 0; r < runs.length; r++) {
+      const [i, j] = runs[r];
+      const prev = runs[r - 1] || (loop ? runs[runs.length - 1] : null), next = runs[r + 1] || (loop ? runs[0] : null);
+      if (j - i + 1 >= min || !prev || !next || prev === next) continue;
+      const side = -sg(i);
+      if (sg(prev[0]) !== side || sg(next[0]) !== side) continue;
+      for (let k = i; k <= j; k++) out[k] = side * Math.max(Math.abs(out[k]), 0.6);
     }
   }
 }
