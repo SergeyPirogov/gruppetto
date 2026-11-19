@@ -209,7 +209,7 @@ function deviceStatus(d) {
   }
   if (d.dev === controller || d.dev === obc) {
     const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
-    const units = d.dev === controller && controller.count > 1 ? ` ×${controller.count}` : '';
+    const units = ''; // the units have their own slots
     const hint = ''; // the second Zwift Ride unit has its own slot under the row (renderCtlUnits)
     return `${d.dev.name}${units}${label ? ` · ${tr('pressed: {label}', { label })}` : ` · ${tr('press any button')}`}${hint}`;
   }
@@ -258,7 +258,19 @@ function updateDeviceUI() {
   $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
   renderCtlUnits();
   // a card per device on the Devices page: lit when it is connected
-  for (const d of DEVICES) $(`btn-${d.key}`)?.closest('.device')?.classList.toggle('on', d.dev.connected || (d.dev === cadenceSensor && trainer.connected));
+  for (const d of DEVICES) {
+    const on = d.dev.connected || (d.dev === cadenceSensor && trainer.connected);
+    $(`btn-${d.key}`)?.closest('.device')?.classList.toggle('on', on);
+    const st = $(`${d.key}-state`), lv = $(`${d.key}-live`);
+    if (st) st.textContent = reconnecting.has(d.key) ? tr('reconnecting…') : d.dev.connected ? tr('connected') : on ? tr('from trainer') : tr('not connected');
+    // the live reading, big on the card's right
+    if (lv) lv.textContent = !on ? '' : d.dev === trainer ? `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`
+      : d.dev === hrm ? `${fresh(live.hr, live.hrAt) || '—'}` : d.dev === cadenceSensor ? `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`
+      : '';
+    // the long line only when it says more than the state above it
+    const note = $(`${d.key}-status`);
+    if (note) note.hidden = note.textContent === tr('not connected');
+  }
   // lobby top bar: a dot per device, lit when connected
   // with the live reading on the chip, so you see at a glance that each one is working
   const reading = { trainer: () => `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`, hr: () => { const v = fresh(live.hr, live.hrAt); return v ? `❤ ${v}` : '—'; }, cad: () => `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}` };

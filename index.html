@@ -214,30 +214,26 @@
       <div class="card" data-panel="devices">
         <h2>Devices</h2>
         <p id="bt-warning" class="warn" hidden>This browser does not support Bluetooth. Use Chrome or Edge on a computer or Android, or the simulator mode.</p>
-        <div id="autoconnect-hint" class="note" hidden>
-          <b>Connect automatically next time</b>
-          <p>This browser asks you to pick each sensor every time. To have the trainer, heart rate monitor and controllers connect by themselves when the page opens:</p>
-          <ol>
-            <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
-            <li>Set it to <b>Enabled</b> and restart Chrome</li>
-            <li>Reconnect each sensor here once</li>
-          </ol>
-          <button id="copy-flag" class="ghost">Copy the address</button>
-        </div>
-        <div class="device">
-          <div><b>Smart trainer / power meter</b><small id="trainer-status">not connected</small></div>
-          <button id="btn-trainer">Connect</button>
-        </div>
-        <div class="device">
-          <div><b>Heart rate monitor</b><small id="hr-status">not connected</small></div>
-          <button id="btn-hr">Connect</button>
-        </div>
-        <div class="device">
-          <div><b>Cadence sensor</b><small id="cad-status">not connected</small></div>
-          <button id="btn-cad">Connect</button>
-        </div>
-        <div class="device">
-          <div><b>Zwift Ride / Play / Click controllers</b><small id="ctl-status">not connected</small>
+        <!-- a card per device, lit when connected; the live reading on the right (js/app.js updateDeviceUI) -->
+        <div class="dev-grid">
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M4 18h16M7 18l3-9h4l3 9M10 9l2-4 2 4"/></svg><div class="dev-name"><b>Smart trainer / power meter</b><span class="dev-state" id="trainer-state">not connected</span></div><b class="dev-live" id="trainer-live"></b></div>
+            <small id="trainer-status" class="dev-note">not connected</small>
+            <div class="btns"><button id="btn-trainer">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z"/></svg><div class="dev-name"><b>Heart rate monitor</b><span class="dev-state" id="hr-state">not connected</span></div><b class="dev-live" id="hr-live"></b></div>
+            <small id="hr-status" class="dev-note">not connected</small>
+            <div class="btns"><button id="btn-hr">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16M12 12l4-3"/></svg><div class="dev-name"><b>Cadence sensor</b><span class="dev-state" id="cad-state">not connected</span></div><b class="dev-live" id="cad-live"></b></div>
+            <small id="cad-status" class="dev-note">not connected</small>
+            <div class="btns"><button id="btn-cad">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M6 8h12v8H6zM9 12h2M13 12h2"/></svg><div class="dev-name"><b>Zwift Ride / Play / Click controllers</b><span class="dev-state" id="ctl-state">not connected</span></div><b class="dev-live" id="ctl-live"></b></div>
+            <small id="ctl-status" class="dev-note">not connected</small>
             <!-- a Zwift Ride is two units: a slot for each hand, so you see both are on (js/app.js renderCtlUnits) -->
             <ul id="ctl-units" class="ctl-units" hidden></ul>
             <details class="btn-map"><summary>Buttons</summary>
@@ -253,18 +249,30 @@
                 <tr><td>Power-up right</td><td>Hide / show the HUD</td></tr>
               </table>
             </details>
+            <div class="btns"><button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button><button id="btn-ctl">Connect</button></div>
+          </article>
+          <article class="device">
+            <div class="dev-head"><svg viewBox="0 0 24 24" class="dev-ic" aria-hidden="true"><path d="M5 12h14M12 5v14"/></svg><div class="dev-name"><b>OpenBikeControl</b><span class="dev-state" id="obc-state">not connected</span></div><b class="dev-live" id="obc-live"></b></div>
+            <small id="obc-status" class="dev-note">not connected</small><small class="hint-sm">Any controller via the BikeControl app</small>
+            <div class="btns"><button id="btn-obc">Connect</button></div>
+          </article>
+        </div>
+        <div class="dev-more">
+          <div id="autoconnect-hint" class="dev-box dev-auto" hidden>
+            <b>Connect automatically next time</b>
+            <p>This browser asks you to pick each sensor every time. To have the trainer, heart rate monitor and controllers connect by themselves when the page opens:</p>
+            <ol>
+              <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
+              <li>Set it to <b>Enabled</b> and restart Chrome</li>
+              <li>Reconnect each sensor here once</li>
+            </ol>
+            <button id="copy-flag" class="ghost">Copy the address</button>
           </div>
-          <div class="btns">
-            <button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button>
-            <button id="btn-ctl">Connect</button>
+          <div class="dev-box"><b>Without a trainer</b>
+            <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
+            <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
           </div>
         </div>
-        <div class="device">
-          <div><b>OpenBikeControl</b><small id="obc-status">not connected</small><small class="hint-sm">Any controller via the BikeControl app</small></div>
-          <button id="btn-obc">Connect</button>
-        </div>
-        <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
-        <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
       </div>
       <!-- Profile: three tabs (Me, Connections, Settings); a card shows on the tab its data-ptab names -->
       <nav class="card ptabs" data-panel="profile" aria-label="Profile">

@@ -2009,12 +2009,28 @@ select.seg-src { display: none; }
   #history-all .hist-row { grid-template-columns: 46px minmax(0, 1fr) 64px 56px; } #history-all .hist-row > :nth-child(5), #history-all .hist-row > :nth-child(6), #history-all .hist-sent { display: none; }
 }
 
-/* =================== Devices: a card per device, lit when connected; the Zwift Ride's two units =================== */
-#drawer [data-panel="devices"] .device { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 16px 18px; margin-top: 10px; border-radius: 18px; background: #121824; border: 1px solid var(--line); }
-#drawer [data-panel="devices"] .device.on { background: #0f1d18; border-color: #1f4a37; }
-#drawer [data-panel="devices"] .device > div:first-child > b { font-size: 1rem; }
-#drawer [data-panel="devices"] .device small[id$="-status"] { display: block; margin-top: 2px; color: var(--muted); }
-#drawer [data-panel="devices"] .device.on small[id$="-status"] { color: #3ddc84; font-weight: 600; }
+/* =================== Devices: a grid of cards, lit when connected; the Zwift Ride's two units =================== */
+.dev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 10px; }
+.dev-grid .device { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; padding: 16px 18px; border-radius: 18px; background: #121824; border: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.dev-grid .device.on { background: #0f1d18; border-color: #1f4a37; }
+.dev-head { display: flex; align-items: center; gap: 12px; }
+.dev-ic { width: 44px; height: 44px; padding: 10px; border-radius: 12px; flex: none; background: #1b2436; stroke: #a3afc2; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.device.on .dev-ic { background: #13261f; stroke: #3ddc84; }
+.dev-name { min-width: 0; flex: 1; }
+.dev-name b { display: block; font-size: .98rem; }
+.dev-state { font-size: .8rem; font-weight: 700; color: #93a0b5; }
+.device.on .dev-state { color: #3ddc84; }
+.dev-live { font-size: 1.5rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dev-grid .dev-note { color: var(--muted); font-size: .8rem; line-height: 1.35; }
+.dev-grid .device .btns { margin-top: auto; }
+.dev-grid .device .btns button { padding: 9px 16px; font-size: .85rem; }
+.dev-grid #ctl-units { margin: 0; }
+.dev-more { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin-top: 12px; }
+.dev-box { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 18px; background: #121824; border: 1px solid var(--line); font-size: .85rem; }
+.dev-box[hidden] { display: none; }
+.dev-box p, .dev-box ol { margin: 0; color: var(--muted); }
+.dev-box code { word-break: break-all; }
+.dev-box .check { margin: 0; padding: 0; background: none; border: 0; }
 .ctl-units { list-style: none; margin: 10px 0 2px; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .ctl-units[hidden] { display: none; }
 .ctl-units li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #0b1019; border: 1px dashed #2e3a50; font-size: .85rem; }
@@ -2049,3 +2065,9 @@ select.seg-src { display: none; }
 .prog-badges { margin-top: 14px; padding: 14px 16px; border-radius: 18px; background: #121824; border: 1px solid var(--line); }
 .prog-badges[hidden] { display: none; }
 @media (max-width: 900px) { #progress-box.progress-box, .prog-charts { grid-template-columns: minmax(0, 1fr); } }
+.dev-grid .dev-note[hidden] { display: none; }
+.dev-grid .ctl-units li b { white-space: nowrap; }
+.dev-grid .ctl-units li span { white-space: nowrap; }
+.dev-auto #copy-flag { align-self: flex-start; width: auto; }
+.dev-grid .ctl-units li { flex-wrap: wrap; row-gap: 0; }
+.dev-grid .ctl-units li span { margin-left: 18px; flex-basis: 100%; }
