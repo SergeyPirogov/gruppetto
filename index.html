@@ -240,7 +240,6 @@
             <small id="ctl-status" class="dev-note">not connected</small>
             <!-- a Zwift Ride is two units: a slot for each hand, so you see both are on (js/app.js renderCtlUnits) -->
             <ul id="ctl-units" class="ctl-units" hidden></ul>
-            <a href="#ctl-map" class="ctl-setup"><span class="ctl-setup-ic"><svg viewBox="0 0 24 24" class="ic stroke" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg></span><span class="ctl-setup-txt"><b>Buttons</b><small id="ctl-setup-sub">As in Zwift · − easier, + harder</small></span><span class="ctl-setup-go">Set up</span></a>
             <div class="btns"><button id="btn-ctl-add" hidden title="Zwift Ride has two controllers; each connects separately">+ controller</button><button id="btn-ctl">Connect</button></div>
           </article>
           <article class="device">
@@ -534,7 +533,7 @@
         </div>
         <img class="strava-compat" src="icons/strava/compatible-with-strava.svg" alt="Compatible with Strava" width="160" height="14">
       </div>
-      <div class="card" id="garmin-card" data-panel="profile" data-ptab="links" hidden>
+      <div class="card" id="garmin-card" data-panel="profile" data-ptab="links" data-off="1" hidden>
         <h2>Garmin Connect</h2>
         <p class="muted">Finished rides go to Garmin Connect as a FIT file. Garmin has no upload API for apps like this one, so Gruppetto signs in the way Garmin's own app does. Your email and password pass once through Gruppetto's server on to Garmin and are kept nowhere. What comes back is a sign-in that stays only in this browser, and it opens your whole Garmin account, so connect only on your own device. Rather not? Save the .FIT after the ride and upload it at connect.garmin.com yourself.</p>
         <label class="check"><input type="checkbox" id="f-garmin-upload"> Upload the ride to Garmin Connect when finished</label>
