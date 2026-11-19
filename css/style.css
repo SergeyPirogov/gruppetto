@@ -2327,3 +2327,38 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
   #gr-new:not([open]) { display: none; } /* + New ride in the head opens it */
   .gr-d-facts { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+/* leagues, redesigned: cards on the left, the picked league's standings with medals and its races as steps */
+.gr-lg-card { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid var(--line); background: rgba(255, 255, 255, .03); cursor: pointer; }
+.gr-lg-card:hover { border-color: #3a4a66; }
+.gr-lg-card.sel { border-color: var(--accent); background: rgba(255, 122, 26, .07); }
+.gr-lg-card > div { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.gr-lg-card b { font-size: .95rem; }
+.gr-lg-card small { font-size: .78rem; color: var(--muted); }
+#gr-lg-home { display: flex; flex-direction: column; gap: 12px; }
+#gr-lg-home[hidden] { display: none; }
+.gr-lg-new { margin: 0; }
+.gr-pts { display: flex; flex-wrap: wrap; gap: 4px; }
+.gr-pts span { padding: 3px 8px; border-radius: 6px; background: #0b1019; font-size: .78rem; font-weight: 700; color: #c6d0e0; }
+.gr-pts small { color: var(--muted); font-weight: 600; }
+#gr-lg-one { display: flex; flex-direction: column; gap: 12px; }
+#gr-lg-one[hidden] { display: none; }
+.gr-lg-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.gr-lg-head h3 { margin: 0; font-size: 1.35rem; font-weight: 800; }
+.gr-lg-head small { color: var(--muted); font-size: .85rem; }
+.gr-lg-table td { vertical-align: middle; padding: 9px 6px; }
+.gr-lg-table th:nth-child(n+3), .gr-lg-table td:nth-child(n+3) { text-align: right; }
+.gr-lg-table td:nth-child(3) { font-size: 1.05rem; color: var(--text); }
+.gr-lg-table tr.me td { background: rgba(255, 122, 26, .10); }
+.gr-lg-races li { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 10px; background: #0b1019; }
+.gr-lg-races li > i { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: .75rem; font-weight: 800; background: #243049; color: #c6d0e0; }
+.gr-lg-races li.done > i { background: #2f6b45; color: #4ade80; }
+.gr-lg-races li > div { flex: 1; min-width: 0; }
+.gr-lg-races li > small { white-space: nowrap; }
+.gr-lg-races li .link-btn { color: var(--accent); white-space: nowrap; }
+@media (min-width: 900px) {
+  .gr-lg:not([hidden]) { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.5fr); gap: 20px; align-items: start; }
+  #gr-lg-one:not([hidden]) { padding: 20px; border-radius: 14px; background: #121824; border: 1px solid var(--line); }
+  #gr-lg-back { display: none; }
+  #gr-lg-home { display: flex !important; }
+}

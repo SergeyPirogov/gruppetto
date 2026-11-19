@@ -15,7 +15,7 @@ export function initLeagues(handles) {
   h = handles;
   $('gr-tabs').onclick = (ev) => { const b = ev.target.closest('[data-gr-tab]'); if (b) showTab(b.dataset.grTab); };
   $('gr-lg-list').onclick = (ev) => { const b = ev.target.closest('[data-lg]'); if (b) openLeague(b.dataset.lg); };
-  $('gr-lg-back').onclick = () => { openId = null; render(); };
+  $('gr-lg-back').onclick = () => { openId = null; if (wide()) { $('gr-lg-home').hidden = false; $('gr-lg-one').hidden = true; } else render(); };
   $('gr-lg-form').onsubmit = create;
   $('gr-lg-races').onclick = (ev) => { const b = ev.target.closest('[data-ride]'); if (b) { showTab('cal'); h.openRide(b.dataset.ride); } };
 }
@@ -25,6 +25,7 @@ export function showTab(t) {
   for (const b of $('gr-tabs').querySelectorAll('[data-gr-tab]')) b.classList.toggle('sel', b.dataset.grTab === t);
   $('gr-cal').hidden = t !== 'cal';
   $('gr-lg').hidden = t !== 'lg';
+  $('gr-new-btn').textContent = t === 'lg' ? tr('+ New league') : tr('+ New ride');
   if (t === 'lg') { h.ctx.track('social', 'league-list'); load(); }
 }
 
@@ -57,26 +58,34 @@ const when = (iso) => {
   return `${d.toLocaleDateString(h.ctx.locale, { weekday: 'short', day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(h.ctx.locale, { hour: '2-digit', minute: '2-digit' })}`;
 };
 
+/** A wide screen has room for both: the list on the left, a league's standings beside it. */
+const wide = () => matchMedia('(min-width: 900px)').matches;
+
 function render() {
-  $('gr-lg-home').hidden = !!openId;
+  // wide: a league is always shown beside the list (the first, until another is picked)
+  if (wide() && !openId && rows.length) { openLeague(rows[0].id); return; }
+  $('gr-lg-home').hidden = !!openId && !wide();
   $('gr-lg-one').hidden = !openId;
-  if (openId) return;
   $('gr-lg-empty').hidden = !!rows.length;
-  $('gr-lg-list').innerHTML = rows.map((l) => `<li class="gr-row gr-lg-row" data-lg="${esc(l.id)}" role="button" tabindex="0">`
-    + `<div class="gr-when"><b>🏆</b></div>`
-    + `<div class="gr-what"><b>${esc(l.title)}</b><small>${esc(l.host_name || tr('a rider'))} · ${esc(tr('{n} races', { n: l.races }))}`
-    + `${l.next_at ? ` · ${esc(tr('next {t}', { t: when(l.next_at) }))}` : ''}</small></div>`
-    + `<div class="gr-acts"><span class="pill-btn">${esc(tr('Standings'))}</span></div></li>`).join('');
+  // running (a race ahead) first, then the ones whose races are all ridden
+  const over = rows.filter((l) => !l.next_at && l.races > 0), live = rows.filter((l) => !over.includes(l)); // a new league, no races yet, is running too
+  const card = (l) => `<li class="gr-lg-card${l.id === openId ? ' sel' : ''}" data-lg="${esc(l.id)}" role="button" tabindex="0">`
+    + `<div><b>🏆 ${esc(l.title)}</b><small>${esc(tr('{n} races', { n: l.races }))}</small></div>`
+    + `<small>${esc(l.host_name || tr('a rider'))}${l.next_at ? ` · ${esc(tr('next {t}', { t: when(l.next_at) }))}` : ''}</small></li>`;
+  const sec = (t, list) => (list.length ? `<li class="gr-sec">${esc(t)}</li>${list.map(card).join('')}` : '');
+  $('gr-lg-list').innerHTML = sec(tr('Running'), live) + sec(tr('Finished'), over);
 }
 
 async function openLeague(id) {
   openId = id;
   const l = rows.find((x) => x.id === id);
-  $('gr-lg-name').textContent = l ? `🏆 ${l.title}` : '';
+  $('gr-lg-name').textContent = l ? l.title : '';
+  $('gr-lg-meta').textContent = l ? [l.host_name ? tr('Host {name}', { name: l.host_name }) : '', tr('{n} races', { n: l.races }), l.next_at ? tr('next {t}', { t: when(l.next_at) }) : ''].filter(Boolean).join(' · ') : '';
   $('gr-lg-rows').innerHTML = `<tr><td colspan="5" class="muted">${esc(tr('Loading…'))}</td></tr>`;
   $('gr-lg-races').innerHTML = '';
   $('gr-lg-none').hidden = true;
   render();
+  for (const c of $('gr-lg-list').querySelectorAll('[data-lg]')) c.classList.toggle('sel', c.dataset.lg === id);
   h.ctx.track('social', 'league-open');
   let st, races;
   try { [st, races] = await Promise.all([leagueStandings(id), leagueRaces(id)]); } catch (e) {
@@ -85,12 +94,14 @@ async function openLeague(id) {
   }
   if (openId !== id) return;
   $('gr-lg-none').hidden = !!st.length;
-  $('gr-lg-rows').innerHTML = placed(st).map((r) => `<tr class="${r.me ? 'me' : ''}"><td>${r.place}</td><td>${esc(r.name || tr('a rider'))}</td>`
-    + `<td>${r.points}</td><td>${r.races}</td><td>${r.wins || ''}</td></tr>`).join('');
+  const rank = (p) => `<i class="ua-rank${p <= 3 ? ` m${p}` : ''}">${p}</i>`;
+  $('gr-lg-rows').innerHTML = placed(st).map((r) => `<tr class="${r.me ? 'me' : ''}"><td>${rank(r.place)}</td><td>${esc(r.name || tr('a rider'))}${r.me ? `<em class="ua-you">${esc(tr('you'))}</em>` : ''}</td>`
+    + `<td>${r.points}</td><td>${r.races}</td><td>${r.wins || '–'}</td></tr>`).join('');
   const { done, next } = splitRaces(races, Date.now());
-  const item = (r, past) => `<li><span class="gr-lg-when">${esc(when(r.starts_at))}</span> <b>${esc(r.title)}</b>`
-    + (past ? ` <small>${esc(tr('{n} finished', { n: r.finishers }))}</small>` : ` <button class="link-btn" data-ride="${esc(r.id)}">${esc(tr('In the calendar'))}</button>`) + '</li>';
-  $('gr-lg-races').innerHTML = [...done.map((r) => item(r, true)), ...next.map((r) => item(r, false))].join('')
+  // the races as steps: ridden ones ticked, the next with its time and a way to the calendar
+  const item = (r, past, i) => `<li class="${past ? 'done' : ''}"><i>${past ? '✓' : i + 1}</i><div><b>${esc(r.title)}</b> <small>${esc(when(r.starts_at))}</small></div>`
+    + (past ? `<small>${esc(tr('{n} finished', { n: r.finishers }))}</small>` : `<button class="link-btn" data-ride="${esc(r.id)}">${esc(tr('In the calendar'))}</button>`) + '</li>';
+  $('gr-lg-races').innerHTML = [...done.map((r, i) => item(r, true, i)), ...next.map((r, i) => item(r, false, done.length + i))].join('')
     || `<li class="muted">${esc(tr('No races in this league yet'))}</li>`;
 }
 

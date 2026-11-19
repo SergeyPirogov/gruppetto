@@ -558,4 +558,11 @@ export const UK = {
   'Starts by itself': 'Стартує сам',
   'When all are ready': 'Коли всі готові',
   'You start it, 10 s to 10 min countdown': 'Ти запускаєш, відлік від 10 с до 10 хв',
+  // leagues redesign
+  'No leagues yet': 'Ліг ще немає',
+  'Create one, then add your group races to it.': 'Створи лігу, потім додай до неї свої групові гонки.',
+  'Points per race': 'Очки за гонку',
+  'A league is a series of group races. Simulator rides earn no points. Pick the league when you schedule a race.': 'Ліга — це серія групових гонок. Заїзди на симуляторі очок не дають. Обери лігу, коли плануєш гонку.',
+  'Running': 'Тривають',
+  'Host {name}': 'Організатор {name}',
 };
