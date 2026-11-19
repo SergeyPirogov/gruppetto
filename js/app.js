@@ -894,8 +894,9 @@ function renderModes() {
   race.classList.toggle('sel', settings.mode === 'race');
   wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
   // the segmented control above shows the mode; only the picked mode's card stays visible (free ride when none is picked)
+  // a free ride has nothing to pick or show: the segment says it, so no card under it
   const picked = [free, wb, race].find((o) => o.classList.contains('sel')) || free;
-  picked.classList.add('cur');
+  if (picked !== free) picked.classList.add('cur');
   modeWorkout = w;
   const seg = $('mode-select');
   if (seg) seg.value = picked === race ? 'race' : picked === wb ? 'workout' : 'free';

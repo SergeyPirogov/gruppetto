@@ -718,7 +718,8 @@ test('the lobby: the next group race as a big card with Join, the mode as segmen
   assert.equal(await page.isVisible('#mode-list .race-pick'), true);
   assert.equal(await page.isVisible('#mode-list [data-id="free"]'), false);
   await page.evaluate(() => document.querySelector('.mode-select + .seg > button[data-v="free"]').click());
-  assert.equal(await page.isVisible('#mode-list [data-id="free"]'), true);
+  assert.equal(await page.isVisible('#mode-list [data-id="free"]'), false); // a free ride: no card, the segment is enough
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('powerup.settings')).mode), 'free');
   assert.deepEqual(errors, []);
   await context.close();
   // no Supabase project: the card stays hidden
