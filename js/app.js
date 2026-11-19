@@ -1964,8 +1964,19 @@ function renderRaceTable() {
   $('sum-race-cats').innerHTML = [null, ...cats].map((c) => `<button class="pill-btn${c === raceTable.cat ? ' sel' : ''}" data-cat="${c || ''}">${c ? `${tr('Cat')} ${c}` : tr('All')}</button>`).join('');
   // those still riding when you finished, from the ride's own table, after the finishers, marked * (until they are in)
   const riding = raceTable.cat ? [] : (e.race || []).filter((x) => x.est && !x.me && !rows.some((r) => r.name === x.name)).map((x) => ({ name: x.name, time_s: x.time, est: true }));
-  $('sum-race-rows').innerHTML = [...list, ...riding].map((x) => `<tr class="${x.me ? 'me' : ''}"><td>${x.est ? '' : x.place}</td><td>${esc(x.name || tr('Rider'))}${x.cat && !raceTable.cat ? ` <small class="race-cat cat-${x.cat}">${x.cat}</small>` : ''}${x.sim ? ` <small class="muted" title="${esc(tr('Ridden in the simulator'))}">🖥</small>` : ''}</td>`
-    + `<td>${fmtTime(Math.round(x.time_s))}${x.est ? ' *' : ''}${x.wkg ? ` <small class="muted">${Number(x.wkg).toFixed(1)} ${U.wkg}</small>` : ''}</td><td>${x.gap ? `+${fmtTime(Math.round(x.gap))}` : ''}</td></tr>`).join('');
+  // the podium: second, first, third, each on a block as high as the place
+  const top = list.filter((x) => !x.est).slice(0, 3);
+  $('sum-podium').hidden = top.length < 2;
+  $('sum-podium').innerHTML = [1, 0, 2].filter((i) => top[i]).map((i) => {
+    const x = top[i];
+    return `<div class="pod pod-${i + 1}${x.me ? ' me' : ''}"><span class="pod-av${x.cat ? ` cat-${x.cat}` : ''}">${esc((x.name || '?')[0].toUpperCase())}</span>`
+      + `<b class="pod-name">${esc(x.name || tr('Rider'))}</b><small>${i ? `+${fmtTime(Math.round(x.gap || 0))}` : fmtTime(Math.round(x.time_s))}</small><span class="pod-block">${i + 1}</span></div>`;
+  }).join('');
+  $('sum-race-head').hidden = false;
+  $('sum-race-rows').innerHTML = [...list, ...riding].map((x) => `<tr class="${x.me ? 'me' : ''}"><td>${x.est ? '' : x.place}</td>`
+    + `<td>${esc(x.name || tr('Rider'))}${x.me ? ` <small class="muted">(${tr('you')})</small>` : ''}${x.cat && !raceTable.cat ? ` <small class="race-cat cat-${x.cat}">${x.cat}</small>` : ''}${x.sim ? ` <small class="muted" title="${esc(tr('Ridden in the simulator'))}">🖥</small>` : ''}</td>`
+    + `<td>${fmtTime(Math.round(x.time_s))}${x.est ? ' *' : ''}</td><td>${x.gap ? `+${fmtTime(Math.round(x.gap))}` : ''}</td>`
+    + `<td>${x.avg_w ? `${x.avg_w} ${U.W}` : ''}</td><td>${x.wkg ? Number(x.wkg).toFixed(1) : ''}</td></tr>`).join('');
 }
 $('sum-race-cats').addEventListener('click', (ev) => {
   const b = ev.target.closest('[data-cat]');
@@ -3152,6 +3163,7 @@ function showSummary(e, { live = false, from = null } = {}) {
   renderFtpTip($('sum-ftp'), e);
   // race results
   $('sum-race').hidden = !e.race;
+  $('sum-podium').hidden = true; $('sum-race-head').hidden = true;
   if (e.race) {
     const mine = e.race.find((x) => x.me), winner = e.race[0];
     $('sum-race-place').textContent = mine ? tr('{n} of {m}', { n: e.race.indexOf(mine) + 1, m: e.race.length }) : '';

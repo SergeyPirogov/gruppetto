@@ -739,7 +739,8 @@
       <div id="sum-race" class="card sum-race" hidden>
         <div class="sum-chart-head"><h2>Race results</h2><span id="sum-race-place" class="race-place"></span></div>
         <div id="sum-race-cats" class="race-cats" hidden></div>
-        <table><tbody id="sum-race-rows"></tbody></table>
+        <div id="sum-podium" class="podium" hidden></div>
+        <table class="race-table"><thead id="sum-race-head" hidden><tr><th>#</th><th>Rider</th><th>Time</th><th>Gap</th><th>Avg power</th><th>W/kg</th></tr></thead><tbody id="sum-race-rows"></tbody></table>
         <p class="hint"><span>* still riding: the time at their speed</span><br><span>Categories by W/kg (A from 4.0, B 3.2, C 2.5, D below): your FTP's, or the race's own if you rode above it.</span> <button id="btn-race-copy" class="link-btn">Copy the results</button></p>
       </div>
       <div id="sum-intervals" class="card sum-intervals" hidden>
