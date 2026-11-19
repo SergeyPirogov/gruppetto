@@ -1900,3 +1900,63 @@ select.seg-src { display: none; }
 .race-table tr.me td { background: rgba(255, 122, 26, .1); color: #ffb07a; }
 .pod-av.cat-A { background: #f87171; } .pod-av.cat-B { background: #4ade80; } .pod-av.cat-C { background: #60a5fa; } .pod-av.cat-D { background: #facc15; }
 .race-table th:nth-child(n+3), .race-table td:nth-child(n+3) { text-align: right; }
+
+/* ---------- Ride summary, layout B: the story first (Profile > Settings, js/app.js applySummaryLayout) ---------- */
+.sum-story[hidden] { display: none; }
+#summary:not(.sum-b) .stats .b-only { display: none; }
+#summary.sum-b { background: #0b1019; }
+#summary.sum-b .sum-title { display: none; } /* the story's first line says it */
+#summary.sum-b .sum-main { max-width: 920px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-content: start; grid-auto-flow: row dense; }
+#summary.sum-b .sum-main > * { grid-column: 1 / -1; margin: 0; min-width: 0; }
+#summary.sum-b .sum-main > [hidden] { display: none; }
+#summary.sum-b .card, #summary.sum-b .sum-icu { background: #121824; border-color: #1f2a3d; border-radius: 18px; }
+#summary.sum-b .card { padding: 16px 18px; }
+#summary.sum-b .card h2, #summary.sum-b .sum-chart-head h2 { color: #e8edf5; text-transform: none; letter-spacing: 0; font-size: 1.1rem; font-weight: 700; }
+#summary.sum-b #sum-story { order: 1; display: flex; flex-direction: column; gap: 16px; padding: 28px 30px; border-radius: 24px; background: linear-gradient(135deg, #2a1c12 0%, #121824 70%); border: 1px solid #4a2a12; }
+#summary.sum-b .story-kicker { font-size: .8rem; color: #f2c9a8; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+#summary.sum-b .story-main { display: flex; align-items: flex-end; justify-content: space-between; gap: 28px; flex-wrap: wrap; }
+#summary.sum-b .story-big { display: flex; flex-direction: column; }
+#summary.sum-b .story-big b { font-size: 6rem; font-weight: 900; line-height: .9; color: #ffc233; font-variant-numeric: tabular-nums; }
+#summary.sum-b .story-big span { font-size: 1rem; color: #f0dccb; margin-top: 8px; }
+#summary.sum-b .story-big .story-cat { color: #4ade80; }
+#summary.sum-b .story-cols { display: grid; grid-template-columns: repeat(3, auto); gap: 4px 28px; text-align: right; }
+#summary.sum-b .story-cols span { font-size: .75rem; color: #c9a688; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+#summary.sum-b .story-cols b { font-size: 1.9rem; font-variant-numeric: tabular-nums; }
+#summary.sum-b .story-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+#summary.sum-b .story-chips span { padding: 6px 12px; border-radius: 999px; background: #3a2414; color: #ffc233; font-size: .8rem; font-weight: 800; }
+/* the order: story, the chart, the race and the numbers side by side, then the rest */
+#summary.sum-b #sum-hero, #summary.sum-b #sum-prs, #summary.sum-b #sum-earned { display: none; } /* in the story */
+#summary.sum-b .sum-chart { order: 2; }
+#summary.sum-b #sum-ftp { order: 3; }
+#summary.sum-b #sum-race { order: 4; grid-column: 1; }
+#summary.sum-b #sum-stats { order: 4; grid-column: 2; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 10px; align-content: start; padding: 16px 18px; border-radius: 18px; background: #121824; border: 1px solid #1f2a3d; }
+#summary.sum-b .sum-main:has(#sum-race[hidden]) #sum-stats { grid-column: 1 / -1; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
+#summary.sum-b #sum-stats div { background: none; border: 0; padding: 0; }
+#summary.sum-b #sum-stats label { font-size: .75rem; }
+#summary.sum-b #sum-stats b { font-size: 1.25rem; }
+#summary.sum-b #sum-intervals { order: 5; }
+#summary.sum-b #sum-zones { order: 6; }
+#summary.sum-b #sum-segments { order: 7; }
+#summary.sum-b .sum-actions { order: 9; align-items: center; gap: 10px; padding: 14px 18px; border-radius: 18px; background: #121824; border: 1px solid #1f2a3d; }
+#summary.sum-b .sum-actions button { padding: 10px 14px; border-radius: 12px; background: #1b2436; color: #e8edf5; border: 1px solid #2a3650; font-weight: 700; }
+#summary.sum-b .sum-actions button.primary { background: #ff7a1a; color: #1a0f05; border: 0; font-weight: 800; }
+#summary.sum-b .sum-actions button.ghost { background: none; }
+#summary.sum-b .sum-icu { order: 10; justify-self: start; }
+#summary.sum-b .hint { order: 11; }
+/* the race: a plain list, the podium stays in A */
+#summary.sum-b #sum-podium { display: none; }
+#summary.sum-b #sum-race { align-self: start; }
+#summary.sum-b .sum-race td { border-top: 0; padding: 8px 10px; background: #0e131d; }
+#summary.sum-b .sum-race tbody { display: table-row-group; }
+#summary.sum-b .sum-race table { border-collapse: separate; border-spacing: 0 4px; }
+#summary.sum-b .sum-race tr.me td { background: #13261f; color: #b7f5cf; }
+#summary.sum-b .sum-race td:first-child { border-radius: 10px 0 0 10px; }
+#summary.sum-b .sum-race td:last-child { border-radius: 0 10px 10px 0; }
+@media (max-width: 760px) {
+  #summary.sum-b .sum-main { grid-template-columns: minmax(0, 1fr); }
+  #summary.sum-b #sum-race, #summary.sum-b #sum-stats { grid-column: 1; }
+  #summary.sum-b #sum-story { padding: 20px 18px; }
+  #summary.sum-b .story-big b { font-size: 4rem; }
+  #summary.sum-b .story-cols { text-align: left; gap: 4px 18px; }
+  #summary.sum-b .story-cols b { font-size: 1.4rem; }
+}

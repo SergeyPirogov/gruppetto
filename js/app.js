@@ -56,7 +56,7 @@ const DEFAULT_SETTINGS = {
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, powerAvg: 3, hudLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -1973,6 +1973,7 @@ function renderRaceTable() {
       + `<b class="pod-name">${esc(x.name || tr('Rider'))}</b><small>${i ? `+${fmtTime(Math.round(x.gap || 0))}` : fmtTime(Math.round(x.time_s))}</small><span class="pod-block">${i + 1}</span></div>`;
   }).join('');
   $('sum-race-head').hidden = false;
+  renderStory(e);
   $('sum-race-rows').innerHTML = [...list, ...riding].map((x) => `<tr class="${x.me ? 'me' : ''}"><td>${x.est ? '' : x.place}</td>`
     + `<td>${esc(x.name || tr('Rider'))}${x.me ? ` <small class="muted">(${tr('you')})</small>` : ''}${x.cat && !raceTable.cat ? ` <small class="race-cat cat-${x.cat}">${x.cat}</small>` : ''}${x.sim ? ` <small class="muted" title="${esc(tr('Ridden in the simulator'))}">🖥</small>` : ''}</td>`
     + `<td>${fmtTime(Math.round(x.time_s))}${x.est ? ' *' : ''}</td><td>${x.gap ? `+${fmtTime(Math.round(x.gap))}` : ''}</td>`
@@ -3154,10 +3155,14 @@ function showSummary(e, { live = false, from = null } = {}) {
   $('lobby').hidden = true;
   $('summary').hidden = false;
   $('sum-kicker').textContent = live ? tr('Ride complete') : new Date(e.date).toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  applySummaryLayout();
+  track('exp', `summary-${summaryLayout}`); // summaries shown by layout, to compare A and B
   $('sum-name').textContent = [e.routeName, e.race ? `🏁 ${tr('Race')}` : e.workoutName || tr('Free ride')].filter(Boolean).join(' · ');
   // new power records: this ride against every ride before it
   const before = powerCurve(history.filter((x) => x !== e && Date.parse(x.date) < Date.parse(e.date)));
-  const recs = Object.entries(e.bests || {}).filter(([d, w]) => before[d] && w > before[d].w).map(([d, w]) => `<span class="pr-chip">${durLabel(+d)} <b>${w} ${U.W}</b> 🏆</span>`);
+  const recPairs = Object.entries(e.bests || {}).filter(([d, w]) => before[d] && w > before[d].w);
+  storyRecs = recPairs;
+  const recs = recPairs.map(([d, w]) => `<span class="pr-chip">${durLabel(+d)} <b>${w} ${U.W}</b> 🏆</span>`);
   $('sum-prs').hidden = !recs.length;
   $('sum-prs').innerHTML = recs.length ? `<span class="pr-head">${tr('New power records')}</span>${recs.join('')}` : '';
   renderFtpTip($('sum-ftp'), e);
@@ -3199,7 +3204,9 @@ function showSummary(e, { live = false, from = null } = {}) {
   if (sum) { const low = e.wbalMin ?? Math.min(...wb); stats.push([tr('Lowest W′bal'), `${(low / 1000).toFixed(1)} ${tr('kJ')} · ${Math.round((low / wPrime) * 100)}%`]); }
   if (sum && e.ramp && sum.best1min) stats.push([tr('Estimated FTP'), `${Math.round(sum.best1min * 0.75)} ${U.W}`]);
   if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([tr('vs {name}', { name: e.ghostName || tr('ghost') }), `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} ${U.m} ${e.ghostGap >= 0 ? '🏆' : ''}`]);
-  $('sum-stats').innerHTML = stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
+  // layout B's grid also holds the numbers of A's top row (its story has the time); hidden in A
+  const heroB = sum ? [[tr('Distance'), `${(sum.distance / 1000).toFixed(2)} ${U.km}`], [tr('Avg power'), `${sum.avgPower} ${U.W}`], [tr('Avg heart rate'), sum.avgHr ? `${sum.avgHr} ${U.bpm}` : '—']] : [];
+  $('sum-stats').innerHTML = heroB.map(([k, v]) => `<div class="b-only"><label>${k}</label><b>${v}</b></div>`).join('') + stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
   // laps and climbs of this ride, with personal bests
   const rows = [
     ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? tr('Finish') : tr('Lap {n}', { n: i + 1 }), t, null, `${e.routeId}-lap`]),
@@ -3219,6 +3226,7 @@ function showSummary(e, { live = false, from = null } = {}) {
   shown = { entry: e, rec: live ? recorder : null };
   groupRaceTable(e); // a group race: the results from the table, kept up to date
   renderEarned(e);
+  renderStory(e);
   $('btn-challenge').hidden = !(e.chart?.d?.length > 1 && !e.race && routes.some((r) => r.id === e.routeId && !r.custom));
   const files = (on) => {
     for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !on; $(id).disabled = !sum; }
@@ -3274,6 +3282,60 @@ function showSummary(e, { live = false, from = null } = {}) {
 }
 /** The ride on the summary screen: its history entry and, when kept, its full record. */
 let shown = { entry: null, rec: null };
+let storyRecs = []; // the power records of the ride on the summary: [duration, watts]
+
+/** 1st, 2nd, 3rd, 4th; «3-є» in Ukrainian. */
+const placeWord = (n) => (lang === 'uk' ? `${n}-є` : `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`);
+
+/**
+ * Summary layout B opens with the story of the ride (it is built always, A just hides it): in a race the place,
+ * the time, the gap to the leader and W/kg; otherwise the time, distance and power; then what the ride earned.
+ */
+function renderStory(e) {
+  const box = $('sum-story'), sum = e.summary;
+  if (!sum) { box.innerHTML = ''; return; }
+  const date = new Date(e.date).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'long' });
+  const kicker = [date, e.groupRace?.title, e.routeName, e.race ? '' : e.workoutName || tr('Free ride')].filter(Boolean).join(' · ');
+  const wkg = settings.weight ? (sum.avgPower / settings.weight).toFixed(1) : '—';
+  const gapText = (g) => (g < 0.05 ? '—' : g < 60 ? `+${g.toFixed(1)} ${tr('s')}` : `+${fmtTime(Math.round(g))}`);
+  let big = fmtTime(sum.duration), sub = `${(sum.distance / 1000).toFixed(1)} ${U.km} · ${sum.avgPower} ${U.W}`, cols;
+  cols = [[tr('Distance'), `${(sum.distance / 1000).toFixed(1)} ${U.km}`], [tr('Avg power'), `${sum.avgPower} ${U.W}`], [tr('Avg W/kg'), wkg]];
+  let mine = null, total = 0, myTime = 0, gap = 0, inCat = '';
+  if (raceTable.e === e && raceTable.rows.length) {
+    const rows = raceTable.rows, all = catResults(rows), me = all.find((x) => x.me);
+    if (me) {
+      mine = me.place; total = all.length; myTime = me.time_s; gap = me.gap;
+      if (me.cat && catsIn(rows).length > 1) inCat = tr('{place} in category {cat}', { place: placeWord(catResults(rows, me.cat).find((x) => x.me).place), cat: me.cat });
+    }
+  } else if (e.race) {
+    const me = e.race.find((x) => x.me);
+    if (me) { mine = e.race.indexOf(me) + 1; total = e.race.length; myTime = me.time; gap = me.time - e.race[0].time; }
+  }
+  if (mine) {
+    big = placeWord(mine);
+    sub = `${tr('of {m} in the race', { m: total })}${inCat ? ` · <b class="story-cat">${esc(inCat)}</b>` : ''}`;
+    cols = [[tr('Time'), fmtTime(Math.round(myTime))], [tr('Behind the leader'), gapText(gap)], [tr('Avg W/kg'), wkg]];
+  }
+  const chips = [
+    ...storyRecs.map(([d, w]) => `${tr('New {d} record: {w} W', { d: durLabel(+d), w })}`),
+    ...(e.earned?.levelUp ? [tr('Level {n}!', { n: e.earned.levelUp })] : []),
+    ...(e.earned?.badges || []).map((id) => BADGES.find((b) => b.id === id)).filter(Boolean).map((b) => badgeName(b)),
+  ];
+  box.innerHTML = `<span class="story-kicker">${esc(kicker)}</span>`
+    + `<div class="story-main"><div class="story-big"><b>${esc(big)}</b><span>${sub}</span></div>`
+    + `<div class="story-cols">${cols.map(([k]) => `<span>${esc(k)}</span>`).join('')}${cols.map(([, v]) => `<b>${esc(v)}</b>`).join('')}</div></div>`
+    + (chips.length ? `<div class="story-chips">${chips.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : '');
+}
+
+let summaryLayout = '';
+/** The summary in layout A (cards in a column) or B (the story first): a class on #summary, styled in css/style.css. */
+function applySummaryLayout() {
+  const v = variant('summary', { chosen: settings.summaryLayout });
+  $('f-summary-layout').value = v;
+  summaryLayout = v;
+  $('summary').classList.toggle('sum-b', v === 'b');
+  $('sum-story').hidden = v !== 'b';
+}
 /**
  * «Upload again» after a ✓: for a ride deleted there (or gone wrong), as long as its full record is still here.
  * kind: 'icu', 'strava' or 'garmin'.
@@ -5075,6 +5137,8 @@ function applyHudLayout() {
   $('ride').classList.toggle('hud-b', v === 'b');
 }
 applyHudLayout();
+applySummaryLayout();
+$('f-summary-layout').onchange = () => { settings.summaryLayout = $('f-summary-layout').value; saveSettings(); applySummaryLayout(); track('exp', `summary-${summaryLayout}-picked`); };
 $('f-hud-layout').onchange = () => { settings.hudLayout = $('f-hud-layout').value; saveSettings(); applyHudLayout(); track('exp', `hud-${hudLayout}-picked`); };
 
 $('f-lang').innerHTML = LANGS.map((l) => `<option value="${l.id}">${l.name}</option>`).join('');
