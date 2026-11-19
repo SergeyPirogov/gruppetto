@@ -492,6 +492,7 @@ export const UK = {
   "Sign in to write in the chat. Reactions work for everyone.": "Увійди, щоб писати в чат. Реакції доступні всім.",
   "Watching": "Перегляд",
   'Without a trainer': 'Без станка', 'reconnecting…': 'перепідключення…',
+  'Manage': 'Керувати',
   // progress
   'Level': 'Рівень', 'Form today': 'Форма сьогодні', 'Badges': 'Нагороди', '{n} of {m}': '{n} з {m}', 'ramp test on {date}': 'рамп-тест {date}', 'set by you': 'задано тобою', 'an estimate: a ramp test finds yours': 'оцінка: рамп-тест знайде твій', 'Take the test again': 'Пройти тест ще раз', 'Take the ramp test': 'Пройти рамп-тест',
   // devices
