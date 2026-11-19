@@ -27,7 +27,7 @@ const ROUTES = [
     // endurance with something to look at
     id: 'level', theme: 'alpine',
     name: 'Alpine Valley',
-    description: 'Dead flat, 0 % for 45 km along an alpine valley, the peaks all around. For long workouts in ERG and steady endurance.',
+    description: 'Dead flat, 0 % for 45 km along an alpine valley, with peaks all around. Ideal for long ERG workouts and steady endurance.',
     length: 45000,
     hills: [],
     curves: [[0.005, 15000, 0.3], [0.004, 4500, 1.1], [0.002, 1500, 2.2]],
@@ -94,7 +94,7 @@ const ROUTES = [
   {
     id: 'sunset', theme: 'sunset',
     name: 'Sunset Hills',
-    description: 'Looping “walls” up to 8% at sunset. For strength.',
+    description: 'Looping “walls” up to 8% at sunset. Great for strength work.',
     length: 20000,
     hills: [[25, 5000, 0], [12, 2000, 1], [3, 1000, 2]],
     curves: [[0.008, 4000, 1], [0.005, 1000, 0]],
@@ -118,7 +118,7 @@ const ROUTES = [
   {
     id: 'carpathians', theme: 'carpathians',
     name: 'Carpathian Switchbacks',
-    description: 'Spruce slopes, switchbacks and a 3.5 km climb, ramps up to 8%.',
+    description: 'Spruce slopes, switchbacks and a 3.5 km climb with ramps up to 8%.',
     length: 14000,
     hills: [[90, 14000, -Math.PI / 2], [15, 3500, 0.4], [4, 1000, 1]],
     curves: [[0.016, 1750, 0], [0.008, 700, 1]],

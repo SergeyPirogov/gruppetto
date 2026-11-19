@@ -106,7 +106,7 @@ async function create(ev) {
     $('gr-lg-title').value = '';
     $('gr-lg-new').open = false;
     await load();
-    h.ctx.toast(tr('League created: now schedule a race in the calendar and pick it'));
+    h.ctx.toast(tr('League created. Now schedule a race in the calendar and choose this league'));
     openLeague(id);
   } catch (e) { err.textContent = e.message; err.hidden = false; } finally { $('gr-lg-create').disabled = false; }
 }

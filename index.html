@@ -40,7 +40,7 @@
       <button class="rail-btn" data-open="devices" title="Devices"><svg viewBox="0 0 24 24" class="ic stroke"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M10 7h4"/></svg><i class="rail-dot" id="rail-dev-dot"></i><span>Devices</span></button>
       <button class="rail-btn" id="rail-garage" title="Garage"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 20V9l9-5 9 5v11M7 20v-7h10v7M7 16h10"/></svg><span>Garage</span></button>
       <span class="rail-grow"></span>
-      <button class="rail-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, a dock icon, and it works offline"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span>Install</span></button>
+      <button class="rail-btn" id="btn-install" hidden title="Install Gruppetto as an app: its own window, a dock icon, and offline support"><svg viewBox="0 0 24 24" class="ic stroke"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg><span>Install</span></button>
       <button class="rail-btn rail-me" data-open="profile" id="open-profile" title="Profile"><span class="avatar" id="avatar"></span><span>Profile</span></button>
     </nav>
     <div class="lobby-body">
@@ -79,9 +79,9 @@
             <li><b>Free.</b> No subscription, no account.</li>
             <li><b>In the browser.</b> Nothing to install. After the first load, it works offline.</li>
             <li><b>Your workouts.</b> Zwift .zwo files open here, and your intervals.icu plan syncs automatically.</li>
-            <li><b>Your devices.</b> Smart trainers, heart rate, Zwift Ride, Play and Click controllers.</li>
+            <li><b>Your devices.</b> Smart trainers, heart rate monitors, Zwift Ride, Play and Click controllers.</li>
             <li><b>With friends.</b> Send a ride as a link and friends race your ghost.</li>
-            <li><b>Your rides stay yours.</b> On this device, and to intervals.icu or any app as .FIT.</li>
+            <li><b>Your rides stay yours.</b> Saved on this device, and exportable to intervals.icu or any app as .FIT.</li>
           </ul>
           <div class="why-actions"><button id="why-zwo" class="pill-btn">Import .zwo</button><button id="why-icu" class="pill-btn" data-open="icu">Connect intervals.icu</button></div>
         </div>
@@ -150,7 +150,7 @@
         <button id="btn-start" class="primary big">Ride</button>
         <button id="btn-start-more" class="primary big start-more" aria-label="More ways to ride" title="More ways to ride">▾</button>
         <div id="start-menu" class="start-menu" hidden>
-          <button id="start-watch"><b>📺 Watch &amp; ride</b><small>In a mini window over a film or the match; the 3D road is not loaded</small></button>
+          <button id="start-watch"><b>📺 Watch &amp; ride</b><small>In a mini window over a movie or the game; the 3D road is not loaded</small></button>
         </div>
       </div>
     </div>
@@ -170,7 +170,7 @@
       <div class="drawer-bg" data-wb-close></div>
       <div class="wk-menu-panel wkd-panel wb-panel">
         <div class="wk-menu-head"><h2>Workout builder</h2><button class="drawer-close" data-wb-close aria-label="Close">✕</button></div>
-        <div class="wb-meta"><label>Name <input id="wb-name" maxlength="60"></label><label>Notes <input id="wb-desc" maxlength="200" placeholder="What it is for, how to ride it"></label></div>
+        <div class="wb-meta"><label>Name <input id="wb-name" maxlength="60"></label><label>Notes <input id="wb-desc" maxlength="200" placeholder="What it is for and how to ride it"></label></div>
         <canvas id="wb-chart" class="wkd-chart"></canvas>
         <div id="wb-stats" class="wb-stats"></div>
         <ol id="wb-blocks" class="wb-blocks"></ol>
@@ -217,7 +217,7 @@
       </div>
       <div class="card" data-panel="devices">
         <h2>Devices</h2>
-        <p id="bt-warning" class="warn" hidden>This browser does not support Bluetooth. Use Chrome or Edge on a computer or Android, or the simulator mode.</p>
+        <p id="bt-warning" class="warn" hidden>This browser does not support Bluetooth. Use Chrome or Edge on a computer or Android, or try the simulator.</p>
         <!-- a card per device, lit when connected; the live reading on the right (js/app.js updateDeviceUI) -->
         <div class="dev-grid">
           <article class="device">
@@ -264,7 +264,7 @@
         <div class="dev-more">
           <div id="autoconnect-hint" class="dev-box dev-auto" hidden>
             <b>Connect automatically next time</b>
-            <p>This browser asks you to pick each sensor every time. To have the trainer, heart rate monitor and controllers connect by themselves when the page opens:</p>
+            <p>This browser asks you to pick each sensor every time. To connect your trainer, heart rate monitor and controllers automatically when the page opens:</p>
             <ol>
               <li>Open <code>chrome://flags/#enable-web-bluetooth-new-permissions-backend</code></li>
               <li>Set it to <b>Enabled</b> and restart Chrome</li>
@@ -273,7 +273,7 @@
             <button id="copy-flag" class="ghost">Copy the address</button>
           </div>
           <div class="dev-box"><b>Without a trainer</b>
-            <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer; set power with the slider or + / −; ? lists every key)</label>
+            <label class="check"><input type="checkbox" id="sim"> Simulator (no trainer): set power with the slider or + / −; press ? to list all keys</label>
             <label class="check"><input type="checkbox" id="show-all"> Show all Bluetooth devices (if yours is not listed)</label>
           </div>
         </div>
@@ -303,11 +303,11 @@
         <aside class="me-aside" data-panel="profile" data-ptab="me">
           <!-- each connection's state at a glance; the button opens its tab (js/app.js renderMeLinks) -->
           <div class="card me-links" id="me-links" data-panel="profile" data-ptab="me"></div>
-          <div class="card me-garage" data-panel="profile" data-ptab="me"><button id="btn-garage" class="garage-open wide"><span class="garage-swatches" id="garage-swatches"></span><span><b>Garage</b><small>Kit, bike and helmet colours, on a turntable</small></span></button></div>
+          <div class="card me-garage" data-panel="profile" data-ptab="me"><button id="btn-garage" class="garage-open wide"><span class="garage-swatches" id="garage-swatches"></span><span><b>Garage</b><small>Kit, bike and helmet colors on a turntable</small></span></button></div>
         <!-- accounts and leaderboards (docs/specs/social-phase1.md): shown only with a project in js/social-config.js -->
         <div class="card" id="social-card" data-panel="profile" data-ptab="me" data-off="1" hidden>
           <h2>Account &amp; leaderboards</h2>
-          <p class="muted" id="social-pitch">Sign in to put your times on climbs, sprints and laps on the leaderboards with other riders, and to have your profile and records on every device. Without it everything works as before, in this browser.</p>
+          <p class="muted" id="social-pitch">Sign in to post your climb, sprint and lap times to the leaderboards and keep your profile and records on every device. Without signing in, everything works as before, in this browser.</p>
           <div class="row icu-row" id="social-out"><button id="btn-social-in" class="primary">Sign in with Google</button></div>
           <div id="social-in" hidden>
             <p class="muted" id="social-who"></p>
@@ -331,7 +331,7 @@
         <button data-sgroup-go="ride"><b>Ride</b><small>bunch, wind, climbs, attacks</small></button>
         <button data-sgroup-go="gears"><b>Gears</b><small>virtual gears, chainring, buttons</small></button>
         <button data-sgroup-go="pacer"><b>Pacer</b><small>in workouts and free rides</small></button>
-        <button data-sgroup-go="pip"><b>Mini window</b><small>over a film, HUD for Mac</small></button>
+        <button data-sgroup-go="pip"><b>Mini window</b><small>over a movie, HUD for Mac</small></button>
         <button data-sgroup-go="app"><b>App</b><small>language, sound, stats</small></button>
         <span class="set-nav-note">Changes save automatically. Esc closes.</span>
       </nav>
@@ -346,10 +346,10 @@
             </select>
             <label class="set-field"><span>Graphics</span>
               <select id="f-quality" data-seg>
-                <option value="auto" data-short="Auto">Auto (by this device)</option>
+                <option value="auto" data-short="Auto">Auto (based on this device)</option>
                 <option value="low" data-short="Low">Low: fast on any laptop</option>
                 <option value="medium" data-short="Medium">Medium</option>
-                <option value="high" data-short="High">High: glow and colour finish</option>
+                <option value="high" data-short="High">High: glow and color grading</option>
               </select>
             </label>
           </div>
@@ -357,7 +357,7 @@
             <h3>Dashboard</h3>
             <select id="f-hud-layout" data-seg="cards" aria-label="Ride dashboard"><option value="a" data-short="A · in the corners">A: panels in the corners</option><option value="b" data-short="B · strip at the bottom">B: every number in a strip at the bottom</option></select>
             <label class="set-field"><span>Power, averaged over</span>
-              <select id="f-power-avg" data-seg><option value="1" data-short="1 s">1 s (as it is)</option><option value="3" data-short="3 s">3 s average</option><option value="5" data-short="5 s">5 s average</option><option value="10" data-short="10 s">10 s average</option></select>
+              <select id="f-power-avg" data-seg><option value="1" data-short="1 s">1 s (raw)</option><option value="3" data-short="3 s">3 s average</option><option value="5" data-short="5 s">5 s average</option><option value="10" data-short="10 s">10 s average</option></select>
             </label>
           </div>
           <div class="set-box">
@@ -365,16 +365,16 @@
             <select id="f-summary-layout" data-seg="cards" aria-label="Ride summary"><option value="a" data-short="A · cards in a column">A: numbers and cards in a column</option><option value="b" data-short="B · the story first">B: the story of the ride first, then the numbers</option></select>
           </div>
           <div class="set-box wide">
-            <h3>Camera <small>keys 1–0, C the next one</small></h3>
+            <h3>Camera <small>keys 1–0, C for the next one</small></h3>
             <select id="f-camera" data-seg="tiles" aria-label="Camera">
               <option value="chase" data-key="1" data-short="Chase">1 · Chase</option>
               <option value="eyes" data-key="2" data-short="Eyes">2 · Rider's eyes</option>
               <option value="iso" data-key="3" data-short="Isometric">3 · Isometric</option>
               <option value="side" data-key="4" data-short="Shoulder">4 · Over the shoulder</option>
-              <option value="front" data-key="5" data-short="Front">5 · From the front</option>
+              <option value="front" data-key="5" data-short="Front">5 · Front view</option>
               <option value="far" data-key="6" data-short="Far">6 · Far behind</option>
               <option value="back" data-key="7" data-short="Looking back">7 · Looking back</option>
-              <option value="post" data-key="8" data-short="By the road">8 · By the road</option>
+              <option value="post" data-key="8" data-short="By the road">8 · Roadside</option>
               <option value="heli" data-key="9" data-short="Helicopter">9 · Helicopter</option>
               <option value="tv" data-key="0" data-short="TV">0 · TV broadcast</option>
               <option value="top" data-short="Above">From above</option>
@@ -401,7 +401,7 @@
                 <option value="clear" data-short="Clear">Clear</option>
                 <option value="fog" data-short="Fog">Fog</option>
                 <option value="rain" data-short="Rain">Rain</option>
-                <option value="changeable" data-short="Changeable">Changeable: rain comes and goes</option>
+                <option value="changeable" data-short="Changeable">Variable: rain comes and goes</option>
               </select>
             </label>
             <small id="f-time-hint" class="hint time-hint" hidden></small>
@@ -429,7 +429,7 @@
             <div class="set-ticks"><span>flat</span><span>half the grade</span><span>as on the road</span></div>
           </div>
           <div class="set-box wide">
-            <label class="check set-toggle"><input type="checkbox" id="f-attacks"><span class="st-text"><b>Attacks in a free ride</b><small>Now and then a rider goes clear of the bunch, most often on a climb</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-attacks"><span class="st-text"><b>Attacks in a free ride</b><small>Now and then a rider breaks away from the bunch, most often on a climb</small></span></label>
           </div>
         </div>
       </div>
@@ -465,7 +465,7 @@
             <p id="gears-note-off" class="muted fields-note wide" hidden>A cassette and a derailleur on the bike: shift there, as on the road. The trainer gets the real wheel size; the buttons change gears only in a workout (intensity).</p>
           </div>
           <div class="set-box wide">
-            <label class="check set-toggle"><input type="checkbox" id="f-shift-buttons"><span class="st-text"><b>Shift buttons on the screen</b><small>+ and − on the right, to tap with a finger; with a mouse they show with the menu</small></span></label>
+            <label class="check set-toggle"><input type="checkbox" id="f-shift-buttons"><span class="st-text"><b>Shift buttons on the screen</b><small>+ and − on the right, to tap with a finger; with a mouse they appear with the menu</small></span></label>
           </div>
         </div>
       </div>
@@ -488,14 +488,14 @@
           <div class="set-box wide">
             <label class="set-field"><span>Mini window over other apps (I)</span>
               <select id="f-pip" data-seg>
-                <option value="sharp" data-short="Sharp, with the address">Sharp window (Chrome shows the site's address over it)</option>
-                <option value="clean" data-short="Clean, no address">Clean, no address bar (drawn as a video, a little softer)</option>
+                <option value="sharp" data-short="Sharp, with address bar">Sharp window (Chrome shows the site's address over it)</option>
+                <option value="clean" data-short="Clean, no address bar">Clean, no address bar (drawn as video, a little softer)</option>
               </select>
             </label>
           </div>
           <div class="set-box wide">
-            <label class="check set-toggle"><input type="checkbox" id="f-overlay"><span class="st-text"><b>Gruppetto HUD for Mac</b><small>The numbers in a see-through panel over everything (the app runs on this Mac)</small></span></label>
-            <small id="hud-get" class="hint time-hint" hidden><a href="https://github.com/SergeyPirogov/gruppetto/releases/latest/download/Gruppetto-HUD.zip">⬇ Download Gruppetto HUD for Mac</a> · macOS 13+. The first time: System Settings → Privacy &amp; Security → Open Anyway.</small>
+            <label class="check set-toggle"><input type="checkbox" id="f-overlay"><span class="st-text"><b>Gruppetto HUD for Mac</b><small>Your numbers in a see-through panel over all windows (the app runs on this Mac)</small></span></label>
+            <small id="hud-get" class="hint time-hint" hidden><a href="https://github.com/SergeyPirogov/gruppetto/releases/latest/download/Gruppetto-HUD.zip">⬇ Download Gruppetto HUD for Mac</a> · macOS 13+. First launch: System Settings → Privacy &amp; Security → Open Anyway.</small>
           </div>
         </div>
       </div>
@@ -529,7 +529,7 @@
     </div>
       <div class="card" id="strava-card" data-panel="profile" data-ptab="links">
         <h2>Strava</h2>
-        <p class="muted">Finished rides go to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto only asks to upload; it reads nothing of yours.</p>
+        <p class="muted">Finished rides upload to Strava as a Virtual Ride, with power, heart rate and cadence. Gruppetto only requests upload access and reads none of your data.</p>
         <label class="check"><input type="checkbox" id="f-strava-upload"> Upload the ride to Strava when finished</label>
         <div class="row icu-row">
           <!-- Strava's own button, as its brand guidelines ask (icons/strava, from developers.strava.com) -->
@@ -557,7 +557,7 @@
       <div class="card" data-panel="history">
         <h2>Ride history</h2>
         <p class="muted">Kept in this browser. Open a ride to see its summary.</p>
-        <div class="hist-backup" id="hist-backup" hidden><button id="btn-backup" class="ghost">⬇ Download all rides (.zip)</button><small class="hint">every ride as .FIT, a backup or a move to another app</small></div>
+        <div class="hist-backup" id="hist-backup" hidden><button id="btn-backup" class="ghost">⬇ Download all rides (.zip)</button><small class="hint">every ride as .FIT, for backup or moving to another app</small></div>
         <section id="hist-week" class="hist-week" hidden aria-label="This week"></section>
         <div id="history-all" class="hist-list"></div>
       </div>
@@ -588,7 +588,7 @@
   <section id="ride" class="screen" hidden>
     <canvas id="scene"></canvas>
     <!-- the mini window is open: the road rests, the ride goes on -->
-    <div id="pip-rest" class="pip-rest" hidden><b>Riding in the mini window</b><small>The road is paused to keep your computer cool. The ride goes on.</small><button id="pip-show-road" class="pill-btn">Show the road</button></div>
+    <div id="pip-rest" class="pip-rest" hidden><b>Riding in the mini window</b><small>The road is paused to keep your computer cool. Your ride continues.</small><button id="pip-show-road" class="pill-btn">Show the road</button></div>
 
     <div class="hud-left">
       <div class="board">
@@ -722,7 +722,7 @@
     <div id="gr-host" class="gr-host" hidden>
       <b>Everyone here? Start the ride</b><span id="gr-host-line"></span>
       <div class="gr-host-btns"><button class="pill-btn" data-in="10">10 s</button><button class="pill-btn" data-in="60">1 min</button><button class="pill-btn" data-in="120">2 min</button><button class="pill-btn" data-in="300">5 min</button><button class="pill-btn" data-in="600">10 min</button></div>
-      <small class="gr-host-note">Everyone sees the same countdown. Whoever opens the ride after the start is in it too, timed from the common start.</small>
+      <small class="gr-host-note">Everyone sees the same countdown. Anyone who opens the ride after the start joins too, timed from the common start.</small>
     </div>
     <div id="paused" class="paused" hidden>PAUSED</div>
     <div id="keys-help" class="keys-help" hidden>
@@ -773,7 +773,7 @@
         <div id="sum-race-cats" class="race-cats" hidden></div>
         <div id="sum-podium" class="podium" hidden></div>
         <table class="race-table"><thead id="sum-race-head" hidden><tr><th>#</th><th>Rider</th><th>Time</th><th>Gap</th><th>Avg power</th><th>W/kg</th></tr></thead><tbody id="sum-race-rows"></tbody></table>
-        <p class="hint"><span>* still riding: the time at their speed</span><br><span>Categories by W/kg (A from 4.0, B 3.2, C 2.5, D below): your FTP's, or the race's own if you rode above it.</span> <button id="btn-race-copy" class="link-btn">Copy the results</button></p>
+        <p class="hint"><span>* still riding: estimated time at their speed</span><br><span>Categories by W/kg (A from 4.0, B 3.2, C 2.5, D below): your FTP's, or the race's own if you rode above it.</span> <button id="btn-race-copy" class="link-btn">Copy the results</button></p>
       </div>
       <div id="sum-intervals" class="card sum-intervals" hidden>
         <div class="sum-chart-head"><h2>Intervals</h2><span id="sum-int-score" class="int-score"></span></div>
@@ -798,7 +798,7 @@
         <button id="btn-strava-upload" hidden>Upload to Strava</button>
         <button id="btn-garmin-upload" hidden>Upload to Garmin</button>
         <button id="btn-delete-ride" class="ghost" hidden>Delete ride</button>
-        <button id="btn-challenge" hidden title="A link: your friend rides against your ghost">Challenge a friend 👻</button>
+        <button id="btn-challenge" hidden title="Send a link and your friend races your ghost">Challenge a friend 👻</button>
         <button id="btn-card">Share card</button>
         <button id="btn-again" class="ghost">Back to lobby</button>
       </div>
@@ -817,7 +817,7 @@
       <div class="drawer-bg"></div>
       <div class="wk-menu-panel preflight-panel">
         <div class="wk-menu-head"><h2>Sensors</h2></div>
-        <p class="muted">Waiting for every sensor. The ride starts by itself once each one has a reading.</p>
+        <p class="muted">Waiting for all sensors. The ride starts automatically once each one has a reading.</p>
         <ul id="preflight-list" class="preflight-list"></ul>
         <div class="wkd-actions"><button id="preflight-cancel" class="pill-btn">Back</button><button id="preflight-go" class="primary wkd-ride">Ride anyway</button></div>
       </div>
@@ -850,8 +850,8 @@
         <div class="fields">
           <label>Leaderboard name <input id="ss-name" maxlength="24" autocomplete="nickname"></label>
           <label>Country <select id="ss-country"></select></label>
-          <label id="ss-region-box" hidden>Region, for the Ukraine leaderboard <select id="ss-region"></select></label>
-          <label>Gender, for the filter <select id="ss-gender"><option value="">Prefer not to say</option><option value="f">Female</option><option value="m">Male</option></select></label>
+          <label id="ss-region-box" hidden>Your region for the Ukraine leaderboard <select id="ss-region"></select></label>
+          <label>Gender (for leaderboard filters) <select id="ss-gender"><option value="">Prefer not to say</option><option value="f">Female</option><option value="m">Male</option></select></label>
         </div>
         <label class="check"><input type="checkbox" id="ss-public" checked> Show me on the leaderboards</label>
         <p class="hint">Others see your name, country, times and W/kg, but never your weight. <a href="privacy.html" target="_blank" rel="noopener">Privacy</a></p>
@@ -875,8 +875,8 @@
           <table class="lb-table"><thead><tr><th>#</th><th></th><th>Rider</th><th>Time</th><th>W/kg</th><th>HR</th><th>Date</th></tr></thead><tbody id="lb-rows"></tbody></table>
         </div>
         <p id="lb-empty" class="hint" hidden>No times here yet: be the first.</p>
-        <p id="lb-cta" class="hint" hidden><button id="lb-signin" class="pill-btn">Sign in with Google</button> to put your times here</p>
-        <p class="hint">Categories by FTP per kilo: A from 4.0, B 3.2–4.0, C 2.5–3.2, D below 2.5 W/kg. «?»: no heart rate, or close to the limit of the possible.</p>
+        <p id="lb-cta" class="hint" hidden><button id="lb-signin" class="pill-btn">Sign in with Google</button> to post your times here</p>
+        <p class="hint">Categories by FTP per kilo: A from 4.0, B 3.2–4.0, C 2.5–3.2, D below 2.5 W/kg. “?”: no heart rate data, or close to the limit of what is possible.</p>
       </div>
     </div>
 
@@ -888,16 +888,16 @@
         <div class="lb-filters">
           <div class="lb-chips" id="ua-tab"><button class="pill-btn sel" data-v="regions">Regions</button><button class="pill-btn" data-v="riders">Riders</button></div>
           <div class="lb-chips" id="ua-period"><button class="pill-btn sel" data-v="week">This week</button><button class="pill-btn" data-v="month">This month</button><button class="pill-btn" data-v="all">All time</button></div>
-          <div class="lb-chips" id="ua-metric"><button class="pill-btn sel" data-v="km">Kilometres</button><button class="pill-btn" data-v="climb">Climbing</button></div>
+          <div class="lb-chips" id="ua-metric"><button class="pill-btn sel" data-v="km">Kilometers</button><button class="pill-btn" data-v="climb">Climbing</button></div>
           <div class="lb-chips" id="ua-gender" hidden><button class="pill-btn sel" data-v="">Everyone</button><button class="pill-btn" data-v="f">Women</button><button class="pill-btn" data-v="m">Men</button></div>
           <select id="ua-region" aria-label="Region" hidden></select>
         </div>
         <div class="lb-scroll">
           <table class="lb-table ua-table"><thead id="ua-head"></thead><tbody id="ua-rows"></tbody></table>
         </div>
-        <p id="ua-empty" class="hint" hidden>No rides here yet: ride on a trainer to get your region on the leaderboard.</p>
+        <p id="ua-empty" class="hint" hidden>No rides here yet. Ride on a trainer to put your region on the leaderboard.</p>
         <p id="ua-cta" class="hint" hidden></p>
-        <p class="hint">Trainer rides by signed-in riders, each counted for the region in their profile. Simulator rides do not count.</p>
+        <p class="hint">Trainer rides by signed-in riders, each counted toward the region in their profile. Simulator rides do not count.</p>
       </div>
     </div>
 
@@ -906,17 +906,17 @@
       <div class="welcome-in">
         <div class="welcome-brand"><img class="mark" src="logo.svg" alt="">Gruppetto</div>
         <h1 id="welcome-title">Ride indoors. Free, right in your browser.</h1>
-        <p class="welcome-sub">You can ride right away, no sign-up needed. Signing in is only for features that involve other riders.</p>
+        <p class="welcome-sub">Ride right away, no sign-up needed. You only need to sign in for features that involve other riders.</p>
         <div class="welcome-cards">
           <section class="welcome-card">
             <small>Without signing in</small>
             <h2>Ride as a guest</h2>
             <ul class="welcome-list ok">
-              <li>Free rides, ERG workouts, a race against the bots</li>
+              <li>Free rides, ERG workouts, races against bots</li>
               <li>Every route, your own GPX, the garage</li>
-              <li>History and progress, on this device</li>
+              <li>History and progress, saved on this device</li>
               <li>FIT, Strava, intervals.icu, Garmin</li>
-              <li>Challenge a friend: their ghost against yours</li>
+              <li>Challenge a friend: race their ghost</li>
             </ul>
             <button id="welcome-guest" class="primary big">Ride now</button>
           </section>
@@ -925,7 +925,7 @@
             <h2>Ride with the community</h2>
             <p class="welcome-plus">Everything a guest gets, plus:</p>
             <ul class="welcome-list plus">
-              <li>Your times in the climb, sprint and lap leaderboards, women and men apart</li>
+              <li>Your times on the climb, sprint and lap leaderboards, with separate women and men rankings</li>
               <li>Ukraine leaderboard: you ride for your region</li>
               <li>Group rides, live with friends</li>
               <li>Profile, workouts and history on every device</li>
@@ -933,7 +933,7 @@
             <button id="welcome-signin" class="google-btn big"></button>
           </section>
         </div>
-        <p class="welcome-foot">You can sign in at any time from the top bar or in Profile. Rides already on this device will be added to your account.</p>
+        <p class="welcome-foot">You can sign in any time from the top bar or Profile. Rides already on this device will be added to your account.</p>
       </div>
     </div>
 
@@ -968,13 +968,13 @@
                 <p id="gr-lg-err" class="hint gr-wide" hidden></p>
               </form>
             </details>
-            <p class="hint">A league is a series of group races. Each race gives points by place: 25, 20, 16, 13, 11, then 10 down to 1 for 15th. Rides in the simulator get no points. Set up a race in the calendar and pick the league for it.</p>
+            <p class="hint">A league is a series of group races. Each race awards points by finishing place: 25, 20, 16, 13, 11, then 10 down to 1 for 15th. Simulator rides earn no points. Schedule a race in the calendar and choose this league for it.</p>
           </div>
           <div id="gr-lg-one" hidden>
             <button id="gr-lg-back" class="link-btn">← All leagues</button>
             <h3 id="gr-lg-name" class="gr-lg-name"></h3>
             <table class="lb-table gr-lg-table"><thead><tr><th>#</th><th>Rider</th><th>Points</th><th>Races</th><th>Wins</th></tr></thead><tbody id="gr-lg-rows"></tbody></table>
-            <p id="gr-lg-none" class="hint" hidden>No results yet: the points come with the first race.</p>
+            <p id="gr-lg-none" class="hint" hidden>No results yet. Points appear after the first race.</p>
             <h4 class="gr-lg-sub">Races</h4>
             <ul id="gr-lg-races" class="gr-lg-races"></ul>
           </div>
@@ -986,7 +986,7 @@
           <!-- the picked ride's details, on a wide screen (js/social-ui.js detailRender) -->
           <aside id="gr-detail" class="gr-detail" aria-label="Ride details" hidden></aside>
         </div>
-        <p id="gr-empty" class="hint" hidden>No group rides planned yet: create one and send the link to your friends.</p>
+        <p id="gr-empty" class="hint" hidden>No group rides scheduled yet. Create one and send the link to your friends.</p>
         <details id="gr-new" class="gr-new">
           <summary>+ New group ride</summary>
           <form id="gr-form" class="gr-form">
@@ -1049,7 +1049,7 @@
       <div class="garage-stage">
         <canvas id="garage-canvas"></canvas>
         <div class="garage-loading" id="garage-loading">Loading the rider…</div>
-        <div class="garage-views" id="garage-views"><button data-gview="side" class="pill-btn sel">Side</button><button data-gview="front" class="pill-btn">Front</button><button data-gview="back" class="pill-btn">From behind</button><button data-gview="head" class="pill-btn">Helmet</button><button id="garage-spin" class="pill-btn" aria-pressed="true" title="Stop or start the turntable and the pedalling">⏸ Stop</button></div>
+        <div class="garage-views" id="garage-views"><button data-gview="side" class="pill-btn sel">Side</button><button data-gview="front" class="pill-btn">Front</button><button data-gview="back" class="pill-btn">From behind</button><button data-gview="head" class="pill-btn">Helmet</button><button id="garage-spin" class="pill-btn" aria-pressed="true" title="Start or stop the turntable and pedaling">⏸ Stop</button></div>
         <small class="garage-hint">Drag to turn, scroll to zoom</small>
       </div>
       <aside class="garage-side">

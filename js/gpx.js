@@ -314,7 +314,7 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
     ...(relief ? { relief } : {}),
     id: `gpx-${Date.now().toString(36)}`,
     name: title.slice(0, 40),
-    description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. ${loop ? `A loop of ${(length / 1000).toFixed(1)} km.` : `Point to point, finish at ${(length / 1000).toFixed(1)} km.`}`,
+    description: `Imported from GPX${source === 'none' ? ' (no elevation data in the file, so flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. ${loop ? `A loop of ${(length / 1000).toFixed(1)} km.` : `Point to point, finish at ${(length / 1000).toFixed(1)} km.`}`,
     elevSource: source,
     startHeading: Math.round(RH[0] * 1000) / 1000, // map radians (from east, anticlockwise)
     // the road's shape for the minimap, every 50 m, north up (x east, y south), in whole metres
