@@ -2130,3 +2130,7 @@ select.seg-src { display: none; }
 .lobby-body .dev-chip.need { border: 1px dashed rgba(255, 122, 26, .7); }
 @media (max-width: 860px) { .lobby-body .dev-chips { overflow-x: auto; scrollbar-width: none; } .lobby-body .dev-chip { flex: none; } }
 .dev-chip .chip-val::before { content: "·"; margin-right: 7px; color: var(--muted); font-weight: 400; }
+/* the two charts side by side: each as tall as it needs, the power table on one row */
+.prog-charts { align-items: start; }
+.prog-charts .pc-table { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
+.prog-charts #fit-chart { height: 220px; }
