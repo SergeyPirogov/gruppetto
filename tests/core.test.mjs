@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseIndoorBikeData, parseCyclingPower, parseHeartRate, cadenceFromCrank, parseCSC, wahoo, parseRideKeypad } from '../js/ble.js';
 import { steadySpeed, stepSpeed } from '../js/physics.js';
-import { rideIntent } from '../js/controls.js';
+import { rideIntent, ctlRows, ctlDevice } from '../js/controls.js';
 import { routes } from '../js/routes.js';
 import { workouts, targetAt, totalDuration } from '../js/workouts.js';
 import { Recorder, normalizedPower, bestAverage } from '../js/recorder.js';
@@ -1359,4 +1359,19 @@ test('strava: your routes that are rides, ids kept as text', async () => {
   ]);
   assert.deepEqual(out, [{ id: '3344556677889900123', name: 'Kyiv loop', distance: 42000, gain: 310, starred: true, private: false }]);
   assert.deepEqual(rideRoutes(null), []);
+});
+
+test('controller buttons: your map wins, a pair row takes a pair, untouched rows keep the Zwift default', () => {
+  const map = { y: 'skip', updown: 'easier|harder', powerup: 'none|none' };
+  assert.equal(rideIntent('y', map), 'skip');
+  assert.equal(rideIntent('up', map), 'easier');
+  assert.equal(rideIntent('down', map), 'harder');
+  assert.equal(rideIntent('powerUpR', map), null);
+  assert.equal(rideIntent('shiftUpL', map), 'easier');
+  assert.equal(rideIntent('onOffR', map), null);
+  assert.deepEqual(ctlRows('click').map((r) => r.id), ['minus', 'plus']);
+  assert.ok(!ctlRows('play').some((r) => r.id === 'powerup'));
+  assert.equal(ctlDevice('Zwift Click'), 'click');
+  assert.equal(ctlDevice('Zwift Play'), 'play');
+  assert.equal(ctlDevice('Zwift Ride'), 'ride');
 });

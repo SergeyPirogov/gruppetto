@@ -1,5 +1,5 @@
 import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
-import { obcIntents, rideIntent, OBC_LABELS } from './controls.js';
+import { obcIntents, rideIntent, OBC_LABELS, ctlRows, ctlRowOf, ctlDevice, CTL_ACTIONS, CTL_PAIRS, CTL_DEFAULTS } from './controls.js';
 import { variant } from './experiments.js';
 import { segmentAll } from './settings-ui.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
@@ -55,6 +55,7 @@ const DEFAULT_SETTINGS = {
   name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
   icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
+  ctlMap: {}, // the Zwift controller rows you changed (js/controls.js CTL_ROWS); the rest keep the Zwift default
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
   intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: false, voice: false, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
@@ -219,6 +220,48 @@ function deviceStatus(d) {
 }
 
 /** The controller's units under its row: for a Zwift Ride a slot per hand, each connected or not; any other, a line per unit. */
+// ---------- Controller buttons: what each does, by device ----------
+let ctlTab = null; // 'click' | 'play' | 'ride'; null: the connected one's
+const CTL_DEV_NAMES = { click: 'Zwift Click', play: 'Zwift Play', ride: 'Zwift Ride' };
+function renderCtlMap() {
+  const units = controller.unitsInfo || [], on = units.filter((u) => u.connected);
+  const connectedDev = units.length ? ctlDevice(units[0].name) : null;
+  const dev = ctlTab || connectedDev || 'play';
+  const map = settings.ctlMap || {};
+  $('ctl-map-tabs').innerHTML = Object.entries(CTL_DEV_NAMES).map(([d, n]) => `<button role="tab" data-dev="${d}" class="${d === dev ? 'on' : ''}" aria-selected="${d === dev}">${n}</button>`).join('');
+  $('ctl-map-note').textContent = dev === connectedDev && on.length
+    ? `${CTL_DEV_NAMES[dev]} · ${on.length > 1 ? tr('{n} units connected', { n: on.length }) : tr('connected')}`
+    : tr('Not connected: you can set it up ahead');
+  $('ctl-map-rows').innerHTML = ctlRows(dev).map((r) => {
+    const v = map[r.id] || CTL_DEFAULTS[r.id];
+    const opts = (r.pair ? CTL_PAIRS : CTL_ACTIONS).map(([id, label]) => `<option value="${id}"${id === v ? ' selected' : ''}>${esc(tr(label))}</option>`).join('');
+    return `<div class="ctl-row" data-row="${r.id}"><span class="ctl-key k-${r.id}">${r.key}</span><span class="ctl-name">${esc(tr(r.label[dev]))}</span><select data-row="${r.id}" aria-label="${esc(tr(r.label[dev]))}">${opts}</select></div>`;
+  }).join('');
+}
+$('ctl-map-tabs').onclick = (e) => { const b = e.target.closest('[data-dev]'); if (b) { ctlTab = b.dataset.dev; renderCtlMap(); } };
+$('ctl-map-rows').onchange = (e) => {
+  const sel = e.target.closest('select[data-row]');
+  if (!sel) return;
+  const map = { ...(settings.ctlMap || {}) };
+  if (sel.value === CTL_DEFAULTS[sel.dataset.row]) delete map[sel.dataset.row]; else map[sel.dataset.row] = sel.value;
+  settings.ctlMap = map; saveSettings();
+};
+$('ctl-map-reset').onclick = () => { settings.ctlMap = {}; saveSettings(); renderCtlMap(); toast(tr('Buttons back to the Zwift defaults')); };
+/** A press while the panel is on screen: its row lights up (on the device's tab), to find and change it. */
+function ctlMapHit(button) {
+  const box = $('ctl-map');
+  if (!box || !box.offsetParent) return;
+  const row = ctlRowOf(button);
+  if (!row) return;
+  const units = controller.unitsInfo || [], dev = units.length ? ctlDevice(units[0].name) : null;
+  if (!$('ctl-map-rows').querySelector(`[data-row="${row.id}"]`) || (dev && ctlTab && ctlTab !== dev)) { ctlTab = dev; renderCtlMap(); }
+  const el = $('ctl-map-rows').querySelector(`.ctl-row[data-row="${row.id}"]`);
+  if (!el) return;
+  for (const x of $('ctl-map-rows').querySelectorAll('.hit')) x.classList.remove('hit');
+  el.classList.add('hit'); el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  clearTimeout(ctlMapHit.t); ctlMapHit.t = setTimeout(() => el.classList.remove('hit'), 2500);
+}
+
 function renderCtlUnits() {
   const box = $('ctl-units'), units = controller.unitsInfo || [];
   const ride = units.some((u) => /ride/i.test(u.name));
@@ -257,6 +300,7 @@ function updateDeviceUI() {
   // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
   $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
   renderCtlUnits();
+  renderCtlMap();
   // a card per device on the Devices page: lit when it is connected
   for (const d of DEVICES) {
     const on = d.dev.connected || (d.dev === cadenceSensor && trainer.connected);
@@ -4661,7 +4705,8 @@ const BUTTON_LABELS = {
 function onControllerButton(name) {
   lastButtonLabel = BUTTON_LABELS[name] || name;
   updateDeviceUI();
-  const intent = rideIntent(name);
+  ctlMapHit(name);
+  const intent = rideIntent(name, settings.ctlMap);
   if (intent) runIntent(intent);
 }
 
