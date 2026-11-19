@@ -5423,7 +5423,7 @@ window.addEventListener('pagehide', () => { if (ride) saveDraft(); });
 initSocialUi({
   settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,
   getProgress: () => progress, setProgress: (p) => { progress = p; saveProgress(); },
-  saveSettingsRaw: writeSettings, saveRecords, openGarage: () => openGarage(),
+  saveSettingsRaw: writeSettings, saveRecords,
   // full sync: your own workouts and the ride history, written here without sending them straight back
   getWorkouts: () => myWorkouts, workoutsDeleted: () => myWorkoutsDeleted,
   setWorkouts: (list, deleted) => {
