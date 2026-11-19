@@ -2434,7 +2434,9 @@ function updateHud(cadence, hr, grade) {
     const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
     // what comes next and for how long, so you know what you are getting into
     const nextWhat = !next ? '—' : nextW !== null ? `${nextW} ${U.W}` : next.hr ? `${next.hr[0]}–${next.hr[1]} ${U.bpm}` : tr('free');
-    $('wk-next').innerHTML = next ? `${esc(nextWhat)} <small class="wk-next-dur">· ${esc(fmtDur(next.dur))}</small>` : '—';
+    // how long it lasts goes in the label ("Next · 10 min"): beside the target it ran out of the panel
+    $('wk-next').textContent = nextWhat;
+    $('wk-next-label').textContent = next ? `${tr('Next')} · ${fmtDur(next.dur)}` : tr('Next');
     drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
   }
 
@@ -2829,15 +2831,25 @@ function drawWorkoutChart(canvas, w, t) {
     const his = w.steps.filter((s) => s.hr), zs = hrZones();
     const top = Math.max(...his.map((s) => s.hr[1])) * 1.03, base = Math.min(...his.map((s) => s.hr[0])) * 0.75;
     const y = (v) => H - ((v - base) / (top - base)) * H;
+    // without heart rate zones (no LTHR) the steps still read as easy or hard: coloured by where their band
+    // sits in this workout, from an easy blue-green to a hard orange, like power zones
+    const mids = his.map((s) => (s.hr[0] + s.hr[1]) / 2), mLo = Math.min(...mids), mHi = Math.max(...mids);
+    const colorOf = (s) => {
+      if (!s.hr) return '#64748b';
+      const mid = (s.hr[0] + s.hr[1]) / 2;
+      if (zs) return (zs.find((z) => mid < z.upTo) || zs[zs.length - 1]).color;
+      return zoneColor(0.6 + (mHi > mLo ? (mid - mLo) / (mHi - mLo) : 0.5) * 0.4);
+    };
+    const gap = Math.max(1, dpr), r = 3 * dpr;
     let x0 = 0;
     for (const s of w.steps) {
-      const x1 = x0 + s.dur, X0 = (x0 / total) * W, DX = ((x1 - x0) / total) * W;
-      const mid = s.hr ? (s.hr[0] + s.hr[1]) / 2 : 0;
-      ctx.fillStyle = s.hr && zs ? (zs.find((z) => mid < z.upTo) || zs[zs.length - 1]).color : s.hr ? '#4a9e64' : '#64748b';
-      ctx.globalAlpha = t >= 0 && x1 <= t ? 0.45 : 1;
-      const lo = s.hr ? y(s.hr[0]) : H * 0.7;
-      ctx.fillRect(X0, lo, DX, H - lo);
-      if (s.hr) { ctx.globalAlpha *= 0.5; ctx.fillRect(X0, y(s.hr[1]), DX, lo - y(s.hr[1])); }
+      const x1 = x0 + s.dur, X0 = (x0 / total) * W, DX = Math.max(1, ((x1 - x0) / total) * W - gap);
+      const now = t >= x0 && t < x1, past = t >= 0 && x1 <= t;
+      ctx.fillStyle = colorOf(s);
+      ctx.globalAlpha = past ? 0.35 : now ? 1 : 0.8;
+      const lo = s.hr ? y(s.hr[0]) : H * 0.7, hi = s.hr ? y(s.hr[1]) : lo;
+      ctx.beginPath(); ctx.roundRect(X0, hi, DX, H - hi, [r, r, 0, 0]); ctx.fill(); // the band on top of its floor, one block
+      if (s.hr) { ctx.globalAlpha *= 0.45; ctx.fillStyle = '#0b1019'; ctx.fillRect(X0, hi, DX, lo - hi); } // the band: lighter than the floor
       x0 = x1;
     }
     ctx.globalAlpha = 1;
