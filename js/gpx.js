@@ -3,6 +3,7 @@
 // special case. GPX elevations are noisy, so they are smoothed before any grade is read from them.
 import { SEG } from './routes.js';
 import { landFromOsm } from './osm.js';
+import { encodeRelief } from './relief.js';
 
 const TURN = 2.5;          // the 3D renderer multiplies curvature by this; divide it back out
 const MAX_KM = 150;
@@ -298,8 +299,19 @@ export function routeFromTrack({ name, points }, fileName = '', { elevation, osm
   const title = name || fileName.replace(/\.gpx$/i, '') || 'My route';
   const length = m * SEG;
   const scenery = osm ? landFromOsm(osm, (la, lo) => [lo * Math.PI / 180 * R * Math.cos(lat0), la * Math.PI / 180 * R], RX, RY, RH, SEG) : null;
+  // The real relief beside the road, from the terrain model already loaded for the elevations: its height on a
+  // corridor in the road's own frame, kept in the route so the ride needs no network. The frame is the one the
+  // renderer replays from the curve: along the road from segment k's start, across it to the right of its
+  // heading (map east/north: right of heading h is (sin h, -cos h)).
+  const relief = elevation && source === 'terrain' ? encodeRelief(length, (s, o) => {
+    const k = Math.min(m - 1, Math.round(s / SEG));
+    const x = RX[k] + Math.sin(RH[k]) * o, y = RY[k] - Math.cos(RH[k]) * o;
+    const h = elevation((y / R) * 180 / Math.PI, (x / (R * Math.cos(lat0))) * 180 / Math.PI);
+    return h === null || !Number.isFinite(h) ? null : h - flat[k];
+  }, { loop }) : null;
   return {
     ...(scenery || {}),
+    ...(relief ? { relief } : {}),
     id: `gpx-${Date.now().toString(36)}`,
     name: title.slice(0, 40),
     description: `Imported from GPX${source === 'none' ? ' (no elevation in the file: flat)' : source === 'terrain' ? ' (elevation from a terrain model)' : ''}. ${loop ? `A loop of ${(length / 1000).toFixed(1)} km.` : `Point to point, finish at ${(length / 1000).toFixed(1)} km.`}`,

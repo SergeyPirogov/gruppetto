@@ -633,7 +633,9 @@ async function importGpxText(text, fileName) {
     const route = new Route(def);
     localizeClimbs(route);
     customDefs.push(def);
-    if (!saveCustomRoutes()) { customDefs.pop(); throw new Error(tr('Not enough browser storage for this route')); }
+    // the relief is the biggest part of a route in storage: when it does not fit, keep the route without it (it
+    // behaves like a route from before the relief existed, with random hills)
+    if (!saveCustomRoutes() && !(delete def.relief && saveCustomRoutes())) { customDefs.pop(); throw new Error(tr('Not enough browser storage for this route')); }
     routes.push(route);
     settings.routeId = route.id; saveSettings();
     renderRouteList(); showRoute();

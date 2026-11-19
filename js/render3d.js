@@ -17,6 +17,7 @@ import { villages, crossings, tunnels } from './villages.js';
 import { hexRgb, mixRgb, mixHex, blendAtmosphere } from './atmo-blend.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 import { loadFanModels } from './fans.js';
+import { gradeProfile, gradeShape, mountainSide, arrayAt, shapeOffset, decodeRelief, reliefAt } from './relief.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
 // phones and small touch screens: a lighter world (?quality=low / high to force either)
@@ -74,6 +75,7 @@ const T3 = {
 };
 const TREE_TYPES = ['pine', 'oak', 'birch', 'palm', 'cactus'];
 const GULLY = 17, GULLY_DEPTH = 6;
+const PAST_EXTRA = 90;         // m: how much farther than the other road's far side the land goes on, under it
 // what each world has of its own: [type, chance per 5 m of road, metres out [from, to], how many together, scale]
 const LANDMARKS = {
   meadow: [['haybale', 0.006, [14, 60], 5, 1]],
@@ -1377,6 +1379,7 @@ export class Scene3D {
     // a route may bring its own water: a lake or a river beside the road (Alpine Valley's lake under the slopes)
     else if (route.water) this.t3 = { ...this.t3, dip: route.water };
     this._grid = null;
+    this._landShape();
     this.archList = null; this.bannerCache = null; this.lineTexCache = null; // arches are per route
     // imported routes with OpenStreetMap data: woods, water and buildings where they really are
     this.land = route.land || null;
@@ -1810,13 +1813,55 @@ export class Scene3D {
     return { x, z, y: this._roadY(d), h, rx: -Math.sin(h), rz: Math.cos(h) };
   }
 
-  _terrainY(roadY, o, x, z) {
+  /**
+   * What the road's grade does to the land, once per route (the land reads the grade averaged over ~200 m, so it
+   * changes slowly along the road): the grade, which side the mountain is on, and, for an imported route, its
+   * real relief. The same route always gives the same land: nothing here is random per run.
+   */
+  _landShape() {
+    const route = this.route, T = this.t3, loop = !route.oneWay;
+    this.gradeAvg = gradeProfile(route.segments.map((q) => q.elev), { loop });
+    // a world with a wall of its own keeps it on its side; a lake on one side puts the mountain on the other;
+    // otherwise the road's bends say
+    const curve = route.segments.map((q) => q.curve);
+    this.mountain = T.wall ? new Float32Array(curve.length).fill(-1)
+      : T.dip ? new Float32Array(curve.length).fill(-T.dip.side)
+        : mountainSide(curve, { turn: TURN, loop });
+    this.reliefData = route.custom ? decodeRelief(route.relief) : null;
+    this._shapeAtD = { d: NaN };
+  }
+
+  /** The grade shaping at distance d along the road: { bias (+ right is the mountain), shape }. Cached for the row being built. */
+  _shape(d) {
+    const c = this._shapeAtD;
+    if (c.d === d) return c;
+    const loop = !this.route.oneWay, g = arrayAt(this.gradeAvg, d, loop);
+    c.d = d; c.shape = gradeShape(g); c.bias = arrayAt(this.mountain, d, loop);
+    if (this.t3.wall) c.shape = { ...c.shape, rise: c.shape.rise * 0.5 }; // such a world has its wall already
+    return c;
+  }
+
+  /** How rocky the land is at distance d (0..1): the grade's, half as much where the real relief shapes it. */
+  _rocky(d) { return this._shape(d).shape.rocky * (this.reliefData ? 0.5 : 1); }
+
+  /**
+   * The land's height at offset o from the road centre (x, z in the world), over the road's height roadY at
+   * distance d along the road. `gk` (0..1) lets less of the grade's shaping through where another stretch of the
+   * road is close and the land has to meet it at its own height.
+   */
+  _terrainY(roadY, o, x, z, d = 0, gk = 1) {
     const T = this.t3, ao = Math.abs(o);
-    const w = smooth(8, 60, ao);
-    let y = roadY - 0.05 + w * (fbm(x, z) - 0.42) * 2 * T.amp;
+    if (this.reliefData) {
+      // the real relief, flat on the road bed and its verge and fully there from 45 m; a little noise over the
+      // model's smooth 30 m cells so a hillside is not glass
+      const rel = reliefAt(this.reliefData, d, o, this.route.oneWay ? 0 : this.route.length) * V_EXAG * gk;
+      return roadY - 0.05 + smooth(5, 45, ao) * (rel + (fbm(x, z) - 0.42) * 2 * 1.5);
+    }
+    const w = smooth(8, 60, ao), sh = this._shape(d);
+    let y = roadY - 0.05 + w * (fbm(x, z) - 0.42) * 2 * T.amp * sh.shape.ampK;
     if (T.wall) y += smooth(10, 160, ao) * T.wall * (o < 0 ? 1 : -0.6);
     if (T.dip && Math.sign(o) === T.dip.side) y -= smooth(T.dip.from, T.dip.to, ao) * T.dip.depth;
-    return y;
+    return y + shapeOffset(o, sh.bias, sh.shape, gk);
   }
 
   /** Whether the chunk of this number (or, on a loop, the same stretch of another lap) is built, or is being built now. */
@@ -1997,6 +2042,18 @@ export class Scene3D {
       for (let q = r; q <= r + 6; q++) for (const k of [0, 1]) if (raw[q].lim[k] < lim[k]) { lim[k] = raw[q].lim[k]; other[k] = raw[q].other[k]; to[k] = raw[q].to[k]; }
       return { lim, other, to };
     });
+    // The road is a smooth curve and the land under it a straight line from row to row, 5 m apart: in a sag, or
+    // where two passes were made one height and the grade jumps, the straight chord rises above the curve and the
+    // grass shows through the asphalt in patches. The land under the road goes lower by what the chord is off.
+    const chord = frames.map((f, r) => {
+      let e = 0;
+      for (const q of [r - 1, r]) {
+        if (q < 0 || q >= rows - 1) continue;
+        e = Math.max(e, Math.abs(this.frame((a0 + q + 0.5) * SEG).y - (frames[q].y + frames[q + 1].y) / 2));
+      }
+      return e;
+    });
+    const rockyRow = frames.map((_, r) => this._rocky((a0 + r) * SEG)); // 0 on the flat, up to 1 on a steep climb
     for (let r = 0; r < rows; r++) {
       const f = frames[r];
       heights.push([]);
@@ -2006,9 +2063,10 @@ export class Scene3D {
         // below that road, past its far side, so that it covers nothing of it yet leaves no gap where that
         // stretch's own land is not built. (A bend's inner limit has no other road: the land stays within it.)
         const past = ao > lim && oy !== null && oy !== undefined;
-        const o = Math.sign(COLS[k]) * (past ? lim + (ao - lim) / (COLS[COLS.length - 1] - lim) * (reach[r].to[sd] - lim) : Math.min(ao, lim));
+        const o = Math.sign(COLS[k]) * (past ? lim + (ao - lim) / (COLS[COLS.length - 1] - lim) * (Math.min(COLS[COLS.length - 1], reach[r].to[sd] + PAST_EXTRA) - lim) : Math.min(ao, lim));
         const x = f.x + f.rx * o, z = f.z + f.rz * o;
-        let y = this._terrainY(f.y, o, x, z);
+        const dd = (a0 + r) * SEG, gk = oy === null || oy === undefined ? 1 : smooth(30, 120, lim);
+        let y = this._terrainY(f.y, o, x, z, dd, gk);
         const g = gully((a0 + r) * SEG);
         y -= g * GULLY_DEPTH;
         // over a tunnel the hill rises 11 m above the road and slopes away beyond 12 m out
@@ -2018,8 +2076,10 @@ export class Scene3D {
         // between two stretches of the same road the land slopes to meet halfway, at the mean height
         if (oy !== null && oy !== undefined) {
           const mid = (f.y + oy) / 2;
-          y = past ? Math.min(mid, oy) - 1.2 : this._terrainY(f.y + (mid - f.y) * smooth(ROAD_HALF + 1, lim, Math.abs(o)), o, x, z);
+          // past: the land goes on, sloping down under the other road's far side, so no pale gap shows where that stretch's own land is not built yet
+          y = past ? Math.min(mid, oy) - 1.2 - Math.max(0, Math.abs(o) - reach[r].to[sd]) * 0.06 : this._terrainY(f.y + (mid - f.y) * smooth(ROAD_HALF + 1, lim, Math.abs(o)), o, x, z, dd, gk);
         }
+        if (ao < 5) y -= chord[r] * 2.5; // under the road (the cell's edge columns, 4.3 m out)
         heights[r].push(y);
         const i = (r * nc + k) * 3;
         pos[i] = x; pos[i + 1] = y; pos[i + 2] = z;
@@ -2031,6 +2091,8 @@ export class Scene3D {
         if (lc === 'w') cc = waterC.clone().lerp(cc, vnoise(x / 40, z / 40) * 0.08);
         const rel = y - f.y;
         if (T3c.rock && rel > T3c.rock) cc = rockC.clone().lerp(cc, 0.3);
+        // a steep climb's mountainside is bare rock, more the higher it rises above the road
+        else if (rockyRow[r] > 0 && rel > 2 && Math.abs(o) > 12) cc = cc.lerp(rockC, Math.min(1, rockyRow[r] * 1.15) * smooth(2, 14, rel) * (0.75 + vnoise(x / 14, z / 14) * 0.25));
         if (T3c.snow && rel > T3c.snow) cc = snowC.clone();
         if (T3c.dip && rel < -T3c.dip.depth * 0.25 && Math.sign(o) === T3c.dip.side) cc = sand.clone();
         if (T3c.beach && Math.sign(o) === T3c.dip.side && Math.abs(o) > 10) cc = sand.clone();
@@ -2076,13 +2138,27 @@ export class Scene3D {
         if (o.dist < 2 * ROAD_HALF && o.b < own) f.sink = -0.03;
       });
     }
-    const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false, shade = null) => {
+    // the other stretches' asphalt near this chunk: the verge ribbon of this pass must not lie on it
+    const otherNear = (this.route.custom || this.route.nearItself) ? this._otherRoadsNear(a0, frames) : null;
+    const ribbon = (o1, o2, lift, color, material = this.mat, dashed = false, shade = null, underOthers = false) => {
       const p = [], cs = [], uv = [];
       const cc = color instanceof THREE.Color ? color : col(color);
       for (let q = 0; q < fine.length - 1; q++) {
         if (dashed && ((a0 + Math.floor(q / SUB)) % 3 + 3) % 3 !== 0) continue;
         const f1 = fine[q], f2 = fine[q + 1];
-        const v = (f, o) => [f.x + f.rx * o, f.y + lift + ((lift < 0.03 ? f.verge : f.sink) || 0), f.z + f.rz * o];
+        const v = (f, o) => {
+          const x = f.x + f.rx * o, z = f.z + f.rz * o;
+          let y = f.y + lift + ((lift < 0.03 ? f.verge : f.sink) || 0);
+          // Where another stretch's asphalt (or its edge) is, a verge that is above it (a hairpin, a crossing, the
+          // two passes of one street at about one height) goes just under it. The per-frame sink above looks at the
+          // centre line only, and where the roads cross at an angle the verge's edge reaches the other asphalt
+          // from farther than that. (Not when the other road is far below: then it is a bridge over it.)
+          if (underOthers && otherNear) {
+            const q = otherNear(x, z);
+            if (q && q.dist < ROAD_HALF + 0.9 && y > q.y - 0.02 && y - q.y < 2.5) y = q.y - 0.12;
+          }
+          return [x, y, z];
+        };
         const A = v(f1, o1), B = v(f1, o2), C = v(f2, o1), D = v(f2, o2);
         p.push(...A, ...B, ...C, ...B, ...D, ...C);
         // World-space coordinates keep the asphalt continuous across chunks.
@@ -2105,7 +2181,7 @@ export class Scene3D {
       group.add(m);
     };
     ribbon(-ROAD_HALF - 0.6, ROAD_HALF + 0.6, 0.02, verge.clone().multiplyScalar(0.85), this.mat, false,
-      (d) => (inTunnel(d, 2) ? 0.18 : 1)); // the verge in a tunnel is in the dark
+      (d) => (inTunnel(d, 2) ? 0.18 : 1), true); // the verge in a tunnel is in the dark
     ribbon(-ROAD_HALF, ROAD_HALF, 0.05, rgb(T.road[0]), this.roadMat);
     ribbon(-ROAD_HALF * 0.9 - 0.07, -ROAD_HALF * 0.9 + 0.07, 0.052, rgb(T.line), this.lineMat);
     ribbon(ROAD_HALF * 0.9 - 0.07, ROAD_HALF * 0.9 + 0.07, 0.052, rgb(T.line), this.lineMat);
@@ -2126,7 +2202,7 @@ export class Scene3D {
     const flowerPalette = T.palette.flowers.colors.map((c) => (c === 'lupine' ? '#9b7fd1' : c));
     const flowers = [], fenceSides = [];
     for (let r = 0; r < rows - 1; r++) {
-      const a = a0 + r, idxN = ((a % n) + n) % n, f = frames[r];
+      const a = a0 + r, idxN = ((a % n) + n) % n, f = frames[r], rocky = rockyRow[r];
       if (onBridge(a)) continue; // nothing stands in the gully or on the bridge
       for (const side of [-1, 1]) {
         if (((a % 5) + 5) % 5 === 0) {
@@ -2153,14 +2229,17 @@ export class Scene3D {
           }
           // now and then a boulder a few metres out
           const bs = a * 5.3 + side * 23.9;
-          if (hash(bs) < 0.025) {
-            const o = side * (ROAD_HALF + 3 + hash(bs + 1) * 6), ff = this.frame(a * SEG + hash(bs + 2) * SEG), sc = 0.6 + hash(bs + 3) * 0.7;
+          if (hash(bs) < 0.025 + rocky * 0.2) { // a steep climb is strewn with them, and they are bigger
+            const o = side * (ROAD_HALF + 3 + hash(bs + 1) * (6 + rocky * 40)), ff = this.frame(a * SEG + hash(bs + 2) * SEG), sc = (0.6 + hash(bs + 3) * 0.7) * (1 + rocky * 1.2);
             const m = mtx(ff.x + ff.rx * o, heightAt(r, o) - 0.15, ff.z + ff.rz * o, hash(bs + 4) * 6.28, this.nature?.types.boulder ? sc : sc * 1.8);
             put(this.nature?.types.boulder ? 'boulder' : 'rock', m);
           }
         }
         T.scenery.forEach((sc, j) => {
           if (this.land && TREE_TYPES.includes(sc.type)) return; // trees stand where the map has woods
+          // on a steep climb the slope is stone: fewer flowers and fields
+          if ((sc.type === 'flowers' || sc.type === 'sunflowers') && hash(idxN * 2.77 + side * 9.1 + j * 5.3) < rocky * 0.9) return;
+          if (TREE_TYPES.includes(sc.type) && hash(idxN * 4.41 + side * 6.3 + j * 2.9) < rocky * 0.6) return;
           if (TREE_TYPES.includes(sc.type) && (inVillage(a * SEG) || nearLandmark(idxN))) return;
           const h = (k) => hash(idxN * 7.13 + side * 3.7 + (j * 4 + k) * 19.1);
           if (h(0) >= sc.prob) return;
@@ -2197,7 +2276,7 @@ export class Scene3D {
       // the world's landmarks (not on imported routes: theirs are on the map)
       if (!this.land) (LANDMARKS[this.route.theme] || []).forEach(([type, chance, [o0, o1], n, sc], j) => {
         const hl = (k) => hash(idxN * 1.931 + j * 71.3 + k * 13.7);
-        if (hl(0) >= chance || inVillage(a * SEG)) return;
+        if (hl(0) >= chance || inVillage(a * SEG) || (type === 'haybale' && hl(5) < rocky * 0.9)) return; // no fields on a steep slope
         // the coast's lighthouse stands on the beach, toward the sea; the rest on either side
         const side = type === 'lighthouse' && T3c.dip ? T3c.dip.side : hl(1) < 0.5 ? -1 : 1;
         for (let q = 0; q < n; q++) {
@@ -2219,7 +2298,7 @@ export class Scene3D {
           const side = hq(1) < 0.5 ? -1 : 1, o = side * (30 + hq(2) * 230);
           // trees stand together in woods with open meadow between, not one by one all over
           const wood = vnoise((f.x + f.rx * o) / 140, (f.z + f.rz * o) / 140) > 0.56;
-          if (hq(0) > T3c.far * (wood ? 2.6 : 0.25)) continue;
+          if (hq(0) > T3c.far * (wood ? 2.6 : 0.25) * (1 - rocky * 0.7)) continue; // a steep climb is not forest
           if (reach[r] && Math.abs(o) > reach[r].lim[side > 0 ? 1 : 0] - 4) continue;
           if (Math.abs(o) < 55 && inVillage(a * SEG)) continue;
           if (Math.abs(o) < 70 && nearLandmark(idxN)) continue; // a landmark stands in the open
@@ -2242,6 +2321,7 @@ export class Scene3D {
             const hq = (k) => hash(a * 11.3 + side * 5.7 + q * 2.9 + k * 7.1);
             const o = side * (ROAD_HALF + 0.75 + hq(0) ** 2.4 * 30);
             if (Math.abs(o) > lim - 1 || (T3c.beach && side === T3c.dip.side && Math.abs(o) > 9)) continue;
+            if (hq(7) < rockyRow[r] * 0.75) continue; // bare rock, not a lawn
             if (this.land && this._landAt(a, o) === 'w') continue;
             const ff = this.frame(a * SEG + hq(1) * SEG);
             const x = ff.x + ff.rx * o, z = ff.z + ff.rz * o;
@@ -2470,7 +2550,7 @@ export class Scene3D {
         const f = this.frame(dc + dd);
         for (const o of COLS) {
           const x = f.x + f.rx * o, z = f.z + f.rz * o;
-          p.push(x, this._terrainY(f.y, o, x, z) - GULLY_DEPTH * (1 - (dd / GULLY) ** 2) + 1.3, z);
+          p.push(x, this._terrainY(f.y, o, x, z, dc + dd) - GULLY_DEPTH * (1 - (dd / GULLY) ** 2) + 1.3, z);
         }
         if (j) for (let k = 0; k < COLS.length - 1; k++) idx.push(k, k + 1, k + COLS.length, k + 1, k + 1 + COLS.length, k + COLS.length); // facing up
       }
