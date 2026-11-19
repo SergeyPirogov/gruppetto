@@ -2025,3 +2025,27 @@ select.seg-src { display: none; }
 .ctl-units li.ok i { background: #3ddc84; box-shadow: 0 0 0 3px rgba(61, 220, 132, .2); }
 .ctl-units li.ok span { color: #3ddc84; }
 .ctl-units li.ctl-tip { grid-column: 1 / -1; border: 0; background: none; padding: 2px 0; color: #ffc233; font-size: .78rem; }
+
+/* =================== Progress: level, FTP and form on top, charts side by side, badges below =================== */
+#progress-box.progress-box { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+#progress-box[hidden] { display: none; }
+.pg-tile { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 18px; background: #121824; border: 1px solid var(--line); min-width: 0; }
+.pg-label { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.pg-big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pg-big b { font-size: 2.4rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+.pg-big span { color: var(--muted); font-size: .85rem; }
+.pg-foot { color: var(--muted); font-size: .8rem; margin-top: auto; }
+.pg-btn { align-self: flex-start; }
+.pg-tile .lvl-bar { margin: 0; }
+.pg-three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pg-three b { display: block; font-size: 1.7rem; font-weight: 800; line-height: 1.1; }
+.pg-three small { color: var(--muted); font-size: .75rem; }
+.pg-three .c-fit { color: #38bdf8; } .pg-three .c-fat { color: #f472b6; }
+.prog-charts { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 14px; }
+.prog-charts > div { padding: 14px 16px; border-radius: 18px; background: #121824; border: 1px solid var(--line); margin: 0; min-width: 0; }
+.prog-charts > div[hidden] { display: none; }
+.prog-charts:has(> div:only-of-type:not([hidden])), .prog-charts:has(> [hidden]) { grid-template-columns: minmax(0, 1fr); }
+.prog-charts #fit-nums { display: none; }
+.prog-badges { margin-top: 14px; padding: 14px 16px; border-radius: 18px; background: #121824; border: 1px solid var(--line); }
+.prog-badges[hidden] { display: none; }
+@media (max-width: 900px) { #progress-box.progress-box, .prog-charts { grid-template-columns: minmax(0, 1fr); } }
