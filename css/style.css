@@ -23,6 +23,7 @@ button {
 }
 button:hover { background: #31405c; }
 button.primary { background: linear-gradient(135deg, var(--accent), var(--accent2)); border: 0; color: #1a1205; }
+button.primary:disabled { opacity: .55; cursor: progress; filter: saturate(.5); }
 button.danger { background: var(--danger); border: 0; }
 button.big { width: 100%; padding: 16px; font-size: 1.25rem; margin-top: 8px; }
 button.ok { background: #1f6f43; border-color: #2b8f58; }
@@ -712,11 +713,10 @@ body.pixel-ui .draft-tag { border-radius: 0; box-shadow: 4px 4px 0 rgba(0,0,0,.4
 .imp-ok i::after { content: ''; position: absolute; left: 3.5px; top: 1.5px; width: 3px; height: 6px; border: solid #0f1420; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .imp-off i { background: var(--muted); height: 2px; border-radius: 1px; }
 .imp-off span { color: var(--muted); }
-.imp-skip { flex: none; width: auto; white-space: nowrap; padding: 8px 16px; border-radius: 999px; font-weight: 700; font-size: .88rem;
-  background: rgba(47, 212, 240, .12); border: 1px solid rgba(47, 212, 240, .55); color: var(--cyan); backdrop-filter: none; }
-.imp-skip:hover { background: rgba(47, 212, 240, .22); }
+.imp-bar { height: 6px; margin-top: 10px; border-radius: 3px; background: rgba(47, 212, 240, .15); overflow: hidden; }
+.imp-bar span { display: block; height: 100%; border-radius: inherit; background: var(--cyan); transition: width .9s linear; }
+.imp-left { display: block; margin-top: 4px; color: var(--muted); font-size: .82em; font-variant-numeric: tabular-nums; }
 @keyframes imp-spin { to { transform: rotate(360deg); } }
-@media (max-width: 560px) { .imp { flex-direction: column; align-items: stretch; } .imp-skip { align-self: flex-end; } }
 .osm-attr { display: block; margin-top: 6px; font-size: .72rem; opacity: .75; }
 .osm-attr a { color: inherit; }
 /* settings during a ride: history opens the summary screen, so it stays in the lobby */

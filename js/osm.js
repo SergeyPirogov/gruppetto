@@ -59,7 +59,10 @@ function thin(points, step = 200) {
  * `onTry(i, n)` says which of the n map servers is being asked (from 1); `signal` aborts the whole query
  * (the rider chose to go on without the map).
  */
-export async function fetchOsm(points, { fetcher = fetch, timeoutMs = 60000, onTry, signal } = {}) {
+/** How long one map server is waited for before the next is asked; with ENDPOINTS, the longest a query can take. */
+export const OSM_TIMEOUT_MS = 60000;
+export const OSM_SERVERS = ENDPOINTS.length;
+export async function fetchOsm(points, { fetcher = fetch, timeoutMs = OSM_TIMEOUT_MS, onTry, signal } = {}) {
   const line = thin(points);
   if (line.length > 900 || trackBoxes(line).length > 120) throw new Error('track too long for a map query');
   const near = thin(points, 120);
