@@ -72,6 +72,22 @@ export function addRide(p0, e) {
   return { progress: p, badges: earned, levelUp: levelOf(p.xp).level > before };
 }
 
+/**
+ * A ride counted with no summary (a bug saved rides so on 2026-11-20) gets what its summary earns once it is back:
+ * the XP, km and climbing, and the badges for one ride. The ride itself is not counted again.
+ */
+export function addSummary(p0, e) {
+  const p = { ...newProgress(), ...p0, days: [...(p0?.days || [])], badges: { ...(p0?.badges || {}) }, counted: [...(p0?.counted || [])] };
+  if (!e?.summary || !p.counted.includes(e.id)) return { progress: p, badges: [], levelUp: false };
+  const before = levelOf(p.xp).level;
+  p.xp += rideXp(e);
+  p.km = Math.round((p.km + (e.summary.distance || 0) / 1000) * 10) / 10;
+  p.gain = Math.round(p.gain + (e.summary.elevationGain || 0));
+  const earned = BADGES.filter((b) => !p.badges[b.id] && b.test(p, e));
+  for (const b of earned) p.badges[b.id] = day(e.date);
+  return { progress: p, badges: earned, levelUp: levelOf(p.xp).level > before };
+}
+
 /** Totals from a history kept before progress existed (oldest first), with what those rides earned. */
 export function progressFrom(entries) {
   let p = newProgress();

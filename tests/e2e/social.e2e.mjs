@@ -283,6 +283,37 @@ test('a finished ride keeps its numbers: time, distance and power on the finish 
   await context.close();
 });
 
+test('a ride kept with no summary (the bug of 2026-11-20) gets it back from its record at the next opening', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: LOCAL });
+  await page.evaluate(() => document.getElementById('btn-start').click());
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  await page.evaluate(() => { const p = document.getElementById('sim-power'); p.value = 250; p.oninput?.(); });
+  await page.waitForFunction(() => window.__ride.elapsed >= 35, null, { timeout: 60000, polling: 500 }); // a ride of 30 s or more is kept
+  await page.evaluate(() => { const f = document.getElementById('btn-finish'); f.click(); f.click(); });
+  await page.waitForSelector('#summary:not([hidden])');
+  const xp = await page.evaluate(() => JSON.parse(localStorage.getItem('gruppetto-progress')).xp);
+  assert.ok(xp > 0);
+  await page.evaluate(() => { // as the bug saved it: no summary, no XP for it
+    const h = JSON.parse(localStorage.getItem('gruppetto.history')); delete h[0].summary; h[0].tss = 0;
+    localStorage.setItem('gruppetto.history', JSON.stringify(h));
+    const p = JSON.parse(localStorage.getItem('gruppetto-progress')); p.xp = 0; p.km = 0; p.gain = 0;
+    localStorage.setItem('gruppetto-progress', JSON.stringify(p));
+  });
+  await page.reload();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gruppetto.history'))[0].summary?.duration > 0, null, { timeout: 10000 });
+  const after = await page.evaluate(() => ({ h: JSON.parse(localStorage.getItem('gruppetto.history'))[0], p: JSON.parse(localStorage.getItem('gruppetto-progress')) }));
+  assert.ok(after.h.summary.distance > 0);
+  assert.ok(after.h.tss > 0);
+  assert.equal(after.p.xp, xp); // what it earned the first time, no more
+  assert.equal(after.p.rides, 1);
+  await page.reload(); // once only
+  await page.waitForFunction(() => document.getElementById('btn-start')?.onclick);
+  await page.waitForTimeout(500);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('gruppetto-progress')).xp), xp);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('a first visit: the welcome, then the lobby (not Devices); Ride goes in the simulator with no trainer', async () => {
   const { page, context, errors } = await openApp({ config: false });
   assert.equal(await page.isHidden('#drawer'), true);
