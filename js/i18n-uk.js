@@ -12,12 +12,12 @@ export const UK = {
   'ride on your own': 'їдеш сам', 'last ride': 'останній заїзд', 'your best': 'твій рекорд',
   'Recent rides': 'Останні заїзди', 'All rides': 'Усі заїзди', 'This week': 'Цього тижня',
   'Flat': 'Рівні', 'Hilly': 'Пагорбисті', 'Mountain': 'Гірські', 'My routes': 'Мої маршрути',
-  'Import GPX': 'Імпорт GPX', 'A real road from Strava, Komoot or Garmin, up to 150 km': 'Справжня дорога зі Strava, Komoot чи Garmin, до 150 км',
+  'Import GPX': 'Імпорт GPX', 'A real road from Strava, Komoot or Garmin, up to 600 km': 'Справжня дорога зі Strava, Komoot чи Garmin, до 600 км',
   'Delete this route': 'Видалити маршрут',
   'Delete “{name}”? Its records stay in your ride history.': 'Видалити «{name}»? Рекорди лишаться в історії заїздів.',
   'Not enough browser storage for this route': 'Забракло місця в сховищі браузера для цього маршруту',
   'Could not import {file}: {error}': 'Не вдалося імпортувати {file}: {error}',
-  'The track is shorter than 1 km': 'Трек коротший за 1 км', 'The track is longer than 150 km': 'Трек довший за 150 км',
+  'The track is shorter than 1 km': 'Трек коротший за 1 км', 'The track is longer than 600 km': 'Трек довший за 600 км', 'The track is longer than {n} km': 'Трек довший за {n} км',
   'This file is not valid GPX': 'Це не коректний GPX-файл', 'No track points in this GPX file': 'У цьому GPX-файлі немає точок треку',
   'Imported from GPX. Point to point, finish at {km} km.': 'Імпортовано з GPX. З точки до точки, фініш на {km} км.',
   'Imported from GPX (no elevation data in the file, so flat). Point to point, finish at {km} km.': 'Імпортовано з GPX (у файлі немає висот: рівна дорога). З точки до точки, фініш на {km} км.',
@@ -194,7 +194,7 @@ export const UK = {
   'Your routes on Strava': 'Твої маршрути на Strava', 'Loading your routes…': 'Завантажую твої маршрути…', 'Could not load your Strava routes: {error}': 'Strava не віддала маршрути: {error}',
   'Only seeing public routes? Reconnect Strava to see your private ones (Profile → Connections).': 'Видно лише публічні маршрути? Приватні з’являться, якщо підключити Strava ще раз (Профіль → Зв’язки).',
   "No ride routes on your Strava yet. Make one in Strava's route builder.": 'На твоїй Strava ще немає маршрутів для велосипеда. Створи маршрут у конструкторі Strava.',
-  'over 150 km': 'понад 150 км', 'Loading the route…': 'Отримую маршрут…', 'Could not load the Strava route: {error}': 'Strava не віддала маршрут: {error}',
+  'over {n} km': 'понад {n} км', 'Loading the route…': 'Отримую маршрут…', 'Could not load the Strava route: {error}': 'Strava не віддала маршрут: {error}',
   'Upload again': 'Завантажити ще раз', 'not matched to the planned workout (moved or deleted?)': 'не прив’язано до запланованого тренування (перенесли чи видалили там?)', 'Deleted it there? Upload this ride again': 'Видалили там? Надішліть цей заїзд ще раз',
   'syncing…': 'синхронізую…', 'not synced': 'не синхронізовано', 'just now': 'щойно', '{n} min ago': '{n} хв тому',
   'Syncing…': 'Синхронізую…', 'Not synced: {error}': 'Не синхронізовано: {error}', 'Synced {when}': 'Синхронізовано {when}',
@@ -599,6 +599,8 @@ export const UK = {
   // ---- lobby: the three ways to ride, one short line each ----
   'Your pace, with a ghost if you like': 'Твій темп, за бажання з привидом', 'Bots at your level, laps, a finish': 'Боти твого рівня, кола, фініш',
   'The trainer holds the power': 'Станок тримає потужність',
+  // ---- brevets: one long route at a time ----
+  'One route over {n} km is kept at a time. Replace “{name}” with this one?': 'Маршрут понад {n} км зберігається лише один. Замінити «{name}» на цей?',
 
   // ---- the lag log ----
   'Show FPS': 'Показувати FPS', 'Frames per second on the ride screen': 'Кадри за секунду на екрані заїзду',

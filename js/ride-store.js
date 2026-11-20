@@ -1,16 +1,17 @@
 // Full second-by-second records of recent rides, in IndexedDB (too big for localStorage): an older
 // ride can still be downloaded as .FIT/.TCX or sent to intervals.icu. The latest KEEP rides are kept.
-const DB = 'gruppetto', STORE = 'rides', DRAFTS = 'drafts', KEEP = 50;
+const DB = 'gruppetto', STORE = 'rides', DRAFTS = 'drafts', ROUTES = 'routes', KEEP = 50;
 
 let dbp = null;
 function open() {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
   return dbp ||= new Promise((resolve) => {
-    const req = indexedDB.open(DB, 2);
+    const req = indexedDB.open(DB, 3);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(DRAFTS)) db.createObjectStore(DRAFTS, { keyPath: 'id' }); // the ride in progress
+      if (!db.objectStoreNames.contains(ROUTES)) db.createObjectStore(ROUTES, { keyPath: 'id' }); // the routes imported from GPX
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null); // private mode or blocked: rides simply aren't kept
@@ -51,3 +52,12 @@ export async function swapDraft(from, to) {
     if (back) s.put({ ...back, id: 'current' });
   }, DRAFTS);
 }
+
+// The routes imported from GPX: { id, owner, def }. A 600 km brevet is about 2 MB, so they live here, not in
+// localStorage (5 MB for everything). `owner` is the account whose route it is (null: a guest's, which the first
+// account to sign in here takes).
+/** All the routes kept on this device, or null when IndexedDB is not there (private mode). */
+export const getRoutes = () => run('readonly', (s) => s.getAll(), ROUTES);
+/** Keeps one; true when it was written (false: no room, or no IndexedDB). */
+export const putRoute = (rec) => run('readwrite', (s) => s.put(rec), ROUTES).then((k) => k !== null);
+export const deleteRoute = (id) => run('readwrite', (s) => s.delete(id), ROUTES);

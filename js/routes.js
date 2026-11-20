@@ -170,8 +170,9 @@ export class Route {
     let steep = 0;
     for (let i = 0; i < (this.oneWay ? n - w : n); i++) steep = Math.max(steep, (this.segments[(i + w) % n].elev - this.segments[i].elev) / (w * SEG));
     this.maxGrade = steep;
-    this.minElev = Math.min(...this.segments.map((s) => s.elev));
-    this.maxElev = Math.max(...this.segments.map((s) => s.elev));
+    // a loop, not Math.min(...): a 600 km brevet has 120 000 segments, past what a call can take as arguments
+    this.minElev = Infinity; this.maxElev = -Infinity;
+    for (const s of this.segments) { if (s.elev < this.minElev) this.minElev = s.elev; if (s.elev > this.maxElev) this.maxElev = s.elev; }
     this.climbs = findClimbs(this);
     this.sprints = def.fixedSprints // a route that says where its sprints are (the velodrome: too short to find any)
       ? def.fixedSprints.map((x, k) => ({ start: x.start, length: x.length, end: x.start + x.length, id: `${this.id}-s${k + 1}`, name: x.name || `Sprint ${k + 1}`, sprint: true, grade: 0 }))
