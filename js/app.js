@@ -5,7 +5,7 @@ import { segmentAll } from './settings-ui.js';
 import { IntervalsClient, activityUrl, localDate } from './intervals.js';
 import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
 import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
-import { parseGpx, routeFromTrack } from './gpx.js';
+import { parseGpx, routeFromTrack, trackKm, MAX_KM, LONG_KM } from './gpx.js';
 import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
 import { t as tr, tIn, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
@@ -15,7 +15,7 @@ import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
 const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNames, lthr: s.lthr });
 import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
-import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft, swapDraft } from './ride-store.js';
+import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft, swapDraft, getRoutes, putRoute, deleteRoute } from './ride-store.js';
 import { Recorder, rideFileName } from './recorder.js';
 import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
@@ -86,14 +86,37 @@ records.lap ||= {}; records.seg ||= {}; records.segTrace ||= {}; records.top ||=
 const plausibleLap = (t, length) => t > 0 && t >= length / 25;
 /** This route's best lap / finish time, ignoring an impossible one. */
 const bestLap = (r) => { const t = records.lap[r.id]; return t && plausibleLap(t, r.length) ? t : undefined; }; // segTrace: seconds at every 10 m of the record climb
-// routes imported from GPX (#25), kept on this device as plain data
+// routes imported from GPX (#25), kept on this device as plain data: in IndexedDB (a 600 km brevet is ~2 MB, too
+// much for localStorage), each under the account it belongs to; in localStorage only where IndexedDB is missing
 const ROUTES_KEY = 'gruppetto.routes';
-const customDefs = (() => { try { return JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch { return []; } })();
+const routeOwner = () => { try { return localStorage.getItem('gruppetto.owner'); } catch { return null; } };
+let routesInDb = false;
+const customDefs = await (async () => {
+  let legacy = [];
+  try { legacy = JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch { /* a broken entry: none */ }
+  const recs = await getRoutes();
+  if (!recs) return legacy; // no IndexedDB here (private mode): localStorage as before
+  routesInDb = true;
+  const owner = routeOwner(), mine = recs.filter((r) => r.owner === owner || r.owner == null);
+  // the guest's routes are the first account's to sign in here; routes from before IndexedDB move over
+  for (const r of mine) if (r.owner !== owner) { r.owner = owner; putRoute(r); }
+  let moved = true;
+  for (const d of legacy) if (!mine.some((r) => r.id === d.id)) { const rec = { id: d.id, owner, def: d }; if (await putRoute(rec)) mine.push(rec); else moved = false; }
+  if (moved) try { localStorage.removeItem(ROUTES_KEY); } catch { /* private mode */ }
+  return mine.map((r) => r.def);
+})();
 for (const d of customDefs) { try { routes.push(new Route(d)); } catch { /* skip a broken entry */ } }
 // the route picked is gone (a GPX route deleted, or another account's put aside): the default one, shown as picked
 if (!routes.some((r) => r.id === settings.routeId)) { settings.routeId = (routes.find((r) => r.id === DEFAULT_SETTINGS.routeId) || routes[0]).id; try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } }
-const saveCustomRoutes = () => {
+/** Keeps a route just imported; false when there was no room for it. */
+const saveCustomRoute = async (def) => {
+  if (routesInDb) return putRoute({ id: def.id, owner: routeOwner(), def });
   try { localStorage.setItem(ROUTES_KEY, JSON.stringify(customDefs)); return true; } catch { return false; }
+};
+const forgetCustomRoute = (id) => {
+  if (routesInDb) return deleteRoute(id);
+  try { localStorage.setItem(ROUTES_KEY, JSON.stringify(customDefs)); } catch { /* it was smaller before */ }
+  return null;
 };
 const saveRecords = () => { try { localStorage.setItem('gruppetto.records', JSON.stringify(records)); } catch { /* ignore */ } };
 /** Seconds into a climb at `off` metres, from a record trace (every 10 m) or, without one, an even pace. */
@@ -648,7 +671,7 @@ function renderRouteList() {
   for (const r of mine) box.append(card(r));
   const add = document.createElement('label');
   add.className = 'option rc-import';
-  add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 150 km')}</small>`;
+  add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 600 km')}</small>`;
   add.htmlFor = 'gpx-file';
   box.append(add);
   // your own routes on Strava (as in Slipstream): pick one, and it comes in as a GPX would.
@@ -724,6 +747,11 @@ async function importGpxText(text, fileName) {
   const file = { name: fileName };
   try {
     const track = parseGpx(text);
+    // a brevet up to 600 km, but one long route at a time: each is megabytes on this device
+    const km = trackKm(track.points);
+    if (km > MAX_KM + 5) throw new Error(tr('The track is longer than {n} km', { n: MAX_KM }));
+    const replaces = km > LONG_KM ? routes.find((r) => r.custom && r.length > LONG_KM * 1000) : null;
+    if (replaces && !confirm(tr('One route over {n} km is kept at a time. Replace “{name}” with this one?', { n: LONG_KM, name: replaces.name }))) return;
     // real elevations from a terrain model along the road (#25); without a network, the file's own
     // and the woods, water and buildings beside it from OpenStreetMap; each is optional
     // no riding off on the previously chosen route while this one is still being built
@@ -756,7 +784,7 @@ async function importGpxText(text, fileName) {
     let elevation, osm;
     try {
       [elevation, osm] = await Promise.all([
-        loadTerrain(track.points, { onProgress: (done, total) => { tiles = done >= total ? `✓ ${total}/${total}` : `${done}/${total}`; show(); } })
+        loadTerrain(track.points, { z: km > LONG_KM ? 12 : 13, onProgress: (done, total) => { tiles = done >= total ? `✓ ${total}/${total}` : `${done}/${total}`; show(); } })
           .then((e) => { if (tiles === '…') { tiles = '✓'; show(); } return e; })
           .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); tiles = tr('from the file'); show(); return null; }),
         fetchOsm(track.points, { signal: skip.signal, onTry: (i, n) => { server = i; servers = n; show(); } })
@@ -774,7 +802,8 @@ async function importGpxText(text, fileName) {
     customDefs.push(def);
     // the relief is the biggest part of a route in storage: when it does not fit, keep the route without it (it
     // behaves like a route from before the relief existed, with random hills)
-    if (!saveCustomRoutes() && !(delete def.relief && saveCustomRoutes())) { customDefs.pop(); throw new Error(tr('Not enough browser storage for this route')); }
+    if (!(await saveCustomRoute(def)) && !(delete def.relief && (await saveCustomRoute(def)))) { customDefs.pop(); throw new Error(tr('Not enough browser storage for this route')); }
+    if (replaces) removeCustomRoute(replaces);
     routes.push(route);
     settings.routeId = route.id; saveSettings();
     renderRouteList(); showRoute();
@@ -799,8 +828,8 @@ async function openStravaRoutes() {
   }
   const hint = `<p class="hint">${esc(tr('Only seeing public routes? Reconnect Strava to see your private ones (Profile → Connections).'))}</p>`;
   if (!routesOnStrava.length) { list.innerHTML = `<p class="muted">${esc(tr('No ride routes on your Strava yet. Make one in Strava\'s route builder.'))}</p>${hint}`; return; }
-  list.innerHTML = routesOnStrava.map((r) => `<button class="option sr-row" data-id="${esc(r.id)}" ${r.distance > 150000 ? 'disabled' : ''}>`
-    + `<b>${r.starred ? '★ ' : ''}${esc(r.name)}</b><small>${(r.distance / 1000).toFixed(1)} ${U.km} · ↗ ${Math.round(r.gain)} ${U.m}${r.distance > 150000 ? ` · ${esc(tr('over 150 km'))}` : ''}</small></button>`).join('') + hint;
+  list.innerHTML = routesOnStrava.map((r) => `<button class="option sr-row" data-id="${esc(r.id)}" ${r.distance > MAX_KM * 1000 ? 'disabled' : ''}>`
+    + `<b>${r.starred ? '★ ' : ''}${esc(r.name)}</b><small>${(r.distance / 1000).toFixed(1)} ${U.km} · ↗ ${Math.round(r.gain)} ${U.m}${r.distance > MAX_KM * 1000 ? ` · ${esc(tr('over {n} km', { n: MAX_KM }))}` : ''}</small></button>`).join('') + hint;
   list.onclick = async (ev) => {
     const b = ev.target.closest('[data-id]');
     if (!b || b.disabled) return;
@@ -820,12 +849,16 @@ for (const el of document.querySelectorAll('[data-sr-close]')) el.addEventListen
 
 function deleteCustomRoute(r) {
   if (!confirm(tr('Delete “{name}”? Its records stay in your ride history.', { name: r.name }))) return;
+  removeCustomRoute(r);
+  renderRouteList(); showRoute();
+}
+/** Takes an imported route off this device and out of the list. */
+function removeCustomRoute(r) {
   const i = customDefs.findIndex((d) => d.id === r.id);
   if (i >= 0) customDefs.splice(i, 1);
-  saveCustomRoutes();
-  routes.splice(routes.indexOf(r), 1);
+  forgetCustomRoute(r.id);
+  if (routes.includes(r)) routes.splice(routes.indexOf(r), 1);
   if (settings.routeId === r.id) { settings.routeId = routes[0].id; saveSettings(); }
-  renderRouteList(); showRoute();
 }
 
 function infoBox(msg) {
@@ -3349,7 +3382,7 @@ function historyEntry(r, samples) {
   }
   return {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
-    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(Math.min(...wbal)) : wPrime, summary: r.summary,
+    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(wbal.reduce((m, v) => Math.min(m, v), Infinity)) : wPrime, // reduce: a 24 h brevet is 86 400 seconds, too many for Math.min(...) summary: r.summary,
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
     race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
     maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,

@@ -6,7 +6,19 @@ import { landFromOsm } from './osm.js';
 import { encodeRelief } from './relief.js';
 
 const TURN = 2.5;          // the 3D renderer multiplies curvature by this; divide it back out
-const MAX_KM = 150;
+export const MAX_KM = 600;  // a 600 km brevet (BRM 200 to 600)
+export const LONG_KM = 150; // longer than this is a long route: one is kept at a time (about 0.5 MB per 150 km)
+
+/** A track's length along its points, in km (great circle between each two). */
+export function trackKm(points) {
+  let m = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1], b = points[i], la = (a.lat * Math.PI) / 180, lb = (b.lat * Math.PI) / 180;
+    const h = Math.sin((lb - la) / 2) ** 2 + Math.cos(la) * Math.cos(lb) * Math.sin((((b.lon - a.lon) * Math.PI) / 180) / 2) ** 2;
+    m += 2 * 6371000 * Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+  return m / 1000;
+}
 const MIN_RADIUS = 12;     // m: tighter kinks in the track are GPS noise, not road
 const LOOP_GAP = 1000;     // m: a track ending this close to its start is ridden as a loop
 
