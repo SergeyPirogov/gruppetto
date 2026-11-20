@@ -341,6 +341,38 @@ test('the challenge of the day: in the lobby, done in a ride with a toast, on th
   await context.close();
 });
 
+test('an iPhone (no Bluetooth): the lobby says where to ride, sends the link, and the simulator is a tap away', async () => {
+  const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1' });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.route(/goatcounter|gc\.zgo\.at|supabase/, (r) => r.abort());
+  await page.addInitScript(() => {
+    Object.defineProperty(Navigator.prototype, 'bluetooth', { get: () => undefined }); // as on an iPhone
+    localStorage.setItem('gruppetto.welcomed', 'guest');
+    navigator.share = async (d) => { window.__shared = d; };
+  });
+  await page.goto(APP + '?debug');
+  await page.waitForSelector('#nobt-box:not([hidden])');
+  assert.equal(await page.textContent('#nobt-title'), 'Ride on a computer or Android');
+  await page.tap('#nobt-send');
+  await page.waitForFunction(() => window.__shared);
+  assert.match(await page.evaluate(() => window.__shared.url), /\/\?utm_campaign=self-send$/);
+  await page.tap('#nobt-sim');
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  assert.equal(await page.evaluate(() => window.__ride.simulated), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a browser with Bluetooth: no card about where to ride', async () => {
+  const { page, context } = await openApp({ config: false, local: LOCAL });
+  const bt = await page.evaluate(() => !!navigator.bluetooth);
+  assert.equal(await page.isHidden('#nobt-box'), bt);
+  await context.close();
+});
+
 test('a first visit: the welcome, then the lobby (not Devices); Ride goes in the simulator with no trainer', async () => {
   const { page, context, errors } = await openApp({ config: false });
   assert.equal(await page.isHidden('#drawer'), true);

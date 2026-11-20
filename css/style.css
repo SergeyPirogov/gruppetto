@@ -1086,6 +1086,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .ch-text small { color: var(--muted); }
 .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 640px) { .challenge-box { grid-template-columns: auto 1fr; } .ch-actions { grid-column: 1 / -1; } }
+.nobt-box { position: relative; display: grid; gap: 10px; margin-bottom: 14px; padding: 12px 40px 12px 16px; border-radius: 14px; background: linear-gradient(135deg, rgba(47, 212, 240, .14), rgba(167, 139, 250, .06)); border: 1px solid rgba(47, 212, 240, .45); }
+.nobt-box[hidden] { display: none; }
+body.no-bt .dev-chip { display: none; }
+.nobt-text { display: grid; gap: 3px; }
+.nobt-text b { font-size: 1.05rem; color: #fff; }
+.nobt-text span { color: var(--muted); }
 .daily-box { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin-bottom: 14px; padding: 12px 16px; border-radius: 14px; background: linear-gradient(135deg, rgba(255, 122, 26, .16), rgba(47, 212, 240, .05)); border: 1px solid rgba(255, 122, 26, .45); }
 .daily-box[hidden] { display: none; }
 .daily-box.done { background: linear-gradient(135deg, rgba(34, 197, 94, .12), rgba(47, 212, 240, .04)); border-color: rgba(34, 197, 94, .4); }

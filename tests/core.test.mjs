@@ -1449,3 +1449,13 @@ test('the challenge of the day: one goal a day, the same everywhere, in turn; it
   assert.equal(markDone(Array.from({ length: 60 }, (_, i) => `d${i}`), 'new').length, 60);
   assert.match(localDay(new Date(2026, 0, 5, 23, 30)), /^2026-01-05$/); // local, not UTC
 });
+
+test('where a browser without Bluetooth is: an iPhone, an iPad passing as a Mac, Android, a computer', async () => {
+  const { platformOf } = await import('../js/ble.js');
+  assert.equal(platformOf('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 Version/18.1 Mobile/15E148 Safari/604.1', 5), 'ios');
+  assert.equal(platformOf('Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 CriOS/131.0 Mobile/15E148 Safari/604.1', 5), 'ios'); // Chrome on an iPhone: no Bluetooth either
+  assert.equal(platformOf('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.1 Safari/605.1.15', 5), 'ios'); // an iPad
+  assert.equal(platformOf('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.1 Safari/605.1.15', 0), 'desktop'); // Safari on a Mac
+  assert.equal(platformOf('Mozilla/5.0 (Android 15; Mobile; rv:133.0) Gecko/133.0 Firefox/133.0', 5), 'android');
+  assert.equal(platformOf('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0', 0), 'desktop');
+});

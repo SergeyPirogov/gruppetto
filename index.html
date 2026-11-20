@@ -72,6 +72,13 @@
     <main class="lobby-main">
       <!-- step 1, how you ride: three cards (js/app.js renderModeCards); the select under them is the state, its
            segmented buttons (settings-ui.js) stay for the keyboard and the tests but are not shown -->
+      <!-- no Bluetooth in this browser (an iPhone, Safari, Firefox): where a trainer connects, and the link to send
+           there (js/app.js renderNoBt) -->
+      <div id="nobt-box" class="nobt-box" hidden>
+        <button class="why-close" id="nobt-close" aria-label="Close">✕</button>
+        <div class="nobt-text"><b id="nobt-title"></b><span id="nobt-why"></span></div>
+        <div class="why-actions"><button id="nobt-send" class="primary"></button><button id="nobt-sim" class="pill-btn">Try it in the simulator</button></div>
+      </div>
       <section class="lobby-step lobby-how" id="sec-how">
         <h2 class="step-h"><i>1</i> How you ride</h2>
         <div class="mode-top"><select id="mode-select" class="mode-select" data-seg aria-label="Mode"><option value="free" data-short="Free ride">Free ride</option><option value="workout" data-short="Workout">Workout</option><option value="race" data-short="Race vs bots">Race vs bots</option></select></div>
