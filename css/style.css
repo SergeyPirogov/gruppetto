@@ -2623,7 +2623,13 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
 .fps-board .fps-val span, .fps-board small { font-size: .7rem; color: #c9d4e3; font-variant-numeric: tabular-nums; }
 .fps-board small { color: #9fb0c6; }
 @media (max-width: 760px) { #ride .fps-board { align-self: flex-end; flex-direction: row; align-items: baseline; gap: 6px; padding: 3px 8px; border-radius: 10px; } #ride .fps-board label { font-size: .5rem; } #ride .fps-board .fps-val b { font-size: .95rem; } #ride .fps-board .fps-val { white-space: nowrap; gap: 3px; } #ride .fps-board small { display: none; } }
-/* in a ride: Devices, Profile and Progress as an overlay over the road (as the lobby's pages), not a side menu */
+/* in a ride: Devices, Profile and Progress as an overlay over the road (as the lobby's pages), not a side menu;
+   one size for every tab (a fixed height, room kept for the scrollbar), so switching tabs does not resize it */
 .drawer.in-ride .drawer-bg { background: rgba(5, 8, 14, .55); backdrop-filter: blur(4px); }
-.drawer.in-ride .drawer-panel { top: 50%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: min(1100px, calc(100vw - 48px)); max-height: calc(100vh - 48px); border: 1px solid var(--line); border-radius: 18px; padding: 20px 28px 28px; box-shadow: 0 20px 60px rgba(0, 0, 0, .55); }
+.drawer.in-ride .drawer-panel { top: 50%; left: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); width: min(1100px, calc(100vw - 48px)); height: min(900px, calc(100vh - 48px)); scrollbar-gutter: stable; border: 1px solid var(--line); border-radius: 18px; padding: 20px 28px 28px; box-shadow: 0 20px 60px rgba(0, 0, 0, .55); }
 @media (max-width: 760px) { .drawer.in-ride .drawer-panel { width: 100vw; max-height: none; height: 100%; top: 0; left: 0; transform: none; border: 0; border-radius: 0; padding: 12px; } }
+/* its scrollbar: thin and dark inside the rounded panel, not the system's grey bar along its edge */
+.drawer.in-ride .drawer-panel { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }
+.drawer.in-ride .drawer-panel::-webkit-scrollbar { width: 8px; }
+.drawer.in-ride .drawer-panel::-webkit-scrollbar-track { background: transparent; margin: 14px 0; }
+.drawer.in-ride .drawer-panel::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
