@@ -1991,7 +1991,7 @@ async function startRide(opts) {
   rideTimer = setInterval(() => advance(), 250);
   resetPip();
   keepAwake(true);
-  if (simulated) toast(tr('Simulator mode: set power with the slider or ↑/↓'));
+  if (simulated) toast(matchMedia('(pointer: coarse)').matches ? tr('Simulator mode: tap the screen for the power slider') : tr('Simulator mode: set power with the slider or ↑/↓')); // a phone has no arrow keys
   const touch = matchMedia('(pointer: coarse)').matches;
   if (scene?.orbit && !ride.noScene) setTimeout(() => toast(touch ? tr('Camera: drag to turn, pinch to zoom, double-tap to reset') : tr('Camera: drag to orbit, scroll to zoom, double-click to reset')), simulated ? 3500 : 0);
   requestAnimationFrame(frame);
@@ -5357,7 +5357,8 @@ function updateGear() {
   $('shifters').hidden = nothingToShift || settings.shiftButtons === false;
   $('m-gear-label').textContent = inErg || hold ? 'ERG' : tr('Gear');
   $('m-gear').textContent = hold ? ride.hold : inErg ? settings.intensity : ride.gear; // what the shifters move
-  $('m-gear-unit').textContent = hold ? U.W : inErg ? '%' : `/${GEARS} · ${ratioOf(ride.gear).toFixed(2)}`;
+  $('m-gear-unit').textContent = hold ? U.W : inErg ? '%' : `/${GEARS}`;
+  $('m-gear-ratio').textContent = hold || inErg ? '' : ` · ${ratioOf(ride.gear).toFixed(2)}`; // its own span: a phone has no room for it
 }
 
 // Pause / Finish and the simulator slider stay hidden while riding: they show when the mouse moves (for a few seconds, or as
