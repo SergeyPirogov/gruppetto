@@ -143,7 +143,7 @@ export class Garage {
     }, { passive: false });
   }
 
-  _key(L) { return L ? [L.jersey, L.stripe, L.bike, L.tape, L.decal, L.helmet, L.lens, L.figure].join(':') : ''; }
+  _key(L) { return L ? [L.jersey, L.stripe, L.bike, L.tape, L.decal, L.helmet, L.lens, L.figure, L.kit ? Object.values(L.kit).join('/') : ''].join(':') : ''; }
 
   /** A new rider and bike in the current colours (colour pickers fire many times a second: once a frame at most). */
   _build() {
@@ -156,7 +156,7 @@ export class Garage {
     const group = new THREE.Group();
     const R = { group };
     const riderModel = (L.figure === 'female' && M.riderF) || M.rider;
-    if (riderModel) R.model = new (riderModel.dummy ? DummyRider : ModelRider)(riderModel, group, { jersey: L.jersey, stripe: L.stripe, helmet: L.helmet, lens: L.lens });
+    if (riderModel) R.model = new (riderModel.dummy ? DummyRider : ModelRider)(riderModel, group, { jersey: L.jersey, stripe: L.stripe, helmet: L.helmet, lens: L.lens, kit: L.kit });
     if (M.bike) R.bike = new ModelBike(M.bike, group, { color: L.bike || L.jersey, tape: L.tape || null, accent: L.decal || L.stripe || null });
     const fit = R.model?.cfg;
     if (fit && (fit.bikeScale || fit.saddleDrop)) {

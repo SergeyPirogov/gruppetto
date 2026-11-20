@@ -622,4 +622,12 @@ export const UK = {
   '📲 Send the link to myself': '📲 Надіслати посилання собі', '📋 Copy the link': '📋 Скопіювати посилання',
   'Try it in the simulator': 'Спробувати в симуляторі', 'Indoor cycling in the browser. Free.': 'Велотренажер у браузері. Безкоштовно.',
   'Link copied. Open it on the computer': 'Посилання скопійовано: відкрий його на комп\'ютері',
+  // jersey patterns (js/kits.js)
+  'Jersey pattern': 'Візерунок джерсі', 'Plain': 'Однотонна', 'Chest band': 'Смуга на грудях', 'Blue and yellow': 'Синьо-жовта',
+  'Hoops': 'Обручі', 'Pinstripes': 'Тонкі смуги', 'Sash': 'Перев\'язь', 'Chevron': 'Шеврони', 'Two halves': 'Дві половини', 'Fade': 'Перехід',
+  'Yellow jersey': 'Жовта майка', 'Green jersey': 'Зелена майка', 'Polka-dot jersey': 'Горохова майка',
+  'From level {n}': 'З {n}-го рівня', 'Win a race against the bots': 'Виграй гонку з ботами',
+  'Win the sprints in a race': 'Виграй спринти в гонці', 'Win the climbs in a race': 'Виграй підйоми в гонці',
+  '⚡ First over the line: {name}': '⚡ Перший на фініші спринту: {name}', '⛰ First to the top: {name}': '⛰ Перший на вершині: {name}',
+  'Wear it': 'Вдягнути', '{name}: on for your next ride': '{name}: вдягнуто на наступний заїзд',
 };

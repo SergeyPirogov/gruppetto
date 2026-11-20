@@ -1459,3 +1459,33 @@ test('where a browser without Bluetooth is: an iPhone, an iPad passing as a Mac,
   assert.equal(platformOf('Mozilla/5.0 (Android 15; Mobile; rv:133.0) Gecko/133.0 Firefox/133.0', 5), 'android');
   assert.equal(platformOf('Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0', 0), 'desktop');
 });
+
+import { PATTERNS, patternOpen, kitLook, jerseysWon, patternOf } from '../js/kits.js';
+import { addRide as addRideK } from '../js/progress.js';
+
+test('jersey patterns: free ones open to all, the rest by level or a jersey won', () => {
+  const free = PATTERNS.filter((p) => patternOpen(p, { level: 1 })).map((p) => p.id);
+  assert.deepEqual(free, ['plain', 'band', 'ukraine']);
+  assert.equal(patternOpen(patternOf('hoops'), { level: 2 }), true);
+  assert.equal(patternOpen(patternOf('fade'), { level: 7 }), false);
+  assert.equal(patternOpen(patternOf('polka'), { level: 99 }), false);
+  assert.equal(patternOpen(patternOf('polka'), { jerseys: { polka: '2026-11-20' } }), true);
+  // an unknown id is plain; a locked one is drawn plain in the rider's colours
+  assert.equal(patternOf('nope').id, 'plain');
+  assert.deepEqual(kitLook('hoops', { jersey: '#111111', stripe: '#222222' }, () => false), { n: 0, main: '#111111', pattern: '#222222', accent: '#222222' });
+  assert.equal(kitLook('yellow', { jersey: '#111111', stripe: '#222222' }).main, '#ffd400');
+});
+
+test('leader jerseys: yellow for the win, green and polka for most sprints and climbs won', () => {
+  assert.deepEqual(jerseysWon(1, {}), ['yellow']);
+  const tops = { 'c1:0': { kind: 'climb', who: 'me' }, 'c2:0': { kind: 'climb', who: 'b3' }, 'c1:1': { kind: 'climb', who: 'me' }, 's1:0': { kind: 'sprint', who: 'b1' } };
+  assert.deepEqual(jerseysWon(4, tops), ['polka']);
+  // a tie with a bot is not enough
+  assert.deepEqual(jerseysWon(2, { a: { kind: 'sprint', who: 'me' }, b: { kind: 'sprint', who: 'b2' } }), []);
+  // kept in the progress once, and a race won before jerseys existed still gives yellow
+  const r1 = addRideK(null, { id: 'r1', date: '2026-11-20T10:00:00Z', summary: { distance: 1000 }, jerseys: ['polka'], race: [{ me: true }] });
+  assert.deepEqual(r1.jerseys, ['polka', 'yellow']);
+  const r2 = addRideK(r1.progress, { id: 'r2', date: '2026-11-21T10:00:00Z', summary: { distance: 1000 }, jerseys: ['polka'] });
+  assert.deepEqual(r2.jerseys, []);
+  assert.deepEqual(Object.keys(r2.progress.jerseys).sort(), ['polka', 'yellow']);
+});

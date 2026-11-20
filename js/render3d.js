@@ -17,6 +17,11 @@ import { villages, crossings, tunnels } from './villages.js';
 import { hexRgb, mixRgb, mixHex, blendAtmosphere } from './atmo-blend.js';
 import { OFFSETS as LAND_OFFSETS, LAND_STEP } from './osm.js';
 import { loadFanModels } from './fans.js';
+import { kitLook } from './kits.js';
+
+/** A rider's kit for the jersey shader: given (you: only patterns open to you), or from its pattern and colours. */
+const riderKit = (r) => r.kit || kitLook(r.pattern, { jersey: r.color, stripe: r.stripe });
+const kitKeyOf = (k) => `${k.n}:${k.main}:${k.pattern}:${k.accent}`;
 import { gradeProfile, gradeShape, mountainSide, arrayAt, shapeOffset, decodeRelief, reliefAt } from './relief.js';
 
 const CHUNK = 40;              // segments per chunk (200 m)
@@ -3320,7 +3325,8 @@ export class Scene3D {
         const riderModel = (r.figure === 'female' && this.riderModelF) || this.riderModel;
         if (riderModel) {
           const Model = riderModel.dummy ? DummyRider : ModelRider;
-          R.model = new Model(riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens });
+          R.model = new Model(riderModel, R.group, { jersey: r.color, stripe: r.stripe, helmet: r.helmet, lens: r.lens, kit: riderKit(r) });
+          R.kitKey = kitKeyOf(riderKit(r));
         }
         // the frame its own colour, or the jersey's
         if (this.bikeModel) { R.bike = new ModelBike(this.bikeModel, R.group, { color: r.bike || r.color, tape: r.tape || null, accent: r.decal || r.stripe || null }); if (!R.bike.hasDecal) R.group.add(this._frameDecal()); }
@@ -3347,6 +3353,8 @@ export class Scene3D {
         this._riderFill(R.group);
         this._csmMaterials(R.group);
       }
+      // a kit changed on the same rider (a pattern picked, the leader's jersey changing hands): new colours, same model
+      if (R.model?.setKit) { const k = riderKit(r), kk = kitKeyOf(k); if (R.kitKey !== kk) { R.model.setKit(k); R.kitKey = kk; } }
       const d = r.dist;
       // phones draw riders within 150 m only: further up the road they are a few pixels, and each is ~110k triangles
       const visible = Math.abs(d - dist) < (LOW && !r.self ? 150 : CHUNK * SEG * AHEAD);

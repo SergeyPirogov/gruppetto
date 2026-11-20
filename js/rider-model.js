@@ -762,27 +762,90 @@ function maskTexture(tex) {
   return t;
 }
 
-function kitMaskMaterial(m, jersey, stripe, zip) {
+/**
+ * The jersey's pattern (js/kits.js), worked out from where a point of the jersey is on the model as it stands
+ * in its rest pose (the `position` attribute, before the skin bends it to the bike): height up the torso
+ * (0 at the hem, 1 at the collar, from the jersey's own box: kitBoxOf) and across
+ * (-1 left, 1 right), so a stripe lies the same on him and on her, front and back.
+ *   0 plain, 1 chest band, 2 hoops, 3 pinstripes, 4 sash, 5 chevron, 6 two halves, 7 fade, 8 blue over yellow,
+ *   9 polka dots, 10 one colour
+ */
+const KIT_PATTERN_GLSL = `
+float kitPatternAt( float n, vec3 p, vec3 box ) {
+  float h = clamp( ( p.y - box.x ) / ( box.y - box.x ), 0.0, 1.0 );
+  float w = clamp( p.z / box.z, -1.0, 1.0 );
+  if ( n < 0.5 ) return 0.0;
+  if ( n < 1.5 ) return step( 0.58, h ) * step( h, 0.72 );
+  if ( n < 2.5 ) return step( 0.5, fract( h * 4.0 + 0.25 ) );
+  if ( n < 3.5 ) return step( 0.75, fract( ( w + 1.0 ) * 6.0 ) );
+  if ( n < 4.5 ) return 1.0 - step( 0.12, abs( ( h - 0.5 ) - w * 0.55 ) );
+  if ( n < 5.5 ) return step( 0.5, fract( h * 3.0 - abs( w ) * 1.1 ) );
+  if ( n < 6.5 ) return step( 0.0, w );
+  if ( n < 7.5 ) return smoothstep( 0.2, 0.95, h );
+  if ( n < 8.5 ) return 1.0 - step( 0.5, h );
+  if ( n < 9.5 ) { vec2 c = fract( vec2( p.y, p.z ) / 0.075 ) - 0.5; return 1.0 - step( 0.27, length( c ) ); }
+  return 0.0;
+}
+`;
+
+/**
+ * The jersey's box in the rest pose, once per model: [lowest y, highest y, half the width (z)] of every vertex
+ * drawn with a kit-mask material, for the pattern's height and width (see KIT_PATTERN_GLSL).
+ */
+const KIT_BOXES = new WeakMap();
+function kitBoxOf(gltf, names) {
+  if (KIT_BOXES.has(gltf)) return KIT_BOXES.get(gltf);
+  let lo = Infinity, hi = -Infinity, half = 0;
+  gltf.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    const pos = o.geometry.attributes.position, idx = o.geometry.index;
+    const groups = o.geometry.groups.length ? o.geometry.groups : [{ start: 0, count: idx ? idx.count : pos.count, materialIndex: 0 }];
+    for (const g of groups) {
+      if (!names.includes(mats[g.materialIndex]?.name)) continue;
+      for (let i = g.start; i < g.start + g.count; i++) {
+        const k = idx ? idx.getX(i) : i, y = pos.getY(k), z = Math.abs(pos.getZ(k));
+        if (y < lo) lo = y; if (y > hi) hi = y; if (z > half) half = z;
+      }
+    }
+  });
+  const box = hi > lo && half > 0 ? [lo, hi, half] : null;
+  KIT_BOXES.set(gltf, box);
+  return box;
+}
+
+/** The kit a rider wears: kitLook() of js/kits.js, or the plain jersey in the rider's two colours. */
+const plainKit = (jersey, stripe) => ({ n: 0, main: jersey, pattern: stripe, accent: stripe });
+
+function kitMaskMaterial(m, kit, zip, box) {
   const c = m.clone();
   c.color = new THREE.Color('#ffffff');
   if (c.map) c.map = maskTexture(c.map);
+  const pocket = /pocket/i.test(m.name);
   const uniforms = {
-    kitMain: { value: new THREE.Color(jersey || '#1f6fd6') },
+    kitMain: { value: new THREE.Color(kit.main || '#1f6fd6') },
     // the pockets' seams are green in the mask too: paint them the jersey colour, not the accent
-    kitAccent: { value: new THREE.Color((/pocket/i.test(m.name) ? jersey : stripe) || '#0b1024') },
+    kitAccent: { value: new THREE.Color((pocket ? kit.main : kit.accent) || '#0b1024') },
     kitZip: { value: new THREE.Color(zip || '#1a1a1a') },
+    kitPattern: { value: kit.n || 0 },
+    kitPatColor: { value: new THREE.Color(kit.pattern || kit.accent || '#0b1024') },
+    kitBox: { value: new THREE.Vector3(...(box || [1.16, 1.83, 0.31])) },
   };
+  c.userData.kit = { uniforms, pocket };
   c.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
-    shader.fragmentShader = 'uniform vec3 kitMain;\nuniform vec3 kitAccent;\nuniform vec3 kitZip;\n' + shader.fragmentShader.replace(
+    shader.vertexShader = 'varying vec3 vKitPos;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n  vKitPos = position;');
+    shader.fragmentShader = 'uniform vec3 kitMain;\nuniform vec3 kitAccent;\nuniform vec3 kitZip;\nuniform float kitPattern;\nuniform vec3 kitPatColor;\nuniform vec3 kitBox;\nvarying vec3 vKitPos;\n'
+      + KIT_PATTERN_GLSL + shader.fragmentShader.replace(
       '#include <map_fragment>',
       `#ifdef USE_MAP
         vec4 kitTex = texture2D( map, vMapUv );
-        diffuseColor.rgb *= kitTex.r * kitMain + kitTex.g * kitAccent + max( 0.0, 1.0 - kitTex.r - kitTex.g ) * kitZip;
+        vec3 kitBody = mix( kitMain, kitPatColor, kitPatternAt( kitPattern, vKitPos, kitBox ) );
+        diffuseColor.rgb *= kitTex.r * kitBody + kitTex.g * kitAccent + max( 0.0, 1.0 - kitTex.r - kitTex.g ) * kitZip;
       #endif`,
     );
   };
-  c.customProgramCacheKey = () => 'kitMask';
+  c.customProgramCacheKey = () => 'kitMask2';
   // the jersey lies 2-3 mm over the skin and the shorts, and the pockets a millimetre or two over the
   // jersey: pull each layer toward the camera in the depth test (pockets more than the jersey), or
   // they fight (flicker) from any distance
@@ -796,11 +859,12 @@ function kitMaskMaterial(m, jersey, stripe, zip) {
  * `group` must already be in the scene graph when pose() is called.
  */
 export class ModelRider {
-  constructor(model, group, { jersey, stripe, helmet, lens }) {
+  constructor(model, group, { jersey, stripe, helmet, lens, kit }) {
     const { gltf, cfg } = model;
     this.cfg = cfg;
     this.group = group;
     this.root = SkeletonUtils.clone(gltf.scene);
+    this.kitMats = []; // the jersey's materials: a new pattern or leader's jersey mid-ride (setKit)
     this.root.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = true;
@@ -809,7 +873,7 @@ export class ModelRider {
       // one texture atlas between all clothes, but keep separate meshes (Ch08_Hoodie, Ch08_Pants).
       const meshName = (o.name || '').toLowerCase();
       const recolor = (m) => {
-        if ((cfg.kitMask || []).includes(m.name)) return kitMaskMaterial(m, jersey, stripe, cfg.kitZip);
+        if ((cfg.kitMask || []).includes(m.name)) { const c = kitMaskMaterial(m, kit || plainKit(jersey, stripe), cfg.kitZip, kitBoxOf(gltf, cfg.kitMask)); this.kitMats.push(c); return c; }
         // rider.json "helmetMaterials" / "lensMaterials": the helmet shell and the sunglass lenses in
         // the rider's own colours (a lens stays a dark mirror: metallic, glossy)
         // The shell's lacquer is a little soft (Blender's is a mirror: clearcoat 1, roughness 0): on the game's
@@ -1022,6 +1086,15 @@ export class ModelRider {
       B.foot.quaternion.copy(_q3.invert().multiply(q));
       B.foot.updateMatrixWorld(true);
     });
+  }
+
+  /** A new kit on the same rider, at once (the leader's jersey changing hands in a race): kitLook() of js/kits.js. */
+  setKit(kit) {
+    for (const c of this.kitMats) {
+      const { uniforms: u, pocket } = c.userData.kit;
+      u.kitMain.value.set(kit.main); u.kitAccent.value.set(pocket ? kit.main : kit.accent);
+      u.kitPatColor.value.set(kit.pattern || kit.accent); u.kitPattern.value = kit.n || 0;
+    }
   }
 
   pose(angle, dtSeconds = 0, cadence = 90, stand = 0) {
