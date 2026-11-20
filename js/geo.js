@@ -49,7 +49,7 @@ export function routeShape(route) {
  * thousands of kilometres from any coast. One degree of longitude apart (≈ 92 km there), more than any route reaches.
  */
 const OCEAN = { lat: -38, lon: -128 };
-const BUILT_IN = ['level', 'flat', 'lakes', 'steppe', 'rolling', 'coast', 'autumn', 'sunset', 'winter', 'desert', 'carpathians', 'mountain', 'velodrome'];
+const BUILT_IN = ['level', 'flat', 'lakes', 'steppe', 'rolling', 'coast', 'autumn', 'sunset', 'winter', 'desert', 'carpathians', 'mountain', 'velodrome', 'dragobrat', 'dnipro', 'dnister'];
 
 /** Where a built-in route starts: its own slot in the ocean (an unknown id gets one from its name). */
 export function oceanAnchor(id) {

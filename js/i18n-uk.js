@@ -630,4 +630,15 @@ export const UK = {
   'Win the sprints in a race': 'Виграй спринти в гонці', 'Win the climbs in a race': 'Виграй підйоми в гонці',
   '⚡ First over the line: {name}': '⚡ Перший на фініші спринту: {name}', '⛰ First to the top: {name}': '⛰ Перший на вершині: {name}',
   'Wear it': 'Вдягнути', '{name}: on for your next ride': '{name}: вдягнуто на наступний заїзд',
+  // routes: Drahobrat, Dnipro Slopes, Dnister Canyon
+  'Drahobrat Wall': 'Стіна Драгобрату',
+  'A hill climb: 6.7 km at about 5% with ramps to 10% through the spruce, then the same back down.': 'Гонка в гору: 6,7 км близько 5%, рампи до 10% крізь смереки, і такий самий спуск.',
+  'Dnipro Slopes': 'Дніпровські схили',
+  'A 6 km park loop with six short, sharp kicks up to 10% from the river. A criterium course: attack on every rise.': 'Коло 6 км парком: шість коротких крутих підйомів від річки, до 10%. Траса для критеріуму: атакуй на кожному.',
+  'Dnister Canyon': 'Дністровський каньйон',
+  'A 40 km gran fondo along a winding river: four 3 km climbs out of the canyon (up to 7%) and fast roads back down.': 'Гран-фондо на 40 км уздовж звивистої річки: чотири підйоми по 3 км з каньйону (до 7%) і швидкі спуски.',
+  'Lavra Kick': 'Лаврський ривок', 'Andriyivsky Ramp': 'Андріївський узвіз', 'Park Steps': 'Паркові сходи', 'Pechersk Rise': 'Печерський підйом',
+  'Arch Hill': 'Пагорб біля Арки', 'Volodymyr Hill': 'Володимирська гірка',
+  'Bakota Climb': 'Підйом з Бакоти', 'Khotyn Road': 'Хотинська дорога', 'Kamianets Rise': 'Кам\'янецький підйом', 'Canyon Rim': 'Край каньйону', 'Stara Ushytsia': 'Стара Ушиця',
+  'Embankment Sprint': 'Спринт набережною', 'Khreshchatyk Sprint': 'Спринт Хрещатиком',
 };
