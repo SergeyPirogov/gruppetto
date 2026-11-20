@@ -3448,7 +3448,7 @@ function historyEntry(r, samples) {
   }
   return {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
-    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(wbal.reduce((m, v) => Math.min(m, v), Infinity)) : wPrime, // reduce: a 24 h brevet is 86 400 seconds, too many for Math.min(...) summary: r.summary,
+    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(wbal.reduce((m, v) => Math.min(m, v), Infinity)) : wPrime, summary: r.summary, // reduce, not Math.min(...): a 24 h brevet is 86 400 seconds, too many arguments for one call
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
     race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
     maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,

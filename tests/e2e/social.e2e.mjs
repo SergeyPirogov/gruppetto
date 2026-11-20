@@ -269,6 +269,20 @@ test('a ride in the simulator sends nothing to the tables', async () => {
   await context.close();
 });
 
+test('a finished ride keeps its numbers: time, distance and power on the finish screen', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: LOCAL });
+  await rideSprint(page, { real: false });
+  // a comment once swallowed «summary» in the ride's entry: the finish screen showed «Time 0:00» alone, and the
+  // history, the XP and the ratings got a ride of 0 km
+  const hero = await page.$$eval('#sum-hero > div', (els) => els.map((el) => [el.querySelector('label').textContent, el.querySelector('b').textContent]));
+  assert.deepEqual(hero.map(([k]) => k), ['Time', 'Distance', 'Avg power', 'Avg heart rate']);
+  assert.notEqual(hero[0][1], '0:00');
+  assert.ok(Number(hero[1][1]) > 0, `distance ${hero[1][1]}`);
+  assert.ok(Number(hero[2][1]) > 0, `power ${hero[2][1]}`);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('a ride with power: its sprint goes to the table and the finish screen shows the place', async () => {
   const mock = mockSupabase({ profile: PROFILE() });
   const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
