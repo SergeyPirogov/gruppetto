@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#0f1420"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffb23e"/><stop offset="1" stop-color="#ff4d1a"/></linearGradient>
+    <mask id="road"><rect width="64" height="64" fill="#fff"/><path d="M18 57L34 47L25 39L37 30" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></mask>
+  </defs>
+  <g transform="translate(6 4) scale(.82)">
+    <path d="M2 56L22 30L28 36L40 16L62 56Z" fill="url(#g)" stroke="url(#g)" stroke-width="3" stroke-linejoin="round" mask="url(#road)"/>
+    <circle cx="40" cy="9.5" r="5.5" fill="#ffc04d"/>
+  </g>
+</svg>

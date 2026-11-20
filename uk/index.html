@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The link to share in Ukrainian chats: its preview (Telegram, Facebook, Viber) is in Ukrainian, and it opens
+       the app in Ukrainian. The query (utm_campaign=…) goes on to the app, so GoatCounter sees the channel. -->
+  <title>Gruppetto — безкоштовний віртуальний велотренажер</title>
+  <meta name="description" content="Віртуальний велотренажер у браузері, українською й безкоштовно: смарт-тренажери, тренування в ERG, гонки з ботами, групові заїзди й рейтинги областей. Без підписки й встановлення.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Gruppetto">
+  <meta property="og:locale" content="uk_UA">
+  <meta property="og:title" content="Gruppetto — крути вдома безкоштовно, просто в браузері">
+  <meta property="og:description" content="Смарт-тренажери й контролери Zwift, тренування в ERG, гонки з ботами, групові заїзди й рейтинги областей. Українською, без підписки й встановлення.">
+  <meta property="og:url" content="https://automation-remarks.com/gruppetto/uk/">
+  <meta property="og:image" content="https://automation-remarks.com/gruppetto/og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Gruppetto: велосипедист на дорозі в браузері, з потужністю, пульсом і каденсом">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <meta name="theme-color" content="#0d1422">
+  <script>
+    // Ukrainian, unless a language was already chosen in the app's Profile
+    try { if (!localStorage.getItem('gruppetto.lang')) localStorage.setItem('gruppetto.lang', 'uk'); } catch { /* storage blocked */ }
+    location.replace('../' + location.search + location.hash);
+  </script>
+  <style>body { margin: 0; background: #0d1422; color: #e8edf5; font: 16px system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; } a { color: #ff8a1f; }</style>
+</head>
+<body>
+  <p><a href="../">Відкрити Gruppetto</a></p>
+</body>
+</html>

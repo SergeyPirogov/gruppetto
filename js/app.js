@@ -1,0 +1,5967 @@
+import { WIND_CW, bluetoothAvailable, platformOf, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
+import { obcIntents, rideIntent, OBC_LABELS, ctlEntryOf, ctlDevice, ctlMigrate, CTL_LAYOUT, CTL_ACTIONS, CTL_DEFAULTS } from './controls.js';
+import { variant } from './experiments.js';
+import { segmentAll } from './settings-ui.js';
+import { IntervalsClient, activityUrl, localDate } from './intervals.js';
+import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } from './physics.js';
+import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
+import { parseGpx, routeFromTrack, trackKm, MAX_KM, LONG_KM } from './gpx.js';
+import { loadTerrain } from './dem.js';
+import { fetchOsm, OSM_TIMEOUT_MS, OSM_SERVERS } from './osm.js';
+import { PerfLog } from './perf.js';
+import { t as tr, tIn, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
+import { WORKOUT_KINDS, workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
+import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
+/** Heart rate zones in bpm: from intervals.icu when connected, otherwise from the threshold heart rate (Profile). */
+const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNames, lthr: s.lthr });
+import { parseZwo, toZwo } from './zwo.js';
+import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
+import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft, swapDraft, getRoutes, putRoute, deleteRoute } from './ride-store.js';
+import { Recorder, rideFileName, summarize } from './recorder.js';
+import { makeZip } from './zip.js';
+import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
+import { bunchPower, BUNCH } from './bunch.js';
+import { StravaClient, stravaAuthorizeUrl, stravaRedirect, stravaReturn, stravaActivityUrl, STRAVA_STATE } from './strava.js';
+import { GarminClient, garminOn, garminAvailable, garminActivityUrl } from './garmin.js';
+import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
+import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
+import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
+import { BADGES, addRide, addSummary, progressFrom, levelOf, rideXp } from './progress.js';
+import { dailyGoal, goalProgress, streakOf, markDone, localDay } from './daily.js';
+import { PATTERNS, patternOf, patternOpen, patternHow, kitLook, botPattern, jerseysWon } from './kits.js';
+import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
+import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
+import { CLIENT as SOCIAL_CLIENT } from './social.js';
+import { initSocialUi, groupChannel, groupFinish, groupResults, groupStart, groupRow, socialSignIn, GOOGLE_G, socialSettingsSaved, socialDataChanged, socialAfterRide, accountRecord, decorateSummary, renderRoute as socialRoute, socialSegStart, socialSegLeader, versionOf } from './social-ui.js';
+import { DEFAULT_W_PRIME, wbalStep, wbalSeries, timeToEmpty, WARN_SECONDS } from './wbal.js';
+import { Sampler } from './sampler.js';
+import { unlockAudio, beep, say, speechLang, spokenDuration, crowd, crowdOff, audioReady } from './sound.js';
+import { Scene, drawProfile } from './render.js';
+import { standStep } from './standing.js';
+import { gradeRuns } from './grade-color.js';
+import { themeFor } from './themes.js';
+import { routeShape, positionFor } from './geo.js';
+import { pipSupport, pipOpen, openPip, closePip, updatePip, resetPip } from './pip.js';
+import { nextWeather } from './atmo-blend.js';
+import { GEARS, DEFAULT_GEAR, ratioOf, virtualWheelMm, shiftPlan, BASE_WHEEL_MM } from './gears.js';
+import { PASS_AFTER, heldBy, pickLane } from './passing.js';
+import { Mates, packet as groupPacket, catResults, catsIn, resultsText } from './group.js';
+import { ChatLog, Reactions, Watchers, SendGate, QUICK } from './chat.js';
+import { socialOn } from './social.js';
+
+const $ = (id) => document.getElementById(id);
+// units in the interface language
+const U = { km: tr('km'), m: tr('m'), W: tr('W'), bpm: tr('bpm'), rpm: tr('rpm'), min: tr('min'), wkg: tr('W/kg') };
+
+// ---------- Settings ----------
+const DEFAULT_SETTINGS = {
+  name: 'Me', weight: 75, height: 178, ftp: 200, wPrimeKj: DEFAULT_W_PRIME / 1000, maxHr: 0, lthr: 0, difficulty: 50, routeId: 'rolling', mode: 'free',
+  icuKey: '', icuAthlete: '', icuUpload: true, stravaUpload: true, garminUpload: true, stats: true, quality: 'auto', pipMode: 'clean', overlay: false,
+  chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
+  ctlMap: {}, // the Zwift controller buttons you changed (js/controls.js CTL_LAYOUT); the rest keep the Zwift default
+  jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
+  intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+};
+let settings = { ...DEFAULT_SETTINGS };
+try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
+settings.ctlMap = ctlMigrate(settings.ctlMap); // the first version kept pairs (▲ ▼ as one)
+initStats(settings.stats);
+// what breaks in riders' browsers: the message only (no stack, no address)
+window.addEventListener('error', (ev) => track('error', String(ev.message || 'unknown').replace(/https?:\/\/\S+/g, '').slice(0, 80)));
+// the workout pacer used to start switched on: once, switch it off (P or the Pacer button brings him back)
+if (!settings.pacerOffByDefault) {
+  settings.pacer = false; settings.pacerOffByDefault = true;
+  try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ }
+}
+// workout sounds and voice used to start switched off, so few ever heard an interval's countdown: once, on
+if (!settings.soundOnByDefault) {
+  settings.sound = settings.voice = true; settings.soundOnByDefault = true;
+  try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ }
+}
+// ?debug: reach the current ride from devtools (jump along the route when testing laps and climbs)
+if (new URLSearchParams(location.search).has('debug')) {
+  Object.defineProperty(window, '__ride', { get: () => ride });
+  Object.defineProperty(window, '__scene', { get: () => scene });
+  window.__groupRide = (g) => startRide({ group: g }); // a group ride without an account (the browser tests)
+  window.__pretendTrainer = false; // true: a simulator ride counts as a real one for the leaderboards (the browser tests)
+  window.__planDemo = (list) => { icuWorkouts = list; icuClient = icuClient || { demo: true, uploadActivity: async (_, o) => { (window.__icuUploads ||= []).push(o); return null; } }; renderModes(); }; // try the plan box and uploads without an account
+}
+
+// personal bests on this device: { lap: {routeId: seconds}, seg: {climbId: seconds} }
+const records = (() => { try { return JSON.parse(localStorage.getItem('gruppetto.records') || '{}'); } catch { return {}; } })();
+records.lap ||= {}; records.seg ||= {}; records.segTrace ||= {}; records.top ||= {}; // top: best top speed per sprint, km/h
+/** A lap or finish time is real only below 90 km/h on average (a debug jump or a broken import is not a record). */
+const plausibleLap = (t, length) => t > 0 && t >= length / 25;
+/** This route's best lap / finish time, ignoring an impossible one. */
+const bestLap = (r) => { const t = records.lap[r.id]; return t && plausibleLap(t, r.length) ? t : undefined; }; // segTrace: seconds at every 10 m of the record climb
+// routes imported from GPX (#25), kept on this device as plain data: in IndexedDB (a 600 km brevet is ~2 MB, too
+// much for localStorage), each under the account it belongs to; in localStorage only where IndexedDB is missing
+const ROUTES_KEY = 'gruppetto.routes';
+const routeOwner = () => { try { return localStorage.getItem('gruppetto.owner'); } catch { return null; } };
+let routesInDb = false;
+const customDefs = await (async () => {
+  let legacy = [];
+  try { legacy = JSON.parse(localStorage.getItem(ROUTES_KEY) || '[]'); } catch { /* a broken entry: none */ }
+  const recs = await getRoutes();
+  if (!recs) return legacy; // no IndexedDB here (private mode): localStorage as before
+  routesInDb = true;
+  const owner = routeOwner(), mine = recs.filter((r) => r.owner === owner || r.owner == null);
+  // the guest's routes are the first account's to sign in here; routes from before IndexedDB move over
+  for (const r of mine) if (r.owner !== owner) { r.owner = owner; putRoute(r); }
+  let moved = true;
+  for (const d of legacy) if (!mine.some((r) => r.id === d.id)) { const rec = { id: d.id, owner, def: d }; if (await putRoute(rec)) mine.push(rec); else moved = false; }
+  if (moved) try { localStorage.removeItem(ROUTES_KEY); } catch { /* private mode */ }
+  return mine.map((r) => r.def);
+})();
+for (const d of customDefs) { try { routes.push(new Route(d)); } catch { /* skip a broken entry */ } }
+// the route picked is gone (a GPX route deleted, or another account's put aside): the default one, shown as picked
+if (!routes.some((r) => r.id === settings.routeId)) { settings.routeId = (routes.find((r) => r.id === DEFAULT_SETTINGS.routeId) || routes[0]).id; try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } }
+/** Keeps a route just imported; false when there was no room for it. */
+const saveCustomRoute = async (def) => {
+  if (routesInDb) return putRoute({ id: def.id, owner: routeOwner(), def });
+  try { localStorage.setItem(ROUTES_KEY, JSON.stringify(customDefs)); return true; } catch { return false; }
+};
+const forgetCustomRoute = (id) => {
+  if (routesInDb) return deleteRoute(id);
+  try { localStorage.setItem(ROUTES_KEY, JSON.stringify(customDefs)); } catch { /* it was smaller before */ }
+  return null;
+};
+const saveRecords = () => { try { localStorage.setItem('gruppetto.records', JSON.stringify(records)); } catch { /* ignore */ } };
+/** Seconds into a climb at `off` metres, from a record trace (every 10 m) or, without one, an even pace. */
+function traceTime(trace, best, length, off) {
+  if (trace?.length > 1) {
+    const x = Math.max(0, off / TRACE_STEP), i = Math.min(trace.length - 2, Math.floor(x));
+    return trace[i] + (trace[i + 1] - trace[i]) * (x - i);
+  }
+  return best * Math.max(0, Math.min(1, off / length));
+}
+/** Metres into a climb after `t` seconds at the record's pace (the inverse of traceTime). */
+function traceDist(trace, best, length, t) {
+  if (trace?.length > 1) {
+    let i = 0;
+    while (i < trace.length - 2 && trace[i + 1] <= t) i++;
+    const f = trace[i + 1] > trace[i] ? (t - trace[i]) / (trace[i + 1] - trace[i]) : 1;
+    return Math.min(length, (i + Math.max(0, Math.min(1, f))) * TRACE_STEP);
+  }
+  return length * Math.max(0, Math.min(1, t / best));
+}
+const TRACE_STEP = 10;
+// the grade's colour, as climbing apps paint it: green to 2 %, yellow to 4, orange to 7, red to 10, then
+// dark red; flat white, downhill blue
+const gradeColor = (g) => g > 0.1 ? '#e11d48' : g > 0.07 ? '#ef4444' : g > 0.04 ? '#f97316' : g > 0.02 ? '#facc15' : g > 0.005 ? '#4ade80' : g < -0.02 ? '#60a5fa' : '#e8edf5';
+const fmtDelta = (d) => `${d < 0 ? '−' : '+'}${fmtTime(Math.abs(d))}`;
+const writeSettings = () => { try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ } };
+// a change to a setting that follows you to your other devices (name, weight, FTP…) goes up to the account too
+const saveSettings = () => { writeSettings(); socialSettingsSaved(); if (!$('drawer').hidden) renderMeHero(); };
+/** The profile's fields as the settings are now (after the account brought them from another device). */
+function refreshProfileForm() {
+  const fields = [['f-name', 'name'], ['f-jersey', 'jersey'], ['f-stripe', 'stripe'], ['f-weight', 'weight'], ['f-height', 'height'], ['f-ftp', 'ftp'], ['f-wprime', 'wPrimeKj'], ['f-lthr', 'lthr']];
+  for (const [id, key] of fields) if ($(id) && settings[key] !== undefined) $(id).value = settings[key];
+  if ($('f-bike')) $('f-bike').value = settings.bikeColor || settings.jersey;
+}
+
+// ---------- Devices & live data ----------
+const trainer = new Trainer();
+const hrm = new HeartRateMonitor();
+const cadenceSensor = new CadenceSensor();
+const controller = new ZwiftController();
+const obc = new OpenBikeControlDevice();
+const obcState = new Map();
+let lastLobbyUpdate = 0;
+const live = { power: 0, cadence: 0, hr: 0, powerAt: 0, cadAt: 0, hrAt: 0 };
+
+const powerSamples = new Sampler(3000);
+const cadenceSamples = new Sampler(3000);
+const hrSamples = new Sampler(5000);
+
+trainer.addEventListener('data', ({ detail: d }) => {
+  const now = performance.now();
+  if (d.power !== undefined) { live.power = Math.max(0, d.power); live.powerAt = now; powerSamples.add(now, live.power); }
+  if (d.cadence !== undefined && !cadenceSensor.connected) { live.cadence = d.cadence; live.cadAt = now; cadenceSamples.add(now, d.cadence); }
+  if (d.heartRate && !hrm.connected) { live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); }
+  if (d.cadence !== undefined) trainer.sendsCadence = true;
+  if (!ride && now - lastLobbyUpdate > 500) { lastLobbyUpdate = now; updateDeviceUI(); } // live readings in the lobby
+  advance(now); // keeps the ride clock running even when the tab is hidden and frames stop
+});
+hrm.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.hr = d.heartRate; live.hrAt = now; hrSamples.add(now, d.heartRate); if (!ride && now - lastLobbyUpdate > 500) { lastLobbyUpdate = now; updateDeviceUI(); } });
+cadenceSensor.addEventListener('data', ({ detail: d }) => { const now = performance.now(); live.cadence = d.cadence; live.cadAt = now; cadenceSamples.add(now, d.cadence); if (!ride && now - lastLobbyUpdate > 500) { lastLobbyUpdate = now; updateDeviceUI(); } });
+setInterval(() => { if (!ride) updateDeviceUI(); }, 1000); // stale readings fall to 0 / — in the lobby
+controller.addEventListener('press', ({ detail: name }) => onControllerButton(name));
+obc.addEventListener('buttons', ({ detail: changes }) => onObcButtons(changes));
+obc.addEventListener('disconnect', () => obcState.clear());
+
+const DEVICES = [
+  { dev: trainer, key: 'trainer', lost: tr('Trainer disconnected') },
+  { dev: hrm, key: 'hr', lost: tr('Heart rate monitor disconnected') },
+  { dev: cadenceSensor, key: 'cad', lost: tr('Cadence sensor disconnected') },
+  { dev: controller, key: 'ctl', lost: tr('Controller disconnected') },
+  { dev: obc, key: 'obc', lost: tr('OpenBikeControl disconnected') },
+];
+const TRAINER_PROTOCOL = { ftms: 'FTMS', wahoo: 'Wahoo', power: tr('power meter') };
+let lastButtonLabel = '';
+let lastObcLabel = '';
+
+const reconnecting = new Map(); // key -> attempt number
+
+for (const d of DEVICES) {
+  d.dev.addEventListener('disconnect', () => { track('device-drop', d.key); if (ride) saveDraft(); updateDeviceUI(); toast(tr('{what} — reconnecting…', { what: d.lost })); });
+  d.dev.addEventListener('reconnecting', ({ detail: n }) => { reconnecting.set(d.key, n); updateDeviceUI(); });
+  d.dev.addEventListener('reconnected', () => {
+    reconnecting.delete(d.key);
+    if (d.dev === trainer) resyncTrainer();
+    updateDeviceUI();
+    toast(tr('{name}: connection restored ✓', { name: d.dev.name }));
+  });
+  d.dev.addEventListener('reconnect-failed', () => {
+    track('device-lost', d.key);
+    reconnecting.delete(d.key);
+    updateDeviceUI();
+    toast(tr('{name}: could not reconnect — press “Connect” in Devices', { name: d.dev.name }));
+  });
+}
+
+/** After the trainer comes back, send the current mode and target again. */
+function resyncTrainer() {
+  trainer.riderWeight = settings.weight + 8;
+  trainer.resetMode();
+  if (!ride) return;
+  ride.lastSentTarget = null;
+  ride.lastSentGrade = null;
+  ride.lastSentWheel = null;
+}
+
+function deviceStatus(d) {
+  if (reconnecting.has(d.key)) return `${d.dev.name} · ${tr('connection lost, reconnecting (attempt {n})…', { n: reconnecting.get(d.key) })}`;
+  if (d.dev === cadenceSensor && !d.dev.connected && trainer.connected) {
+    // no separate sensor: cadence comes from the trainer automatically
+    if (trainer.sendsCadence) return `${tr('from trainer')} · ${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`;
+    return tr('from trainer · start pedaling (if cadence stays at 0, connect a separate sensor)');
+  }
+  if (!d.dev.connected) return tr('not connected');
+  if (d.dev === trainer) {
+    const resistance = trainer.controllable ? tr('resistance: controlled by the app ✓') : tr('data only, no resistance control');
+    return `${trainer.name} · ${TRAINER_PROTOCOL[trainer.protocol] || ''} · ${resistance} · ${Math.round(fresh(live.power, live.powerAt))} ${U.W}`;
+  }
+  if (d.dev === controller || d.dev === obc) {
+    const label = d.dev === obc ? lastObcLabel : lastButtonLabel;
+    const units = ''; // the units have their own slots
+    const hint = ''; // the second Zwift Ride unit has its own slot under the row (renderCtlUnits)
+    return `${d.dev.name}${units}${label ? ` · ${tr('pressed: {label}', { label })}` : ` · ${tr('press any button')}`}${hint}`;
+  }
+  if (d.dev === hrm) { const hr = fresh(live.hr, live.hrAt); return `${d.dev.name} · ${hr ? `❤ ${hr} ${U.bpm}` : tr('waiting for a reading…')}`; }
+  if (d.dev === cadenceSensor) return `${d.dev.name} · ${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`;
+  return d.dev.name;
+}
+
+/** The controller's units under its row: for a Zwift Ride a slot per hand, each connected or not; any other, a line per unit. */
+// ---------- Controller buttons: what each does, by device ----------
+// the controllers drawn in the middle, the left unit's buttons listed on the left, the right unit's on the
+// right, each with what it does in a select; the button you last pressed (or picked) is lit on both
+let ctlTab = null; // 'click' | 'play' | 'ride'; null: the connected one's
+let ctlSel = null; // the entry lit up
+const CTL_DEV_NAMES = { click: 'Zwift Click', play: 'Zwift Play', ride: 'Zwift Ride' };
+const CTL_FACE = { Y: '#1ba6c9', A: '#22a35a', B: '#d0358f', Z: '#e0582a' };
+const ctlConnectedDev = () => { const u = controller.unitsInfo || []; return u.length ? ctlDevice(u[0].name) : null; };
+/** The units as SVG, with the lit button ringed. */
+function ctlArt(dev, sel) {
+  const ring = (cx, cy, r) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#fbbf24" stroke-width="4"/>`;
+  const defs = '<defs><linearGradient id="ctlg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b3240"/><stop offset="1" stop-color="#161a23"/></linearGradient></defs>';
+  if (dev === 'click') {
+    let s = '<rect x="20" y="10" width="160" height="230" rx="80" fill="url(#ctlg)" stroke="#353e50"/><rect x="88" y="26" width="24" height="6" rx="3" fill="#4fdcf2"/>';
+    for (const [t, cy, id] of [['+', 95, 'plus'], ['−', 170, 'minus']]) {
+      s += `<circle cx="100" cy="${cy}" r="30" fill="#2a3448" stroke="#3a4860"/><text x="100" y="${cy + 10}" text-anchor="middle" font-size="30" font-weight="800" fill="#e8edf5">${t}</text>`;
+      if (sel === id) s += ring(100, cy, 37);
+    }
+    return `<svg viewBox="0 0 200 250" class="ctl-art click" aria-hidden="true">${defs}${s}</svg>`;
+  }
+  const unit = (right) => {
+    if (dev === 'play') {
+      let s = [[46, 58, -45], [194, 58, 45], [46, 186, 45], [194, 186, -45]].map(([x, y, r]) => `<rect x="${x - 22}" y="${y - 14}" width="44" height="28" rx="7" fill="#1a1f2a" stroke="#2c3444" transform="rotate(${r} ${x} ${y})"/>`).join('');
+      s += '<path d="M120 22 C 178 22 212 62 212 116 C 212 158 190 176 176 196 C 166 212 166 250 120 254 C 74 250 74 212 64 196 C 50 176 28 158 28 116 C 28 62 62 22 120 22 Z" fill="url(#ctlg)" stroke="#353e50"/>';
+      s += '<rect x="108" y="38" width="24" height="6" rx="3" fill="#4fdcf2"/><rect x="72" y="66" width="96" height="96" rx="22" fill="#10141c" stroke="#2a3140" stroke-width="2" transform="rotate(45 120 114)"/>';
+      if (right) {
+        for (const [t, cx, cy] of [['Y', 120, 76], ['A', 158, 114], ['B', 120, 152], ['Z', 82, 114]]) {
+          s += `<circle cx="${cx}" cy="${cy}" r="17" fill="${CTL_FACE[t]}"/><text x="${cx}" y="${cy + 6}" text-anchor="middle" font-size="17" font-weight="800" fill="#f2f5fa">${t}</text>`;
+          if (sel === t.toLowerCase()) s += ring(cx, cy, 24);
+        }
+        s += '<path d="M120 222 v16 M112 230 h16" stroke="#e8edf5" stroke-width="3.5" stroke-linecap="round"/>';
+        if (sel === 'plus') s += ring(120, 230, 20);
+      } else {
+        const A = { up: [120, 80], down: [120, 148], left: [86, 114], right: [154, 114] };
+        s += '<path d="M112 84 l8 -7 l8 7 M112 144 l8 7 l8 -7 M90 106 l-7 8 l7 8 M150 106 l7 8 l-7 8" fill="none" stroke="#e8edf5" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>';
+        if (A[sel]) s += ring(...A[sel], 15);
+        s += '<path d="M112 230 h16" stroke="#e8edf5" stroke-width="3.5" stroke-linecap="round"/>';
+        if (sel === 'minus') s += ring(120, 230, 20);
+      }
+      return `<svg viewBox="0 0 240 270" class="ctl-art" aria-hidden="true">${defs}${s}</svg>`;
+    }
+    // a Ride hood, side on: the horn with its lever outside, the flat base with the buttons inside; the right one mirrored
+    const shift = sel === (right ? 'plus' : 'minus'), lever = sel === (right ? 'paddleR' : 'paddleL'), pu = sel === (right ? 'powerUpR' : 'powerUpL');
+    let s = '<path d="M40 250 L40 62 C40 26 60 8 82 8 C106 8 120 26 120 54 L120 118 C120 132 128 140 144 142 L198 150 C216 153 226 166 226 186 L226 222 C226 240 214 250 196 250 Z" fill="url(#ctlg)" stroke="#353e50" stroke-width="1.5"/>';
+    s += `<rect x="58" y="26" width="44" height="150" rx="22" fill="#3b4459" stroke="${lever ? '#fbbf24' : '#4d5873'}" stroke-width="${lever ? 4 : 1}"/><rect x="64" y="44" width="10" height="114" rx="5" fill="#465169"/>`;
+    s += `<rect x="28" y="72" width="16" height="112" rx="7" fill="#151a24" stroke="${shift ? '#fbbf24' : '#3a4860'}" stroke-width="${shift ? 4 : 1.2}"/><line x1="30" y1="128" x2="42" y2="128" stroke="#3a4860" stroke-width="2"/>`;
+    // the grip's ridge on the shoulder, the button pad, and the power-up on top of the horn, above the lever
+    s += '<rect x="138" y="156" width="52" height="12" rx="6" fill="#1b202b" stroke="#2e3646"/><rect x="126" y="178" width="88" height="62" rx="22" fill="#10141c" stroke="#2a3140" stroke-width="2"/>';
+    s += `<rect x="64" y="11" width="36" height="11" rx="5.5" fill="#2a3448" stroke="${pu ? '#fbbf24' : '#4d5873'}" stroke-width="${pu ? 4 : 1.2}"/>`;
+    const mir = (x) => (right ? 240 - x : x);
+    let k = '';
+    if (right) {
+      for (const [t, dx, dy] of [['Y', 0, -17], ['A', 22, 0], ['B', 0, 17], ['Z', -22, 0]]) {
+        const cx = mir(170) + dx, cy = 209 + dy;
+        k += `<circle cx="${cx}" cy="${cy}" r="10" fill="${CTL_FACE[t]}"/><text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="11" font-weight="800" fill="#f2f5fa">${t}</text>`;
+        if (sel === t.toLowerCase()) k += ring(cx, cy, 14);
+      }
+    } else {
+      k += '<path transform="translate(170 209)" d="M-5 -12 l5 -5 l5 5 M-5 12 l5 5 l5 -5 M-18 -5 l-5 5 l5 5 M18 -5 l5 5 l-5 5" fill="none" stroke="#e8edf5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>';
+      const A = { up: [170, 194], down: [170, 224], left: [151, 209], right: [189, 209] };
+      if (A[sel]) k += ring(...A[sel], 10);
+    }
+    return `<svg viewBox="0 0 240 260" class="ctl-art" aria-hidden="true">${defs}${right ? `<g transform="translate(240 0) scale(-1 1)">${s}</g>` : s}${k}</svg>`;
+  };
+  return unit(false) + unit(true);
+}
+function renderCtlMap() {
+  const units = controller.unitsInfo || [], on = units.filter((u) => u.connected);
+  const connectedDev = ctlConnectedDev();
+  const dev = ctlTab || connectedDev || 'play';
+  const map = settings.ctlMap || {}, L = CTL_LAYOUT[dev];
+  $('ctl-map-tabs').innerHTML = Object.entries(CTL_DEV_NAMES).map(([d, n]) => `<button role="tab" data-dev="${d}" class="${d === dev ? 'on' : ''}" aria-selected="${d === dev}">${n}</button>`).join('');
+  $('ctl-map-note').textContent = dev === connectedDev && on.length
+    ? `${CTL_DEV_NAMES[dev]} · ${on.length > 1 ? tr('{n} units connected', { n: on.length }) : tr('connected')}`
+    : tr('Not connected: you can set it up ahead');
+  const opts = (v) => CTL_ACTIONS.map(([id, label]) => `<option value="${id}"${id === v ? ' selected' : ''}>${esc(tr(label))}</option>`).join('');
+  const mark = (e) => `<span class="ctl-key${CTL_FACE[e.mark] ? ` face` : ''}"${CTL_FACE[e.mark] ? ` style="background:${CTL_FACE[e.mark]}"` : ''}>${e.mark}</span>`;
+  const col = (side, list) => `<div class="ctl-col ${side}">${list.map((e) => `<label class="ctl-row${ctlSel === e.id ? ' hit' : ''}" data-id="${e.id}">${mark(e)}<span class="ctl-pick"><small>${esc(tr(e.name))}</small><select data-id="${e.id}">${opts(map[e.id] || CTL_DEFAULTS[e.id])}</select></span></label>`).join('')}</div>`;
+  $('ctl-map-body').innerHTML = col('L', L.L) + `<div class="ctl-mid ${dev}">${ctlArt(dev, ctlSel)}</div>` + col('R', L.R);
+  $('ctl-map-body').className = `ctl-map-body ${dev}`;
+  const changed = Object.keys(map).filter((k) => [...L.L, ...L.R].some((e) => e.id === k) && map[k] !== CTL_DEFAULTS[k]).length;
+  $('ctl-map-changed').textContent = changed ? tr('{n} changed from Zwift', { n: changed }) : tr('As in Zwift');
+}
+$('ctl-map-tabs').onclick = (e) => { const b = e.target.closest('[data-dev]'); if (b) { ctlTab = b.dataset.dev; renderCtlMap(); } };
+$('ctl-map-body').onchange = (e) => {
+  const sel = e.target.closest('select[data-id]');
+  if (!sel) return;
+  const map = { ...(settings.ctlMap || {}) };
+  if (sel.value === CTL_DEFAULTS[sel.dataset.id]) delete map[sel.dataset.id]; else map[sel.dataset.id] = sel.value;
+  settings.ctlMap = map; saveSettings();
+  ctlSel = sel.dataset.id; renderCtlMap();
+};
+$('ctl-map-body').addEventListener('focusin', (e) => {
+  const sel = e.target.closest('select[data-id]');
+  if (sel && ctlSel !== sel.dataset.id) { ctlSel = sel.dataset.id; for (const r of $('ctl-map-body').querySelectorAll('.ctl-row')) r.classList.toggle('hit', r.dataset.id === ctlSel); $('ctl-map-body').querySelector('.ctl-mid').innerHTML = ctlArt(ctlTab || ctlConnectedDev() || 'play', ctlSel); }
+});
+$('ctl-map-reset').onclick = () => { settings.ctlMap = {}; saveSettings(); renderCtlMap(); toast(tr('Buttons back to the Zwift defaults')); };
+/** A press while the panel is on screen: the button lights up, on the drawing and in its list. */
+function ctlMapHit(button) {
+  const box = $('ctl-map');
+  if (!box || !box.offsetParent) return;
+  const e = ctlEntryOf(button);
+  if (!e) return;
+  const dev = ctlConnectedDev();
+  if (dev && ctlTab && ctlTab !== dev) ctlTab = dev;
+  ctlSel = e.id; renderCtlMap();
+  $('ctl-map-body').querySelector(`.ctl-row[data-id="${e.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function renderCtlUnits() {
+  const box = $('ctl-units'), units = controller.unitsInfo || [];
+  const ride = units.some((u) => /ride/i.test(u.name));
+  box.hidden = !units.length;
+  if (!units.length) { box.innerHTML = ''; return; }
+  const slot = (label, u) => `<li class="${u?.connected ? 'ok' : ''}"><i></i><b>${label}</b><span>${u ? (u.connected ? tr('connected') : tr('not connected')) : tr('not connected')}</span></li>`;
+  if (ride) {
+    // the hand is known once a button on it is pressed; until then the units fill the slots in order
+    const left = units.find((u) => u.side === 'left'), right = units.find((u) => u.side === 'right');
+    const rest = units.filter((u) => u !== left && u !== right);
+    const L = left || rest.shift(), R = right || rest.shift();
+    box.innerHTML = slot(tr('Left unit'), L) + slot(tr('Right unit'), R)
+      + (controller.count === 2 ? '' : `<li class="ctl-tip">${tr('A Zwift Ride is two units: connect the second with “+ controller”, then press a button on each')}</li>`);
+  } else box.innerHTML = units.map((u) => slot(esc(u.name), u)).join('');
+}
+
+/** A live reading, or 0 once it is older than 3 s (the trainer stops sending when you stop pedalling). */
+const fresh = (v, at) => (performance.now() - at < 3000 ? v : 0);
+
+function updateDeviceUI() {
+  // mid-ride: a device the ride started with that dropped shows a button to its panel, so it can be reconnected without stopping
+  const lost = ride ? DEVICES.filter((d) => ride.devs?.has(d.key) && !d.dev.connected) : [];
+  const alert = $('btn-dev-lost');
+  alert.hidden = !lost.length;
+  if (lost.length) alert.textContent = `⚠ ${lost.map((d) => d.lost).join(' · ')}`;
+  for (const d of DEVICES) {
+    const btn = $(`btn-${d.key}`);
+    $(`${d.key}-status`).textContent = deviceStatus(d);
+    // cadence from the trainer counts as connected; the button then offers a separate sensor instead
+    const viaTrainer = d.dev === cadenceSensor && !d.dev.connected && trainer.connected;
+    btn.textContent = d.dev.connected ? tr('Disconnect') : viaTrainer ? tr('Change') : tr('Connect');
+    btn.title = viaTrainer ? tr('Connect a separate cadence sensor instead of the trainer') : '';
+    btn.classList.toggle('ok', !d.dev.connected && viaTrainer); // "Change": the cadence comes from the trainer
+    btn.classList.toggle('danger', d.dev.connected); // "Disconnect" in red
+  }
+  // a Zwift Ride is two units: offer to add the other one while fewer than two are connected
+  $('btn-ctl-add').hidden = !(controller.connected && controller.count < 2);
+  renderCtlUnits();
+  renderCtlMap();
+  // a card per device on the Devices page: lit when it is connected
+  for (const d of DEVICES) {
+    const on = d.dev.connected || (d.dev === cadenceSensor && trainer.connected);
+    $(`btn-${d.key}`)?.closest('.device')?.classList.toggle('on', on);
+    const st = $(`${d.key}-state`), lv = $(`${d.key}-live`);
+    if (st) st.textContent = reconnecting.has(d.key) ? tr('reconnecting…') : d.dev.connected ? tr('connected') : on ? tr('from trainer') : tr('not connected');
+    // the live reading, big on the card's right
+    if (lv) lv.textContent = !on ? '' : d.dev === trainer ? `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`
+      : d.dev === hrm ? `${fresh(live.hr, live.hrAt) || '—'}` : d.dev === cadenceSensor ? `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}`
+      : '';
+    // the long line only when it says more than the state above it
+    const note = $(`${d.key}-status`);
+    if (note) note.hidden = note.textContent === tr('not connected');
+  }
+  // lobby top bar: a dot per device, lit when connected
+  // with the live reading on the chip, so you see at a glance that each one is working
+  const reading = { trainer: () => `${Math.round(fresh(live.power, live.powerAt))} ${U.W}`, hr: () => { const v = fresh(live.hr, live.hrAt); return v ? `❤ ${v}` : '—'; }, cad: () => `${Math.round(fresh(live.cadence, live.cadAt))} ${U.rpm}` };
+  for (const d of DEVICES) {
+    const chip = document.querySelector(`.dev-chip[data-key="${d.key}"]`);
+    if (!chip) continue;
+    const on = d.dev.connected || (d.dev === cadenceSensor && trainer.connected);
+    chip.classList.toggle('on', on);
+    let val = chip.querySelector('.chip-val');
+    if (!val) { val = document.createElement('b'); val.className = 'chip-val'; chip.append(val); }
+    val.textContent = on && reading[d.key] ? reading[d.key]() : '';
+  }
+  renderRailDots();
+  // nothing to ride on: the trainer's chip asks to be connected
+  document.querySelector('.dev-chip[data-key="trainer"]')?.classList.toggle('need', !trainer.connected && !$('sim').checked);
+}
+
+/** A setting changed during a ride: takes effect now, not at the next start. */
+function applyLive(key) {
+  if (!ride) return;
+  if (key === 'weight' || key === 'height') {
+    ride.cda = riderCdA(settings.height, settings.weight);
+    trainer.riderWeight = settings.weight + 8;
+    trainer.resetMode(); // the trainer's road model gets the new weight with the next grade
+    ride.lastSentGrade = null;
+  }
+  if (key === 'ftp' && ride.workout && !ride.workoutDone) {
+    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+    if (t) ride.target = ergTarget(t);
+    ride.lastSentTarget = null;
+  }
+  if (key === 'difficulty') ride.lastSentGrade = null;
+  if (key === 'shiftMode' || key === 'chainring' || key === 'cog') {
+    ride.shiftMode = settings.shiftMode;
+    ride.lastSentGrade = null; ride.lastSentWheel = null;
+    updateGear();
+  }
+  if (key === 'style') scene?.setStyle?.(settings.style);
+  if (key === 'camera') scene?.setCamera?.(settings.camera);
+  if (key === 'timeOfDay' || key === 'weather') scene?.setAtmosphere?.(settings.timeOfDay, weatherNow());
+}
+
+/** Remembered device ids per slot (the browser decides whether it still allows them). */
+const rememberDevice = (d) => { settings.devices = { ...(settings.devices || {}), [d.key]: d.dev.device?.id }; saveSettings(); };
+const forgetDevice = (d) => { if (settings.devices) { delete settings.devices[d.key]; saveSettings(); } };
+
+/** Try to connect a remembered device without the chooser. */
+async function reopenRemembered(d) {
+  const id = settings.devices?.[d.key];
+  if (!id) return false;
+  const known = (await knownDevices()).find((k) => k.id === id);
+  if (!known) return false;
+  try {
+    if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
+    await d.dev.reopen(known);
+    return true;
+  } catch { return false; }
+}
+
+/** On page load: quietly reconnect every remembered device that is in range. A device that is off or asleep
+ *  then is picked up as soon as it wakes: its advertisements are watched where Chrome allows it, and every
+ *  15 s it is tried again, in the lobby and mid-ride (after the trainer's own retries gave up). */
+let autoBusy = false;
+async function autoConnectRemembered({ quiet = false } = {}) {
+  if (autoBusy) return;
+  autoBusy = true;
+  try {
+    for (const d of DEVICES) {
+      if (d.dev.connected || reconnecting.has(d.key) || !settings.devices?.[d.key] || (ride && !ride.devs?.has(d.key))) continue; // mid-ride: only what it started with
+      if (!quiet) $(`${d.key}-status`).textContent = tr('connecting remembered device…');
+      const ok = await reopenRemembered(d);
+      if (ok && d.dev === trainer) { if (ride) resyncTrainer(); else $('sim').checked = false; } // mid-ride: the target and grade again
+      if (!ok) watchRemembered(d);
+      updateDeviceUI();
+    }
+  } finally { autoBusy = false; }
+}
+const watching = new Set();
+async function watchRemembered(d) {
+  const id = settings.devices?.[d.key];
+  const known = id && (await knownDevices()).find((k) => k.id === id);
+  if (!known?.watchAdvertisements || watching.has(id)) return;
+  watching.add(id);
+  known.addEventListener('advertisementreceived', () => { if (!d.dev.connected) autoConnectRemembered({ quiet: true }); });
+  try { await known.watchAdvertisements(); } catch { watching.delete(id); }
+}
+setInterval(() => { if (bluetoothAvailable() && DEVICES.some((d) => !d.dev.connected && settings.devices?.[d.key] && (!ride || ride.devs?.has(d.key)))) autoConnectRemembered({ quiet: true }); }, 15000);
+
+async function toggleDevice(d, { add = false } = {}) {
+  const btn = add ? $('btn-ctl-add') : $(`btn-${d.key}`);
+  if (!add && (d.dev.connected || reconnecting.has(d.key))) { d.dev.disconnect(); reconnecting.delete(d.key); forgetDevice(d); updateDeviceUI(); return; }
+  btn.disabled = true;
+  btn.textContent = tr('Searching…');
+  let error = null;
+  try {
+    if (d.dev === trainer) trainer.riderWeight = settings.weight + 8;
+    if (d.dev === trainer) trainer.sendsCadence = false;
+    if (add || !(await reopenRemembered(d))) await d.dev.connect(); // a second Zwift Ride unit always goes through the chooser
+    if (!add) rememberDevice(d);
+    track('device-connect', d.key);
+    if (ride) ride.devs?.add(d.key); // connected mid-ride: kept connected through it too
+    if (d.dev === trainer) $('sim').checked = false;
+  } catch (e) {
+    if (!(e.name === 'NotFoundError' && /cancel/i.test(e.message))) error = e; // ignore only a cancelled chooser
+  } finally {
+    btn.disabled = false;
+    if (add) btn.textContent = tr('+ controller');
+    updateDeviceUI();
+    if (error) {
+      const noService = error.name === 'NotFoundError' || /service|characteristic/i.test(error.message);
+      $(`${d.key}-status`).textContent = noService && $('show-all').checked
+        ? tr('This device does not have the required service. Choose another one')
+        : tr('Could not connect: {error}', { error: error.message });
+    }
+  }
+}
+
+// ---------- Lobby ----------
+function initLobby() {
+  // Bluetooth works but Chrome can't reopen remembered sensors without its permissions flag
+  if (bluetoothAvailable() && !navigator.bluetooth.getDevices) {
+    $('autoconnect-hint').hidden = false;
+    $('copy-flag').onclick = async () => {
+      try { await navigator.clipboard.writeText('chrome://flags/#enable-web-bluetooth-new-permissions-backend'); $('copy-flag').textContent = tr('Copied'); } catch { /* clipboard blocked */ }
+    };
+  }
+  if (!bluetoothAvailable()) {
+    $('bt-warning').hidden = false;
+    for (const d of DEVICES) $(`btn-${d.key}`).disabled = true;
+    $('sim').checked = true;
+  }
+  for (const d of DEVICES) $(`btn-${d.key}`).onclick = () => toggleDevice(d);
+  $('btn-ctl-add').onclick = () => toggleDevice(DEVICES.find((d) => d.dev === controller), { add: true });
+  $('show-all').onchange = () => setShowAllDevices($('show-all').checked);
+  if (bluetoothAvailable()) autoConnectRemembered();
+
+  const bind = (id, key, num = true) => {
+    const el = $(id);
+    el.value = settings[key];
+    el.oninput = () => { settings[key] = num ? Number(el.value) : el.value; saveSettings(); refreshDiff(); applyLive(key); };
+  };
+  bind('f-name', 'name', false);
+  bind('f-jersey', 'jersey', false);
+  bind('f-stripe', 'stripe', false);
+  bind('f-bike', 'bikeColor', false);
+  $('f-bike').value = settings.bikeColor || settings.jersey; // until one is picked, the frame wears the jersey's colour
+  bind('f-tape', 'tapeColor', false);
+  bind('f-decal', 'decalColor', false);
+  $('f-decal').value = settings.decalColor || settings.stripe; // until one is picked, the wheel lettering wears the accent
+  bind('f-helmet', 'helmetColor', false);
+  bind('f-lens', 'lensColor', false);
+  bind('f-figure', 'figure', false);
+  $('f-figure').addEventListener('input', renderFigure);
+  bind('f-weight', 'weight');
+  bind('f-height', 'height');
+  bind('f-ftp', 'ftp');
+  $('f-ftp').addEventListener('input', () => { settings.ftpSet = true; saveSettings(); renderFtpBox(); });
+  bind('f-wprime', 'wPrimeKj');
+  bind('f-lthr', 'lthr');
+  bind('f-diff', 'difficulty');
+  bind('f-chainring', 'chainring');
+  bind('f-cog', 'cog');
+  bind('f-shift', 'shiftMode', false);
+  // gears on the bike: the chainring and cog say nothing then
+  const gearFields = () => {
+    const off = settings.shiftMode === 'off';
+    for (const el of document.querySelectorAll('.gear-teeth')) el.hidden = off;
+    $('gears-note').hidden = off; $('gears-note-off').hidden = !off;
+  };
+  $('f-shift').addEventListener('input', gearFields);
+  gearFields();
+  $('f-power-avg').value = String(boardAvg());
+  $('f-power-avg').onchange = () => { settings.powerAvg = +$('f-power-avg').value; saveSettings(); if (ride?.lastHud) updateHud(...ride.lastHud); };
+  $('f-shift-buttons').checked = settings.shiftButtons !== false;
+  $('f-shift-buttons').onchange = () => { settings.shiftButtons = $('f-shift-buttons').checked; saveSettings(); if (ride) updateGear(); };
+  bind('f-style', 'style', false);
+  bind('f-camera', 'camera', false);
+  bind('f-time', 'timeOfDay', false);
+  bind('f-quality', 'quality', false);
+  // a new setting (pipMode), so the clean window is everyone's default, also for those who had the sharp one saved
+  $('f-pip').value = settings.pipMode === 'sharp' ? 'sharp' : 'clean';
+  $('f-pip').onchange = () => { settings.pipMode = $('f-pip').value; saveSettings(); };
+  $('f-quality').addEventListener('change', () => scene?.setQuality?.(settings.quality));
+  $('f-time').addEventListener('change', renderTimeHint);
+  renderTimeHint();
+  bind('f-weather', 'weather', false);
+  bind('f-wind', 'wind', false);
+  $('f-wind').addEventListener('change', () => { if (ride?.wind) { ride.wind.base = windBase(); updateWindHud(); } }); // takes effect mid-ride too
+  bind('f-bots', 'bots');
+  // the pixel 3D style squares off the interface too (square corners, hard shadows)
+  const pixelUi = () => document.body.classList.toggle('pixel-ui', settings.style === 'pixel');
+  const refreshDiff = () => { $('diff-val').textContent = `${settings.difficulty}%`; renderModes(); pixelUi(); };
+  refreshDiff();
+
+  renderRouteList();
+  $('gpx-file').addEventListener('change', importGpx);
+  showRoute();
+  initDrawer();
+  renderHistory();
+  $('sim').addEventListener('change', updateDeviceUI);
+
+  // «Ride» on the button is the verb: in Ukrainian «Поїхали» (its own key), not «Заїзд», the noun the word is elsewhere
+  const rideVerb = lang === 'en' ? 'Ride' : tr('Ride (go)');
+  $('btn-start').textContent = rideVerb;
+  $('btn-start').onclick = startRide;
+  // from the Watch & ride page (watch.html, ?start=watch): the big button is Watch & ride, the ▾ menu has the 3D ride
+  if (new URLSearchParams(location.search).get('start') === 'watch' && (pipSupport() || settings.overlay)) {
+    $('btn-start').textContent = `📺 ${tr('Watch & ride')}`;
+    $('btn-start').onclick = () => startRide({ watch: true });
+    $('start-watch').innerHTML = `<b>${rideVerb}</b><small>${tr('On the 3D road')}</small>`;
+    $('start-watch').onclick = () => { $('start-menu').hidden = true; startRide(); };
+  }
+  updateDeviceUI();
+  initIntervals();
+  initStrava();
+  initGarmin();
+}
+
+/** The "From Strava" route import in the route list; hidden until Strava's rate limits are sorted. */
+const STRAVA_ROUTES = false;
+/**
+ * The route cards (Lobby A): your own routes first, with Import GPX, then every built-in route in one grid,
+ * flat to mountain and shortest first in each. The tabs over them show one kind at a time.
+ */
+function renderRouteList() {
+  const rl = $('route-list');
+  rl.innerHTML = '';
+  // one height scale for the cards, so a flat route looks flat; at 40 % of the tallest route's rise,
+  // so rolling hills still read as hills and only the passes fill the box
+  const cardScale = 0.4 * Math.max(...routes.filter((r) => !r.custom).map((r) => r.maxElev - r.minElev));
+  const order = ROUTE_GROUPS.map((g) => g.id);
+  const card = (r) => {
+    const b = document.createElement('button');
+    b.className = 'option';
+    b.dataset.id = r.id;
+    b.dataset.group = r.custom ? 'mine' : r.group;
+    const best = bestLap(r);
+    const tag = r.custom ? '<em class="rc-gpx">GPX</em>'
+      : best ? `<em class="rc-best" title="${esc(r.oneWay ? tr('Your best finish') : tr('Your best lap'))}">🏆 ${fmtTime(best)}</em>` : '';
+    b.innerHTML = `<span class="rc-head"><b>${esc(r.name)}</b>${tag}</span><small>${(r.length / 1000).toFixed(r.custom || r.length < 1000 ? 1 : 0)} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}</small><canvas></canvas>`
+      + (r.custom ? `<span class="rc-del" title="${tr('Delete this route')}" role="button">✕</span>` : '');
+    b.title = r.description || '';
+    b.onclick = (ev) => {
+      if (ev.target.classList.contains('rc-del')) { deleteCustomRoute(r); return; }
+      settings.routeId = r.id; saveSettings(); markRoute(); showRoute(); renderChallenge();
+    };
+    requestAnimationFrame(() => drawProfile(b.querySelector('canvas'), r, [], r.custom ? '#8b5cf6aa' : `${themeFor(r.theme).accent}99`, cardScale));
+    return b;
+  };
+  const section = (id, head) => {
+    const sec = document.createElement('div');
+    sec.className = 'route-group';
+    sec.dataset.group = id;
+    sec.innerHTML = `<h3>${head}</h3><div class="options route-cards"></div>`;
+    rl.append(sec);
+    return sec.querySelector('.route-cards');
+  };
+  // yours: a real road from a GPX, with the map's buildings and woods along it
+  const mine = routes.filter((r) => r.custom).sort((a, b) => a.length - b.length);
+  const box = section('mine', `<span>${tr('My routes')}</span><small class="rg-hint">${tr('your GPX: real climbs, buildings and woods from the map')}</small>`);
+  for (const r of mine) box.append(card(r));
+  const add = document.createElement('label');
+  add.className = 'option rc-import';
+  add.innerHTML = `<b>＋ ${tr('Import GPX')}</b><small>${tr('A real road from Strava, Komoot or Garmin, up to 600 km')}</small>`;
+  add.htmlFor = 'gpx-file';
+  box.append(add);
+  // your own routes on Strava (as in Slipstream): pick one, and it comes in as a GPX would.
+  // Off for now: Strava's API rate limits are not sorted yet; set STRAVA_ROUTES back to true then.
+  if (STRAVA_ROUTES && !$('strava-card').hidden) {
+    const st = document.createElement('button');
+    st.className = 'option rc-import rc-strava';
+    st.innerHTML = `<b>＋ ${tr('From Strava')}</b><small>${stravaClient ? tr('One of your routes on Strava') : tr('Connect Strava, then pick one of your routes')}</small>`;
+    st.onclick = () => (stravaClient ? openStravaRoutes() : (location.href = stravaAuthorizeUrl(stravaRedirect())));
+    box.append(st);
+  }
+  const built = routes.filter((r) => !r.custom).sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group) || a.length - b.length);
+  const all = section('built', `<span>${tr('Gruppetto routes')} · <i class="rg-n">${built.length}</i></span>`);
+  for (const r of built) all.append(card(r));
+  markRoute();
+  filterRoutes();
+}
+
+// ---------- the routes' tabs: all, yours, or one kind ----------
+const RF_KEY = 'gruppetto.route-filter';
+let routeFilter = (() => { try { return localStorage.getItem(RF_KEY) || 'all'; } catch { return 'all'; } })();
+function filterRoutes() {
+  const count = (g) => document.querySelectorAll(`#route-list .option[data-id][data-group="${g}"]`).length;
+  for (const b of document.querySelectorAll('[data-rf]')) {
+    const g = b.dataset.rf, n = g === 'all' ? 0 : count(g);
+    // a kind with no routes (no mountains yet) has no tab; My routes always has one (it holds Import GPX)
+    b.hidden = g !== 'all' && g !== 'mine' && !n;
+    b.dataset.n = n || '';
+  }
+  if (routeFilter !== 'all' && document.querySelector(`[data-rf="${routeFilter}"]`)?.hidden) routeFilter = 'all';
+  for (const b of document.querySelectorAll('[data-rf]')) b.classList.toggle('sel', b.dataset.rf === routeFilter);
+  const kind = !['all', 'mine'].includes(routeFilter);
+  for (const sec of document.querySelectorAll('.route-group')) sec.hidden = sec.dataset.group === 'mine' ? kind : routeFilter === 'mine';
+  let shown = 0;
+  for (const el of document.querySelectorAll('.route-group[data-group="built"] .option[data-id]')) {
+    el.hidden = kind && el.dataset.group !== routeFilter;
+    if (!el.hidden) shown++;
+  }
+  const n = document.querySelector('.route-group[data-group="built"] .rg-n');
+  if (n) n.textContent = shown;
+}
+for (const b of document.querySelectorAll('[data-rf]')) {
+  b.onclick = () => { routeFilter = b.dataset.rf; try { localStorage.setItem(RF_KEY, routeFilter); } catch { /* private mode */ } filterRoutes(); };
+}
+
+/** Climb names in the interface language ("Climb 2" -> "Підйом 2"), and an imported route's description. */
+function localizeClimbs(r) {
+  if (r.custom) {
+    const src = r.elevSource || (/no elevation/.test(r.description) ? 'none' : 'gpx');
+    const from = tr({ none: 'Imported from GPX (no elevation data in the file, so flat).', terrain: 'Imported from GPX (elevation from a terrain model).', gpx: 'Imported from GPX.' }[src]);
+    const km = (r.length / 1000).toFixed(1);
+    r.description = `${from} ${r.oneWay ? tr('Point to point, finish at {km} km.', { km }) : tr('A loop of {km} km: ride it lap after lap.', { km })}`;
+  }
+  for (const c of r.climbs) { const m = /^Climb (\d+)$/.exec(c.name); c.name = m ? tr('Climb {n}', { n: m[1] }) : tr(c.name); }
+  for (const s of r.sprints || []) { const m = /^Sprint (\d+)$/.exec(s.name); s.name = m ? tr('Sprint {n}', { n: m[1] }) : tr(s.name); }
+}
+
+function markRoute() {
+  for (const el of $('route-list').querySelectorAll('.option[data-id]')) el.classList.toggle('sel', el.dataset.id === settings.routeId);
+}
+
+let restoreStart = null;
+let importing = false; // a GPX being built into a route: no ride starts till it is done
+async function importGpx(ev) {
+  const file = ev.target.files?.[0];
+  ev.target.value = '';
+  if (!file) return;
+  await importGpxText(await file.text(), file.name);
+}
+
+/** A GPX made into a route of your own: from a file, or a route of yours on Strava. */
+async function importGpxText(text, fileName) {
+  restoreStart = null;
+  const file = { name: fileName };
+  try {
+    const track = parseGpx(text);
+    // a brevet up to 600 km, but one long route at a time: each is megabytes on this device
+    const km = trackKm(track.points);
+    if (km > MAX_KM + 5) throw new Error(tr('The track is longer than {n} km', { n: MAX_KM }));
+    const replaces = km > LONG_KM ? routes.find((r) => r.custom && r.length > LONG_KM * 1000) : null;
+    if (replaces && !confirm(tr('One route over {n} km is kept at a time. Replace “{name}” with this one?', { n: LONG_KM, name: replaces.name }))) return;
+    // real elevations from a terrain model along the road (#25); without a network, the file's own
+    // and the woods, water and buildings beside it from OpenStreetMap; each is optional
+    // no riding off on the previously chosen route while this one is still being built
+    const start = $('btn-start'), more = $('btn-start-more'), startText = start.textContent;
+    importing = true; start.disabled = more.disabled = true; $('start-menu').hidden = true; start.textContent = tr('Importing GPX…');
+    restoreStart = () => { importing = false; start.disabled = more.disabled = false; start.textContent = startText; };
+    // what the import waits for, said plainly: the heights come in tiles (a count), the map is one query to a
+    // public server that answers all at once, so it has no progress of its own, only a limit: each server is
+    // waited for OSM_TIMEOUT_MS, then the next. The bar runs to the longest the import can still take
+    const t0 = performance.now();
+    let tiles = '…', mapState = 'wait', server = 1, servers = OSM_SERVERS, tryAt = t0, tilesDone = 0, tilesTotal = 0;
+    let building = false, frac = 0;
+    const show = () => {
+      const now = performance.now(), gone = (now - t0) / 1000;
+      // the map: what is left of this server's wait and the whole waits of the servers after it (a limit, not a guess)
+      const mapLeft = mapState === 'wait' ? Math.max(0, OSM_TIMEOUT_MS - (now - tryAt)) / 1000 + (servers - server) * OSM_TIMEOUT_MS / 1000 : 0;
+      // the heights: at the pace the tiles came so far
+      const hLeft = tilesTotal && tilesDone < tilesTotal && tilesDone ? gone * (tilesTotal - tilesDone) / tilesDone : 0;
+      const left = Math.max(mapLeft, hLeft);
+      // never back: a server that failed fast only shortens the limit; the road being built holds it near the end
+      frac = building ? Math.max(frac, .97) : Math.max(frac, Math.min(.97, gone / (gone + left || 1)));
+      const t = Math.ceil(left), clock = t >= 60 ? `${Math.floor(t / 60)} ${U.min} ${t % 60} ${tr('s')}` : `${t} ${tr('s')}`;
+      const note = building || !t ? '' : mapLeft ? tr('up to {t} left', { t: clock }) : tr('≈ {t} left', { t: clock });
+      // one row per step: a spinner while it runs, a tick when done, a dash when it went without
+      const heights = tiles === '…' ? ['run', tr('Heights'), ''] : tiles === tr('from the file') ? ['off', tr('Heights'), tiles] : [/✓/.test(tiles) ? 'ok' : 'run', tr('Heights'), tiles.replace('✓ ', '')];
+      const map = [mapState === 'ok' ? 'ok' : mapState === 'wait' ? 'run' : 'off', tr('Buildings, woods and water from the map'),
+        mapState === 'ok' ? '' : mapState === 'off' ? tr('unavailable, simple scenery')
+          : servers > 1 && server > 1 ? tr('server {i} of {n}', { i: server, n: servers }) : ''];
+      const rows = [heights, map, ...(building ? [['run', tr('Building the road…'), '']] : [])];
+      const el = $('lobby-msg');
+      el.innerHTML = `<div class="imp"><div class="imp-main"><b class="imp-title">${esc(tr('Importing {name}', { name: track.name || file.name }))}</b>`
+        + `<ul class="imp-steps">${rows.map(([st, what, more]) => `<li class="imp-${st}"><i aria-hidden="true"></i><span>${esc(what)}</span>${more ? `<small>${esc(more)}</small>` : ''}</li>`).join('')}</ul>`
+        + `<div class="imp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(frac * 100)}"><span style="width:${(frac * 100).toFixed(1)}%"></span></div>`
+        + `${note ? `<small class="imp-left">${esc(note)}</small>` : ''}</div></div>`;
+      el.hidden = false; el.classList.add('info'); clearTimeout(alertBox.t);
+    };
+    show();
+    const clock = setInterval(() => { if (!building) show(); }, 1000);
+    let elevation, osm;
+    try {
+      [elevation, osm] = await Promise.all([
+        loadTerrain(track.points, { z: km > LONG_KM ? 12 : 13, onProgress: (done, total) => { tilesDone = done; tilesTotal = total; tiles = done >= total ? `✓ ${total}/${total}` : `${done}/${total}`; show(); } })
+          .then((e) => { if (tiles === '…') { tiles = '✓'; show(); } return e; })
+          .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); tiles = tr('from the file'); show(); return null; }),
+        fetchOsm(track.points, { onTry: (i, n) => { server = i; servers = n; tryAt = performance.now(); show(); } })
+          .then((d) => { mapState = 'ok'; show(); return d; })
+          .catch((err) => { console.info('Map data unavailable, generic scenery', err); mapState = 'off'; show(); return null; }),
+      ]);
+    } finally { clearInterval(clock); }
+    // building the road and its scenery holds the page a moment: say so, and let the message paint first
+    building = true; show();
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+    const def = routeFromTrack(track, file.name, { elevation, osm });
+    $('lobby-msg').hidden = true;
+    const route = new Route(def);
+    localizeClimbs(route);
+    customDefs.push(def);
+    // the relief is the biggest part of a route in storage: when it does not fit, keep the route without it (it
+    // behaves like a route from before the relief existed, with random hills)
+    if (!(await saveCustomRoute(def)) && !(delete def.relief && (await saveCustomRoute(def)))) { customDefs.pop(); throw new Error(tr('Not enough browser storage for this route')); }
+    if (replaces) removeCustomRoute(replaces);
+    routes.push(route);
+    settings.routeId = route.id; saveSettings();
+    renderRouteList(); showRoute();
+    $('route-list').querySelector('.sel')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } catch (e) {
+    alertBox(tr('Could not import {file}: {error}', { file: file.name, error: tr(e.message) }));
+  } finally {
+    restoreStart?.();
+  }
+}
+
+/** The picker of your Strava routes: name, length and climbing; one tapped comes in as a route. */
+async function openStravaRoutes() {
+  const box = $('strava-routes'), list = $('sr-list');
+  box.hidden = false;
+  list.innerHTML = `<p class="muted">${esc(tr('Loading your routes…'))}</p>`;
+  track('strava', 'routes');
+  let routesOnStrava;
+  try { routesOnStrava = await stravaClient.routes(); } catch (e) {
+    list.innerHTML = `<p class="muted">${esc(tr('Could not load your Strava routes: {error}', { error: e.message }))}</p>`;
+    return;
+  }
+  const hint = `<p class="hint">${esc(tr('Only seeing public routes? Reconnect Strava to see your private ones (Profile → Connections).'))}</p>`;
+  if (!routesOnStrava.length) { list.innerHTML = `<p class="muted">${esc(tr('No ride routes on your Strava yet. Make one in Strava\'s route builder.'))}</p>${hint}`; return; }
+  list.innerHTML = routesOnStrava.map((r) => `<button class="option sr-row" data-id="${esc(r.id)}" ${r.distance > MAX_KM * 1000 ? 'disabled' : ''}>`
+    + `<b>${r.starred ? '★ ' : ''}${esc(r.name)}</b><small>${(r.distance / 1000).toFixed(1)} ${U.km} · ↗ ${Math.round(r.gain)} ${U.m}${r.distance > MAX_KM * 1000 ? ` · ${esc(tr('over {n} km', { n: MAX_KM }))}` : ''}</small></button>`).join('') + hint;
+  list.onclick = async (ev) => {
+    const b = ev.target.closest('[data-id]');
+    if (!b || b.disabled) return;
+    const r = routesOnStrava.find((x) => x.id === b.dataset.id);
+    b.disabled = true; b.querySelector('small').textContent = tr('Loading the route…');
+    try {
+      const gpx = await stravaClient.routeGpx(r.id);
+      box.hidden = true;
+      track('strava', 'route-import');
+      await importGpxText(gpx, `${r.name}.gpx`);
+    } catch (e) {
+      b.disabled = false; b.querySelector('small').textContent = tr('Could not load the Strava route: {error}', { error: e.message });
+    }
+  };
+}
+for (const el of document.querySelectorAll('[data-sr-close]')) el.addEventListener('click', () => { $('strava-routes').hidden = true; });
+
+function deleteCustomRoute(r) {
+  if (!confirm(tr('Delete “{name}”? Its records stay in your ride history.', { name: r.name }))) return;
+  removeCustomRoute(r);
+  renderRouteList(); showRoute();
+}
+/** Takes an imported route off this device and out of the list. */
+function removeCustomRoute(r) {
+  const i = customDefs.findIndex((d) => d.id === r.id);
+  if (i >= 0) customDefs.splice(i, 1);
+  forgetCustomRoute(r.id);
+  if (routes.includes(r)) routes.splice(routes.indexOf(r), 1);
+  if (settings.routeId === r.id) { settings.routeId = routes[0].id; saveSettings(); }
+}
+
+function infoBox(msg) {
+  const el = $('lobby-msg');
+  el.textContent = msg; el.hidden = false; el.classList.add('info');
+  clearTimeout(alertBox.t);
+}
+function alertBox(msg) {
+  const el = $('lobby-msg');
+  el.textContent = msg; el.hidden = false; el.classList.remove('info');
+  clearTimeout(alertBox.t); alertBox.t = setTimeout(() => { el.hidden = true; }, 6000);
+}
+
+// your own workouts: imported from .zwo files or made in the builder (#28, #36)
+const MY_KEY = 'gruppetto.workouts';
+let myWorkouts = (() => { try { return JSON.parse(localStorage.getItem(MY_KEY) || '[]'); } catch { return []; } })();
+// signed in, they follow you to every device: each carries when it last changed, a deleted one when it went
+const readJson = (key, empty) => { try { return JSON.parse(localStorage.getItem(key) || 'null') ?? empty; } catch { return empty; } };
+const writeJson = (key, v) => { try { localStorage.setItem(key, JSON.stringify(v)); } catch { /* storage full or blocked */ } };
+const MY_DEL_KEY = 'gruppetto.workouts.deleted';
+let myWorkoutsDeleted = readJson(MY_DEL_KEY, {});
+const seenWorkouts = new Map();
+stampChanged(myWorkouts, seenWorkouts);
+const writeMyWorkouts = () => writeJson(MY_KEY, myWorkouts);
+const saveMyWorkouts = () => {
+  const gone = new Set(seenWorkouts.keys());
+  for (const w of myWorkouts) gone.delete(w.id);
+  for (const id of gone) { myWorkoutsDeleted[id] = Date.now(); seenWorkouts.delete(id); }
+  if (gone.size) writeJson(MY_DEL_KEY, myWorkoutsDeleted);
+  stampChanged(myWorkouts, seenWorkouts);
+  writeMyWorkouts();
+  socialDataChanged();
+};
+const allWorkouts = () => [...icuWorkouts, ...myWorkouts, ...workouts];
+
+/** Today's and tomorrow's workouts from the intervals.icu calendar, right in the lobby. */
+function renderPlan() {
+  // today's planned workout is the Workout card among the modes; the rest of the plan is in the Workouts menu
+  if ($('plan-box')) $('plan-box').hidden = true;
+}
+
+/** The workout the Workout segment would pick (set by renderModes): the chosen one, today's plan, or the last ridden. */
+let modeWorkout = null;
+let planPicked = false;
+
+// the segmented control: the cards' own handlers do the same, this is the shorter way to switch
+$('mode-select')?.addEventListener('change', (ev) => {
+  const v = ev.target.value;
+  if (v === 'workout' && !modeWorkout) { renderModes(); openWorkoutMenu(); return; } // nothing to pick yet: choose one (the redraw puts the old mode back)
+  settings.mode = v === 'workout' ? modeWorkout.id : v;
+  saveSettings(); renderModes();
+});
+
+/** Mode: free ride, or a workout picked in its own menu. */
+function renderModes() {
+  renderPlan();
+  const ml = $('mode-list');
+  ml.innerHTML = '';
+  // the workout card: the one picked, else today's from the intervals.icu plan, else the last one ridden
+  // ... and not one already ridden today here (when intervals.icu has not heard of the ride yet)
+  const riddenToday = new Set(history.filter((e) => e.eventId && localDate(new Date(e.date)) === localDate(new Date())).map((e) => String(e.eventId)));
+  const todayPlan = icuWorkouts.find((x) => dayLabel(x.date) === 'today' && !riddenToday.has(String(x.eventId))) || null;
+  // a workout planned for today on intervals.icu: the lobby opens with it picked (once a load: you can pick another)
+  if (todayPlan && !planPicked) { planPicked = true; if (settings.mode !== todayPlan.id) { settings.mode = todayPlan.id; saveSettings(); } }
+  const w = allWorkouts().find((x) => x.id === settings.mode) || todayPlan
+    || allWorkouts().find((x) => x.id === settings.lastWorkout) || null;
+  const free = document.createElement('button');
+  free.className = 'option';
+  free.dataset.id = 'free';
+  free.innerHTML = `<b>${tr('Free ride')}</b><small>${tr('The trainer simulates the road grade.')}</small>`;
+  free.onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); };
+  const wb = document.createElement('button');
+  wb.className = 'option wk-pick';
+  wb.dataset.id = 'workout';
+  wb.innerHTML = w
+    ? `${w.source === 'intervals' && dayLabel(w.date) === 'today' ? `<span class="tag plan-day today">${tr('Today · intervals.icu')}</span>` : ''}<span class="wk-pick-head"><b>${esc(w.name)}</b><span class="wk-change">${tr('Workouts')} ›</span></span><small>${Math.round(totalDuration(w) / 60)} ${U.min} · ${esc(w.description)}</small><canvas></canvas>`
+    : `<span class="wk-pick-head"><b>${tr('Workout')}</b><span class="wk-change">${tr('Choose')} ›</span></span><small>${tr('Structured intervals in ERG: the trainer holds the target power.')}</small>`;
+  wb.onclick = (ev) => {
+    if (w && !ev.target.closest('.wk-change')) { openWorkoutDetail(w); return; }
+    openWorkoutMenu();
+  };
+  // race against the bots (#39): from the line, N laps or to the finish of a point-to-point route
+  const r = routes.find((x) => x.id === settings.routeId) || routes[0];
+  const race = document.createElement('button');
+  race.className = 'option race-pick';
+  race.dataset.id = 'race';
+  const laps = settings.raceLaps || 1;
+  race.innerHTML = `<span class="wk-pick-head"><b>🏁 ${tr('Race')}</b>${r?.oneWay ? '' : `<span class="race-laps">${[1, 2, 3, 5].map((n) => `<i data-laps="${n}" class="${n === laps ? 'on' : ''}">${n}</i>`).join('')} ${tr('laps')}</span>`}</span><small>${r?.oneWay ? tr('To the finish line against the bunch.') : tr('{km} km against the bunch, from a standing start.', { km: ((r?.length || 0) * laps / 1000).toFixed(1) })}</small>`;
+  race.onclick = (ev) => {
+    const l = ev.target.closest('[data-laps]');
+    if (l) settings.raceLaps = Number(l.dataset.laps);
+    settings.mode = 'race'; saveSettings(); renderModes();
+  };
+  ml.append(free, wb, race);
+  renderNextUp(null); // today's plan is picked in the lobby itself now (step 1, step 3): no card over the routes
+  free.classList.toggle('sel', settings.mode === 'free');
+  race.classList.toggle('sel', settings.mode === 'race');
+  wb.classList.toggle('sel', !['free', 'race'].includes(settings.mode) && !!w && w.id === settings.mode);
+  // the segmented control above shows the mode; only the picked mode's card stays visible (free ride when none is picked)
+  // a free ride has nothing to pick or show: the segment says it, so no card under it
+  const picked = [free, wb, race].find((o) => o.classList.contains('sel')) || free;
+  if (picked !== free) picked.classList.add('cur');
+  modeWorkout = w;
+  const seg = $('mode-select');
+  if (seg) seg.value = picked === race ? 'race' : picked === wb ? 'workout' : 'free';
+  if (w) requestAnimationFrame(() => drawWorkoutChart(wb.querySelector('canvas'), w, -1));
+  // the panel beside the routes says which mode is on: a workout or a race takes the climbs' and the ghost's place
+  $('lobby-pick')?.setAttribute('data-mode', seg?.value || 'free');
+  renderModeCards(seg?.value || 'free', w, todayPlan);
+  renderWorkoutPick(todayPlan, w);
+  updateSummary();
+}
+
+/** Step 1 of the lobby: the three ways to ride as cards; the picked one outlined. */
+/** The three ways to ride, drawn in one line style (the rail's), not as emoji that each look different. */
+const MODE_IC = {
+  free: '<svg viewBox="0 0 24 24" class="ic stroke"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-8h5l3 8M10 9l-1.5-3H6m9 3l-3 8"/></svg>',
+  workout: '<svg viewBox="0 0 24 24" class="ic stroke"><path d="M3 17h3V9h3v8h3V5h3v12h3v-6h3"/></svg>',
+  race: '<svg viewBox="0 0 24 24" class="ic stroke"><path d="M5 21V4m0 0h13l-2.5 4L18 12H5"/></svg>',
+};
+function renderModeCards(mode, w, todayPlan) {
+  const box = $('mode-cards');
+  if (!box) return;
+  const today = w && w === todayPlan;
+  const cards = [
+    ['free', MODE_IC.free, tr('Free ride'), tr('Your pace, with a ghost if you like')],
+    ['workout', MODE_IC.workout, tr('Workout'), tr('The trainer holds the power'), w ? (today ? tr('Today in your plan: {name}', { name: w.name }) : tr('Picked: {name}', { name: w.name })) : ''],
+    ['race', MODE_IC.race, tr('Race vs bots'), tr('Bots at your level, laps, a finish')],
+  ];
+  box.innerHTML = cards.map(([v, ic, name, line, extra = '']) => `<button class="mode-card${v === mode ? ' sel' : ''}" data-v="${v}"><span class="mc-ic" aria-hidden="true">${ic}</span>`
+    + `<span class="mc-text"><b>${esc(name)}${v === 'workout' && todayPlan ? ` <em class="mc-today">${tr('today')}</em>` : ''}</b><small>${esc(line)}</small>${extra ? `<small class="mc-extra">${esc(extra)}</small>` : ''}</span></button>`).join('');
+  box.onclick = (ev) => {
+    const v = ev.target.closest('[data-v]')?.dataset.v;
+    const sel = $('mode-select');
+    if (!v || !sel) return;
+    if (v === sel.value && v === 'workout') { if (modeWorkout) openWorkoutDetail(modeWorkout); else openWorkoutMenu(); return; } // the picked card again: the workout itself
+    sel.value = v;
+    sel.dispatchEvent(new Event('change'));
+  };
+}
+
+/** The steps of a workout in rows: repeats folded ("3 × 12 min"), the watts at your FTP. */
+function workoutRows(w) {
+  const ftp = settings.ftp;
+  const one = (st, i) => {
+    const a = stepWatts(st, 0, ftp), b = stepWatts(st, 1, ftp);
+    const watts = st.free ? (st.hr ? `${st.hr[0]}–${st.hr[1]} ${tr('bpm')}` : tr('free')) : a === b ? `${a} W` : `${a} → ${b} W`;
+    const mid = stepWatts(st, 0.5, ftp);
+    const kind = i === 0 && b > a ? tr('Warm-up') : i === w.steps.length - 1 && b < a ? tr('Cool-down') : st.free ? tr('Free') : tr(powerZone(mid / ftp).name);
+    return { dur: st.dur, kind, watts };
+  };
+  const rows = w.steps.map(one), out = [];
+  const same = (x, y) => x.dur === y.dur && x.watts === y.watts;
+  for (let i = 0; i < rows.length;) {
+    let done = false;
+    for (const L of [2, 1]) { // a work-and-rest pair, or one step, repeated
+      let k = 1;
+      while (i + (k + 1) * L <= rows.length && rows.slice(i, i + L).every((r, j) => same(r, rows[i + k * L + j]))) k++;
+      // a pair often ends on the effort (work, rest, work, rest, work): that last work counts in too
+      const tail = L === 2 && rows[i + k * L] && same(rows[i], rows[i + k * L]) ? 1 : 0;
+      if (k + tail >= 2) {
+        out.push({ ...rows[i], n: k + tail });
+        if (L === 2) out.push({ ...rows[i + 1], n: k, between: tail > 0 });
+        i += k * L + tail; done = true; break;
+      }
+    }
+    if (!done) { out.push({ ...rows[i], n: 1 }); i++; }
+  }
+  const mins = (d) => (d % 60 ? fmtTime(d) : `${d / 60} ${U.min}`);
+  return out.map((r) => ({ dur: r.between ? mins(r.dur) : `${r.n > 1 ? `${r.n} × ` : ''}${mins(r.dur)}`, kind: r.between ? tr('{kind} between', { kind: r.kind }) : r.kind, watts: r.watts }));
+}
+
+/** With Workout on: the picked workout, big: its shape, its steps in watts, the coach's note; Other workout opens the menu. */
+function renderWorkoutPick(todayPlan, w) {
+  const box = $('wk-quick');
+  if (!box) return;
+  if (!w) { box.innerHTML = `<button class="option wq-card" data-wq="all"><b>${tr('Choose a workout')} ›</b><small>${tr('Structured intervals in ERG: the trainer holds the target power.')}</small></button>`; }
+  else {
+    const st = w.steps?.length ? workoutStats(w, settings.ftp) : null;
+    const tag = w === todayPlan ? `${tr('Today')} · intervals.icu` : w.source === 'intervals' ? 'intervals.icu' : myWorkouts.includes(w) ? tr('yours') : tr('Workout');
+    const rows = w.steps?.length ? workoutRows(w) : [];
+    const shown = rows.slice(0, 6);
+    const note = (w.notes || '').trim();
+    box.innerHTML = `<div class="wq-head"><small class="wq-tag">${esc(tag)}</small><button class="link-btn" data-wq="all">${tr('Other workout')} ›</button></div>`
+      + `<b class="wq-name">${esc(w.name)}</b>`
+      + `<small class="wq-meta">${fmtTime(totalDuration(w))}${st?.tss ? ` · TSS ${st.tss}` : ''}${st?.if ? ` · IF ${st.if.toFixed(2)}` : ''}</small>`
+      + '<canvas class="wq-chart"></canvas>'
+      + (shown.length ? `<ul class="wq-steps">${shown.map((r) => `<li><b>${esc(r.dur)}</b><span>${esc(r.kind)}</span><small>${esc(r.watts)}</small></li>`).join('')}${rows.length > shown.length ? `<li class="wq-more">${tr('+{n} more', { n: rows.length - shown.length })}</li>` : ''}</ul>` : '')
+      + (note ? `<p class="wq-note">${esc(note.length > 160 ? `${note.slice(0, 157)}…` : note)}</p>` : '');
+    requestAnimationFrame(() => { const c = box.querySelector('canvas'); if (c?.clientWidth) drawWorkoutChart(c, w, -1); });
+  }
+  box.onclick = (ev) => { if (ev.target.closest('[data-wq="all"]')) openWorkoutMenu(); };
+}
+
+/** Up next, over the modes: today's planned workout from intervals.icu, its shape, and Start. */
+function renderNextUp(w) {
+  const box = $('next-up');
+  box.hidden = !w;
+  if (!w) return;
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null;
+  box.innerHTML = `<div class="nu-card nu-plan"><small class="nu-tag">${tr('Plan for today')} · intervals.icu</small>`
+    + `<b class="nu-name">${esc(w.name)}</b><span class="nu-meta">${Math.round(totalDuration(w) / 60)} ${U.min}${st?.tss ? ` · ~${st.tss} TSS` : ''}${w.description ? ` · ${esc(w.description)}` : ''}</span>`
+    + `<canvas class="nu-chart"></canvas><span class="nu-actions"><button class="primary" data-nu="go">${tr('Start')}</button><button class="pill-btn" data-nu="other">${tr('Other workouts')}</button></span></div>`;
+  box.querySelector('[data-nu="go"]').onclick = () => { settings.mode = w.id; saveSettings(); renderModes(); startRide(); };
+  box.querySelector('[data-nu="other"]').onclick = () => openWorkoutMenu();
+  requestAnimationFrame(() => drawWorkoutChart(box.querySelector('canvas'), w, -1));
+}
+
+/** The zone a workout spends most of its work in (past Z1, when it has more than recovery). */
+function mainZone(w) {
+  const t = new Map();
+  for (const st of w.steps) {
+    const p = stepWatts(st, 0.5, settings.ftp);
+    if (p === null) continue;
+    const z = powerZone(p / settings.ftp);
+    t.set(z, (t.get(z) || 0) + st.dur);
+  }
+  // what the workout is for: the hardest zone it spends at least 15 % of its time in (a 40/20 is VO2max, not the
+  // endurance of its warm-up); failing that, where most of the time goes
+  const total = [...t.values()].reduce((a, b) => a + b, 0) || 1;
+  const hard = [...t.entries()].filter(([z, d]) => z.z > 1 && d / total >= 0.15).sort((a, b) => b[0].z - a[0].z)[0]?.[0];
+  return hard || [...t.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || powerZone(0.6);
+}
+
+/** A workout's card: where it comes from, its name, its numbers (time, TSS, IF, main zone), a line of description, its shape. */
+function workoutCardHTML(w, tag) {
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null, z = mainZone(w);
+  const chip = (t, cls = '') => `<span class="wk-chip ${cls}">${t}</span>`;
+  // a ramp test runs to failure: its full length (and so its TSS) is never ridden
+  const chips = w.ramp ? [chip(tr('to failure')), chip(tr('sets your FTP'), 'wk-zone')].join('')
+    : [chip(`⏱ ${Math.round(totalDuration(w) / 60)} ${U.min}`), st?.tss ? chip(`TSS ${st.tss}`) : '', st?.if ? chip(`IF ${st.if.toFixed(2)}`) : '', chip(`Z${z.z} ${tr(z.name)}`, 'wk-zone')].join('');
+  const from = tag ? `<span class="tag${tag === 'mine' ? ' mine' : ''}">${tag === 'mine' ? tr('Mine') : `intervals.icu · ${esc(tag)}`}</span>` : '';
+  return `${from}<b class="wk-name">${esc(w.name)}</b><span class="wk-chips">${chips}</span>${w.description ? `<small class="wk-desc">${esc(w.description)}</small>` : ''}<canvas class="wk-chart"></canvas>`;
+}
+
+/** The workout menu: planned intervals.icu workouts first, then the built-in ones. */
+function openWorkoutMenu() {
+  const menu = $('wk-menu'), list = $('wk-menu-list');
+  // a page beside the rail, like the other sections
+  menu.classList.add('as-page');
+  $('drawer').hidden = true;
+  markRail('workouts');
+  menu.querySelector('.wk-menu-panel').scrollTop = 0;
+  list.innerHTML = '';
+  const add = (w, tag) => {
+    const b = document.createElement('button');
+    b.className = 'option';
+    b.dataset.id = w.id;
+    b.classList.add('wk-card');
+    b.innerHTML = workoutCardHTML(w, tag);
+    b.style.setProperty('--zc', mainZone(w).color);
+    b.onclick = () => openWorkoutDetail(w);
+    b.classList.toggle('sel', w.id === settings.mode);
+    list.append(b);
+    requestAnimationFrame(() => drawWorkoutChart(b.querySelector('canvas'), w, -1));
+  };
+  // three groups, each under its heading: your plan in intervals.icu, your own, and Gruppetto's (the FTP test first)
+  const head = (text, note = '') => {
+    const h = document.createElement('h3');
+    h.className = 'wk-group-head';
+    h.innerHTML = `${esc(text)}${note ? ` <small>${esc(note)}</small>` : ''}`;
+    list.append(h);
+  };
+  if (icuWorkouts.length) { head(tr('Your plan'), 'intervals.icu'); for (const w of icuWorkouts) add(w, dayLabel(w.date)); }
+  if (myWorkouts.length) { head(tr('Your workouts'), tr('imported and built')); for (const w of myWorkouts) add(w, 'mine'); }
+  head(tr('Gruppetto workouts'));
+  // the library's filters: by what a workout is for (the choice remembered)
+  const kinds = WORKOUT_KINDS.filter(([k]) => workouts.some((w) => w.kind === k));
+  const pick = kinds.some(([k]) => k === settings.wkKind) ? settings.wkKind : 'all';
+  const chips = document.createElement('div');
+  chips.className = 'wk-kinds';
+  chips.innerHTML = [['all', 'All'], ...kinds].map(([k, name]) => `<button class="pill-btn${k === pick ? ' sel' : ''}" data-kind="${k}">${esc(tr(name))}</button>`).join('');
+  chips.onclick = (e) => { const b = e.target.closest('[data-kind]'); if (!b) return; settings.wkKind = b.dataset.kind; saveSettings(); openWorkoutMenu(); };
+  list.append(chips);
+  const shown = workouts.filter((w) => pick === 'all' || w.kind === pick);
+  for (const w of [...shown.filter((x) => x.ramp), ...shown.filter((x) => !x.ramp)]) add(w);
+  menu.hidden = false;
+}
+function closeWorkoutMenu() { $('wk-menu').hidden = true; }
+
+/** Adds a workout of your own (or replaces the one with its id), and selects it. */
+function addMyWorkout(w) {
+  const i = myWorkouts.findIndex((x) => x.id === w.id);
+  if (i >= 0) myWorkouts[i] = w; else myWorkouts.unshift(w);
+  saveMyWorkouts();
+  settings.mode = w.id; settings.lastWorkout = w.id; saveSettings();
+  renderModes();
+}
+
+$('wk-import').onclick = () => $('wk-import-file').click();
+$('wk-import-file').onchange = async (e) => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  let n = 0, last = null;
+  for (const f of files) {
+    try {
+      const w = parseZwo(await f.text());
+      last = { id: `my:${Date.now()}-${n}`, source: 'mine', ...w, description: w.description || tr('Imported from {file}', { file: f.name }) };
+      myWorkouts.unshift(last); n++;
+    } catch (err) { toast(`${f.name}: ${tr(err.message)}`); }
+  }
+  if (!n) return;
+  saveMyWorkouts();
+  toast(n === 1 ? tr('Workout imported: {name}', { name: last.name }) : tr('{n} workouts imported', { n }));
+  track('zwo-import');
+  openWorkoutMenu();
+  if (n === 1) openWorkoutDetail(last);
+};
+$('wk-new').onclick = () => { closeWorkoutMenu(); openBuilder(null); };
+
+// ---------- Why Gruppetto: for a new rider ----------
+const WHY_KEY = 'gruppetto-why-closed';
+function renderWhy() {
+  let closed = false;
+  try { closed = !!localStorage.getItem(WHY_KEY); } catch { /* private mode */ }
+  $('why-box').hidden = closed || history.length > 0;
+}
+$('why-close').onclick = () => { track('why', 'close'); try { localStorage.setItem(WHY_KEY, '1'); } catch { /* private mode */ } renderWhy(); };
+// ---------- FTP still a guess: a ramp test, for a new rider ----------
+const FTP_BOX_KEY = 'gruppetto-ftp-box-closed';
+/** Your FTP is known: typed in, taken from intervals.icu or a test, or ever ramp-tested here. */
+const ftpKnown = () => !!settings.ftpSet || settings.ftp !== DEFAULT_SETTINGS.ftp || history.some((e) => e.ramp);
+function renderFtpBox() {
+  let closed = false;
+  try { closed = !!localStorage.getItem(FTP_BOX_KEY); } catch { /* private mode */ }
+  $('ftp-box').hidden = closed || ftpKnown();
+  $('ftp-title').textContent = tr('Your FTP is an estimate: {w} W', { w: settings.ftp });
+}
+/** The ramp test's card, its Ride button one click away. */
+function openFtpTest(from) {
+  track('ftp-test', from);
+  const w = workouts.find((x) => x.ramp);
+  $('drawer').hidden = true;
+  if (w) openWorkoutDetail(w);
+}
+$('ftp-test').onclick = () => openFtpTest('lobby');
+$('f-ftp-test').onclick = () => openFtpTest('profile');
+$('ftp-know').onclick = () => { track('ftp-box', 'know'); openDrawer('profile', 'me'); requestAnimationFrame(() => { $('f-ftp').focus(); $('f-ftp').select(); }); };
+$('ftp-close').onclick = () => { track('ftp-box', 'close'); try { localStorage.setItem(FTP_BOX_KEY, '1'); } catch { /* private mode */ } renderFtpBox(); };
+$('why-zwo').onclick = () => { track('why', 'zwo'); $('wk-import-file').click(); };
+$('why-icu').addEventListener('click', () => track('why', 'icu'));
+
+// ---------- Workout builder (#36) ----------
+// Blocks you can stack; each turns into steps. Percentages are of FTP, durations in minutes (intervals in seconds).
+const BLOCKS = {
+  warmup: { label: 'Warm-up', make: () => ({ min: 10, from: 45, to: 70 }) },
+  steady: { label: 'Steady', make: () => ({ min: 10, pct: 75 }) },
+  intervals: { label: 'Intervals', make: () => ({ reps: 5, onSec: 60, onPct: 120, offSec: 60, offPct: 55 }) },
+  ramp: { label: 'Ramp', make: () => ({ min: 5, from: 60, to: 100 }) },
+  free: { label: 'Free ride', make: () => ({ min: 5 }) },
+  cooldown: { label: 'Cool-down', make: () => ({ min: 8, from: 65, to: 40 }) },
+};
+function blocksToSteps(blocks) {
+  const steps = [];
+  for (const b of blocks) {
+    if (b.type === 'intervals') for (let i = 0; i < b.reps; i++) { steps.push({ dur: Math.round(b.onSec), power: b.onPct / 100 }, { dur: Math.round(b.offSec), power: b.offPct / 100 }); }
+    else if (b.type === 'steady') steps.push({ dur: Math.round(b.min * 60), power: b.pct / 100 });
+    else if (b.type === 'free') steps.push({ dur: Math.round(b.min * 60), free: true });
+    else steps.push({ dur: Math.round(b.min * 60), power: b.from / 100, ...(b.to !== b.from ? { to: b.to / 100 } : {}) });
+  }
+  return steps.filter((s) => s.dur > 0);
+}
+/** Steps of an imported workout as blocks you can edit (on/off pairs back to back become Intervals). */
+function stepsToBlocks(steps) {
+  const out = [];
+  for (let i = 0; i < steps.length;) {
+    const s = steps[i];
+    if (!s.free && s.to === undefined && i + 3 < steps.length) {
+      const on = s, off = steps[i + 1];
+      let reps = 1;
+      while (i + reps * 2 + 1 < steps.length && [0, 1].every((k) => { const a = steps[i + reps * 2 + k], b = [on, off][k]; return a.dur === b.dur && a.power === b.power && a.to === undefined && !a.free; })) reps++;
+      if (reps > 1 && !off.free && off.to === undefined) {
+        out.push({ type: 'intervals', reps, onSec: on.dur, onPct: Math.round(on.power * 100), offSec: off.dur, offPct: Math.round(off.power * 100) });
+        i += reps * 2; continue;
+      }
+    }
+    if (s.free) out.push({ type: 'free', min: +(s.dur / 60).toFixed(2) });
+    else if (s.to !== undefined) out.push({ type: i === 0 && s.to > s.power ? 'warmup' : i === steps.length - 1 && s.to < s.power ? 'cooldown' : 'ramp', min: +(s.dur / 60).toFixed(2), from: Math.round(s.power * 100), to: Math.round(s.to * 100) });
+    else out.push({ type: 'steady', min: +(s.dur / 60).toFixed(2), pct: Math.round(s.power * 100) });
+    i++;
+  }
+  return out;
+}
+let building = null;
+function openBuilder(w) {
+  building = w
+    ? { id: w.id, name: w.name, description: w.description || '', blocks: w.blocks ? structuredClone(w.blocks) : stepsToBlocks(w.steps) }
+    : { id: null, name: tr('My workout'), description: '', blocks: [{ type: 'warmup', ...BLOCKS.warmup.make() }, { type: 'intervals', ...BLOCKS.intervals.make() }, { type: 'cooldown', ...BLOCKS.cooldown.make() }] };
+  $('wb-name').value = building.name;
+  $('wb-desc').value = building.description;
+  $('wb-add').innerHTML = Object.entries(BLOCKS).map(([k, v]) => `<button class="pill-btn" data-add="${k}">+ ${esc(tr(v.label))}</button>`).join('');
+  renderBuilder();
+  $('wk-builder').hidden = false;
+}
+function renderBuilder() {
+  const B = building;
+  const field = (i, key, label, unit, step = 1) => `<label>${label}<span><input type="number" step="${step}" min="0" data-i="${i}" data-k="${key}" value="${B.blocks[i][key]}">${unit}</span></label>`;
+  $('wb-blocks').innerHTML = B.blocks.map((b, i) => {
+    const f = b.type === 'intervals'
+      ? field(i, 'reps', '×', '') + field(i, 'onSec', tr('on'), tr('s')) + field(i, 'onPct', '', '%') + field(i, 'offSec', tr('off'), tr('s')) + field(i, 'offPct', '', '%')
+      : b.type === 'steady' ? field(i, 'min', '', U.min, 0.5) + field(i, 'pct', '', '%')
+        : b.type === 'free' ? field(i, 'min', '', U.min, 0.5)
+          : field(i, 'min', '', U.min, 0.5) + field(i, 'from', '', '%') + field(i, 'to', '→', '%');
+    return `<li><b>${esc(tr(BLOCKS[b.type].label))}</b><div class="wb-fields">${f}</div><span class="wb-move"><button data-up="${i}" aria-label="Up">↑</button><button data-down="${i}" aria-label="Down">↓</button><button data-del="${i}" aria-label="Remove">✕</button></span></li>`;
+  }).join('');
+  const w = { name: B.name, steps: blocksToSteps(B.blocks) };
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null;
+  $('wb-stats').textContent = st ? `${fmtTime(st.dur)} · TSS ${st.tss} · IF ${st.if.toFixed(2)} · NP ${st.np} ${U.W}` : '';
+  $('wb-save').disabled = !w.steps.length;
+  requestAnimationFrame(() => { if (w.steps.length) drawWorkoutChart($('wb-chart'), w, -1); else $('wb-chart').getContext('2d').clearRect(0, 0, 9999, 9999); });
+}
+$('wb-blocks').addEventListener('input', (e) => {
+  const el = e.target.closest('input[data-i]');
+  if (!el) return;
+  building.blocks[+el.dataset.i][el.dataset.k] = Math.max(0, Number(el.value) || 0);
+  const w = { steps: blocksToSteps(building.blocks) };
+  const st = w.steps.length ? workoutStats(w, settings.ftp) : null;
+  $('wb-stats').textContent = st ? `${fmtTime(st.dur)} · TSS ${st.tss} · IF ${st.if.toFixed(2)} · NP ${st.np} ${U.W}` : '';
+  if (w.steps.length) drawWorkoutChart($('wb-chart'), w, -1);
+});
+$('wb-blocks').addEventListener('click', (e) => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  const B = building.blocks;
+  if (t.dataset.del !== undefined) B.splice(+t.dataset.del, 1);
+  else if (t.dataset.up !== undefined && +t.dataset.up > 0) { const i = +t.dataset.up; [B[i - 1], B[i]] = [B[i], B[i - 1]]; }
+  else if (t.dataset.down !== undefined && +t.dataset.down < B.length - 1) { const i = +t.dataset.down; [B[i + 1], B[i]] = [B[i], B[i + 1]]; }
+  else return;
+  renderBuilder();
+});
+$('wb-add').addEventListener('click', (e) => {
+  const k = e.target.closest('[data-add]')?.dataset.add;
+  if (!k) return;
+  const B = building.blocks, at = k === 'warmup' ? 0 : B.length && B[B.length - 1].type === 'cooldown' && k !== 'cooldown' ? B.length - 1 : B.length;
+  B.splice(at, 0, { type: k, ...BLOCKS[k].make() });
+  renderBuilder();
+});
+$('wb-save').onclick = () => {
+  const B = building, steps = blocksToSteps(B.blocks);
+  if (!steps.length) return;
+  const w = { id: B.id || `my:${Date.now()}`, source: 'mine', name: $('wb-name').value.trim() || tr('My workout'), description: $('wb-desc').value.trim(), blocks: B.blocks, steps };
+  addMyWorkout(w);
+  $('wk-builder').hidden = true;
+  toast(tr('Saved: {name}', { name: w.name }));
+  openWorkoutDetail(w);
+};
+$('wk-builder').addEventListener('click', (e) => { if (e.target.closest('[data-wb-close]')) $('wk-builder').hidden = true; });
+
+function chooseWorkout(w) {
+  settings.mode = w.id; settings.lastWorkout = w.id; saveSettings();
+  closeWorkoutDetail(); closeWorkoutMenu(); renderModes();
+}
+
+/** [lo, hi] watts of a range step at this intensity, or null. */
+function stepBand(s, intensity = settings.intensity) {
+  const r = s && (s.rangeW || (s.range && s.range.map((f) => f * settings.ftp)));
+  return r ? r.map((v) => Math.round((v * intensity) / 100)) : null;
+}
+
+/** "62–65 % · 150–158 W", "40 → 62 %", "Free" for one step. */
+function stepTarget(s) {
+  const ftp = settings.ftp, pct = (x) => Math.round((x / ftp) * 100);
+  if (s.free) return tr('Free ride');
+  const range = s.rangeW || (s.range && s.range.map((f) => f * ftp));
+  if (range) { const [lo, hi] = range.map((v) => scaleW(Math.round(v))); return `${lo}–${hi} ${U.W} <small>${pct(lo)}–${pct(hi)} %</small>`; }
+  const a = scaleW(stepWatts(s, 0, ftp)), b = scaleW(stepWatts(s, 1, ftp));
+  return a === b ? `${a} ${U.W} <small>${pct(a)} %</small>` : `${a} → ${b} ${U.W} <small>${pct(a)} → ${pct(b)} %</small>`;
+}
+
+const fmtDur = (sec) => (sec >= 3600 ? `${Math.floor(sec / 3600)}:${String(Math.floor((sec % 3600) / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}` : sec % 60 ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}` : `${sec / 60} ${U.min}`);
+
+/** A workout on its own page: chart, numbers, the coach's notes and every interval, then Ride. */
+function openWorkoutDetail(w) {
+  const ftp = settings.ftp;
+  const st = workoutStats(w, ftp);
+  const k = settings.intensity / 100;
+  const day = w.date ? dayLabel(w.date) : null;
+  $('wkd-tag').innerHTML = w.source === 'intervals' ? `<span class="tag">intervals.icu${day ? ` · ${esc(day === 'today' ? tr('Today') : day === 'tomorrow' ? tr('Tomorrow') : day)}` : ''}</span>` : '';
+  $('wkd-name').textContent = w.name;
+  const stat = (label, v) => `<div><label>${label}</label><b>${v}</b></div>`;
+  $('wkd-stats').innerHTML = stat(tr('Time'), fmtTime(st.dur))
+    + stat('TSS', Math.round(st.tss * k * k))
+    + stat('IF', (st.if * k).toFixed(2))
+    + stat(tr('Avg'), `${Math.round(st.avg * k)} ${U.W}`)
+    + stat('NP', `${Math.round(st.np * k)} ${U.W}`)
+    + (settings.intensity !== 100 ? stat(tr('Intensity'), `${settings.intensity}%`) : '');
+  $('wkd-notes').textContent = w.notes || w.description || '';
+  // every interval, repeats folded: "4 ×" over the steps that repeat back to back
+  const key = (s) => JSON.stringify([s.dur, s.power, s.to, s.watts, s.wattsTo, s.range, s.rangeW, s.free, s.text]);
+  const rows = [];
+  let t0 = 0;
+  for (let i = 0; i < w.steps.length;) {
+    let folded = false;
+    for (let len = 1; len <= 4 && !folded; len++) {
+      let reps = 1;
+      while (i + (reps + 1) * len <= w.steps.length && w.steps.slice(i + reps * len, i + (reps + 1) * len).every((s, j) => key(s) === key(w.steps[i + j]))) reps++;
+      if (reps > 1) {
+        rows.push({ reps, t: t0, steps: w.steps.slice(i, i + len) });
+        t0 += reps * w.steps.slice(i, i + len).reduce((a, s) => a + s.dur, 0);
+        i += reps * len; folded = true;
+      }
+    }
+    if (!folded) { rows.push({ reps: 1, t: t0, steps: [w.steps[i]] }); t0 += w.steps[i].dur; i++; }
+  }
+  const li = (s, t) => {
+    const mid = scaleW(stepWatts(s, 0.5, ftp));
+    const col = s.free || mid === null ? '#64748b' : zoneColor(mid / ftp);
+    return `<li><i style="background:${col}"></i><span class="t">${t === null ? '' : fmtTime(t)}</span><span class="d">${fmtDur(s.dur)}</span><span>${stepTarget(s)}${s.hr ? ` <small>· ${s.hr.join('–')} ${U.bpm}</small>` : ''}${s.cad ? ` <small>· ${Array.isArray(s.cad) ? s.cad.join('–') : s.cad} ${U.rpm}</small>` : ''}${s.text ? ` <small>· ${esc(s.text)}</small>` : ''}</span></li>`;
+  };
+  // a plan from intervals.icu spells its steps out in its description: the list would only say it again
+  const spelled = w.source === 'intervals' && !!w.description;
+  $('wkd-steps').hidden = $('wkd-steps-h').hidden = spelled;
+  $('wkd-steps').innerHTML = rows.map((r) => (r.reps > 1
+    ? `<li class="x"><span></span><span class="t">${fmtTime(r.t)}</span><span>${r.reps} ×</span><span></span></li>${r.steps.map((s) => li(s, null)).join('')}`
+    : li(r.steps[0], r.t))).join('');
+  const total = totalDuration(w);
+  $('wkd-axis').innerHTML = [0, 0.25, 0.5, 0.75, 1].map((f) => `<span>${fmtTime(Math.round(total * f))}</span>`).join('');
+  $('wkd-select').onclick = () => chooseWorkout(w);
+  const mine = myWorkouts.includes(w);
+  $('wkd-edit').hidden = !mine;
+  $('wkd-delete').hidden = !mine;
+  $('wkd-delete').textContent = tr('Delete');
+  $('wkd-edit').onclick = () => { closeWorkoutDetail(); openBuilder(w); };
+  $('wkd-delete').onclick = () => {
+    const b = $('wkd-delete');
+    if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Tap again to delete'); return; }
+    b.dataset.armed = '';
+    myWorkouts = myWorkouts.filter((x) => x !== w); saveMyWorkouts();
+    if (settings.mode === w.id) { settings.mode = 'free'; saveSettings(); }
+    closeWorkoutDetail(); openWorkoutMenu(); renderModes();
+  };
+  $('wkd-zwo').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([toZwo(w)], { type: 'application/xml' }));
+    a.download = `${(w.name || 'workout').replace(/[^\w\- ]+/g, '').trim() || 'workout'}.zwo`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  $('wkd-ride').onclick = () => { chooseWorkout(w); startRide(); };
+  $('wkd-select').textContent = settings.mode === w.id ? tr('Selected ✓') : tr('Select');
+  $('wk-detail').hidden = false;
+  requestAnimationFrame(() => drawWorkoutChart($('wkd-chart'), w, -1));
+}
+function closeWorkoutDetail() { $('wk-detail').hidden = true; }
+
+/** The selected route, large, beside the route cards: its map, profile, your times and its climbs. */
+function showRoute() {
+  // OpenStreetMap's licence (ODbL) asks for the attribution wherever its data shows: a route built with its map
+  const r = routes.find((x) => x.id === settings.routeId) || routes[0];
+  $('osm-attr').hidden = !r?.land;
+  renderRoutePick(r);
+  socialRoute(r);
+  renderGhostPicker();
+  updateSummary();
+}
+
+function renderRoutePick(r) {
+  const box = $('route-pick');
+  if (!box || !r) return;
+  const best = bestLap(r), ridden = history.filter((e) => e.routeId === r.id).length;
+  const km = (r.length / 1000).toFixed(r.custom || r.length < 1000 ? 1 : 0);
+  const stat = (k, v) => `<span class="rp-stat"><small>${k}</small><b>${v}</b></span>`;
+  const climbs = r.climbs || [];
+  const steep = (g) => (g >= 0.06 ? 'c-hard' : g >= 0.035 ? 'c-mid' : 'c-easy');
+  box.innerHTML = '<canvas class="rp-map"></canvas>'
+    + `<div class="rp-name"><b>${esc(r.name)}</b>${r.custom ? `<em class="rp-tag">${tr('My route')}</em>` : ''}</div>`
+    + `<small class="rp-meta">${km} ${U.km} · ↗ ${Math.round(r.elevationGain)} ${U.m}${r.maxGrade >= 0.02 ? ` · ${tr('max {n}%', { n: Math.round(r.maxGrade * 100) })}` : ''} · ${r.oneWay ? tr('point to point') : tr('loop')}</small>`
+    + '<canvas class="rp-prof"></canvas>'
+    + (best || ridden ? `<div class="rp-stats">${best ? stat(r.oneWay ? tr('Your best finish') : tr('Your best lap'), fmtTime(best)) : ''}${ridden ? stat(tr('Ridden'), `${ridden}×`) : ''}</div>` : '')
+    + (climbs.length ? `<div class="rp-climbs-box"><h2 class="rp-h">${tr('Climbs on the route')} · ${climbs.length}</h2><ul class="rp-climbs">${climbs.map((c) => `<li class="${steep(c.grade)}"><span><b>${esc(c.name)}</b><small>${(c.length / 1000).toFixed(1)} ${U.km} · ${(c.grade * 100).toFixed(1)}%</small></span>${records.seg[c.id] ? `<small>${tr('best {t}', { t: fmtTime(records.seg[c.id]) })}</small>` : ''}</li>`).join('')}</ul></div>` : '');
+  box.classList.toggle('mine', !!r.custom);
+  requestAnimationFrame(() => {
+    drawRouteMap(box.querySelector('.rp-map'), r);
+    drawProfile(box.querySelector('.rp-prof'), r, [], r.custom ? '#8b5cf6cc' : `${themeFor(r.theme).accent}cc`);
+  });
+}
+
+/** The route from above, fitted in its box, the start a green dot. */
+function drawRouteMap(canvas, r) {
+  if (!canvas?.clientWidth) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), W = canvas.clientWidth, H = canvas.clientHeight;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  const g = canvas.getContext('2d'), { pts } = routeShape(r);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  const pad = 18, k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
+  const ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+  g.lineWidth = 3.5; g.lineJoin = 'round'; g.lineCap = 'round';
+  g.strokeStyle = r.custom ? '#a78bfa' : themeFor(r.theme).accent;
+  g.beginPath();
+  pts.forEach(([x, y], i) => (i ? g.lineTo(x * k + ox, y * k + oy) : g.moveTo(x * k + ox, y * k + oy)));
+  g.stroke();
+  g.fillStyle = '#4ade80';
+  g.beginPath(); g.arc(pts[0][0] * k + ox, pts[0][1] * k + oy, 5, 0, Math.PI * 2); g.fill();
+}
+
+/** "Rolling Hills · Sweet Spot 3×10" above the Ride button. */
+function updateSummary() {
+  const el = $('ride-summary');
+  if (!el) return;
+  renderGreeting(); renderAvatar();
+  const r = routes.find((x) => x.id === settings.routeId);
+  const sel = document.querySelector('#mode-list .sel b');
+  const raceLaps = settings.mode === 'race' && r && !r.oneWay ? ((settings.raceLaps || 1) === 1 ? tr('1 lap') : tr('{n} laps', { n: settings.raceLaps })) : null;
+  const g = r && rideGhost(r.id);
+  const free = settings.mode === 'free';
+  const pacer = free && settings.freePacer ? `🚴 ${settings.pacerName?.trim() || tr('Pacer')} ${settings.freePacerWkg} ${U.wkg}` : null;
+  el.textContent = [r?.name, sel?.textContent, raceLaps, settings.mode !== 'race' && g ? (g.friend ? tr('against {name}', { name: g.name || tr('a friend') }) : settings.ghost === 'last' ? tr('against your last ride') : tr('against your best ride')) : null, pacer].filter(Boolean).join(' · ');
+}
+
+/** Side drawer with Devices, Profile and intervals.icu, opened from the top bar; Profile at one of its tabs. */
+function openDrawer(panel, tab) {
+  // intervals.icu lives on the Profile page now, on its Connections tab: asked for, the page opens at it
+  const atIcu = panel === 'icu';
+  if (atIcu) { panel = 'profile'; tab = 'links'; }
+  if (panel === 'profile') { showProfileTab(tab || profileTab); renderMeHero(); }
+  const drawer = $('drawer');
+  drawer.hidden = false;
+  drawer.dataset.panel = panel; // Profile's Settings take the whole screen (css: #drawer[data-panel=profile][data-ptab=settings])
+  if (panel === 'profile') segmentAll(drawer, tr);
+  drawer.classList.toggle('in-ride', !!ride);
+  // in the lobby a section is a page beside the rail; mid-ride it slides over the road
+  drawer.classList.toggle('as-page', !ride);
+  if (!ride) { $('wk-menu').hidden = true; drawer.querySelector('.drawer-panel').scrollTop = 0; }
+  for (const c of drawer.querySelectorAll('[data-panel]')) c.hidden = c.dataset.panel !== panel || c.dataset.off === '1';
+  if (panel === 'progress') { renderPowerCurve(); renderFitness(); } // their charts need the panel on screen to size themselves
+  for (const t of drawer.querySelectorAll('.drawer-tabs [data-open]')) t.classList.toggle('sel', t.dataset.open === panel);
+  markRail(panel);
+  if (atIcu) requestAnimationFrame(() => $('icu-card').scrollIntoView({ block: 'start' }));
+}
+// ---------- Profile: Me, Connections, Settings ----------
+const PTAB_KEY = 'gruppetto.profile-tab';
+let profileTab = (() => { try { return localStorage.getItem(PTAB_KEY) || 'me'; } catch { return 'me'; } })();
+/** One of Profile's tabs (me, links, settings): the cards of the others step aside. */
+function showProfileTab(t) {
+  if (!['me', 'links', 'settings'].includes(t)) t = 'me';
+  profileTab = t;
+  $('drawer').dataset.ptab = t;
+  markProfileTabs();
+  try { localStorage.setItem(PTAB_KEY, t); } catch { /* private mode */ }
+  $('drawer').querySelector('.drawer-panel').scrollTop = 0;
+}
+/** The one row of tabs: Rider and Connections, then a tab per group of settings. */
+function markProfileTabs() {
+  for (const b of document.querySelectorAll('[data-ptab-go]')) {
+    b.classList.toggle('sel', b.dataset.ptabGo === profileTab && (!b.dataset.sgroupGo || b.dataset.sgroupGo === settingsGroup));
+  }
+  // on a phone the row scrolls: the picked tab into view
+  const bar = document.querySelector('#drawer .ptabs'), sel = bar?.querySelector('.sel');
+  if (sel && (sel.offsetLeft < bar.scrollLeft || sel.offsetLeft + sel.offsetWidth > bar.scrollLeft + bar.clientWidth)) bar.scrollLeft = sel.offsetLeft - 16;
+}
+for (const b of document.querySelectorAll('[data-ptab-go]')) {
+  b.onclick = () => { if (b.dataset.sgroupGo) showSettingsGroup(b.dataset.sgroupGo); showProfileTab(b.dataset.ptabGo); };
+}
+
+// ---------- Settings: one group at a time, each a tab in the Profile's row ----------
+const SGROUP_KEY = 'gruppetto.settings-group';
+const SGROUPS = ['look', 'ride', 'gears', 'pacer', 'pip', 'app'];
+let settingsGroup = (() => { try { return localStorage.getItem(SGROUP_KEY) || 'look'; } catch { return 'look'; } })();
+function showSettingsGroup(g) {
+  if (!SGROUPS.includes(g)) g = 'look';
+  settingsGroup = g;
+  $('drawer').dataset.sgroup = g;
+  markProfileTabs();
+  try { localStorage.setItem(SGROUP_KEY, g); } catch { /* private mode */ }
+}
+showSettingsGroup(settingsGroup);
+
+/** The top of Me: who you are at a glance (initial, name, level) and the numbers the rides go by. */
+function renderMeHero() {
+  const box = $('me-hero');
+  if (!box) return;
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  const L = levelOf(progress?.xp || 0), wkg = settings.ftp / settings.weight;
+  const initial = named ? esc(settings.name.trim()[0].toUpperCase()) : '<svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="9" r="3.6"/><path d="M5.5 19.5c1.2-3.3 3.6-5 6.5-5s5.3 1.7 6.5 5"/></svg>';
+  const stat = (label, value) => `<div><label>${label}</label><b>${value}</b></div>`;
+  box.innerHTML = `<div class="me-who"><span class="avatar me-avatar" style="background:${esc(settings.jersey)}">${initial}</span>`
+    + `<div><b>${named ? esc(settings.name.trim()) : tr('Your profile')}</b><small>${tr('Level {n}', { n: L.level })} · ${progress?.rides || 0} ${tr('rides')} · ${Math.round(progress?.km || 0)} ${U.km}</small>`
+    + `<i class="me-lvl"><i style="width:${Math.round(L.frac * 100)}%"></i></i></div></div>`
+    + `<div class="me-stats">${stat('FTP', `${settings.ftp} ${U.W}`)}${stat(U.wkg, wkg > 0 ? wkg.toFixed(1) : '—')}${stat(tr('Category'), categoryOf(settings.ftp, settings.weight))}${stat(tr('Weight'), `${settings.weight} ${tr('kg')}`)}</div>`;
+  // the sync line is the Account group's Sync row, not here too
+  renderMeLinks();
+}
+
+/** Rider's side card: intervals.icu, Strava and Garmin, each connected or not, a button to its tab. */
+function renderMeLinks() {
+  const box = $('me-links');
+  if (!box) return;
+  const list = [['intervals.icu', !!icuClient && !icuClient.demo, 'icu-card'], ['Strava', !!stravaClient, 'strava-card'], ['Garmin Connect', !!garminClient, 'garmin-card']]
+    .filter(([, , card]) => $(card) && $(card).dataset.off !== '1' && (card !== 'garmin-card' || garminOn())); // only those its tab offers
+  const shown = list;
+  box.innerHTML = `<h2>${tr('Connections')}</h2>` + shown.map(([name, on]) => `<div class="ml-row${on ? ' on' : ''}"><i></i><b>${name}</b><span>${on ? tr('connected') : tr('not connected')}</span><button type="button" class="ghost" data-ml>${on ? tr('Manage') : tr('Connect')}</button></div>`).join('');
+  for (const b of box.querySelectorAll('[data-ml]')) b.onclick = () => showProfileTab('links');
+}
+
+/** The rail lights the section open in the drawer, and Ride again once it closes. */
+function markRail(panel) {
+  for (const b of document.querySelectorAll('.rail .rail-btn')) b.classList.toggle('on', panel ? (b.dataset.open || b.dataset.page) === panel : b.hasAttribute('data-home'));
+}
+// a page closes by Escape, Ride in the rail, or another page: the rail follows
+const railFollow = new MutationObserver(() => { if ($('drawer').hidden && $('wk-menu').hidden) markRail(null); });
+for (const id of ['drawer', 'wk-menu']) railFollow.observe($(id), { attributes: true, attributeFilter: ['hidden'] });
+
+function initDrawer() {
+  const drawer = $('drawer');
+  const open = openDrawer;
+  for (const el of document.querySelectorAll('#lobby [data-open], #drawer [data-open]')) el.addEventListener('click', () => open(el.dataset.open));
+  for (const el of drawer.querySelectorAll('[data-close]')) el.addEventListener('click', () => { drawer.hidden = true; });
+  window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !drawer.hidden) drawer.hidden = true; });
+  window.addEventListener('keydown', (e) => {
+    if (e.code !== 'Escape') return;
+    if (!$('wk-detail').hidden) closeWorkoutDetail(); else if (!$('wk-menu').hidden) closeWorkoutMenu();
+  });
+  $('wk-detail').addEventListener('click', (e) => { if (e.target.closest('[data-wkd-close]')) closeWorkoutDetail(); });
+  $('wk-menu').addEventListener('click', (e) => { if (e.target.closest('[data-wk-close]')) closeWorkoutMenu(); });
+  // first visit: the welcome (a guest at once, or signed in), then the lobby itself. Not the Devices page: most
+  // first visitors have no trainer by them (a phone, a look first), and Ride works without one, in the simulator;
+  // the header's + Trainer chips are one tap away for those who have
+  if (!trainer.connected && !$('sim').checked && !localStorage.getItem('powerup-seen-drawer')) {
+    try { localStorage.setItem('powerup-seen-drawer', '1'); } catch { /* private mode */ }
+    if (socialOn() && !localStorage.getItem(WELCOME_KEY) && !history.length) showWelcome(() => {});
+  }
+}
+
+// ---------- The first visit's welcome ----------
+const WELCOME_KEY = 'gruppetto.welcomed';
+/** Two ways in, each with what it gives: ride at once as a guest (then `next`), or sign in with Google. */
+function showWelcome(next) {
+  const done = (how) => {
+    try { localStorage.setItem(WELCOME_KEY, how); } catch { /* private mode */ }
+    $('welcome').hidden = true;
+    window.removeEventListener('keydown', onKey, true);
+    track('welcome', how);
+  };
+  const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done('guest'); next(); } };
+  $('welcome-signin').innerHTML = `${GOOGLE_G}<span>${esc(tr('Sign in with Google'))}</span>`;
+  $('welcome-guest').onclick = () => { done('guest'); next(); };
+  $('welcome-signin').onclick = () => { done('sign-in'); socialSignIn('welcome'); };
+  window.addEventListener('keydown', onKey, true);
+  $('welcome').hidden = false;
+  $('welcome-guest').focus();
+  track('welcome', 'show');
+}
+
+function markSelected(list, id) {
+  for (const el of list.children) el.classList.toggle('sel', el.dataset.id === id);
+}
+
+// ---------- Ride ----------
+// The bunch: a new one every ride, drawn from these names and kits (English spelling, Ukrainian)
+const BOT_NAMES = [
+  ['Andriy', 'Андрій'], ['Taras', 'Тарас'], ['Dmytro', 'Дмитро'], ['Bohdan', 'Богдан'], ['Oleh', 'Олег'], ['Mykola', 'Микола'],
+  ['Serhiy', 'Сергій'], ['Yaroslav', 'Ярослав'], ['Ivan', 'Іван'], ['Ostap', 'Остап'], ['Roman', 'Роман'], ['Vitaliy', 'Віталій'],
+  ['Yuriy', 'Юрій'], ['Maksym', 'Максим'], ['Artem', 'Артем'], ['Nazar', 'Назар'], ['Pavlo', 'Павло'], ['Ihor', 'Ігор'],
+  ['Denys', 'Денис'], ['Volodymyr', 'Володимир'], ['Mykhailo', 'Михайло'], ['Danylo', 'Данило'], ['Stepan', 'Степан'], ['Kyrylo', 'Кирило'],
+];
+const BOT_NAMES_F = [
+  ['Olena', 'Олена'], ['Iryna', 'Ірина'], ['Kateryna', 'Катерина'], ['Oksana', 'Оксана'], ['Mariia', 'Марія'], ['Yuliia', 'Юлія'],
+  ['Anna', 'Анна'], ['Sofiia', 'Софія'], ['Nataliia', 'Наталія'], ['Daryna', 'Дарина'], ['Khrystyna', 'Христина'], ['Viktoriia', 'Вікторія'],
+];
+const BOT_KITS = [
+  ['#e5484d', '#ffffff'], ['#2563eb', '#facc15'], ['#8b5cf6', '#f0f0f0'], ['#f5f5f5', '#16a34a'], ['#111827', '#f97316'],
+  ['#0ea5e9', '#0f172a'], ['#f59e0b', '#1f2937'], ['#14b8a6', '#ffffff'], ['#db2777', '#fde68a'], ['#65a30d', '#f8fafc'],
+  ['#7c2d12', '#fbbf24'], ['#1e3a8a', '#ef4444'],
+];
+/**
+ * A bunch of `n` riders around your level: their steady pace is 55-95 % of your FTP in W/kg (so on
+ * a free ride some are a little slower than you, some a little faster), each with his own weight,
+ * build (air drag from height and weight), cadence and kit; names and kits never repeat in a ride. About a
+ * third are women (their own names and the female rider).
+ */
+/**
+ * Riders coming the other way along the far edge of the road, one at a time, now and then: life on the road, for the
+ * eye only (they touch neither the physics nor the ride). Not in a race: the road is closed.
+ */
+function passersBy(dt) {
+  if (ride.race) return;
+  const list = (ride.passers ||= []);
+  for (const o of list) { o.dist -= o.v * dt; o.pedal += o.v * dt / 2.1; } // ~90 rpm at their speed
+  ride.passers = list.filter((o) => o.dist > ride.dist - 80);
+  ride.passerAt ??= ride.elapsed + 20 + Math.random() * 40;
+  if (ride.elapsed < ride.passerAt || ride.passers.length || ride.v < 1) return;
+  const [color, stripe] = BOT_KITS[Math.floor(Math.random() * BOT_KITS.length)];
+  ride.passers.push({ key: `passer${ride.passerN = (ride.passerN || 0) + 1}`, dist: ride.dist + 320, v: 7 + Math.random() * 3.5, lane: -3.0, color, stripe, pedal: 0, oncoming: true });
+  ride.passerAt = ride.elapsed + 30 + Math.random() * 60;
+}
+
+function makeBots(n, { race = false } = {}) {
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr.splice(Math.floor(Math.random() * arr.length), 1)[0];
+  const names = BOT_NAMES.slice(), namesF = BOT_NAMES_F.slice(), kits = BOT_KITS.filter(([c]) => c.toLowerCase() !== String(settings.jersey).toLowerCase());
+  const ftpWkg = Math.max(1.5, settings.ftp / Math.max(40, settings.weight));
+  return Array.from({ length: n }, (_, i) => {
+    const female = i % 3 === 2; // about a third of the bunch are women
+    const [en, uk] = pick(female ? namesF : names), [color, stripe] = pick(kits.length ? kits : BOT_KITS.slice());
+    const weight = Math.round(female ? rnd(50, 68) : rnd(60, 88)), height = Math.round((female ? 158 : 165) + (weight - (female ? 50 : 60)) * 0.9 + rnd(-6, 6));
+    // spread evenly across the range, then shuffled by the random start order
+    // a ride: 55–95 % of your FTP in W/kg; a race: 82–108 %, so some of them are stronger than you
+    const level = (race ? 0.82 : 0.55) + (n > 1 ? i / (n - 1) : 0.5) * (race ? 0.26 : 0.4) + rnd(-0.04, 0.04);
+    return {
+      name: lang === 'uk' ? uk : en, figure: female ? 'female' : 'male', color, stripe, pattern: botPattern(i), weight, cda: riderCdA(height, weight),
+      wkg: Math.round(ftpWkg * level * 10) / 10, rpm: Math.round(rnd(82, 98)), phase: rnd(0, 6.28),
+      climber: race && Math.random() < 0.4, // attacks on the climbs
+      passAfter: rnd(2, 5), // s on a wheel before pulling out to pass: some wait, some go at once
+    };
+  }).sort(() => Math.random() - 0.5);
+}
+/**
+ * A rider's cadence, like a person's: their own rpm on the flat, slower as the road tilts up (about
+ * 2.5 rpm per % up to 8 %+), a little faster on a gentle descent, freewheeling now and then on a
+ * steep one, and never quite steady. `r` keeps the eased value between frames.
+ */
+/** Coasting: the cranks settle level (crank angle a multiple of π), as a rider rests on the pedals. */
+function levelPedals(pedal, dt) {
+  const target = Math.round(pedal / Math.PI) * Math.PI;
+  return pedal + (target - pedal) * Math.min(1, dt * 3);
+}
+function liveCadence(r, base, grade, t, dt, seed = 0) {
+  let target = base - Math.max(0, Math.min(0.1, grade)) * 250 + (grade < 0 && grade > -0.03 ? -grade * 150 : 0);
+  target += Math.sin(t * 0.37 + seed * 1.7) * 2.5 + Math.sin(t * 1.3 + seed) * 1.2;
+  if (grade <= -0.035 && Math.sin(t * 0.21 + seed) > -0.2) target = 0; // coasting most of a steep descent
+  const cur = r.cad ?? target;
+  r.cad = cur + (target - cur) * Math.min(1, dt * (target === 0 || cur < 5 ? 2.5 : 0.7));
+  return Math.max(0, r.cad < 3 ? 0 : r.cad);
+}
+// Riders keep right: start in the right half of the road (positive lane = right of travel).
+const START_LANE = 1.2;
+
+let ride = null;
+let rideTimer = null;
+let scene = null;
+let sceneKind = null;
+
+/** Creates the 3D or 2D renderer (a canvas can hold only one kind of context). */
+function applySceneSettings() {
+  scene.setStyle?.(settings.style);
+  scene.setQuality?.(settings.quality);
+  scene.setAtmosphere?.(settings.timeOfDay, weatherNow());
+  scene.setCamera?.(settings.camera);
+}
+async function ensureScene() {
+  let want = '3d'; // 2D only as a fallback when the browser has no WebGL
+  if (want === sceneKind) { scene.resize(); scene.restart?.(); return; }
+  const old = $('scene');
+  const canvas = old.cloneNode(false);
+  old.replaceWith(canvas);
+  if (want === '3d') {
+    try {
+      const { Scene3D, webglAvailable } = await import('./render3d.js');
+      if (!webglAvailable()) throw new Error('WebGL is not available');
+      scene = new Scene3D(canvas);
+    } catch (e) {
+      console.warn('3D unavailable, falling back to 2D', e);
+      toast(tr('3D graphics are not available in this browser. Using 2D'));
+      want = '2d';
+      const fresh = canvas.cloneNode(false);
+      canvas.replaceWith(fresh);
+      scene = new Scene(fresh);
+    }
+  } else {
+    scene = new Scene(canvas);
+  }
+  sceneKind = want;
+}
+const recorder = new Recorder();
+/** The GPS track for a ride on this route (by id), when the route is still here. */
+const positionOf = (routeId) => positionFor(routes.find((r) => r.id === routeId));
+
+// ---------- Wind (#50) ----------
+const WIND_SPEED = { off: 0, light: 3, moderate: 6, strong: 9 }; // m/s: 11, 22, 32 km/h
+/** The way the road runs at distance d, as an angle on the map (the minimap's coordinates). */
+function routeHeading(route, d) {
+  const { pts, step } = routeShape(route), L = route.length;
+  const at = (x) => {
+    const dd = route.oneWay ? Math.max(0, Math.min(L, x)) : ((x % L) + L) % L;
+    const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
+    return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t];
+  };
+  const [ax, ay] = at(d + 15), [bx, by] = at(d - 15);
+  return Math.atan2(ay - by, ax - bx);
+}
+/** This moment's wind for you: gusts round the set strength, split into head- and crosswind as the road turns. */
+/** The wind's strength for this ride, m/s: none in a workout. */
+function windBase() {
+  // only in a race: there the wind is tactics (shelter in the bunch, attack into a headwind); in a free ride or a
+  // workout it only slows you down
+  return ride?.race ? WIND_SPEED[settings.wind] ?? 0 : 0;
+}
+function updateWind() {
+  const W = ride.wind;
+  if (!W) return;
+  const t = ride.elapsed;
+  W.speed = W.base * (1 + 0.18 * Math.sin(t / 7.3) + 0.08 * Math.sin(t / 2.1 + 1.3));
+  const h = routeHeading(ride.route, ride.dist);
+  const c = windComponents(W.speed, W.toward, h);
+  W.head = c.head; W.cross = c.cross;
+  W.rel = W.toward - h; // where it blows, relative to the way you ride (0 = straight ahead with you)
+}
+/** The wind in the top bar: an arrow the way it blows (up = with you) and its speed. */
+function updateWindHud() {
+  const W = ride.wind, cell = $('wind-cell');
+  cell.hidden = !W?.base;
+  if (cell.hidden) { scene?.setWind?.(0); return; }
+  $('wind-arrow').style.transform = `rotate(${W.rel}rad)`;
+  $('m-wind').textContent = Math.round(W.speed * 3.6);
+  const kind = W.head > W.speed * 0.5 ? 'head' : W.head < -W.speed * 0.5 ? 'tail' : 'cross';
+  cell.dataset.kind = kind;
+  cell.title = tr({ head: 'Headwind', tail: 'Tailwind', cross: 'Crosswind' }[kind]);
+  scene?.setWind?.(W.speed);
+}
+
+// ---------- Before the start: are the sensors in? ----------
+const DEVICE_LABEL = { trainer: 'Trainer', hr: 'Heart rate', cad: 'Cadence', ctl: 'Controllers', obc: 'OpenBikeControl' };
+/**
+ * The sensors you use (connected now, or remembered from an earlier ride), each ready or not:
+ * [{ name, ok, note }]. A trainer you are not using (simulator ticked) is left out.
+ */
+function preflightChecklist() {
+  const out = [];
+  for (const d of DEVICES) {
+    if (d.key === 'trainer' && $('sim').checked) continue;
+    if (!d.dev.connected && !settings.devices?.[d.key]) continue;
+    const name = tr(DEVICE_LABEL[d.key]);
+    if (!d.dev.connected) { out.push({ name, ok: false, note: reconnecting.has(d.key) ? tr('reconnecting…') : tr('not connected yet') }); continue; }
+    if (d.dev === hrm && !fresh(live.hr, live.hrAt)) { out.push({ name, ok: false, note: tr('connected, waiting for a reading…') }); continue; }
+    out.push({ name, ok: true, note: d.dev === hrm ? `❤ ${fresh(live.hr, live.hrAt)} ${U.bpm}` : d.dev === trainer ? `${Math.round(fresh(live.power, live.powerAt))} ${U.W}` : tr('connected') });
+  }
+  return out;
+}
+/** Resolves true to ride (all ready, or "Ride anyway"), false to stay in the lobby. */
+function preflight() {
+  if (preflightChecklist().every((c) => c.ok)) return Promise.resolve(true);
+  if (bluetoothAvailable()) autoConnectRemembered({ quiet: true }).catch(() => {});
+  return new Promise((resolve) => {
+    const box = $('preflight');
+    const done = (go) => { clearInterval(timer); box.hidden = true; resolve(go); };
+    const draw = () => {
+      const list = preflightChecklist();
+      $('preflight-list').innerHTML = list.map((c) => `<li class="${c.ok ? 'ok' : 'wait'}"><i></i><b>${esc(c.name)}</b><span>${esc(c.note)}</span></li>`).join('');
+      if (list.every((c) => c.ok)) { clearInterval(timer); setTimeout(() => { toast(tr('All sensors ready')); done(true); }, 700); } // a moment to see the last tick
+    };
+    const timer = setInterval(draw, 500);
+    draw();
+    box.hidden = false;
+    $('preflight-go').onclick = () => done(true);
+    $('preflight-cancel').onclick = () => { done(false); openDrawer('devices'); };
+  });
+}
+
+/** Opened as an installed app (its own window), not in a browser tab. */
+const installedApp = () => matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: fullscreen)').matches;
+
+/** A held ride: read its start from the database (after the host's word, or every 20 s), and set the clock to it. */
+function groupCheckStart() {
+  const G = ride?.group;
+  if (!G?.held || G.checking) return;
+  G.checking = true; G.polledAt = Date.now();
+  groupRow(G.id).then((g) => {
+    if (ride?.group !== G || !G.held) return;
+    if (g && !g.held) groupStarted(G, Date.parse(g.starts_at));
+    else if (!g) { toast(tr('This ride is over or was cancelled')); G.held = false; G.t0 = Date.now(); }
+  }).catch(() => {}).finally(() => { G.checking = false; });
+}
+function groupStarted(G, t0) {
+  G.held = false; G.t0 = t0;
+  $('gr-host').hidden = true;
+  toast(tr('The host started the ride. Starting in {t}', { t: fmtTime(Math.max(0, Math.ceil((t0 - Date.now()) / 1000))) }));
+}
+/** The host's start buttons, while their held ride waits; and who is on the line. */
+function groupHostRender() {
+  const G = ride?.group, el = $('gr-host');
+  const show = !!(G?.held && G.host);
+  if (el.hidden === !show && !show) return;
+  el.hidden = !show;
+  if (show) {
+    const n = G.mates.list(Date.now()).length + 1;
+    const line = tr('{n} on the line, including you', { n });
+    if ($('gr-host-line').textContent !== line) $('gr-host-line').textContent = line;
+  }
+}
+/** Before a group ride's start: who is on the line, you first, each with the category of their W/kg. */
+function startListRender() {
+  const G = ride?.group, el = $('gr-startlist');
+  const show = !!G && !G.go;
+  // on a wide screen the chat sits beside the list while everyone gathers, its field open (without taking the keys: the
+  // power slider and the arrows still work), and back to the road's small chat at the start
+  const lobby = show && matchMedia('(min-width: 1000px)').matches;
+  if (lobby !== $('chat-box').classList.contains('lobby')) {
+    $('chat-box').classList.toggle('lobby', lobby);
+    chatOpen(lobby, false); // the class is off by now when it closes, so the field really closes
+  }
+  if (!show) { if (!el.hidden) el.hidden = true; return; }
+  el.hidden = false;
+  const catOf = (wkg) => (!(wkg > 0) ? '' : wkg >= 4 ? 'A' : wkg >= 3.2 ? 'B' : wkg >= 2.5 ? 'C' : 'D');
+  const me = { id: 'me', name: G.me?.name || settings.name || tr('you'), color: settings.jersey, cat: categoryOf(settings.ftp, settings.weight), me: true };
+  const rows = [me, ...G.mates.list(Date.now()).map((m) => ({ id: m.id, name: m.name, color: m.color, cat: catOf(m.wkg) }))];
+  // there is no «ready» flag: on the line (the channel's riders) against signed up (the calendar's count, at the time you opened it)
+  const signed = Math.max(G.signed || 0, rows.length);
+  const key = rows.map((r) => `${r.id}${r.cat}${r.name}`).join('|') + `/${signed}`;
+  if (el.dataset.key === key) return; // redrawn only when someone comes or goes
+  el.dataset.key = key;
+  $('gr-sl-n').textContent = String(rows.length);
+  $('gr-sl-ready').textContent = tr('{n} of {m} on the line', { n: rows.length, m: signed });
+  $('gr-sl-fill').style.width = `${Math.round(rows.length / signed * 100)}%`;
+  $('gr-sl-rows').innerHTML = rows.map((r) => `<li class="${r.me ? 'me' : ''}"><i style="background:${esc(r.color || '#888')}"></i>`
+    + `${r.cat ? `<span class="sl-cat cat-${r.cat}">${r.cat}</span>` : '<span class="sl-cat"></span>'}<span class="sl-name">${esc(r.name || tr('Rider'))}</span>${r.me ? `<small>${tr('you')}</small>` : ''}</li>`).join('');
+}
+
+$('gr-host').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-in]'), G = ride?.group;
+  if (!b || !G?.held || !G.host) return;
+  for (const x of $('gr-host').querySelectorAll('button')) x.disabled = true;
+  try {
+    const t0 = await groupStart(G.id, Number(b.dataset.in));
+    groupStarted(G, t0);
+    track('social', `group-start-${b.dataset.in}`);
+    // say so on the channel, a few times (one who joins a moment later hears it too); they read the time themselves
+    for (let i = 0; i < 6; i++) setTimeout(() => { if (ride?.group === G) G.live?.say('start', { u: G.me.id }); }, i * 3000);
+  } catch (err) { toast(err.message); } finally { for (const x of $('gr-host').querySelectorAll('button')) x.disabled = false; }
+});
+
+async function startRide(opts) {
+  // every way in (the ▾ menu, a workout's Ride, a challenge, a group ride) waits for a GPX being imported
+  if (importing) { toast(tr('Wait for the GPX import to finish')); return; }
+  // Watch & ride (#watch, from the Ride button's menu): the mini window opens now, while the click counts, and the
+  // 3D world is not even loaded
+  // with the Mac overlay (Gruppetto HUD) running, the numbers go to it, not to the browser's mini window
+  const watching = opts?.watch === true && (pipSupport() || overlayOn());
+  const pipAsk = watching && !overlayOn() && !pipOpen() ? openMini() : null;
+  // the installed app rides full screen: no title bar over the road (asked now, while the click counts)
+  const wentFull = watching ? false : installedApp() && !document.fullscreenElement && document.documentElement.requestFullscreen?.().then(() => true, () => false);
+  if (!(await preflight())) { if (await wentFull) document.exitFullscreen?.().catch(() => {}); if (pipAsk) closePip(); return; }
+  if (await wentFull) rideFullscreen = true;
+  // a group ride (#84): its route, a free ride with the others live instead of the bots, held on the line till the start
+  const group = opts?.group || null;
+  const resume = opts?.resume || null; // an unfinished ride from before a reload: its route, workout and progress
+  const route = (group && routes.find((r) => r.id === group.routeId)) || (resume && routes.find((r) => r.id === resume.meta.routeId)) || routes.find((r) => r.id === settings.routeId) || routes[0];
+  const workout = group ? null : resume ? allWorkouts().find((w) => w.id === resume.meta.workout?.id) || null : allWorkouts().find((w) => w.id === settings.mode) || null;
+  const simulated = $('sim').checked || !trainer.connected;
+  const racing = !group && settings.mode === 'race';
+  // a group race: the others live instead of the bots, over the laps the host set, the start at the set time
+  const groupRace = group?.kind === 'race';
+  const laps = route.oneWay ? 1 : Math.max(1, (groupRace ? group.laps : settings.raceLaps) || 1);
+  ride = {
+    route, workout, simulated,
+    dist: 0, v: 0, elapsed: 0, secAcc: 0, workoutT: 0, workoutDone: false,
+    gain: 0, lastElev: route.elevAt(0), laps: 0, lapStartT: 0, lapStartI: 0, lapTimes: [], lapEfforts: [], efforts: [], seg: null, prevDist: 0,
+    hold: null, splits: [], splitFrom: { t: 0, d: 0, i: 0 }, // free ride: power held in ERG, manual laps
+    paused: false, pedal: 0, lastSim: performance.now(), moved: 0,
+    powerHist: [], wbal: wPrimeJ(), wbalMin: wPrimeJ(), target: null, lastSentTarget: null, lastSentGrade: null, lastGradeSentAt: 0,
+    cda: riderCdA(settings.height, settings.weight), // air drag from your height and weight
+    gear: DEFAULT_GEAR, ergBias: 0, ergFactor: 1, lowFor: 0, lastSentWheel: null, shiftMode: settings.shiftMode, lane: START_LANE, laneTarget: START_LANE,
+    bots: racing
+      // on the start line: a grid of rows of three across the road, just behind you
+      ? makeBots(Math.max(5, settings.bots || 5), { race: true }).map((b, i) => {
+        const lane = [-2.0, -0.4, 2.0][i % 3], home = lane;
+        return { ...b, dist: -1.6 - Math.floor(i / 3) * 1.9, v: 0, pedal: i, lane, home, laneTarget: lane, line: BUNCH.lines[i % 2] };
+      })
+      : group ? [] : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
+    race: racing || groupRace ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false, tops: {}, was: new Map() } : null,
+    attacks: !racing && !workout && !group && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
+    // workout pacer: a virtual training partner riding the target power exactly, at your weight
+    ghost: racing || group ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
+    // free-ride pacer (#27): steady at the W/kg you set, waiting at the bottom of each climb
+    pacer: racing || group ? null : { name: settings.pacerName?.trim() || tr('Pacer'), color: '#facc15', stripe: '#111827', dist: 0, v: 0, pedal: 0.5, lane: -0.5, pacer: true, free: !workout },
+  };
+  if (workout?.ramp) { toast(tr('Ramp test: hold each step as long as you can. Gruppetto detects when you stop and calculates your FTP')); cueSay('Ramp test. Hold each step as long as you can.'); }
+  if (group) {
+    // on the line, a place of your own: four across, rows 1.9 m apart, picked by your account (the others' differ)
+    const slot = [...String(group.me.id)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 12;
+    ride.lane = ride.laneTarget = ride.laneHome = [-1.8, -0.6, 0.6, 1.8][slot % 4];
+    ride.dist = -Math.floor(slot / 4) * 1.9;
+    ride.group = {
+      id: group.id, title: group.title, t0: group.held ? Infinity : group.startsAt, go: !group.held && Date.now() >= group.startsAt, me: group.me,
+      held: !!group.held, host: !!group.host, signed: group.signed || 0, polledAt: Date.now(), // held: on the line till its host starts it (0010)
+      mates: new Mates(group.me.id), live: null, sentAt: 0,
+      chat: new ChatLog(group.me.id), gate: new SendGate(), reacts: new Reactions(), watchers: new Watchers(), shownAt: 0, // chat (#85), spectators (#86)
+    };
+    const mine = () => (ride?.group?.id === group.id ? ride.group : null);
+    groupChannel(group.id, {
+      pos: (p) => mine()?.mates.receive(p, Date.now()),
+      chat: (p) => { const G = mine(); if (G?.chat.receive(p, Date.now())) chatRender(); },
+      react: (p) => { const G = mine(), r = G?.reacts.receive(p, Date.now()); if (r && r.to === G.me.id) reactPop(r); },
+      watch: (p) => mine()?.watchers.receive(p, Date.now()),
+      start: () => { if (mine()?.held) groupCheckStart(); }, // the host says it started: the time comes from the database
+    }).then((live) => { if (mine()) ride.group.live = live; else live.leave(); }).catch((e) => toast(e.message));
+  }
+  track('ride-start', [groupRace ? 'group-race' : group ? 'group' : racing ? 'race' : workout?.ramp ? 'ramp' : workout ? 'workout' : 'free', ride.ghost?.entry?.friend ? 'challenge' : '', simulated ? 'sim' : 'trainer'].filter(Boolean).join('-'));
+  ride.devs = new Set(DEVICES.filter((d) => d.dev.connected).map((d) => d.key)); // what to keep connected through the ride
+  // on the grid in the first row with the bunch, the front wheel just behind the line (the bike is ~1.7 m long)
+  if (racing) { ride.lane = ride.laneTarget = 0.8; ride.laneHome = 0.8; ride.dist = -1.6; }
+  // the wind (#50): a strength from Settings, a direction picked for this ride, gusting a little; races only
+  ride.wind = { base: windBase(), toward: Math.random() * Math.PI * 2, speed: 0, head: 0, cross: 0, rel: 0 };
+  if (workout) ride.target = ergTarget(targetAt(workout, 0, settings.ftp));
+  unlockAudio();
+  $('wk-int').textContent = `${settings.intensity}%`;
+  trainer.riderWeight = settings.weight + 8;
+  trainer.resetMode();
+  recorder.reset();
+  recorder.position = positionFor(route); // the GPS track in the FIT: the real road, or the route's place in the ocean
+  if (resume) resumeFrom(resume);
+  setKeepReconnecting(true);
+  updateGear();
+  $('lobby').hidden = true;
+  if ($('drawer').classList.contains('as-page')) $('drawer').hidden = true; // a lobby page (Devices…) stays in the lobby
+  $('summary').hidden = true;
+  $('ride').hidden = false;
+  $('sim-ctl').hidden = !simulated;
+  $('workout-panel').hidden = !workout;
+  $('wk-intensity').hidden = !workout;
+  $('wk-steps').hidden = !workout;
+  $('race-board').hidden = !racing && !groupRace;
+  $('countdown').hidden = !racing && !group;
+  $('chat-box').hidden = !group; $('btn-chat').hidden = !group; $('chat-feed').innerHTML = ''; chatOpen(false); // a group ride's chat (#85)
+  $('minimap-box').classList.toggle('big', !!settings.bigMap); mapZoomLabel(); // as you left it
+  hidePanel('map', !!settings.hideMap); hidePanel('profile', !!settings.hideProfile);
+  ride.stepStats = [];
+  $('wk-pacer-btn').classList.toggle('on', settings.pacer === true);
+  $('wk-erg-btn').classList.add('on'); // every workout starts in ERG
+  $('paused').hidden = true;
+  $('btn-pause').textContent = tr('Pause');
+  $('ride').classList.remove('show-controls');
+  if (watching && (await pipAsk) !== false) {
+    ride.noScene = true; // the road is not built; «Show the road» builds it
+    track('watch-ride');
+  } else {
+    await ensureScene();
+    applySceneSettings();
+  }
+  ride.lastSim = performance.now();
+  clearInterval(rideTimer);
+  rideTimer = setInterval(() => advance(), 250);
+  resetPip();
+  keepAwake(true);
+  if (simulated) toast(matchMedia('(pointer: coarse)').matches ? tr('Simulator mode: tap the screen for the power slider') : tr('Simulator mode: set power with the slider or ↑/↓')); // a phone has no arrow keys
+  const touch = matchMedia('(pointer: coarse)').matches;
+  if (scene?.orbit && !ride.noScene) setTimeout(() => toast(touch ? tr('Camera: drag to turn, pinch to zoom, double-tap to reset') : tr('Camera: drag to orbit, scroll to zoom, double-click to reset')), simulated ? 3500 : 0);
+  requestAnimationFrame(frame);
+}
+
+/** Power (W) for physics at time t: the trainer's reading averaged over the last second. */
+function powerAt(t) {
+  if (ride.simulated) {
+    if (inErgStep()) return ride.target; // ERG holds the target; with ERG off the slider is your legs
+    return Number($('sim-power').value);
+  }
+  return powerSamples.mean(t - 1000, t);
+}
+
+function cadenceAt(t, power) {
+  if (ride.simulated) return power > 0 ? 88 + Math.sin(ride.elapsed / 7) * 4 : 0;
+  return cadenceSamples.mean(t - 1000, t);
+}
+
+const hrAt = (t) => hrSamples.latest(t);
+
+const MAX_GAP_S = 15;
+
+/**
+ * Advances the ride to wall-clock time `now`: physics in small steps and one recorded sample per
+ * elapsed second. Driven by animation frames, a timer and incoming trainer data, so a hidden tab or
+ * a stalled frame never loses time. A long gap with no trainer data (laptop asleep, sensor lost)
+ * is skipped instead of being recorded as zeros.
+ */
+function advance(now = performance.now()) {
+  if (!ride) return;
+  const from = ride.lastSim;
+  let left = (now - from) / 1000;
+  ride.lastSim = now;
+  if (left <= 0 || ride.paused) return;
+  if (left > MAX_GAP_S && !ride.simulated && !powerSamples.has(from, now)) {
+    toast(tr('No data from the trainer for {s} s. This gap was skipped', { s: Math.round(left) }));
+    return;
+  }
+  const { route } = ride;
+  let t = from;
+  if (ride.race && !ride.race.go && !ride.group) { // on the line: the clock waits for the start (a group race: for the set time, below)
+    if (!scene?.warming) ride.race.countdown -= left; // not while the world is still loading behind the loader
+    t += left * 1000;
+    if (ride.race.countdown <= 0) { ride.race.go = true; ride.race.t0 = ride.elapsed; cueBeep(1320, 0.45); }
+    left = 0;
+  }
+  if (ride.group?.held && Date.now() - ride.group.polledAt > 20000) groupCheckStart(); // a start broadcast missed
+  if (ride.group && !ride.group.go) { // a group ride: on the line till the time it starts, the clock waiting too
+    if (Date.now() >= ride.group.t0) {
+      ride.group.go = true; cueBeep(1320, 0.45);
+      // a group race's clock runs from the set start, also for one who comes late (the server checks start + time)
+      if (ride.race) { ride.race.go = true; ride.race.t0 = ride.elapsed - Math.max(0, (Date.now() - ride.group.t0) / 1000); }
+    } else { t += left * 1000; left = 0; }
+  }
+  groupSend();
+  const mates = ride.group ? ride.group.mates.list(Date.now()) : [];
+  updateWind();
+  const W = ride.wind || { head: 0, cross: 0 };
+  while (left > 1e-6) {
+    const dt = Math.min(0.1, left, 1 - ride.secAcc);
+    t += dt * 1000;
+    const power = powerAt(t);
+    const cadence = cadenceAt(t, power);
+    const grade = route.gradeAt(ride.dist);
+    // drafting: the shelter of the riders ahead (deeper in a bunch), and a little from one close behind
+    const pack = [...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...mates];
+    ride.draft = packDraft(pack.map((o) => ({ gap: o.dist - ride.dist, sideways: o.lane - ride.lane })), W.cross);
+    ride.v = stepSpeed(ride.v, power, grade, dt, settings.weight, { cda: ride.cda * (1 - ride.draft), wind: W.head });
+    // your speed on your own, out of the wind shadow: faster than the wheel ahead -> you come past it,
+    // otherwise you sit in and draft
+    ride.vFree = stepSpeed(ride.vFree ?? ride.v, power, grade, dt, settings.weight, { cda: ride.cda, wind: W.head });
+    // on a wheel: no riding into the back of the rider ahead (the overtake logic swings you out instead)
+    for (const o of pack) if (Math.abs(o.lane - ride.lane) < 0.8) ride.v = Math.min(ride.v, wheelCap(o.dist - ride.dist, o.v ?? ride.v));
+    ride.heldFor = heldBy(ride, pack, dt);
+    const moved = ride.v * dt;
+    if (ride.race && !ride.race.done && ride.dist < ride.race.distance && ride.dist + moved >= ride.race.distance) {
+      ride.race.myTime = ride.elapsed - ride.race.t0 + dt * (ride.race.distance - ride.dist) / Math.max(1e-6, moved);
+      ride.race.done = true;
+      raceFinished();
+    }
+    ride.dist += moved;
+    ride.moved += moved;
+    // never into the back of a wheel in your line: at most up to it (a bike's length), at its speed
+    ride.dist = behindWheels(ride, ride.dist, pack);
+    // Pedal animation only: trainers like the KICKR CORE derive cadence from the flywheel and report
+    // 0–1 rpm at low speed, so while there is power the legs keep turning at a plausible rate.
+    const animCadence = cadence >= 20 ? cadence : power > 5 ? Math.max(cadence, 60) : cadence;
+    ride.pedal = animCadence < 5 ? levelPedals(ride.pedal, dt) : ride.pedal + (animCadence / 60) * Math.PI * 2 * dt;
+    // out of the saddle on a surge or a slow grind: power eased over ~1 s, as the HUD shows it; cadence
+    // only when something measures it (a trainer that reports none must not look like coasting)
+    ride.standPow = (ride.standPow ?? power) + (power - (ride.standPow ?? power)) * Math.min(1, dt);
+    const cadKnown = ride.simulated || trainer.sendsCadence || cadenceSensor.connected;
+    ride.stand = standStep(ride.standState ||= {}, { power: ride.standPow, ftp: settings.ftp, cadence: cadKnown ? cadence : null }, dt);
+    ride.lane = ride.autoLane ? easeLane(ride.lane, ride.laneTarget, dt, ride) : ride.lane + (ride.laneTarget - ride.lane) * Math.min(1, dt * 4);
+    ride.lane = keepApart(ride, ride.lane, [...ride.bots, ...(pacerOn() ? [ride.pacer] : [])]);
+    if (ride.ghost) {
+      const G = ride.ghost, before = G.dist;
+      G.dist = ghostDistAt(G.entry, ride.elapsed + dt);
+      const gi = Math.min(G.entry.chart.pw.length - 1, Math.floor((ride.elapsed + dt) / G.entry.chart.every));
+      G.power = G.entry.chart.pw[gi] || 0;
+      G.stand = standStep(G.standState ||= {}, { power: G.power, ftp: settings.ftp, cadence: G.entry.chart.cd ? G.entry.chart.cd[gi] ?? null : null }, dt);
+      G.pedal += ((G.dist > before ? 88 : 0) / 60) * Math.PI * 2 * dt;
+    }
+    if (ride.climbGhost && ride.seg) {
+      const G = ride.climbGhost, before = G.dist;
+      G.dist = ride.seg.d0 + traceDist(G.trace, G.best, G.length, ride.elapsed + dt - ride.seg.t0);
+      G.pedal += ((G.dist > before ? 86 : 0) / 60) * Math.PI * 2 * dt;
+    }
+    if (ride.pacer) {
+      const P = ride.pacer, target = ride.workoutDone || P.free ? null : effectiveTarget();
+      const pw = P.free ? Math.round((settings.freePacerWkg || 2.5) * settings.weight)
+        : target ?? Math.round(settings.ftp * 0.55); // easy spin once the workout is over
+      P.v = stepSpeed(P.v, pw, route.gradeAt(P.dist), dt, settings.weight, { cda: ride.cda, wind: W.head }); // your size, your drag
+      P.power = pw;
+      if (P.free && pacerOn()) pacerRegroup(P, dt);
+      P.dist += P.v * dt;
+      // workout pacer: on target you are riding his ride, so a gap opened by ERG lag at step changes,
+      // a pause or a dropout of the power reading closes again (about 20 s) instead of only growing
+      if (!P.free && target && Math.abs(power - target) <= target * 0.05) P.dist += (ride.dist - P.dist) * Math.min(1, dt / 20);
+      const pc = liveCadence(P, 90, route.gradeAt(P.dist), ride.elapsed, dt, 5);
+      P.pedal = pc < 5 ? levelPedals(P.pedal, dt) : P.pedal + (pc / 60) * Math.PI * 2 * dt;
+      // the workout pacer rides your FTP's targets; the free pacer holds his own steady power, so that is his FTP
+      P.stand = standStep(P.standState ||= {}, { power: pw, ftp: P.free ? pw : settings.ftp, cadence: pc }, dt);
+      // rides beside you, on the side with more room; switches sides only well past the centre line
+      P.side = ride.lane > 0.6 ? -1 : ride.lane < -0.6 ? 1 : (P.side || (ride.lane > 0 ? -1 : 1));
+      P.lane = easeLane(P.lane, ride.lane + 1.4 * P.side, dt, P);
+    }
+    // overtaking: a rider closing on someone in the same lane swings out to a free one, then back
+    if ((ride.laneCheck = (ride.laneCheck || 0) + dt) > 0.25) {
+      ride.laneCheck = 0;
+      const solid = [{ dist: ride.dist, lane: ride.lane, laneTarget: ride.laneTarget, v: ride.v, vFree: ride.vFree, heldFor: ride.heldFor, me: true }, ...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...mates];
+      const inBunch = ride.race && ride.race.go && ride.elapsed - (ride.race.t0 ?? 0) > 8;
+      for (const b of ride.bots) {
+        const lane = pickLane(b, solid, inBunch && b.line != null ? b.line : b.home);
+        // in the race bunch a rider keeps to its line (two abreast, the left of the road free for you to move up);
+        // only a climber attacking on a climb, or anyone in the sprint, goes round
+        const toGo = ride.race ? ride.race.distance - b.dist : Infinity;
+        const goesRound = (b.climber && route.gradeAt(b.dist) > 0.035) || toGo < 300;
+        b.laneTarget = inBunch && b.line != null && !goesRound ? b.line : lane;
+      }
+      if (!ride.steeredAt || ride.elapsed - ride.steeredAt > 4) { // unless you steered yourself just now
+        const me = solid[0], t = pickLane(me, solid, ride.laneHome ?? START_LANE);
+        if (t !== ride.laneTarget) { ride.laneTarget = t; ride.autoLane = true; }
+      }
+    }
+    passersBy(dt);
+    for (const b of ride.bots) b.lane = keepApart(b, easeLane(b.lane, b.laneTarget, dt, b), [{ dist: ride.dist, lane: ride.lane }, ...ride.bots.filter((o) => o !== b), ...(pacerOn() ? [ride.pacer] : [])]);
+    if (ride.attacks) attackStep(grade);
+    for (const b of ride.bots) {
+      const g = route.gradeAt(b.dist);
+      // his steady pace, harder up the climbs and easier down, and never perfectly even
+      const swing = 1 + Math.sin(ride.elapsed * 0.05 + b.phase) * 0.05 + Math.sin(ride.elapsed * 0.17 + b.phase * 2) * 0.03;
+      let p = b.wkg * b.weight * swing * (1 + Math.max(-0.6, Math.min(0.35, g * 4)));
+      if (b.attack) p *= attackFactor(b, ride.elapsed);
+      const wheels = [{ dist: ride.dist, lane: ride.lane, v: ride.v }, ...ride.bots.filter((o) => o !== b)];
+      const bd = packDraft(wheels.map((o) => ({ gap: o.dist - b.dist, sideways: o.lane - b.lane })), W.cross);
+      if (ride.race) {
+        const R = ride.race, toGo = R.distance - b.dist, base = p;
+        const start = ride.elapsed - (R.t0 ?? 0) < 8;
+        // a bunch, as in a real race: on the wheel ahead, two abreast, turns at the front, dropped on a climb
+        if (!start && toGo > 0) p = bunchPower(b, { t: ride.elapsed, dt, base, grade: g, cda: b.cda * (1 - bd), wind: W.head, others: wheels });
+        if (b.climber && g > 0.035) p = Math.max(p, base * 1.12); // climbers attack on the hills
+        if (toGo < 300 && toGo > 0) p = Math.max(p, base * 1.3);  // everyone sprints for the line
+        if (toGo <= 0) p = base * 0.5;                            // over the line: soft-pedalling
+        if (start) p = base * 1.15;                               // the start: out of the saddle
+      }
+      b.power = p;
+      b.v = stepSpeed(b.v, p, g, dt, b.weight, { cda: b.cda * (1 - bd), wind: W.head });
+      b.vFree = stepSpeed(b.vFree ?? b.v, p, g, dt, b.weight, { cda: b.cda, wind: W.head });
+      for (const o of wheels) if (Math.abs(o.lane - b.lane) < 0.8) b.v = Math.min(b.v, wheelCap(o.dist - b.dist, o === wheels[0] ? ride.v : o.v));
+      b.heldFor = heldBy(b, wheels.map((o, k) => (k === 0 ? { ...o, v: ride.v } : o)), dt);
+      const before = b.dist;
+      b.dist += b.v * dt;
+      b.dist = behindWheels(b, b.dist, wheels.map((o, k) => (k === 0 ? { ...o, v: ride.v } : o)));
+      if (ride.race && before < ride.race.distance && b.dist >= ride.race.distance && !ride.race.finish.has(b)) {
+        ride.race.finish.set(b, ride.elapsed - ride.race.t0 + dt * (ride.race.distance - before) / Math.max(1e-6, b.dist - before));
+      }
+      const bc = liveCadence(b, b.rpm || 90, g, ride.elapsed, dt, b.phase * 3);
+      b.pedal = bc < 5 ? levelPedals(b.pedal, dt) : b.pedal + (bc / 60) * Math.PI * 2 * dt;
+      b.stand = standStep(b.standState ||= {}, { power: b.power, ftp: b.wkg * b.weight, cadence: bc }, dt); // his steady pace stands in for FTP
+    }
+    ride.elapsed += dt;
+    ride.secAcc += dt;
+    left -= dt;
+    if (ride.secAcc >= 1 - 1e-9) {
+      ride.secAcc = 0;
+      const p1 = powerAt(t);
+      tick(p1, cadenceAt(t, p1), hrAt(t));
+    }
+  }
+}
+
+/**
+ * Free ride (#48): an attack when one is due, and what you hear of it: who goes, who goes across, who you
+ * catch, and when the break starts to tire with a gap still to close.
+ */
+function attackStep(grade) {
+  const t = ride.elapsed;
+  const ev = nextAttack(ride.attacks, { t, bots: ride.bots, meDist: ride.dist, grade });
+  if (ev) { ev.attacker.attack.lead = true; track('attack', grade > 0.025 ? 'climb' : 'flat'); }
+  for (const b of ride.bots) {
+    const a = b.attack;
+    if (!a || t >= a.fadeEnd) continue;
+    if (!a.told && t >= a.start) {
+      a.told = true;
+      const msg = a.lead ? tr('⚡ {name} attacks!', { name: b.name }) : tr('⚡ {name} bridges across', { name: b.name });
+      toast(msg); cueSay(a.lead ? '{name} attacks!' : '{name} bridges across', { name: b.name });
+    }
+    const gap = b.dist - ride.dist;
+    if (gap > 15) a.away = true;
+    if (attacking(b, t) && a.away && !a.caught && gap < -2) { a.caught = true; toast(tr('You caught {name}', { name: b.name })); }
+    if (!a.tiring && t >= a.holdEnd) { a.tiring = true; if (a.lead && gap > 30) toast(tr('{name} is fading: {s} s to close the gap', { name: b.name, s: Math.round(gap / Math.max(ride.v, 3)) })); }
+  }
+}
+
+/** How close the fans are: 1 at the top of a climb, fading over the last ~190 m below it and 25 m past it. */
+function crowdLevel() {
+  const R = ride.route, L = R.length;
+  let best = 0;
+  for (const c of R.climbs || []) {
+    let x = c.end - ride.dist; // metres to the top
+    if (!R.oneWay) { x = ((x % L) + L) % L; if (x > L - 25) x -= L; }
+    if (x > -25 && x < 190) best = Math.max(best, x < 0 ? 1 + x / 25 : 1 - x / 210);
+  }
+  return best;
+}
+
+// ---------- the lag log: how smooth the ride ran here, to send when it lagged ----------
+const PERF_KEY = 'gruppetto.perf-last';
+const fpsOn = () => settings.fps || new URLSearchParams(location.search).has('fps');
+/** One drawn frame: into the ride's log, and the corner counter (twice a second) when it is on. */
+function perfFrame(t0, t1) {
+  const P = ride.perfLog ||= { log: new PerfLog(), last: 0, t: t0, n: 0, show: 0 };
+  const gap = P.last ? t0 - P.last : 0;
+  P.last = t0;
+  P.log.frame((t0 - P.t) / 1000, gap, t1 - t0, scene.buildMs || 0, scene.lastBuilds || 0,
+    { q: Math.round((scene._pixelRatio?.() ?? 0) * 100) / 100 || undefined, km: Math.round(ride.dist / 100) / 10 });
+  const hud = $('fps-hud');
+  if (!fpsOn()) { hud.hidden = true; return; }
+  P.n++;
+  if (t0 - P.show < 500) return;
+  const fps = (P.n * 1000) / (t0 - P.show || 1), w = P.log.w;
+  $('fps-n').textContent = Math.round(fps);
+  $('fps-n').style.color = fps < 30 ? '#f87171' : fps < 50 ? '#fbbf24' : ''; // red under 30, amber under 50
+  $('fps-ms').textContent = `${Math.round(t1 - t0)} ${tr('ms')}`;
+  $('fps-worst').textContent = tr('worst {n} ms', { n: Math.round(w.worst) });
+  hud.hidden = false; P.show = t0; P.n = 0;
+}
+/** At the ride's end: the log, with this device and its graphics, for "Copy the last ride's lag log". */
+function savePerf() {
+  const L = ride.perfLog?.log;
+  if (!L) return;
+  L._close(L.w.t0 + 1e-9);
+  const env = { when: new Date().toISOString().slice(0, 16), route: `${ride.route.name} (${(ride.route.length / 1000).toFixed(1)} km)`,
+    gpu: scene?.gpuName?.(), quality: settings.quality, screen: `${screen.width}x${screen.height} @${devicePixelRatio}`,
+    window: `${innerWidth}x${innerHeight}`, riders: ride.bots.length + (ride.group ? ride.group.mates.list(Date.now()).length : 0), agent: navigator.userAgent };
+  try { localStorage.setItem(PERF_KEY, L.report(env)); } catch { /* full or private mode: the log is only for sending */ }
+  $('btn-perf-copy').disabled = false;
+}
+$('f-fps').checked = !!settings.fps;
+$('f-fps').onchange = () => { settings.fps = $('f-fps').checked; saveSettings(); };
+try { $('btn-perf-copy').disabled = !localStorage.getItem(PERF_KEY); } catch { /* private mode */ }
+$('btn-perf-copy').onclick = async () => {
+  let text = '';
+  try { text = localStorage.getItem(PERF_KEY) || ''; } catch { /* private mode */ }
+  if (!text) return;
+  const b = $('btn-perf-copy'), was = b.textContent;
+  try { await navigator.clipboard.writeText(text); b.textContent = `✓ ${tr('Copied: paste it in a message to us')}`; }
+  catch { b.textContent = tr('Could not copy'); }
+  setTimeout(() => { b.textContent = was; }, 2500);
+};
+
+function frame(now) {
+  if (!ride) return;
+  advance(now);
+  // the fans on the climbs: not with the sound or the fans off, on a pause, or while you watch something else
+  // with the numbers in the mini window or the Mac overlay (the road isn't drawn then, and the cheering got over a film)
+  if (settings.sound && settings.crowd !== false && !ride.paused && !pipOpen() && !overlayOn()) crowd(crowdLevel()); else crowdOff();
+  if (ride.race || ride.group) {
+    const G = ride.group, c = G ? (G.t0 - Date.now()) / 1000 : ride.race.countdown, el = $('countdown');
+    const txt = G ? (G.held ? (G.host ? tr('On the line') : tr('Waiting for the host to start · {n} on the line', { n: G.mates.list(Date.now()).length + 1 }))
+      : G.go ? (Date.now() - G.t0 < 1500 ? tr('GO!') : '') : c > 3 ? tr('Group start in {t}', { t: fmtTime(Math.ceil(c)) }) : String(Math.ceil(c)))
+      : ride.race.go ? (ride.elapsed - ride.race.t0 < 1.2 ? tr('GO!') : '') : c > 3 ? tr('Get ready') : String(Math.ceil(c));
+    el.classList.toggle('wait', !!G && !G.go && c > 3);
+    groupHostRender();
+    startListRender();
+    if (el.textContent !== txt) {
+      el.textContent = txt; el.hidden = !txt;
+      el.classList.remove('pop'); void el.offsetWidth; if (!el.classList.contains('wait')) el.classList.add('pop'); // the wait's clock ticks quietly
+      if (/^[123]$/.test(txt)) cueBeep(880, 0.15);
+    }
+  }
+  const riders = [
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, kit: myKit(), bike: settings.bikeColor || null, tape: settings.tapeColor || null, decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, stand: !!ride.stand, self: true, name: settings.name, lane: ride.lane, v: ride.v },
+    ...ride.bots,
+    ...(pacerOn() ? [ride.pacer] : []),
+    ...(ride.ghost ? [ride.ghost] : []),
+    ...(ride.climbGhost ? [ride.climbGhost] : []),
+    ...(ride.passers || []),
+    ...(ride.group ? ride.group.mates.list(Date.now()) : []),
+  ];
+  // the mini window is open: the 3D road is not drawn (nobody looks at it, and the video you watch keeps the
+  // graphics card); the ride goes on, and the road comes back the moment the mini window closes
+  const inPip = ride.noScene || ((pipOpen() || overlayOn()) && !ride.showRoadInPip);
+  $('pip-rest').hidden = !inPip;
+  $('ride').classList.toggle('resting', inPip); // the numbers are in the mini window: the board here goes too
+  if (inPip) { ride.moved = 0; requestAnimationFrame(frame); return; }
+  const t0 = performance.now();
+  scene.render(ride.route, ride.dist, riders, ride.moved);
+  perfFrame(t0, performance.now());
+  ride.moved = 0;
+  // the ghost's gap rides over your head, where the bots carry their names
+  const tag = $('ghost-tag'), at = scene.selfScreen;
+  if (at?.on) { tag.style.left = `${at.x}px`; tag.style.top = `${at.y}px`; tag.classList.add('over-me'); } else { tag.classList.remove('over-me'); tag.style.left = tag.style.top = ''; } // not in the picture (own eyes): back to its own place
+  requestAnimationFrame(frame);
+}
+
+/** Riders ahead you could reach within 10 s at your speed: name, gap in seconds and metres, their W/kg. */
+// ---------- Race against the bots (#39) ----------
+/** Everyone's place: finishers by their time, the rest by how far they have got. */
+function raceStandings() {
+  const R = ride.race, me = { me: true, name: settings.name || tr('You'), color: settings.jersey, stripe: settings.stripe, dist: ride.dist, v: ride.v };
+  // a group race: the others on the road, and those who have finished (and may have gone since)
+  const G = ride.group, done = G ? G.mates.finished() : [];
+  const live = G ? G.mates.list(Date.now()).filter((m) => !done.some((d) => d.id === m.id)) : [];
+  const all = [me, ...ride.bots, ...live, ...done.map((d) => ({ ...d, mate: true, dist: R.distance }))];
+  const time = (r) => (r.me ? (R.done ? R.myTime : null) : r.finish ?? R.finish.get(r) ?? null);
+  return all.map((r) => ({ r, t: time(r) })).sort((a, b) => (a.t !== null && b.t !== null ? a.t - b.t : a.t !== null ? -1 : b.t !== null ? 1 : b.r.dist - a.r.dist));
+}
+/** The board while racing: your place, laps and distance to go, and the riders round you with gaps in seconds. */
+/** W/kg right now: a bot's power this moment over its weight, yours from the last 3 s. */
+function wkgNow(r) {
+  if (r.me) return powerOver(3) / Math.max(30, settings.weight);
+  if (r.mate) return r.wkg || 0; // a group mate: as sent
+  return (r.power ?? 0) / Math.max(30, r.weight || 70);
+}
+function updateRaceBoard() {
+  const R = ride.race, list = raceStandings(), i = list.findIndex((x) => x.r.me);
+  const L = ride.route.length, toGo = Math.max(0, R.distance - ride.dist);
+  const lap = Math.min(R.laps, Math.floor(Math.max(0, ride.dist) / L) + 1);
+  $('race-pos').textContent = `${i + 1}/${list.length}`;
+  $('race-info').textContent = R.done ? tr('Finished') : `${R.laps > 1 ? `${tr('Lap {n}', { n: lap })}/${R.laps} · ` : ''}${toGo >= 1000 ? `${(toGo / 1000).toFixed(1)} ${U.km}` : `${Math.round(toGo)} ${U.m}`} ${tr('to go')}`;
+  const v = Math.max(ride.v, 3);
+  const from = Math.max(0, Math.min(i - 2, list.length - 5)), rows = list.slice(from, from + 5);
+  $('race-rows').innerHTML = rows.map(({ r, t }, k) => {
+    const gap = r.me ? '' : t !== null && R.done ? fmtDelta(t - R.myTime) : `${r.dist >= ride.dist ? '+' : '−'}${(Math.abs(r.dist - ride.dist) / v).toFixed(1)}${tr('s')}`;
+    return `<div class="race-row${r.me ? ' me' : ''}"><span class="rp">${from + k + 1}</span><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.me ? tr('You') : r.name)}</b><span class="rw">${wkgNow(r).toFixed(1)}</span><span class="rg">${t !== null ? '🏁 ' : ''}${gap}</span></div>`;
+  }).join('');
+}
+/** You crossed the line: your place, a cheer, and the summary a few seconds later. */
+function raceFinished() {
+  const list = raceStandings(), place = list.findIndex((x) => x.r.me) + 1;
+  ride.race.place = place;
+  toast(place === 1 ? tr('🏆 You win! {time}', { time: fmtTime(ride.race.myTime) }) : tr('🏁 {n} of {m} · {time}', { n: place, m: list.length, time: fmtTime(ride.race.myTime) }));
+  cueBeep(place === 1 ? 1320 : 1040, 0.5);
+  cueSay(place === 1 ? 'You win!' : 'You finished in position {n}', { n: place });
+  if (ride.group) groupRaceFinished();
+  setTimeout(() => { if (ride?.race?.done) finishRide(); }, 4000);
+}
+/** A group race: your time to the results (the summary shows them, and keeps them up to date). */
+function groupRaceFinished() {
+  const s = recorder.summary(), sim = ride.simulated && !window.__pretendTrainer;
+  const avgW = s?.avgPower ?? null, wkg = avgW ? Math.round((avgW / Math.max(30, settings.weight)) * 100) / 100 : null;
+  groupSent = { id: ride.group.id, p: null };
+  groupSent.p = ride.group.sent = groupFinish(ride.group.id, { time: Math.round(ride.race.myTime * 10) / 10, avgW, wkg, sim, ftpWkg: settings.ftp && settings.weight ? Math.round(settings.ftp / settings.weight * 100) / 100 : null })
+    .catch((e) => toast(tr('Could not post your result to the leaderboard: {error}', { error: e.message })));
+}
+
+/**
+ * A group race on the summary: the results from the table, everyone who has finished so far, fastest first. While
+ * the summary is open it looks again every 15 s for half an hour, so the ones still riding come in as they finish.
+ */
+let groupSent = null, groupTableTimer = null;
+function groupRaceTable(e) {
+  clearTimeout(groupTableTimer);
+  if (!e.groupRace?.id) return;
+  const id = e.groupRace.id, until = Date.now() + 30 * 60e3;
+  const load = async () => {
+    if ($('summary').hidden || shown.entry !== e) return;
+    try {
+      if (groupSent?.id === id) await groupSent.p; // your own time in first
+      const rows = await groupResults(id);
+      if (shown.entry !== e || !rows.length) throw 0;
+      raceTable.rows = rows; raceTable.e = e;
+      // your category first, the first time (a club reads its own); All a tap away
+      const cats = catsIn(rows), myCat = rows.find((x) => x.me)?.cat;
+      if (raceTable.id !== id) { raceTable.id = id; raceTable.cat = cats.length > 1 && myCat ? myCat : null; }
+      renderRaceTable();
+    } catch { /* no results yet, or no connection: the ride's own table stays */ }
+    if (Date.now() < until) groupTableTimer = setTimeout(load, 15000);
+  };
+  load();
+}
+
+/** The race's results on the summary: by category (tabs, when there are more than one), with a copy for the club. */
+const raceTable = { id: null, cat: null, rows: [], e: null };
+function renderRaceTable() {
+  const { rows, e } = raceTable, cats = catsIn(rows);
+  if (raceTable.cat && !cats.includes(raceTable.cat)) raceTable.cat = null;
+  const list = catResults(rows, raceTable.cat), mine = list.find((x) => x.me);
+  $('sum-race').hidden = false;
+  $('sum-race-place').textContent = mine ? `${raceTable.cat ? `${raceTable.cat} · ` : ''}${tr('{n} of {m}', { n: mine.place, m: list.length })}` : '';
+  $('sum-race-cats').hidden = cats.length < 2;
+  $('sum-race-cats').innerHTML = [null, ...cats].map((c) => `<button class="pill-btn${c === raceTable.cat ? ' sel' : ''}" data-cat="${c || ''}">${c ? `${tr('Cat')} ${c}` : tr('All')}</button>`).join('');
+  // those still riding when you finished, from the ride's own table, after the finishers, marked * (until they are in)
+  const riding = raceTable.cat ? [] : (e.race || []).filter((x) => x.est && !x.me && !rows.some((r) => r.name === x.name)).map((x) => ({ name: x.name, time_s: x.time, est: true }));
+  // the podium: second, first, third, each on a block as high as the place
+  const top = list.filter((x) => !x.est).slice(0, 3);
+  $('sum-podium').hidden = top.length < 2;
+  $('sum-podium').innerHTML = [1, 0, 2].filter((i) => top[i]).map((i) => {
+    const x = top[i];
+    return `<div class="pod pod-${i + 1}${x.me ? ' me' : ''}"><span class="pod-av${x.cat ? ` cat-${x.cat}` : ''}">${esc((x.name || '?')[0].toUpperCase())}</span>`
+      + `<b class="pod-name">${esc(x.name || tr('Rider'))}</b><small>${i ? `+${fmtTime(Math.round(x.gap || 0))}` : fmtTime(Math.round(x.time_s))}</small><span class="pod-block">${i + 1}</span></div>`;
+  }).join('');
+  $('sum-race-head').hidden = false;
+  renderStory(e);
+  $('sum-race-rows').innerHTML = [...list, ...riding].map((x) => `<tr class="${x.me ? 'me' : ''}"><td>${x.est ? '' : x.place}</td>`
+    + `<td>${esc(x.name || tr('Rider'))}${x.me ? ` <small class="muted">(${tr('you')})</small>` : ''}${x.cat && !raceTable.cat ? ` <small class="race-cat cat-${x.cat}">${x.cat}</small>` : ''}${x.sim ? ` <small class="muted" title="${esc(tr('Ridden in the simulator'))}">🖥</small>` : ''}</td>`
+    + `<td>${fmtTime(Math.round(x.time_s))}${x.est ? ' *' : ''}</td><td>${x.gap ? `+${fmtTime(Math.round(x.gap))}` : ''}</td>`
+    + `<td>${x.avg_w ? `${x.avg_w} ${U.W}` : ''}</td><td>${x.wkg ? Number(x.wkg).toFixed(1) : ''}</td></tr>`).join('');
+}
+$('sum-race-cats').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-cat]');
+  if (!b) return;
+  raceTable.cat = b.dataset.cat || null; renderRaceTable();
+});
+$('btn-race-copy').addEventListener('click', async () => {
+  const e = raceTable.e;
+  const title = e ? `🏁 ${[e.groupRace?.title, e.routeName, new Date(e.date).toLocaleDateString(locale)].filter(Boolean).join(' · ')}` : '';
+  const text = resultsText(raceTable.rows, { title, fmt: fmtTime });
+  try { await navigator.clipboard.writeText(text); toast(tr('Results copied: paste them in your club\'s chat')); } catch { toast(text); }
+  track('social', 'race-copy');
+});
+
+/** Results for the summary: those still riding are given the time they would take at their speed now. */
+function raceResults() {
+  const R = ride.race;
+  if (!R?.go) return null;
+  const now = ride.elapsed - R.t0;
+  return raceStandings().map(({ r, t }) => ({
+    name: r.me ? (settings.name || tr('You')) : r.name, me: !!r.me, color: r.color,
+    time: Math.round((t ?? now + Math.max(0, R.distance - r.dist) / Math.max(1, r.v || 1)) * 10) / 10, est: t === null,
+  })).sort((a, b) => a.time - b.time);
+}
+
+function updateAhead() {
+  const v = Math.max(ride.v, 2), all = [...ride.bots, ...(pacerOn() ? [ride.pacer] : []), ...(ride.ghost ? [ride.ghost] : []), ...(ride.climbGhost ? [ride.climbGhost] : [])];
+  const ahead = all
+    .map((r) => ({ r, gap: r.dist - ride.dist }))
+    .filter(({ r, gap }) => gap > 0.5 && (gap / v <= 10 || (r.attack && attacking(r, ride.elapsed) && gap < 1500)))
+    .sort((a, b) => a.gap - b.gap)
+    .slice(0, 3);
+  $('ahead').hidden = !ahead.length;
+  $('ahead-rows').innerHTML = ahead.map(({ r, gap }) => {
+    const wkg = r.weight ? wkgNow(r) : r.wkg ?? (r.power ? r.power / settings.weight : 0); // a bot's W/kg right now
+    return `<div class="ahead-row"><i style="background:${esc(r.color)};box-shadow:0 0 0 2px ${esc(r.stripe || '#fff')}"></i><b>${esc(r.ghost ? `👻 ${r.name}` : r.attack && attacking(r, ride.elapsed) ? `⚡ ${r.name}` : r.name)}</b><span>+${(gap / v).toFixed(1)}${tr('s')}</span><small>${Math.round(gap)} ${U.m}${wkg ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''}</small></div>`;
+  }).join('');
+}
+
+const LANES = [-2.4, -1.2, 0, 1.2, 2.4];
+/**
+ * A gentle lane change: the sideways speed builds up and fades out (at most 1 m/s² and 0.8 m/s), so a
+ * rider never jerks across the road; `s` keeps that rider's sideways speed between frames.
+ */
+function easeLane(lane, target, dt, s) {
+  const d = target - lane, lv = s.lv || 0;
+  const want = Math.sign(d) * Math.min(0.8, Math.sqrt(2 * Math.abs(d)) * 0.9, Math.abs(d) * 2); // can still stop in time
+  const a = 1.0 * dt;
+  s.lv = lv + Math.max(-a, Math.min(a, want - lv));
+  const next = lane + s.lv * dt;
+  if (Math.abs(d) < 0.005 || (target - next) * d < 0) { s.lv = 0; return target; }
+  return next;
+}
+/**
+ * No riding through each other: alongside someone (overlapping wheels, within a bike's length) a rider keeps at
+ * least a shoulder's width (0.8 m) to the side, on the side it is on; its sideways speed stops there.
+ */
+const SIDE_GAP = 0.8, BIKE_LEN = 1.9;
+function keepApart(r, lane, others) {
+  for (const o of others) {
+    if (!o || o === r || Math.abs(o.dist - r.dist) >= BIKE_LEN) continue;
+    // never pushed aside, only stopped: not closer sideways than a shoulder's width, or than it already is
+    const now = Math.abs(r.lane - o.lane), next = Math.abs(lane - o.lane), floor = Math.min(SIDE_GAP, now);
+    if (next < floor) { const side = Math.sign(r.lane - o.lane) || 1; lane = o.lane + side * floor; r.lv = 0; }
+  }
+  return Math.max(-2.6, Math.min(2.6, lane));
+}
+/**
+ * No overlapping wheels: a rider in the line of someone ahead (less than a shoulder's width aside) stays at least a
+ * bike's length behind it, whatever the speeds did this frame (the wheel ahead may have eased off); held there it
+ * takes that rider's speed.
+ */
+function behindWheels(r, dist, others) {
+  for (const o of others) {
+    if (!o || o === r || Math.abs(o.lane - r.lane) >= SIDE_GAP) continue;
+    const gap = o.dist - dist;
+    if (gap > 0 && gap < BIKE_LEN) { dist = o.dist - BIKE_LEN; r.v = Math.min(r.v, o.v ?? r.v); }
+  }
+  return dist;
+}
+/**
+ * Top speed behind a wheel `gap` m ahead (centre to centre): coming up on it, a rider eases off at no more than
+ * 1.5 m/s² so as to settle on the wheel (2 m) at its speed; before, the brake came in at 3.6 m and the picture
+ * jumped (up to 19 m/s², measured).
+ */
+const EASE_OFF = 1.5;
+function wheelCap(gap, v) {
+  return gap > 0 && gap < 14 ? v + Math.sqrt(2 * EASE_OFF * Math.max(0, gap - 2.0)) : Infinity;
+}
+
+/** Called once per second of riding. */
+function tick(power, cadence, hr) {
+  const { route } = ride;
+  // simulator without a heart rate monitor: a plausible heart rate that follows power with a lag —
+  // from ~62 bpm at rest towards ~170 bpm at FTP, rising in about 30 s and drifting up with time
+  if (ride.simulated && !hr) {
+    const effort = Math.max(0, power) / Math.max(50, settings.ftp);
+    const target = 62 + 108 * Math.min(1.25, effort) + Math.min(8, ride.elapsed / 600);
+    ride.simHr = ride.simHr ? ride.simHr + (target - ride.simHr) * 0.035 : 75;
+    hr = Math.round(ride.simHr + Math.sin(ride.elapsed / 7) * 1.2);
+  }
+
+  // elevation & laps
+  const elev = route.elevAt(ride.dist);
+  if (elev > ride.lastElev) ride.gain += elev - ride.lastElev;
+  ride.lastElev = elev;
+  if (route.oneWay) {
+    // point to point: the finish line ends the ride, with the time against this route's best
+    if (ride.dist >= route.length && !ride.finished) {
+      ride.finished = true;
+      const t = ride.elapsed, best = bestLap(route);
+      ride.lapTimes.push(t);
+      noteLap(t);
+      if ((!best || t < best) && plausibleLap(t, route.length)) { records.lap[route.id] = t; saveRecords(); }
+      if (!ride.race) toast(!best ? tr('Finish! {time} 🏁', { time: fmtTime(t) }) : t < best ? tr('Finish! {time} — new record! ({delta}) 🏆', { time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('Finish! {time} ({delta} vs best)', { time: fmtTime(t), delta: fmtDelta(t - best) }));
+      if (!ride.race) { cueBeep(1180, 0.3); setTimeout(() => { if (ride?.finished) finishRide(); }, 2500); } // a race ends from raceFinished()
+    }
+  } else if (Math.floor(ride.dist / route.length) > ride.laps) {
+    const laps = Math.floor(ride.dist / route.length);
+    ride.laps = laps;
+    // lap time against this route's best on this device
+    const t = ride.elapsed - ride.lapStartT, best = bestLap(route);
+    ride.lapStartT = ride.elapsed;
+    ride.lapTimes.push(t);
+    noteLap(t);
+    if (ride.race) { if ((!best || t < best) && plausibleLap(t, route.length)) { records.lap[route.id] = t; saveRecords(); } } // the race board says it all
+    else if ((!best || t < best) && plausibleLap(t, route.length)) {
+      records.lap[route.id] = t; saveRecords();
+      toast(best ? tr('Lap {n}: {time} — new best lap! ({delta}) 🏆', { n: laps, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('Lap {n}: {time} — first lap on this route 🎉', { n: laps, time: fmtTime(t) }));
+    } else toast(tr('Lap {n}: {time} ({delta} vs best)', { n: laps, time: fmtTime(t), delta: fmtDelta(t - best) }));
+    if (!ride.workout || ride.workoutDone) recorder.markLap();
+  }
+  updateSegments();
+  raceTops();
+
+  // workout / trainer control
+  const grade = route.gradeAt(ride.dist);
+  if (ride.workout?.ramp && !ride.workoutDone) rampWatch(power, cadence);
+  if (ride.workout && !ride.workoutDone) {
+    const t = targetAt(ride.workout, ride.workoutT, settings.ftp);
+    ride.workoutT += 1;
+    if (t) {
+      ride.target = ergTarget(t);
+      if (t.index !== ride.stepIndex) {
+        if (ride.stepIndex !== undefined) { recorder.markLap(); cueBeep(1040, 0.35); }
+        ride.stepIndex = t.index;
+        if (t.step.text) toast(t.step.text);
+        else if (t.watts === null) toast(tr('Free segment — ride by feel'));
+        if (t.step.dur >= 20) cueSay((L) => describeStep(t.step, ride.target, L));
+        updateGear();
+      }
+      if (t.remaining <= 3 && t.remaining >= 1) cueBeep(660, 0.12);
+      const next = ride.workout.steps[t.index + 1];
+      if (next && t.remaining === 10 && t.step.dur >= 30) cueSay((L) => tIn(L, 'In 10 seconds: {what}', { what: describeStep(next, ergTarget({ watts: stepWatts(next, 0, settings.ftp) }), L) }));
+    } else {
+      ride.workoutDone = true;
+      ride.target = null;
+      recorder.markLap();
+      cueBeep(1040, 0.5);
+      cueSay('Workout complete. Great job!');
+      toast(tr('Workout complete! Free ride from here 🏁'));
+      updateGear();
+      if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
+    }
+  }
+  updateSpiralGuard(power, cadence);
+  if (!ride.simulated && trainer.controllable) {
+    if (inErgStep() || inHold()) {
+      const sendW = inHold() ? ride.hold : effectiveTarget();
+      if (sendW !== ride.lastSentTarget) { trainer.setTargetPower(sendW); ride.lastSentTarget = sendW; }
+      ride.lastSentGrade = null;
+    } else {
+      ride.lastSentTarget = null;
+      if (ride.shiftMode === 'wheel') sendVirtualGear();
+      else if (ride.shiftMode === 'off') sendRealWheel();
+      const offset = shiftPlan(ride.shiftMode, ride.gear, settings.chainring, settings.cog || 14).gradeOffset;
+      // the wind as extra grade: a headwind is a gentle hill, a tailwind a gentle descent (±5 % at most)
+      const wg = ride.wind?.head ? Math.max(-5, Math.min(5, windGrade(ride.v, ride.wind.head, ride.cda * (1 - (ride.draft || 0)), settings.weight) * 100)) : 0;
+      const g = Math.round(((grade * 100 + wg) * (settings.difficulty / 100) + offset) * 10) / 10;
+      // on a wheel the trainer gets less wind, so the shelter is felt in the legs, not only seen
+      const cw = Math.round(WIND_CW * (1 - (ride.draft || 0)) * 100) / 100;
+      const now = performance.now();
+      if (g !== ride.lastSentGrade || Math.abs(cw - (ride.lastSentCw ?? cw)) >= 0.02 || now - ride.lastGradeSentAt > 10000) {
+        trainer.setSimulation(g, { cw });
+        ride.lastSentGrade = g;
+        ride.lastSentCw = cw;
+        ride.lastGradeSentAt = now;
+      }
+    }
+  }
+
+  const onPlan = ride.workout && !ride.workoutDone;
+  if (onPlan && ride.stepIndex !== undefined) {
+    const st = (ride.stepStats[ride.stepIndex] ||= { p: 0, t: 0, n: 0 });
+    st.p += power; st.t += ride.target || 0; st.n++;
+  }
+  recorder.add({
+    power, cadence, heartRate: hr, speed: ride.v, distance: ride.dist,
+    altitude: elev, elevationGain: ride.gain,
+    target: onPlan ? ride.target : null, step: onPlan ? ride.stepIndex ?? null : null, // the plan, for the summary
+  });
+  dailyTick();
+
+  ride.powerHist.push(power);
+  if (ride.powerHist.length > 10) ride.powerHist.shift(); // up to the longest average the board can show
+  // W′bal: the anaerobic reserve above FTP, drained and refilled second by second
+  ride.wbal = wbalStep(ride.wbal ?? wPrimeJ(), power, settings.ftp, wPrimeJ(), 1);
+  ride.wbalMin = Math.min(ride.wbalMin ?? wPrimeJ(), ride.wbal);
+  // running averages for the board (zeros left out, as in the ride summary)
+  const A = ride.avg ||= { hr: 0, hrN: 0, cad: 0, cadN: 0 };
+  if (hr > 0) { A.hr += hr; A.hrN++; }
+  if (cadence > 0) { A.cad += cadence; A.cadN++; }
+  updateHud(cadence, hr, grade);
+  if (ride.elapsed - (ride.draftAt || 0) >= 30) saveDraft();
+  drawTrace();
+  renderStepList();
+}
+
+/** W′ in joules, from the profile (kJ). */
+function wPrimeJ() { return Math.max(1, (settings.wPrimeKj || DEFAULT_W_PRIME / 1000) * 1000); }
+
+/** W′bal on the board: what is left in kJ and a bar; above FTP with less than a minute to go, how long. */
+function updateWbalHud(p3) {
+  const full = wPrimeJ(), bal = ride.wbal ?? full, frac = bal / full;
+  $('m-wbal').textContent = (bal / 1000).toFixed(1);
+  const row = document.querySelector('.stat.wbal');
+  row.style.setProperty('--fill', `${Math.round(frac * 100)}%`);
+  const left = timeToEmpty(bal, p3, settings.ftp);
+  const warn = left < WARN_SECONDS;
+  row.classList.toggle('warn', warn);
+  $('m-wbal-warn').textContent = warn ? tr('~{s} s to empty', { s: Math.max(5, Math.round(left / 5) * 5) }) : `${Math.round(frac * 100)}%`;
+}
+
+/** Your average power over the last n seconds (one sample a second). */
+function powerOver(n) {
+  const h = ride?.powerHist || [], last = h.slice(-n);
+  return last.length ? last.reduce((a, b) => a + b, 0) / last.length : 0;
+}
+/** The power the board shows: averaged over 1, 3, 5 or 10 s (Profile → Settings). */
+const POWER_AVGS = [1, 3, 5, 10];
+const boardAvg = () => (POWER_AVGS.includes(+settings.powerAvg) ? +settings.powerAvg : 3);
+
+function updateHud(cadence, hr, grade) {
+  ride.lastHud = [cadence, hr, grade];
+  const p3 = Math.round(powerOver(boardAvg()));
+  $('m-power').textContent = p3;
+  $('m-wkg').textContent = `${(p3 / settings.weight).toFixed(1)} ${U.wkg}`;
+  $('m-ftp-pct').textContent = `${Math.round((p3 / settings.ftp) * 100)}% FTP`;
+  updateWbalHud(p3);
+  updateWindHud();
+  // power zone: the board's bar and a Z1–Z7 tag take the zone's colour (in a workout the number itself
+  // shows how close you are to the target, below)
+  const zone = powerZone(p3 / Math.max(1, settings.ftp));
+  const powerRow = document.querySelector('.stat.power');
+  powerRow.style.setProperty('--c', zone.color);
+  $('m-zone').textContent = `Z${zone.z}`;
+  $('m-zone').style.background = zone.color;
+  $('m-zone').title = tr(zone.name);
+  // heart rate zone, from intervals.icu or your threshold heart rate (Profile); neither → no tag
+  const hrz = $('m-hr-zone'), hrNow = Math.round(hr || 0), zs = hrZones();
+  hrz.hidden = !(zs && hrNow > 0);
+  if (!hrz.hidden) {
+    const z = zs.find((x) => hrNow < x.upTo) || zs[zs.length - 1];
+    hrz.textContent = `Z${z.z}`; hrz.style.background = z.color; hrz.title = tr(z.name);
+    document.querySelector('.stat.hr').style.setProperty('--c', z.color);
+  }
+  if (!ride.workout || ride.workoutDone) $('m-power').style.color = p3 > 0 ? zone.color : '';
+  else $('m-power').style.color = '';
+  $('m-cad').textContent = Math.round(cadence);
+  $('m-hr').textContent = hr ? Math.round(hr) : '—';
+  const A = ride.avg;
+  $('m-hr-avg').textContent = A?.hrN ? `${tr('avg')} ${Math.round(A.hr / A.hrN)}` : '';
+  $('m-cad-avg').textContent = A?.cadN ? `${tr('avg')} ${Math.round(A.cad / A.cadN)}` : '';
+  $('m-speed').textContent = (ride.v * 3.6).toFixed(1);
+  if (ride.race) updateRaceBoard(); else updateAhead();
+  // the slipstream in words: the watts it saves you now (the air's share of your effort at this speed), how deep it
+  // is as a bar (full = right on the wheel), and when you are about to pull out and pass
+  const df = ride.draft || 0;
+  $('draft-tag').hidden = df < 0.03;
+  if (df >= 0.03) {
+    const air = 0.5 * DEFAULTS.rho * ride.cda * Math.max(0, ride.v) ** 3; // W pushing the air at this speed
+    const saved = Math.round((air * df) / 5) * 5;
+    const passing = (ride.heldFor || 0) > PASS_AFTER - 1.5;
+    $('draft-tag').innerHTML = `<b>${tr('Slipstream')}</b><span>${passing ? tr('pulling out to pass…') : saved >= 5 ? tr('saving ~{w} W', { w: saved }) : tr('a little draft')}</span><i class="dt-bar"><i style="width:${Math.round(Math.min(1, df / 0.33) * 100)}%"></i></i>`;
+    $('draft-tag').title = tr('{n}% less air drag behind the wheel', { n: Math.round(df * 100) });
+  }
+  if (ride.ghost) {
+    const G = ride.ghost, gap = ride.dist - G.dist, tg = ghostTimeAt(G.entry, ride.dist);
+    const secs = tg === null ? null : Math.round(tg - ride.elapsed); // + = you got here sooner
+    $('ghost-tag').hidden = false;
+    $('ghost-tag').className = `ghost-mini ${gap >= 0 ? 'c-ok' : 'c-bad'}`;
+    $('ghost-tag').title = G.name;
+    $('ghost-tag').textContent = `👻 ${G.name} ${Math.abs(gap) < 2 ? tr('level') : `${gap > 0 ? '+' : '−'}${Math.round(Math.abs(gap))} ${U.m}`}${secs !== null && Math.abs(gap) >= 2 ? ` · ${secs >= 0 ? '−' : '+'}${fmtTime(Math.abs(secs))}` : ''}`;
+  } else $('ghost-tag').hidden = true;
+  $('m-dist').textContent = (ride.dist / 1000).toFixed(2);
+  $('m-time').textContent = fmtTime(ride.elapsed);
+  $('m-gain').textContent = Math.round(ride.gain);
+  updateProgress();
+  const gEl = $('grade');
+  gEl.textContent = `${grade >= 0 ? '' : '−'}${Math.abs(grade * 100).toFixed(1)}%`;
+  gEl.style.color = gradeColor(grade);
+  // what is coming: the average grade over the next 200 m and the next kilometre (#29)
+  const ahead = (m, min) => { // null near the finish of a point-to-point route
+    const d0 = ride.dist, span = ride.route.oneWay ? Math.min(m, ride.route.length - d0) : m;
+    return span < min ? null : (ride.route.elevAt(d0 + span) - ride.route.elevAt(d0)) / span;
+  };
+  const fmtG = (g) => g === null ? '' : `<b style="color:${gradeColor(g)}">${g < 0 ? '−' : ''}${Math.abs(g * 100).toFixed(1)}%</b>`;
+  const g2 = ahead(200, 50), g10 = ahead(1000, 1000);
+  $('grade-next').innerHTML = (g2 === null ? '' : `<span>200 ${U.m} ${fmtG(g2)}</span>`) + (g10 === null ? '' : `<span>1 ${U.km} ${fmtG(g10)}</span>`);
+
+  if (ride.workout) {
+    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+    const done = ride.workoutDone, target = done ? null : ride.target;
+    // compliance: green within ±5 %, amber within ±10 %, red beyond
+    const dev = target ? (p3 - target) / target : 0;
+    const cls = !target ? '' : Math.abs(dev) <= 0.05 ? 'c-ok' : Math.abs(dev) <= 0.1 ? 'c-warn' : 'c-bad';
+    $('m-power').className = cls;
+    // heart rate range (intervals.icu steps planned by heart rate): shown for you to hold, it never drives the trainer
+    const hrR = done ? null : t?.step?.hr;
+    const hrCls = hrR && hrNow > 0 ? (hrNow < hrR[0] ? 'c-warn' : hrNow > hrR[1] ? 'c-bad' : 'c-ok') : '';
+    $('m-hr').className = hrCls;
+    // the big number is what you hold in this step: your watts against the target, or, in a step planned by
+    // heart rate with free power, your heart rate against its range; a scale shows where it sits
+    const byHr = !target && !!hrR;
+    $('wk-ic-bolt').toggleAttribute('hidden', byHr); // an <svg> has no .hidden property
+    $('wk-ic-heart').toggleAttribute('hidden', !byHr);
+    const nowEl = $('wk-now');
+    nowEl.textContent = done ? '—' : byHr ? (hrNow || '—') : Math.round(p3);
+    nowEl.className = byHr ? hrCls : cls;
+    $('wk-unit').textContent = done ? '' : byHr ? U.bpm : target ? `/ ${target} ${U.W}` : `${U.W} · ${tr('free')}`;
+    const scale = (lo, hi, min, span, mid, warn) => {
+      const at = (v) => `${Math.max(0, Math.min(100, ((v - min) / span) * 100))}%`;
+      const band = (el, a, b) => { el.hidden = a === null; if (a !== null) { el.style.left = at(a); el.style.width = `${((b - a) / span) * 100}%`; } };
+      band($('wk-band-ok'), lo, hi);
+      band($('wk-band-warn'), warn ? warn[0] : null, warn?.[1]);
+      $('wk-mid').hidden = mid === null;
+      if (mid !== null) $('wk-mid').style.left = at(mid);
+      const now = byHr ? hrNow : p3;
+      $('wk-mark').hidden = !(now > 0);
+      $('wk-mark').style.left = at(now);
+      $('wk-lo').textContent = lo; $('wk-lo').style.left = at(lo);
+      $('wk-hi').textContent = hi; $('wk-hi').style.left = at(hi);
+      $('wk-c').style.left = at(mid ?? (lo + hi) / 2);
+    };
+    $('wk-scale').hidden = done || (!target && !hrR);
+    if (byHr) { // the range in the middle third of the bar, at least 40 bpm across
+      const span = Math.max(40, (hrR[1] - hrR[0]) * 3);
+      scale(hrR[0], hrR[1], (hrR[0] + hrR[1] - span) / 2, span, null, null);
+      $('wk-c').textContent = '';
+    } else if (target) { // target ±20 % across the bar: green ±5 %, amber ±10 %
+      scale(Math.round(target * 0.95), Math.round(target * 1.05), target * 0.8, target * 0.4, target, [target * 0.9, target * 1.1]);
+      const d = Math.round(p3 - target);
+      $('wk-c').textContent = ride.ergFactor < 1 ? `ERG ${Math.round(ride.ergFactor * 100)}%` : `${d >= 0 ? '+' : '−'}${Math.abs(d)}`;
+    }
+    wkTargetTxt = done ? '—' : target ? String(target) : hrR ? `${hrR[0]}–${hrR[1]}` : tr('free');
+    wkHero = done || (!target && !hrR) ? null : byHr
+      ? { byHr: true, lo: hrR[0], hi: hrR[1], now: hrNow, cls: hrCls, min: (hrR[0] + hrR[1] - Math.max(40, (hrR[1] - hrR[0]) * 3)) / 2, span: Math.max(40, (hrR[1] - hrR[0]) * 3) }
+      : { byHr: false, lo: Math.round(target * 0.95), hi: Math.round(target * 1.05), now: Math.round(p3), cls, min: target * 0.8, span: target * 0.4 };
+    const P = ride.pacer;
+    $('wk-pacer').hidden = !pacerOn();
+    if (pacerOn()) {
+      const gap = Math.round(ride.dist - P.dist);
+      $('wk-pacer').textContent = Math.abs(gap) < 3 ? tr('With {name}', { name: P.name }) : gap > 0 ? `${P.name} ${tr('{n} m behind', { n: gap })}` : `${P.name} ${tr('{n} m ahead', { n: -gap })}`;
+      const behindS = -gap / Math.max(ride.v, 3); // seconds behind him: 25 m is 2 s at 45 km/h but 5 s at 18
+      $('wk-pacer').className = `pacer-tag ${behindS <= 3 ? 'c-ok' : behindS <= 10 ? 'c-warn' : 'c-bad'}`;
+    }
+    $('wk-left').textContent = t ? fmtTime(done ? 0 : t.remaining - 1) : '0:00';
+    // the other number: your watts when heart rate leads, else your heart rate (and its range, if planned)
+    const oEl = $('wk-other');
+    $('wk-other-label').textContent = byHr ? tr('Power, W') : tr('Heart rate');
+    oEl.textContent = byHr ? Math.round(p3) : hrNow || '—';
+    oEl.className = byHr ? '' : hrCls;
+    $('wk-other-sub').textContent = !byHr && hrR ? `${hrR[0]}–${hrR[1]}` : '';
+    oEl.parentElement.hidden = !byHr && !hrNow && !hrR;
+    const cad = done ? null : t?.step?.cad;
+    const cadEl = $('wk-cad');
+    cadEl.textContent = cadence > 0 ? Math.round(cadence) : '—';
+    $('wk-cad-sub').textContent = cad ? `${cad[0]}–${cad[1]}` : '';
+    wkCadTxt = cad ? `${cad[0]}–${cad[1]}` : '';
+    cadEl.className = cad && cadence > 0 ? (cadence >= cad[0] - 2 && cadence <= cad[1] + 2 ? 'c-ok' : 'c-warn') : '';
+    $('m-cad').className = cadEl.className;
+    cadEl.parentElement.hidden = !cad && !ride.workout.steps.some((s) => s.cad); // no cadence targets in this workout: no column
+    const next = t && ride.workout.steps[t.index + 1];
+    const nextW = next ? scaleW(stepWatts(next, 0, settings.ftp)) : null;
+    // what comes next and for how long, so you know what you are getting into
+    const nextWhat = !next ? '—' : nextW !== null ? `${nextW} ${U.W}` : next.hr ? `${next.hr[0]}–${next.hr[1]} ${U.bpm}` : tr('free');
+    // how long it lasts goes in the label ("Next · 10 min"): beside the target it ran out of the panel
+    $('wk-next').textContent = nextWhat;
+    $('wk-next-label').textContent = next ? `${tr('Next')} · ${fmtDur(next.dur)}` : tr('Next');
+    drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
+  }
+
+  drawProfile($('profile'), ride.route, [...ride.bots, ...(ride.ghost ? [{ dist: ride.ghost.dist, color: 'rgba(255,255,255,.6)' }] : []), { dist: ride.dist, color: settings.jersey, self: true }]);
+  if (pipOpen() || overlayOn()) { const st = pipState(p3, zone, hrNow, zs); if (pipOpen()) updatePip(st); overlaySend(st); }
+}
+
+// ---------- The mini window over other apps (picture-in-picture) ----------
+let wkTargetTxt = '', wkCadTxt = ''; // the workout targets as the board shows them, for the mini window
+let wkHero = null; // what this step is held by (heart rate or power), its band and where you are, for the mini window
+/** What the mini window shows: the same numbers as the board, already formatted. */
+function pipState(p3, zone, hrNow, zs) {
+  const hz = zs && hrNow > 0 ? (zs.find((x) => hrNow < x.upTo) || zs[zs.length - 1]) : null;
+  const wp = wPrimeJ(), f = Math.max(0, Math.min(1, (ride.wbal ?? wp) / wp));
+  const wk = !!ride.workout && !ride.workoutDone;
+  return {
+    labels: { power: tr('Power'), hr: tr('HR'), cad: tr('Cadence'), W: U.W, kmh: tr('km/h'), km: U.km, kj: tr('kJ'), time: tr('Time'), speed: tr('Speed'), distance: tr('Distance'), target: tr('Target'), interval: tr('Interval'), next: tr('Next'), paused: tr('PAUSED') },
+    power: p3, powerCls: $('m-power').className, powerColor: p3 > 0 ? zone.color : '',
+    zone: `Z${zone.z}`, zoneColor: zone.color, wkg: `${(p3 / settings.weight).toFixed(1)} ${U.wkg} · ${$('m-ftp-pct').textContent}`,
+    hr: $('m-hr').textContent, hrAvg: $('m-hr-avg').textContent, hrZone: hz ? `Z${hz.z}` : '', hrZoneColor: hz?.color,
+    cad: $('m-cad').textContent, cadCls: $('m-cad').className, cadAvg: $('m-cad-avg').textContent,
+    cadTarget: wk && wkCadTxt ? `→ ${wkCadTxt}` : '',
+    workout: wk, target: wkTargetTxt, left: $('wk-left').textContent, next: $('wk-next').textContent, nextLabel: $('wk-next-label').textContent,
+    // in a workout the number you hold leads (heart rate in a step planned by it), with its band and how far off you are
+    hero: wk && wkHero ? (() => {
+      const H = wkHero, off = H.now > 0 ? (H.now < H.lo ? H.lo - H.now : H.now > H.hi ? -(H.now - H.hi) : 0) : null;
+      const unit = H.byHr ? U.bpm : U.W;
+      return { ...H, unit, label: `${H.byHr ? tr('Heart rate') : tr('Power')} · ${tr('Target')} ${H.lo}–${H.hi}${H.byHr ? '' : ` ${U.W}`}`,
+        hint: off === null ? '' : off > 0 ? tr('↑ {n} to the band', { n: off }) : off < 0 ? tr('↓ {n} to the band', { n: -off }) : tr('in the band') };
+    })() : null,
+    ...(() => { const t = wk ? targetAt(ride.workout, ride.workoutT, settings.ftp) : null; return t ? { stepF: 1 - t.remaining / Math.max(1, t.step.dur), stepLeft: t.remaining } : {}; })(),
+    time: $('m-time').textContent, speed: $('m-speed').textContent, dist: $('m-dist').textContent,
+    grade: $('grade').textContent, gradeColor: $('grade').style.color,
+    wbalF: f, wbalKj: ((ride.wbal ?? wp) / 1000).toFixed(1), wbalLevel: f <= 0.1 ? 'empty' : f <= 0.25 ? 'low' : f <= 0.5 ? 'mid' : 'ok', wbalTxt: `W′bal ${$('m-wbal').textContent} ${tr('kJ')} · ${$('m-wbal-warn').textContent}`,
+    paused: !!ride.paused,
+  };
+}
+
+/** Open or close the mini window; it has to come from a click or a key press. */
+async function togglePip() {
+  if (!ride) return;
+  if (pipOpen()) { closePip(); return; }
+  if (!(await openMini())) { toast(tr('This browser cannot show a mini window over other apps')); return; }
+  if (ride.lastHud) updateHud(...ride.lastHud); // straight away, not in a second
+}
+/** Opens the mini window (a click or key press must lead here): true when it is open. */
+async function openMini() {
+  const ok = await openPip({
+    clean: settings.pipMode !== 'sharp',
+    onKey: onRideKey,
+    onPause: () => togglePause(),
+    heartbeat: () => { if (ride) advance(); }, // the hidden tab's timers slow down, the mini window's do not
+    onClose: () => { $('btn-pip')?.classList.remove('on'); $('pip-rest').hidden = true; $('ride').classList.remove('resting'); if (ride) ride.showRoadInPip = false; },
+  });
+  if (ok) $('btn-pip').classList.add('on');
+  return ok;
+}
+$('btn-pip').hidden = !pipSupport();
+// the Ride button's menu: Ride, or Watch & ride (the mini window over a movie or the game, no 3D world)
+$('btn-start-more').hidden = !pipSupport() && !settings.overlay;
+// the Mac overlay: looked for while it is on in Profile, from the lobby already, so Watch & ride knows at the click
+function overlaySetting() { if (settings.overlay) overlayStart((on) => { if (on) track('overlay'); }); else overlayStop(); }
+overlaySetting();
+$('f-overlay').checked = !!settings.overlay;
+$('hud-get').hidden = !/Mac/.test(navigator.platform || navigator.userAgent); // the app is for Macs only
+$('f-overlay').onchange = () => { settings.overlay = $('f-overlay').checked; saveSettings(); overlaySetting(); $('btn-start-more').hidden = !pipSupport() && !settings.overlay; };
+$('btn-start-more').onclick = (e) => { e.stopPropagation(); $('start-menu').hidden = !$('start-menu').hidden; };
+$('start-watch').onclick = () => { $('start-menu').hidden = true; startRide({ watch: true }); };
+document.addEventListener('click', (e) => { if (!e.target.closest('#start-menu, #btn-start-more')) $('start-menu').hidden = true; });
+$('btn-pip').onclick = () => togglePip();
+$('pip-show-road').onclick = async () => {
+  if (!ride) return;
+  // Watch & ride starts without the 3D world: it is built now
+  if (!scene || ride.noScene) { await ensureScene(); applySceneSettings(); ride.noScene = false; }
+  ride.showRoadInPip = true; $('pip-rest').hidden = true;
+};
+
+// ---------- Minimap ----------
+/** The minimap grows into a big map and back (click it, the Nearby/Route button, or M). */
+function toggleMinimap(big = !$('minimap-box').classList.contains('big')) {
+  if ($('minimap-box').classList.contains('collapsed')) return;
+  $('minimap-box').classList.toggle('big', big);
+  settings.bigMap = big; saveSettings();
+  mapZoomLabel();
+  if (ride) drawMinimap();
+}
+/** The zoom button says which map you see: round you, or the whole route. */
+function mapZoomLabel() { $('minimap-size').textContent = tr($('minimap-box').classList.contains('big') ? 'Route' : 'Nearby'); }
+$('minimap-box').addEventListener('click', () => toggleMinimap());
+/** Fold the minimap or the profile away to its "+" button, and back; remembered for the next ride. */
+function hidePanel(which, hide) {
+  const box = $(which === 'map' ? 'minimap-box' : 'profile-box'), btn = $(which === 'map' ? 'minimap-hide' : 'profile-hide');
+  box.classList.toggle('collapsed', hide);
+  btn.textContent = hide ? '+' : '−';
+  btn.title = tr(hide ? 'Show' : 'Hide'); btn.setAttribute('aria-label', btn.title);
+  if (hide) box.classList.remove('big');
+  else if (which === 'map') box.classList.toggle('big', !!settings.bigMap);
+}
+for (const which of ['map', 'profile']) {
+  $(which === 'map' ? 'minimap-hide' : 'profile-hide').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const key = which === 'map' ? 'hideMap' : 'hideProfile';
+    settings[key] = !settings[key]; saveSettings();
+    hidePanel(which, settings[key]);
+    if (ride && which === 'map') drawMinimap();
+  });
+}
+$('minimap-size').addEventListener('click', (e) => { e.stopPropagation(); toggleMinimap(); });
+
+function drawMinimap() {
+  const canvas = $('minimap');
+  if (!canvas || !ride || !$('minimap-box').offsetWidth) return; // hidden (phones); offsetParent is null when it is fixed (big)
+  const dpr = Math.min(window.devicePixelRatio || 1, 2), W = canvas.clientWidth, H = canvas.clientHeight;
+  if (canvas.width !== Math.round(W * dpr)) { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); }
+  const g = canvas.getContext('2d'), route = ride.route, { pts, step } = routeShape(route);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, W, H);
+  const big = $('minimap-box').classList.contains('big');
+  const L = route.length;
+  const raw = (d, wrap = true) => { // route point (metres) at distance d (riders wrap round a loop)
+    const dd = route.oneWay || !wrap ? Math.max(0, Math.min(L, d)) : ((d % L) + L) % L;
+    const f = dd / step, i = Math.min(pts.length - 2, Math.floor(f)), t = f - i;
+    return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t];
+  };
+  // heading up: the map turns so that you always ride toward the top, eased so it does not twitch
+  const [mx, my] = raw(ride.dist);
+  // the way the road runs here: from 20 m back to 60 m ahead, kept inside this lap (round the start
+  // line the end of a loop need not meet its beginning on the map, so the map spun after 20 m)
+  const here = route.oneWay ? ride.dist : ((ride.dist % L) + L) % L;
+  const back = Math.max(0, Math.min(L - 80, here - 20));
+  const [ax, ay] = raw(back + 80, false), [bx, by] = raw(back, false);
+  const want = -Math.PI / 2 - Math.atan2(ay - by, ax - bx);
+  if (ride.mapRot === undefined) ride.mapRot = want;
+  ride.mapRot += Math.atan2(Math.sin(want - ride.mapRot), Math.cos(want - ride.mapRot)) * 0.6;
+  const c = Math.cos(ride.mapRot), sn = Math.sin(ride.mapRot);
+  const rot = ([x, y]) => [c * (x - mx) - sn * (y - my), sn * (x - mx) + c * (y - my)];
+  // big: the whole route fitted; small: about 1.2 km round you, you a little below the middle to see ahead
+  const pad = big ? 24 : 12;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pts) { const [x, y] = rot(p); x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  let k = Math.min((W - pad * 2) / Math.max(1, x1 - x0), (H - pad * 2) / Math.max(1, y1 - y0));
+  let ox = (W - (x1 - x0) * k) / 2 - x0 * k, oy = (H - (y1 - y0) * k) / 2 - y0 * k;
+  if (!big) {
+    const kLocal = Math.min(W, H) / 1200;
+    if (kLocal > k) { k = kLocal; ox = W / 2; oy = H * 0.62; }
+  }
+  const at = (d, wrap = true) => { const [x, y] = rot(raw(d, wrap)); return [ox + x * k, oy + y * k]; };
+  const line = (from, to, color, width) => {
+    g.beginPath();
+    for (let d = from; d <= to; d += step) { const [px, py] = at(Math.min(d, to), false); d === from ? g.moveTo(px, py) : g.lineTo(px, py); }
+    const [ex, ey] = at(to, false); g.lineTo(ex, ey);
+    g.strokeStyle = color; g.lineWidth = width; g.lineCap = 'round'; g.lineJoin = 'round'; g.stroke();
+  };
+  line(0, L, 'rgba(0,0,0,.45)', big ? 9 : 7);
+  // the road in the colour of its grade (as on the profile below)
+  const runs = gradeRuns(route, 0, L, 25, 4 / k);
+  g.lineWidth = big ? 4 : 3.2; g.lineCap = 'round';
+  for (let i = 0; i + 1 < runs.length; i++) {
+    const [ax, ay] = at(runs[i].d, false), [bx, by] = at(runs[i + 1].d, false);
+    if (Math.max(ax, bx) < -10 || Math.min(ax, bx) > W + 10 || Math.max(ay, by) < -10 || Math.min(ay, by) > H + 10) continue; // off the map
+    g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.strokeStyle = runs[i].color; g.stroke();
+  }
+  // timed segments: a short tick across the road at start and finish, the kind beside the start
+  const tickAt = (d) => {
+    const [px, py] = at(d), [qx, qy] = at(d + 8), nx = -(qy - py), ny = qx - px, n = Math.hypot(nx, ny) || 1;
+    g.beginPath(); g.moveTo(px - (nx / n) * 5, py - (ny / n) * 5); g.lineTo(px + (nx / n) * 5, py + (ny / n) * 5);
+    g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
+    return [px + (nx / n) * 12, py + (ny / n) * 12];
+  };
+  g.font = '11px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff';
+  for (const c of [...route.climbs, ...(route.sprints || []).map((x) => ({ ...x, sprint: true }))]) {
+    const [lx, ly] = tickAt(c.start);
+    tickAt(c.start + c.length);
+    g.fillText(c.sprint ? '\u26A1' : '\u26F0', lx, ly);
+  }
+  // start (and finish of a point-to-point route)
+  const flag = (d, color) => { const [px, py] = at(d); g.fillStyle = color; g.fillRect(px - 3, py - 3, 6, 6); g.strokeStyle = '#111'; g.lineWidth = 1; g.strokeRect(px - 3, py - 3, 6, 6); };
+  flag(0, '#fff');
+  if (route.oneWay) flag(L, '#22c55e');
+  const dot = (d, color, r, ring) => {
+    const [px, py] = at(d);
+    g.beginPath(); g.arc(px, py, r, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+    if (ring) { g.lineWidth = 2; g.strokeStyle = ring; g.stroke(); }
+  };
+  for (const b of ride.bots) dot(b.dist, b.color, 3);
+  if (pacerOn()) dot(ride.pacer.dist, ride.pacer.color, 3);
+  if (ride.ghost) dot(ride.ghost.dist, 'rgba(255,255,255,.55)', 3);
+  // you: an arrow pointing the way you ride
+  const [px, py] = at(ride.dist), [qx, qy] = at(ride.dist + 25), [rx, ry] = at(ride.dist - 10);
+  const ang = Math.atan2(qy - ry, qx - rx), sz = big ? 11 : 9;
+  g.save(); g.translate(px, py); g.rotate(ang);
+  g.beginPath(); g.moveTo(sz, 0); g.lineTo(-sz * 0.75, sz * 0.7); g.lineTo(-sz * 0.35, 0); g.lineTo(-sz * 0.75, -sz * 0.7); g.closePath();
+  g.fillStyle = settings.jersey; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.lineJoin = 'round'; g.stroke();
+  g.restore();
+}
+
+/** A lap (or the finish) for the leaderboards: its time, with the power and heart rate it was ridden at. */
+function noteLap(t) {
+  const n = recorder.samples.length, a = averages(recorder.samples, ride.lapStartI, n);
+  ride.lapEfforts.push({ segId: `${ride.route.id}-lap`, kind: 'lap', time: t, length: ride.route.length, power: a.power, hr: a.hr, at: Date.now() });
+  ride.lapStartI = n;
+}
+
+/**
+ * A race against the bots: who is first over each climb's top and each sprint's line (each lap), for the green
+ * and polka-dot jerseys. You move before the bots in a tick, so a dead heat is yours.
+ */
+function raceTops() {
+  const R = ride.race;
+  if (!R?.go || ride.group) return;
+  const L = ride.route.length, marks = [...ride.route.climbs, ...(ride.route.sprints || []).map((x) => ({ ...x, sprint: true }))];
+  for (const [r, key] of [[ride, 'me'], ...ride.bots.map((b, i) => [b, `b${i}`])]) {
+    const prev = R.was.get(key) ?? r.dist, cur = r.dist;
+    R.was.set(key, cur);
+    if (cur <= prev || prev >= R.distance) continue;
+    for (const c of marks) {
+      const at = c.start + c.length, lap = Math.floor((cur - at) / L);
+      if (Math.floor((prev - at) / L) >= lap || lap < 0) continue;
+      const id = `${c.id}:${lap}`;
+      if (R.tops[id]) continue;
+      R.tops[id] = { kind: c.sprint ? 'sprint' : 'climb', who: key };
+      if (key === 'me') toast(c.sprint ? tr('⚡ First over the line: {name}', { name: c.name }) : tr('⛰ First to the top: {name}', { name: c.name }));
+    }
+  }
+}
+
+/** Climb segments: start the timer at the foot, stop it at the top, compare with the best. */
+function updateSegments() {
+  const { route } = ride, L = route.length, prev = ride.prevDist, cur = ride.dist;
+  ride.prevDist = cur;
+  const crossed = (at) => Math.floor((prev - at) / L) < Math.floor((cur - at) / L);
+  if (ride.seg) {
+    const S = ride.seg, done = cur - S.d0;
+    if (done >= S.climb.length) {
+      const t = Math.round((ride.elapsed - S.t0) * 10) / 10, best = records.seg[S.climb.id];
+      const top = S.climb.sprint ? Math.round(S.vmax * 3.6 * 10) / 10 : null;
+      const a = averages(recorder.samples, S.i0, recorder.samples.length); // for the leaderboards
+      ride.efforts.push({ name: `${S.climb.sprint ? '⚡' : '⛰'} ${S.climb.name}`, time: t, best, pb: !best || t < best, ...(top ? { top } : {}), segId: S.climb.id, kind: S.climb.sprint ? 'sprint' : 'climb', length: S.climb.length, power: a.power, hr: a.hr, at: Date.now() });
+      if (top && top > (records.top[S.climb.id] || 0)) { records.top[S.climb.id] = top; saveRecords(); }
+      if (!best || t < best) {
+        records.seg[S.climb.id] = t;
+        S.trace.push(Math.round(t * 10) / 10);
+        records.segTrace[S.climb.id] = S.trace; // the record attempt, for the climb ghost next time
+        saveRecords();
+      }
+      ride.climbGhost = null;
+      if (S.climb.sprint) toast(`⚡ ${!best ? tr('{name}: {time} 🏁', { name: S.climb.name, time: fmtTime(t) }) : t < best ? tr('{name}: {time} — new record! ({delta}) 🏆', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('{name}: {time} ({delta} vs best)', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) })} · ${tr('top speed')} ${top} ${tr('km/h')}`);
+      else toast(!best ? tr('{name}: {time} — first time up 🎉', { name: S.climb.name, time: fmtTime(t) }) : t < best ? tr('{name}: {time} — new record! ({delta}) 🏆', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }) : tr('{name}: {time} ({delta} vs best)', { name: S.climb.name, time: fmtTime(t), delta: fmtDelta(t - best) }));
+      cueBeep(t < (best || Infinity) ? 1180 : 760, 0.25);
+      ride.seg = null;
+    } else if (done < -5) { ride.seg = null; ride.climbGhost = null; } // rolled back past the start
+    else {
+      // note the time at every 10 m, interpolated between updates
+      const t = ride.elapsed - S.t0;
+      while (S.trace.length * TRACE_STEP <= done) {
+        const at = S.trace.length * TRACE_STEP, f = done > S.lastOff ? (at - S.lastOff) / (done - S.lastOff) : 1;
+        S.trace.push(Math.round((S.lastT + (t - S.lastT) * Math.max(0, Math.min(1, f))) * 10) / 10);
+      }
+      S.lastT = t; S.lastOff = done;
+      S.vmax = Math.max(S.vmax || 0, ride.v);
+    }
+  }
+  if (!ride.seg) {
+    const c = [...route.climbs, ...(route.sprints || [])].find((cl) => crossed(cl.start));
+    if (c) {
+      ride.seg = { climb: c, t0: ride.elapsed, i0: recorder.samples.length, d0: cur - (((cur - c.start) % L) + L) % L, trace: [0], lastT: 0, lastOff: 0, vmax: ride.v };
+      socialSegStart(route, c); // the week's leader in your category, for the panel
+      // your record on this climb starts beside you and rides it at its own pace (#26)
+      const best = records.seg[c.id];
+      ride.climbGhost = best ? { name: c.sprint ? tr('Sprint record') : tr('Climb record'), ghost: true, climb: true, color: settings.jersey, stripe: settings.stripe, dist: ride.seg.d0, pedal: 0.6, lane: START_LANE + 1.1, trace: records.segTrace[c.id] || null, best, length: c.length } : null;
+      if (c.sprint) { toast(tr('⚡ {name}: {m} m — sprint!', { name: c.name, m: c.length })); cueBeep(1320, 0.18); }
+      else toast(tr('{name} — {km} km at {grade}%. Go! ⛰️', { name: c.name, km: (c.length / 1000).toFixed(1), grade: (c.grade * 100).toFixed(1) }));
+    }
+  }
+  const panel = $('seg-panel');
+  panel.hidden = !ride.seg;
+  if (ride.seg) {
+    const S = ride.seg, t = ride.elapsed - S.t0, best = records.seg[S.climb.id];
+    const frac = Math.min(1, (cur - S.d0) / S.climb.length);
+    const left = Math.max(0, Math.round((S.climb.length - (cur - S.d0))));
+    $('seg-name').textContent = `${S.climb.sprint ? '⚡' : '⛰'} ${S.climb.name}`;
+    panel.classList.toggle('sprint', !!S.climb.sprint);
+    $('seg-time').textContent = S.climb.sprint && t < 60 ? `${t.toFixed(1)} ${tr('s')}` : fmtTime(t);
+    $('seg-left').textContent = S.climb.sprint ? `${tr('{n} m to the line', { n: left })} · ${Math.round((S.vmax || ride.v) * 3.6)} ${tr('km/h')} ${tr('max')}` : tr('{n} m to the top', { n: left });
+    $('seg-best').textContent = (best ? tr('best {time}', { time: fmtTime(best) }) : tr('no record yet')) + socialSegLeader(S.climb.id);
+    // on pace: compare with the best time scaled to the distance done so far
+    const pace = best ? t - traceTime(records.segTrace[S.climb.id], best, S.climb.length, cur - S.d0) : 0;
+    $('seg-pace').textContent = best && frac > 0.05 ? fmtDelta(pace) : '';
+    $('seg-pace').className = pace <= 0 ? 'c-ok' : 'c-bad';
+    $('seg-fill').style.width = `${(frac * 100).toFixed(1)}%`;
+  }
+}
+
+function updateProgress() {
+  drawMinimap();
+  // the bottom-right bar always tracks the lap; the workout's name and progress head its own panel
+  const L = ride.route.length, frac = ride.route.oneWay ? Math.min(1, ride.dist / L) : (ride.dist % L) / L;
+  $('progress-fill').style.width = `${(frac * 100).toFixed(1)}%`;
+  const best = bestLap(ride.route);
+  if (ride.route.oneWay) $('progress-label').textContent = `${(Math.min(ride.dist, L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(1)} ${U.km} · ${fmtTime(ride.elapsed)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
+  else $('progress-label').textContent = `${tr('Lap {n}', { n: Math.floor(ride.dist / L) + 1 })} · ${((ride.dist % L) / 1000).toFixed(1)} / ${(L / 1000).toFixed(L < 1000 ? 1 : 0)} ${U.km} · ${fmtTime(ride.elapsed - ride.lapStartT)}${best ? ` (${tr('best {time}', { time: fmtTime(best) })})` : ''}`;
+  if (ride.workout) {
+    $('wk-name').textContent = ride.workout.name;
+    $('wk-name').title = ride.workout.name;
+    // the chart under the panel already shows how far through you are: the header only says when it is done
+    $('wk-pct').textContent = ride.workoutDone ? tr('done') : '';
+  }
+}
+
+/** "10 min", "30 s", "1:30" */
+const stepDur = (sec) => (sec >= 60 && sec % 60 === 0 ? `${sec / 60} ${U.min}` : sec < 60 ? `${sec} ${tr('s')}` : fmtTime(sec));
+/** "10 min @ 270 W", "5 min 97→151 W", "30 min 151–158 W", "5 min free" for the list. */
+function stepLabel(s) {
+  if (s.free) return s.hr ? `${stepDur(s.dur)} ${s.hr[0]}–${s.hr[1]} ${U.bpm}` : `${stepDur(s.dur)} ${tr('free')}`;
+  const band = stepBand(s);
+  if (band) return `${stepDur(s.dur)} ${band[0]}–${band[1]} ${U.W}`;
+  const a = scaleW(stepWatts(s, 0, settings.ftp)), b = scaleW(stepWatts(s, 1, settings.ftp));
+  return a === b ? `${stepDur(s.dur)} @ ${a} ${U.W}` : `${stepDur(s.dur)} ${a}→${b} ${U.W}`;
+}
+/** Whether a finished interval was ridden on target: inside its range, or within ±5 % of its mean target. */
+function stepOnTarget(s, st) {
+  if (!st || !st.n || s.free) return false;
+  const p = st.p / st.n, band = stepBand(s);
+  if (band) return p >= band[0] * 0.98 && p <= band[1] * 1.02;
+  const t = st.t / st.n;
+  return t > 0 && Math.abs(p - t) <= t * 0.05;
+}
+
+/** The workout's intervals on the left, as in Zwift: two done, the current one filling up, the next ones. */
+function renderStepList() {
+  const box = $('wk-steps');
+  if (!ride?.workout || box.hidden) return;
+  const steps = ride.workout.steps, cur = ride.workoutDone ? steps.length : (ride.stepIndex ?? 0);
+  const total = totalDuration(ride.workout);
+  $('ws-finish').innerHTML = ride.workoutDone ? `<b>${tr('Workout complete')}</b>` : `${tr('Finish in')} <b>${fmtTime(Math.max(0, total - ride.workoutT))}</b>`;
+  const stars = steps.slice(0, cur).filter((s, i) => stepOnTarget(s, ride.stepStats[i])).length;
+  $('ws-stars').textContent = `★ ${stars}/${steps.length}`;
+  const from = Math.max(0, cur - 1), to = Math.min(steps.length, from + 6); // one done, the current one, what's next
+  let start = 0;
+  for (let i = 0; i < cur && i < steps.length; i++) start += steps[i].dur;
+  const html = [];
+  if (from > 0) html.push(`<li class="more">⋯ ${from}</li>`);
+  for (let i = from; i < to; i++) {
+    const s = steps[i], mid = scaleW(stepWatts(s, 0.5, settings.ftp));
+    const zc = s.free || mid === null ? '#64748b' : zoneColor(mid / settings.ftp);
+    if (i < cur) html.push(`<li class="done" style="--zc:${zc}"><span class="st">${stepOnTarget(s, ride.stepStats[i]) ? '★' : ''}</span><span>${esc(stepLabel(s))}</span></li>`);
+    else if (i === cur) {
+      const done = Math.min(1, Math.max(0, (ride.workoutT - start) / s.dur));
+      html.push(`<li class="cur" style="--zc:${zc}"><i class="fill" style="width:${(done * 100).toFixed(1)}%"></i><span class="st">▶</span><span>${esc(stepLabel(s))}</span></li>`);
+    } else html.push(`<li style="--zc:${zc}"><span class="st"></span><span>${esc(stepLabel(s))}</span></li>`);
+  }
+  if (to < steps.length) html.push(`<li class="more">+ ${steps.length - to}</li>`);
+  $('ws-list').innerHTML = html.join('');
+}
+
+/**
+ * The strip along the bottom of the ride (as in Zwift): the ride so far, power as bars coloured by zone
+ * and heart rate as a line. At least ten minutes wide, squeezed as the ride gets longer.
+ */
+/** A small dark tag with the FTP value, just above the dashed FTP line (below it when there is no room). */
+function ftpTag(g, x, yF, ftp, align = 'left') {
+  const t = `FTP ${ftp} W`;
+  g.font = '600 11px system-ui, -apple-system, sans-serif';
+  const tw = g.measureText(t).width, bw = tw + 10, bh = 16;
+  const bx = align === 'right' ? x - bw : x, by = yF - bh - 3 < 0 ? yF + 3 : yF - bh - 3;
+  g.fillStyle = 'rgba(10,15,25,.72)';
+  g.beginPath(); g.roundRect(bx, by, bw, bh, 4); g.fill();
+  g.fillStyle = 'rgba(255,255,255,.9)'; g.textBaseline = 'middle';
+  g.fillText(t, bx + 5, by + bh / 2 + 0.5);
+  g.textBaseline = 'alphabetic';
+}
+
+function drawTrace() {
+  const c = $('trace');
+  if (!c || !c.clientWidth) return;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = c.clientWidth, h = c.clientHeight;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const g = c.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const s = recorder.samples, n = s.length;
+  if (!n) return;
+  const ftp = settings.ftp, BAR = 3;
+  const cols = Math.floor(w / BAR);
+  const span = Math.max(600, n);              // seconds across the strip
+  const per = span / cols;                     // seconds per bar
+  const pMax = Math.max(ftp * 1.6, 1), top = 6, base = h, H = base - top; // as the profile beside it: flush with the bottom, 6 px clear at the top
+  const hrLo = 60, hrHi = Math.max(190, settings.maxHr || 0);
+  const hrPts = [];
+  for (let i = 0; i * per < n; i++) {
+    const a = Math.floor(i * per), b = Math.min(n, Math.max(a + 1, Math.floor((i + 1) * per)));
+    let p = 0, hr = 0, hn = 0;
+    for (let k = a; k < b; k++) { p += s[k].power || 0; if (s[k].heartRate > 0) { hr += s[k].heartRate; hn++; } }
+    p /= b - a;
+    const x = i * BAR;
+    const bh = Math.max(1, Math.min(1, p / pMax) * H);
+    g.fillStyle = zoneColor(p / ftp);
+    g.fillRect(x, base - bh, BAR - 1, bh);
+    if (hn) hrPts.push([x + BAR / 2, base - Math.min(1, Math.max(0, (hr / hn - hrLo) / (hrHi - hrLo))) * H]);
+    else hrPts.push(null);
+  }
+  // FTP line
+  const yF = base - (ftp / pMax) * H;
+  g.strokeStyle = 'rgba(255,255,255,.22)'; g.lineWidth = 1; g.setLineDash([3, 4]);
+  g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = '#ff4d5e'; g.lineWidth = 1.6; g.beginPath();
+  let on = false;
+  for (const p of hrPts) { if (!p) { on = false; continue; } on ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1]); on = true; }
+  g.stroke();
+  ftpTag(g, w - 4, yF, ftp, 'right');
+}
+
+function drawWorkoutChart(canvas, w, t) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = canvas.clientWidth * dpr;
+  canvas.height = canvas.clientHeight * dpr;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const total = totalDuration(w);
+  // planned by heart rate only (free power throughout): each step's height and colour from its heart rate range
+  if (w.steps.every((s) => s.free) && w.steps.some((s) => s.hr)) {
+    const his = w.steps.filter((s) => s.hr), zs = hrZones();
+    const top = Math.max(...his.map((s) => s.hr[1])) * 1.03, base = Math.min(...his.map((s) => s.hr[0])) * 0.75;
+    const y = (v) => H - ((v - base) / (top - base)) * H;
+    // without heart rate zones (no LTHR) the steps still read as easy or hard: coloured by where their band
+    // sits in this workout, from an easy blue-green to a hard orange, like power zones
+    const mids = his.map((s) => (s.hr[0] + s.hr[1]) / 2), mLo = Math.min(...mids), mHi = Math.max(...mids);
+    const colorOf = (s) => {
+      if (!s.hr) return '#64748b';
+      const mid = (s.hr[0] + s.hr[1]) / 2;
+      if (zs) return (zs.find((z) => mid < z.upTo) || zs[zs.length - 1]).color;
+      return zoneColor(0.6 + (mHi > mLo ? (mid - mLo) / (mHi - mLo) : 0.5) * 0.4);
+    };
+    const gap = Math.max(1, dpr), r = 3 * dpr;
+    let x0 = 0;
+    for (const s of w.steps) {
+      const x1 = x0 + s.dur, X0 = (x0 / total) * W, DX = Math.max(1, ((x1 - x0) / total) * W - gap);
+      const now = t >= x0 && t < x1, past = t >= 0 && x1 <= t;
+      ctx.fillStyle = colorOf(s);
+      ctx.globalAlpha = past ? 0.35 : now ? 1 : 0.8;
+      const lo = s.hr ? y(s.hr[0]) : H * 0.7, hi = s.hr ? y(s.hr[1]) : lo;
+      ctx.beginPath(); ctx.roundRect(X0, hi, DX, H - hi, [r, r, 0, 0]); ctx.fill(); // the band on top of its floor, one block
+      if (s.hr) { ctx.globalAlpha *= 0.45; ctx.fillStyle = '#0b1019'; ctx.fillRect(X0, hi, DX, lo - hi); } // the band: lighter than the floor
+      x0 = x1;
+    }
+    ctx.globalAlpha = 1;
+    if (t >= 0) { ctx.fillStyle = '#fff'; ctx.fillRect(Math.min(W - 2 * dpr, (t / total) * W), 0, 2 * dpr, H); }
+    return;
+  }
+  const ftp = settings.ftp;
+  const wattsOf = (s, f) => scaleW(stepWatts(s, f, ftp)) ?? ftp * 0.5;
+  const topOf = (s) => (s.rangeW ? scaleW(s.rangeW[1]) : s.range ? scaleW(Math.round(s.range[1] * ftp)) : 0);
+  const maxW = Math.max(...w.steps.map((s) => Math.max(wattsOf(s, 0), wattsOf(s, 1), topOf(s)))) * 1.05;
+  let x0 = 0;
+  for (const s of w.steps) {
+    const x1 = x0 + s.dur;
+    // a range target (like intervals.icu): solid up to its low end, a lighter band up to the high end
+    const range = (s.rangeW || (s.range && s.range.map((f) => f * ftp)))?.map((v) => scaleW(Math.round(v)));
+    const a = range ? range[0] : wattsOf(s, 0), b = range ? range[0] : wattsOf(s, 1);
+    ctx.fillStyle = s.free ? '#64748b' : zoneColor((range ? (range[0] + range[1]) / 2 : (a + b) / 2) / ftp);
+    ctx.globalAlpha = t >= 0 && x1 <= t ? 0.45 : 1;
+    ctx.beginPath();
+    ctx.moveTo((x0 / total) * W, H);
+    ctx.lineTo((x0 / total) * W, H - (a / maxW) * H);
+    ctx.lineTo((x1 / total) * W, H - (b / maxW) * H);
+    ctx.lineTo((x1 / total) * W, H);
+    ctx.closePath();
+    ctx.fill();
+    if (range) {
+      const [lo, hi] = range;
+      ctx.globalAlpha *= 0.5;
+      ctx.fillRect((x0 / total) * W, H - (hi / maxW) * H, ((x1 - x0) / total) * W, ((hi - lo) / maxW) * H);
+    }
+    x0 = x1;
+  }
+  ctx.globalAlpha = 1;
+  if (t >= 0) {
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(Math.min(W - 2 * dpr, (t / total) * W), 0, 2 * dpr, H);
+  }
+}
+
+function togglePause() {
+  if (!ride) return;
+  advance();
+  ride.paused = !ride.paused;
+  ride.lastSim = performance.now();
+  $('paused').hidden = !ride.paused;
+  $('btn-pause').textContent = ride.paused ? tr('Resume') : tr('Pause');
+  if (ride.paused) showControls(0); else showControls();
+  if (pipOpen() && ride.lastHud) updateHud(...ride.lastHud);
+}
+
+/** The ride so far, kept in case the page closes before Finish (#: crash safety). */
+function saveDraft() {
+  if (!ride || recorder.samples.length < 10) return;
+  ride.draftAt = ride.elapsed;
+  const w = ride.workout;
+  putDraft({
+    start: (recorder.startTime || new Date()).getTime(), savedAt: Date.now(),
+    samples: recorder.samples, lapStarts: recorder.lapStarts,
+    meta: {
+      routeId: ride.route.id, routeName: ride.route.name, intensity: settings.intensity,
+      workout: w ? { id: w.id, name: w.name, source: w.source || null, eventId: w.eventId || null } : null,
+      lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts,
+      // where you were, to go on from there after a reload
+      at: { dist: ride.dist, elapsed: ride.elapsed, workoutT: ride.workoutT, workoutDone: ride.workoutDone, gain: ride.gain, laps: ride.laps, lapStartT: ride.lapStartT, lapStartI: ride.lapStartI },
+    },
+  });
+}
+
+/** Go on with an unfinished ride: its seconds so far, and you, the bunch and the pacer where you were. */
+function resumeFrom(d) {
+  const at = d.meta.at || { dist: d.samples.at(-1)?.distance || 0, elapsed: d.samples.length, workoutT: d.samples.length };
+  recorder.samples = d.samples.slice();
+  recorder.startTime = new Date(d.start);
+  recorder.lapStarts = d.lapStarts || [0];
+  const shift = Math.max(0, at.dist || 0) - ride.dist;
+  ride.dist = ride.prevDist = Math.max(0, at.dist || 0);
+  for (const o of [...ride.bots, ride.pacer, ride.ghost].filter(Boolean)) o.dist += shift;
+  ride.elapsed = at.elapsed || d.samples.length;
+  ride.workoutT = at.workoutT ?? ride.elapsed;
+  ride.workoutDone = !!at.workoutDone;
+  ride.gain = at.gain || 0;
+  ride.lastElev = ride.route.elevAt(ride.dist);
+  ride.laps = at.laps || 0; ride.lapStartT = at.lapStartT || 0; ride.lapStartI = at.lapStartI || 0;
+  ride.lapTimes = d.meta.lapTimes || []; ride.splits = d.meta.splits || []; ride.efforts = d.meta.efforts || [];
+  ride.splitFrom = { t: ride.elapsed, d: ride.dist, i: recorder.samples.length };
+  ride.draftAt = ride.elapsed;
+  if (d.meta.intensity) settings.intensity = d.meta.intensity;
+  if (ride.workout && !ride.workoutDone) { const t = targetAt(ride.workout, ride.workoutT, settings.ftp); if (t) ride.target = ergTarget(t); }
+  toast(tr('Continuing from {time}', { time: fmtTime(ride.elapsed) }));
+}
+
+/** An unfinished ride found on opening the page: save it to history (then upload or download it) or discard it. */
+async function offerDraft() {
+  const d = await getDraft();
+  const box = $('draft-box');
+  if (!d || !d.samples?.length || ride) { box.hidden = true; return; }
+  if (d.samples.length < 30) { deleteDraft(); box.hidden = true; return; }
+  const when = new Date(d.start).toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  $('draft-text').textContent = tr('Unfinished ride: {route}{workout} · {time} · {when}', {
+    route: d.meta.routeName || '', workout: d.meta.workout ? ` · ${d.meta.workout.name}` : '', time: fmtTime(d.samples.length), when,
+  });
+  box.hidden = false;
+  // go on riding it: the route and the workout it had, from where it stopped (the draft stays till the finish)
+  $('draft-continue').onclick = () => { box.hidden = true; track('draft', 'continue'); startRide({ resume: d }); };
+  $('draft-save').onclick = async () => {
+    const rec = new Recorder();
+    rec.samples = d.samples; rec.startTime = new Date(d.start); rec.lapStarts = d.lapStarts || [0]; rec.position = positionOf(d.meta?.routeId);
+    const m = d.meta, full = allWorkouts().find((x) => x.id === m.workout?.id);
+    const r = {
+      workout: full || m.workout, intensity: m.intensity, route: routes.find((x) => x.id === m.routeId) || { id: m.routeId, name: m.routeName },
+      summary: rec.summary(), uploadedId: null, lapTimes: m.lapTimes || [], splits: m.splits || [], efforts: m.efforts || [], ramp: false, ghostGap: null,
+    };
+    const entry = saveToHistory(r, rec.samples);
+    await putRide({ id: entry.id, start: d.start, samples: rec.samples, lapStarts: rec.lapStarts });
+    await deleteDraft();
+    box.hidden = true;
+    showSummary(entry); // from history: .FIT / .TCX and Send to intervals.icu
+  };
+  $('draft-drop').onclick = async () => {
+    if ($('draft-drop').dataset.armed !== '1') { $('draft-drop').dataset.armed = '1'; $('draft-drop').textContent = tr('Tap again to discard'); return; }
+    await deleteDraft();
+    box.hidden = true;
+  };
+}
+
+let rideFullscreen = false; // full screen was ours (installed app): leave it with the ride
+function finishRide() {
+  if (!ride) return;
+  setKeepReconnecting(false);
+  $('gr-host').hidden = true;
+  if (rideFullscreen && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+  rideFullscreen = false;
+  advance();
+  clearInterval(rideTimer);
+  closePip();
+  keepAwake(false);
+  crowdOff();
+  const sum = recorder.summary();
+  const dailyStreak = ride.dailyStreak || 0;
+  const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
+  lastRide = { race: raceResults(), jerseys: ride.race && !ride.group ? jerseysWon(ride.race.done ? ride.race.place : 0, ride.race.tops) : [], raceLaps: ride.race?.laps, groupRace: ride.group && ride.race ? { id: ride.group.id, title: ride.group.title, sent: ride.group.sent || null } : null, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, daily: dailyStreak, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
+  // the ride's laps, climbs and sprints for the leaderboards (a real ride on a built-in route only)
+  const socialItems = ride.route.custom ? [] : rideItems({
+    route: ride.route, version: versionOf(ride.route), simulated: ride.simulated && !window.__pretendTrainer,
+    laps: ride.lapEfforts, efforts: ride.efforts, weight: settings.weight, ftp: settings.ftp, client: SOCIAL_CLIENT,
+  });
+  const socialSim = ride.simulated && !window.__pretendTrainer;
+  const socialTimed = !ride.route.custom && (ride.lapEfforts.length + ride.efforts.length) > 0;
+  savePerf();
+  ride.group?.live?.leave();
+  chatOpen(false); $('chat-box').hidden = true;
+  const socialFirst = ride.efforts.find((x) => socialItems.some((i) => i.segment_id === x.segId))?.name.replace(/^\S+\s/, '') || ride.route.name;
+  ride = null;
+  if (trainer.connected && trainer.controllable) {
+    trainer.setSimulation(0);
+    if (settings.shiftMode !== 'grade') trainer.setWheelCircumference(BASE_WHEEL_MM);
+  }
+  const entry = sum && sum.duration >= 30 ? saveToHistory(lastRide, recorder.samples) : null;
+  if (entry) putRide({ id: entry.id, start: (recorder.startTime || new Date()).getTime(), samples: recorder.samples, lapStarts: recorder.lapStarts });
+  deleteDraft();
+  $('ride').hidden = true;
+  showSummary(entry || historyEntry(lastRide, recorder.samples), { live: true });
+  // the kilometres and climbing for the ratings across Ukraine (a ride on a trainer, kept in the history)
+  const socialRide = entry ? rideTotal(entry, { simulated: socialSim, weight: settings.weight, client: SOCIAL_CLIENT }) : null;
+  socialAfterRide(socialItems, { firstName: socialFirst, simulated: socialSim, timed: socialTimed, ride: socialRide });
+}
+
+// ---------- Ride history (#19) ----------
+// The last 100 rides, kept on this device: the summary, laps and climbs, and power / heart rate every
+// 5 s for the chart (the full second-by-second record is only kept until the next ride).
+const HISTORY_KEY = 'gruppetto.history', HISTORY_DEL_KEY = 'gruppetto.history.deleted';
+let history = (() => { try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; } })();
+let historyDeleted = readJson(HISTORY_DEL_KEY, {}); // rides deleted here: id → when, so they go from your other devices too
+const seenHistory = new Map();
+stampChanged(history, seenHistory);
+const writeHistory = () => {
+  for (;;) {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); return; } catch { if (history.length <= 1) return; history.pop(); } // full: drop the oldest
+  }
+};
+const saveHistory = () => { stampChanged(history, seenHistory); writeHistory(); socialDataChanged(); };
+/** A ride deleted by you (not one that just fell off the end of the list). */
+function forgetRide(id) {
+  history = history.filter((e) => e.id !== id);
+  historyDeleted[id] = Date.now();
+  writeJson(HISTORY_DEL_KEY, historyDeleted);
+  deleteRide(id);
+  saveHistory();
+}
+
+/** Training stress: hours × intensity factor² × 100, with NP (or average power) against FTP. */
+function tss(sum, ftp) {
+  const np = sum.normalizedPower || sum.avgPower;
+  if (!np || !ftp) return 0;
+  return Math.round((sum.duration * np * (np / ftp)) / (ftp * 3600) * 100);
+}
+
+function historyEntry(r, samples) {
+  const every = 5, pw = [], hr = [], d = [], tg = [], cd = [], wb = [];
+  const wPrime = wPrimeJ(), wbal = wbalSeries(samples.map((x) => x.power || 0), settings.ftp, wPrime);
+  for (let i = 0; i < samples.length; i += every) {
+    const chunk = samples.slice(i, i + every);
+    wb.push(Math.round(wbal[Math.min(samples.length, i + every) - 1]));
+    // power and cadence: a plain mean, pauses (zeros) included, so a stop shows as one; heart rate and the target
+    // leave their zeros out (a strap that lost contact, a step without a target)
+    const avg = (k, zeros = false) => { const v = chunk.map((x) => x[k] || 0).filter((x) => zeros || x > 0); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0; };
+    pw.push(avg('power', true)); hr.push(avg('heartRate')); tg.push(avg('target')); cd.push(avg('cadence', true));
+    d.push(Math.round((chunk[chunk.length - 1].distance || 0) * 10) / 10); // distance at the end of each 5 s, for ghosts
+  }
+  return {
+    id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
+    workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(wbal.reduce((m, v) => Math.min(m, v), Infinity)) : wPrime, summary: r.summary, // reduce, not Math.min(...): a 24 h brevet is 86 400 seconds, too many arguments for one call
+    tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
+    daily: r.daily || 0, jerseys: r.jerseys?.length ? r.jerseys : undefined, race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
+    maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
+    bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
+    stops: stopsOf(samples.map((x) => x.power || 0)), // short pauses: how many and how long in all
+    chart: { every, pw, hr, d, wb, ...(tg.some((x) => x > 0) ? { tg } : {}), ...(cd.some((x) => x > 0) ? { cd } : {}) },
+    intervals: r.workout?.steps ? rideIntervals(samples, (i) => stepBand(r.workout.steps[i], r.intensity ?? 100)).map((x) => {
+      // a ramp shows where it starts and ends
+      const st = r.workout.steps[x.step], k = (r.intensity ?? 100) / 100;
+      const a = stepWatts(st, 0, settings.ftp), b = stepWatts(st, 1, settings.ftp);
+      return a !== null && b !== null && a !== b ? { ...x, ramp: [Math.round(a * k), Math.round(b * k)] } : x;
+    }) : [],
+  };
+}
+
+function saveToHistory(r, samples) {
+  const e = historyEntry(r, samples);
+  // XP, level and badges: what this ride earned shows in its summary
+  const got = addRide(progress, e);
+  progress = got.progress; saveProgress();
+  // a planned workout just ridden is done: off the list, and the next ride is a free one unless another is picked
+  if (e.eventId) {
+    const stats = icuWorkouts.stats;
+    icuWorkouts = icuWorkouts.filter((w) => String(w.eventId) !== String(e.eventId));
+    icuWorkouts.stats = stats;
+    if (!allWorkouts().some((w) => w.id === settings.mode) && !['free', 'race'].includes(settings.mode)) { settings.mode = 'free'; saveSettings(); }
+  }
+  track('ride-finish', minutesBucket(e.summary?.duration || 0));
+  track('exp', `hud-${hudLayout}`); // rides finished by dashboard, to compare A and B
+  if (rideMilestone(progress.rides)) track('ride-count', rideMilestone(progress.rides));
+  for (const b of got.badges) track('badge', b.id);
+  for (const j of got.jerseys) track('jersey', j);
+  e.earned = { xp: got.progress.xp, badges: got.badges.map((b) => b.id), levelUp: got.levelUp ? levelOf(got.progress.xp).level : 0, jerseys: got.jerseys, patterns: newPatterns(e, got) };
+  history.unshift(e);
+  history = history.slice(0, 100);
+  saveHistory();
+  renderHistory();
+  return e;
+}
+
+// ---------- Rides saved with no summary (2026-11-20) ----------
+// For a day a comment swallowed `summary` in historyEntry: rides were kept with their full record but no time,
+// distance or power, and earned no XP, km or climbing. Their summaries come back from the record kept on this
+// device, once, and the progress gets what they should have earned.
+async function restoreSummaries() {
+  const lost = history.filter((e) => !e.summary && e.chart?.pw?.length);
+  let fixed = 0;
+  for (const e of lost) {
+    let r = null;
+    try { r = await getRide(e.id); } catch { /* IndexedDB blocked */ }
+    const sum = summarize(r?.samples);
+    if (!sum || sum.duration < 30) continue;
+    e.summary = sum; e.tss = tss(sum, e.ftp || settings.ftp);
+    progress = addSummary(progress, e).progress;
+    fixed++;
+  }
+  if (!fixed) return;
+  saveProgress(); saveHistory(); renderHistory(); renderProgress(); renderWeek();
+}
+
+// ---------- Levels and achievements (#progress) ----------
+const PROGRESS_KEY = 'gruppetto-progress';
+let progress = (() => { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || 'null'); } catch { return null; } })() || progressFrom(history);
+function saveProgress() { try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(progress)); } catch { /* private mode */ } }
+const badgeName = (b) => `${b.icon} ${tr(b.name)}`;
+
+/** The level chip in the lobby and the progress card in History: level, XP to the next, totals, every badge. */
+function renderProgress() {
+  const L = levelOf(progress.xp), pct = Math.round(L.frac * 100);
+  renderAvatar();
+  const box = $('progress-box');
+  box.hidden = !progress.rides;
+  $('progress-empty').hidden = !!progress.rides;
+  $('progress-badges').hidden = true;
+  if (box.hidden) return;
+  const n = Object.keys(progress.badges).length;
+  // three tiles on top: level, FTP, today's form; the badges at the bottom
+  const wkg = settings.weight > 0 ? settings.ftp / settings.weight : 0;
+  const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness.at(-1) : null;
+  const f = icu ? { ctl: icu.ctl, atl: icu.atl, form: icu.ctl - icu.atl } : fitnessSeries(history, { days: 90 }).at(-1);
+  const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
+  const ramp = history.find((e) => e.ramp);
+  box.innerHTML = `<article class="pg-tile"><small class="pg-label">${tr('Level')}</small><div class="pg-big"><b>${L.level}</b><span>${tr('{xp} XP · {left} to level {n}', { xp: L.xp, left: L.to - L.xp, n: L.level + 1 })}</span></div>`
+    + `<div class="lvl-bar"><i style="width:${pct}%"></i></div>`
+    + `<small class="pg-foot">${progress.rides} ${tr('rides')} · ${Math.round(progress.km)} ${U.km} · ${progress.gain} ${tr('m climbed')}</small></article>`
+    + `<article class="pg-tile"><small class="pg-label">FTP</small><div class="pg-big"><b>${settings.ftp}</b><span>${U.W}${wkg > 0 ? ` · ${wkg.toFixed(1)} ${U.wkg}` : ''} · ${tr('Category')} ${categoryOf(settings.ftp, settings.weight)}</span></div>`
+    + `<small class="pg-foot">${ramp ? tr('ramp test on {date}', { date: new Date(ramp.date).toLocaleDateString(locale, { day: 'numeric', month: 'long' }) }) : ftpKnown() ? tr('set by you') : tr('an estimate: take a ramp test to find yours')}</small>`
+    + `<button type="button" class="ghost pg-btn" id="pg-ftp-test">${tr(ramp ? 'Take the test again' : 'Take the ramp test')}</button></article>`
+    + (f ? `<article class="pg-tile"><small class="pg-label">${tr('Form today')}</small><div class="pg-three"><span><b class="c-fit">${Math.round(f.ctl)}</b><small>${tr('Fitness')}</small></span><span><b class="c-fat">${Math.round(f.atl ?? f.ctl - f.form)}</b><small>${tr('Fatigue')}</small></span><span><b class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</b><small>${tr('Form')}</small></span></div>`
+      + `<small class="pg-foot">${esc(BAND[formBand(f.form)])}</small></article>` : '');
+  $('pg-ftp-test').onclick = () => openFtpTest('progress');
+  const pb = $('progress-badges');
+  pb.hidden = false;
+  pb.innerHTML = `<div class="sum-chart-head"><h2>${tr('Badges')}</h2><span class="muted">${tr('{n} of {m}', { n, m: BADGES.length })}</span></div>` + `<div class="badges">${BADGES.map((b) => { const at = progress.badges[b.id]; return `<div class="badge${at ? ' got' : ''}" title="${esc(tr(b.how))}"><span>${b.icon}</span><b>${esc(tr(b.name))}</b><small>${at ? new Date(at).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : esc(tr(b.how))}</small></div>`; }).join('')}</div>`;
+}
+
+/** What a ride earned, on its summary: a new level and new badges. */
+/** Patterns a level-up opened (the level before this ride, and after). */
+function newPatterns(e, got) {
+  if (!got.levelUp) return [];
+  const before = levelOf(got.progress.xp - rideXp(e)).level;
+  return PATTERNS.filter((p) => p.level && p.level > before && p.level <= got.levelUp).map((p) => p.id);
+}
+function renderEarned(e) {
+  const box = $('sum-earned'), got = e.earned;
+  const items = got ? [...(got.levelUp ? [`<span class="earn-lvl">⬆ ${tr('Level {n}!', { n: got.levelUp })}</span>`] : []),
+    ...got.badges.map((id) => BADGES.find((b) => b.id === id)).filter(Boolean).map((b) => `<span class="earn-badge" title="${esc(tr(b.how))}">${badgeName(b)}</span>`)] : [];
+  // the leader's jerseys and patterns this ride opened: wear them in the garage
+  for (const id of [...(got?.jerseys || []), ...(got?.patterns || [])]) {
+    const p = patternOf(id);
+    if (p.id === id) items.push(`<button type="button" class="earn-badge earn-kit" data-wear="${p.id}" title="${esc(tr('Wear it'))}">${patternSwatch(p)} ${esc(tr(p.name))}</button>`);
+  }
+  if (e.daily) items.unshift(`<span class="earn-badge earn-daily">🎯 ${esc(tr('Challenge of the day'))} · ${esc(streakText(e.daily))}</span>`);
+  box.hidden = !items.length;
+  box.innerHTML = items.length ? `<span class="pr-head">${tr('Earned on this ride')}</span>${items.join('')}` : '';
+}
+
+// ---------- No Bluetooth here: where to ride, and the link to send there ----------
+// 40% of visits come from phones, a quarter from iPhones, where no browser can connect a trainer. Rather than
+// Connect buttons that cannot work: say so, where it works, send the link there, or look around in the simulator.
+const NOBT_KEY = 'gruppetto-nobt-closed';
+const NOBT = {
+  ios: ['Ride on a computer or Android', 'iPhone and iPad do not let a browser use Bluetooth, so a trainer cannot connect here. Open Gruppetto in Chrome or Edge on a computer or an Android phone.', '📲 Send the link to myself'],
+  android: ['Open it in Chrome', 'This browser does not support Bluetooth. In Chrome on this phone the trainer, heart rate monitor and controllers connect.', '📋 Copy the link'],
+  desktop: ['Open it in Chrome or Edge', 'This browser does not support Bluetooth, so a trainer cannot connect here. Chrome and Edge can, on a computer or Android.', '📋 Copy the link'],
+};
+const nobtPlace = () => platformOf(navigator.userAgent, navigator.maxTouchPoints || 0);
+function renderNoBt() {
+  let closed = false;
+  try { closed = !!localStorage.getItem(NOBT_KEY); } catch { /* private mode */ }
+  const box = $('nobt-box');
+  document.body.classList.toggle('no-bt', !bluetoothAvailable()); // no Connect chips that cannot work
+  box.hidden = bluetoothAvailable() || closed;
+  if (box.hidden) return;
+  const [title, why, send] = NOBT[nobtPlace()];
+  $('nobt-title').textContent = tr(title); $('nobt-why').textContent = tr(why); $('nobt-send').textContent = tr(send);
+}
+$('nobt-send').onclick = async () => {
+  const url = new URL('./?utm_campaign=self-send', location.href).href; // in GoatCounter: the links riders sent on
+  track('nobt', `send-${nobtPlace()}`);
+  if (navigator.share && nobtPlace() === 'ios') {
+    try { await navigator.share({ title: 'Gruppetto', text: tr('Indoor cycling in the browser. Free.'), url }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast(tr('Link copied. Open it on the computer')); } catch { prompt(tr('Copy the link'), url); }
+};
+$('nobt-sim').onclick = () => { track('nobt', `sim-${nobtPlace()}`); $('btn-start').click(); };
+$('nobt-close').onclick = () => { track('nobt', 'close'); try { localStorage.setItem(NOBT_KEY, '1'); } catch { /* private mode */ } renderNoBt(); };
+
+// ---------- The challenge of the day (#55) ----------
+// One small goal a day, the same for everyone (js/daily.js), and a streak of days in a row; a simulator ride
+// counts too. Done in the ride: a toast at once, and a chip on the ride's summary.
+const DAILY_KEY = 'gruppetto.daily';
+let daily = readJson(DAILY_KEY, { done: [] });
+const saveDaily = () => { try { localStorage.setItem(DAILY_KEY, JSON.stringify(daily)); } catch { /* private mode */ } };
+const todayGoal = () => dailyGoal(localDay(), routes.filter((r) => !r.custom));
+const dailyDoneToday = () => daily.done.includes(localDay());
+
+function goalText(g) {
+  if (g.kind === 'climb') return tr('Reach the top of {climb} on {route}', { climb: g.climb, route: tr(g.route) });
+  if (g.kind === 'km') return tr('Ride {km} km, any route', { km: g.km });
+  return tr('Ride {min} minutes, any route', { min: g.min });
+}
+function streakText(n) {
+  if (!n) return tr('Start a streak: one a day');
+  return lang === 'uk' ? `🔥 ${n} ${plural(n, ['день', 'дні', 'днів'])} поспіль` : `🔥 ${n} ${n === 1 ? 'day' : 'days'} in a row`;
+}
+
+function renderDaily() {
+  const box = $('daily-box');
+  if (!box) return;
+  const g = todayGoal(), done = dailyDoneToday(), n = streakOf(daily.done);
+  box.hidden = false;
+  box.classList.toggle('done', done);
+  $('dl-icon').textContent = done ? '✅' : '🎯';
+  $('dl-goal').textContent = goalText(g);
+  $('dl-streak').textContent = done ? `${tr('Done today. A new one tomorrow')} · ${streakText(n)}` : streakText(n);
+  $('dl-ride').hidden = done;
+  $('dl-ride').textContent = g.kind === 'climb' && settings.routeId !== g.routeId ? tr('Pick the route ▶') : tr('Take it ▶');
+}
+
+$('dl-ride').onclick = () => {
+  const g = todayGoal();
+  track('daily', `take-${g.kind}`);
+  if (g.kind === 'climb' && settings.routeId !== g.routeId) {
+    settings.routeId = g.routeId; saveSettings(); markRoute(); showRoute(); updateSummary(); renderChallenge(); renderDaily();
+    $('sec-routes').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  $('btn-start').click();
+};
+
+/** Once a second in a ride: today's goal reached? Then it is done, with a toast and the streak. */
+function dailyTick() {
+  if (!ride || ride.dailyStreak || ride.group || dailyDoneToday()) return;
+  const g = todayGoal();
+  if (goalProgress(g, { dist: ride.dist, elapsed: ride.elapsed, efforts: ride.efforts, routeId: ride.route.id }) < 1) return;
+  daily.done = markDone(daily.done, localDay()); saveDaily();
+  ride.dailyStreak = streakOf(daily.done);
+  toast(`🎯 ${tr('Challenge of the day done!')} ${streakText(ride.dailyStreak)}`);
+  if (settings.sound) beep(1320, 0.15);
+  track('daily', `done-${g.kind}`);
+  if (ride.dailyStreak > 1) track('daily-streak', String(Math.min(ride.dailyStreak, 30)));
+}
+
+// ---------- A friend's ride from a link (#challenge) ----------
+// The last challenge opened stays until another one comes: on its route its ghost rides instead of yours.
+const CHALLENGE_KEY = 'gruppetto-challenge';
+let challenge = (() => { try { return JSON.parse(localStorage.getItem(CHALLENGE_KEY) || 'null'); } catch { return null; } })();
+function saveChallenge() { try { localStorage.setItem(CHALLENGE_KEY, JSON.stringify(challenge)); } catch { /* private mode */ } }
+/** The ghost to ride with on this route: a friend's challenge first, then your own best or last ride. */
+function rideGhost(routeId) {
+  if (settings.ghost !== 'off' && challenge?.routeId === routeId) return challenge;
+  return pickGhost(routeId);
+}
+const ghostLabel = (g) => (g.friend ? g.name || tr('Friend') : settings.ghost === 'last' ? tr('Last ride') : tr('Your best'));
+
+/** The link to race this ride's ghost: shared where the device can, copied otherwise. */
+async function challengeFriend(e) {
+  const route = routes.find((r) => r.id === e.routeId);
+  // the default name says nothing to a friend: «A friend» then, and a hint to set yours
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  if (!named) toast(tr('Set your name in Profile so friends can see who challenges them'));
+  const url = `${location.origin}${location.pathname}#challenge=${await encodeChallenge(e, named ? settings.name.trim() : '')}`;
+  const text = tr('Race my ghost on {route} in Gruppetto: {km} km in {time}', { route: route?.name || '', km: (e.summary.distance / 1000).toFixed(1), time: fmtTime(e.summary.duration) });
+  track('challenge-send');
+  if (navigator.share) { try { await navigator.share({ title: 'Gruppetto', text, url }); return; } catch (err) { if (err.name === 'AbortError') return; } }
+  try { await navigator.clipboard.writeText(`${text}\n${url}`); toast(tr('Link copied. Send it to a friend')); } catch { prompt(tr('Copy the link'), url); }
+}
+
+/** A page opened from a challenge link: the friend's ride becomes the ghost of its route, which is picked. */
+async function openChallenge() {
+  const code = challengeIn(location.hash);
+  if (!code) return;
+  window.history.replaceState(null, '', location.pathname + location.search); // not «history»: that is the rides
+  const c = await decodeChallenge(code);
+  const route = c && routes.find((r) => r.id === c.routeId && !r.custom);
+  if (!route) { alertBox(tr('This challenge link is broken or from a newer version of Gruppetto. Ask for a new one.')); return; }
+  challenge = c; saveChallenge();
+  track('challenge-open');
+  settings.routeId = route.id;
+  if (settings.ghost === 'off') settings.ghost = 'best';
+  saveSettings(); markRoute(); showRoute(); updateSummary(); renderChallenge();
+  $('challenge-box').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+/** The challenge card in the lobby, while the route picked is the challenge's. */
+function renderChallenge() {
+  const route = challenge && routes.find((r) => r.id === challenge.routeId);
+  $('challenge-box').hidden = !route || settings.routeId !== route.id || settings.ghost === 'off';
+  if ($('challenge-box').hidden) return;
+  const who = challenge.name && challenge.name !== DEFAULT_SETTINGS.name ? challenge.name : tr('A friend'); // links made before names were checked say «Me»
+  $('ch-title').textContent = tr('{name} challenges you on {route}', { name: who, route: route.name });
+  $('ch-goal').textContent = tr('To beat: {km} km in {time}', { km: (challenge.summary.distance / 1000).toFixed(1), time: fmtTime(challenge.summary.duration) });
+  $('ch-how').textContent = tr('Their ghost rides beside you exactly as they rode. Finish ahead of it, and the summary shows by how much.');
+}
+$('ch-ride').onclick = () => { settings.mode = 'free'; saveSettings(); renderModes(); updateSummary(); startRide(); };
+$('ch-drop').onclick = () => { track('challenge-dismiss'); challenge = null; saveChallenge(); renderChallenge(); updateSummary(); };
+
+// ---------- Ghost ride (#24) ----------
+// Race a ghost of an earlier ride on the same route: it rides where you were at the same moment.
+/** Rides on this route that can ride as a ghost (they carry a distance trace). */
+const ghostRides = (routeId) => history.filter((e) => e.routeId === routeId && e.chart?.d?.length > 1 && e.summary?.distance > 300);
+/** The ride to chase: your fastest on this route (average speed), or the latest one. */
+function pickGhost(routeId, mode = settings.ghost) {
+  const list = ghostRides(routeId);
+  if (!list.length || mode === 'off') return null;
+  if (mode === 'last') return list[0];
+  return list.reduce((a, b) => (b.summary.distance / b.summary.duration > a.summary.distance / a.summary.duration ? b : a));
+}
+/** Where the ghost is at time t (s), between the 5 s points of its trace. */
+function ghostDistAt(e, t) {
+  const d = e.chart.d, k = t / e.chart.every - 1; // d[i] is the distance at the end of second (i+1)·every
+  if (k <= 0) return Math.max(0, d[0] * (t / e.chart.every));
+  if (k >= d.length - 1) return d[d.length - 1];
+  const i = Math.floor(k);
+  return d[i] + (d[i + 1] - d[i]) * (k - i);
+}
+/** When the ghost passed distance x (s), or null if it never got that far. */
+function ghostTimeAt(e, x) {
+  const d = e.chart.d, n = d.length;
+  if (x > d[n - 1]) return null;
+  let lo = 0, hi = n - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (d[m] < x) lo = m + 1; else hi = m; }
+  const prev = lo ? d[lo - 1] : 0, t0 = lo * e.chart.every;
+  return t0 + e.chart.every * (d[lo] > prev ? (x - prev) / (d[lo] - prev) : 0);
+}
+/** The ghost picker in the lobby: shown when the selected route has rides to chase. */
+function renderGhostPicker() {
+  const r = routes.find((x) => x.id === settings.routeId);
+  const list = r ? ghostRides(r.id) : [];
+  $('ghost-box').hidden = !list.length;
+  if (!list.length) return;
+  const best = pickGhost(r.id, 'best'), last = list[0];
+  const desc = (e) => `${new Date(e.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} · ${(e.summary.distance / 1000).toFixed(1)} km in ${fmtTime(e.summary.duration)}`;
+  // the time on the card; the date and distance in its hover text
+  $('ghost-best').textContent = fmtTime(best.summary.duration);
+  $('ghost-last').textContent = fmtTime(last.summary.duration);
+  // in the bottom bar the times are the buttons' hover text
+  document.querySelector('#ghost-box [data-ghost="best"]').title = desc(best);
+  document.querySelector('#ghost-box [data-ghost="last"]').title = desc(last);
+  for (const b of document.querySelectorAll('#ghost-box [data-ghost]')) {
+    b.classList.toggle('sel', b.dataset.ghost === settings.ghost);
+    b.onclick = () => { settings.ghost = b.dataset.ghost; saveSettings(); renderGhostPicker(); updateSummary(); renderChallenge(); };
+  }
+}
+
+/** The ride summary screen, for the ride just finished (live: downloads available) or one from history. */
+let summaryFrom = null; // 'history': the summary was opened from History, and goes back there
+function showSummary(e, { live = false, from = null } = {}) {
+  summaryFrom = live ? null : from;
+  $('btn-again').textContent = summaryFrom === 'history' ? `← ${tr('Back to history')}` : tr('Back to lobby');
+  // a lobby page (Devices, Profile…) belongs to the lobby, not over the summary
+  if (!$('drawer').classList.contains('in-ride')) $('drawer').hidden = true;
+  $('wk-menu').hidden = true;
+  const sum = e.summary;
+  $('lobby').hidden = true;
+  $('summary').hidden = false;
+  $('sum-kicker').textContent = live ? tr('Ride complete') : new Date(e.date).toLocaleString(locale, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  applySummaryLayout();
+  track('exp', `summary-${summaryLayout}`); // summaries shown by layout, to compare A and B
+  $('sum-name').textContent = [e.routeName, e.race ? `🏁 ${tr('Race')}` : e.workoutName || tr('Free ride')].filter(Boolean).join(' · ');
+  // new power records: this ride against every ride before it
+  const before = powerCurve(history.filter((x) => x !== e && Date.parse(x.date) < Date.parse(e.date)));
+  const recPairs = Object.entries(e.bests || {}).filter(([d, w]) => before[d] && w > before[d].w);
+  storyRecs = recPairs;
+  const recs = recPairs.map(([d, w]) => `<span class="pr-chip">${durLabel(+d)} <b>${w} ${U.W}</b> 🏆</span>`);
+  $('sum-prs').hidden = !recs.length;
+  $('sum-prs').innerHTML = recs.length ? `<span class="pr-head">${tr('New power records')}</span>${recs.join('')}` : '';
+  renderFtpTip($('sum-ftp'), e);
+  // race results
+  $('sum-race').hidden = !e.race;
+  $('sum-podium').hidden = true; $('sum-race-head').hidden = true;
+  if (e.race) {
+    const mine = e.race.find((x) => x.me), winner = e.race[0];
+    $('sum-race-place').textContent = mine ? tr('{n} of {m}', { n: e.race.indexOf(mine) + 1, m: e.race.length }) : '';
+    $('sum-race-rows').innerHTML = e.race.map((x, i) => `<tr class="${x.me ? 'me' : ''}"><td>${i + 1}</td><td><i style="background:${esc(x.color || '#888')}"></i>${esc(x.name)}</td><td>${fmtTime(Math.round(x.time))}${x.est ? ' *' : ''}</td><td>${i ? `+${fmtTime(Math.round(x.time - winner.time))}` : ''}</td></tr>`).join('');
+  }
+  const hero = sum ? [
+    [tr('Time'), fmtTime(sum.duration), ''],
+    [tr('Distance'), (sum.distance / 1000).toFixed(2), U.km],
+    [tr('Avg power'), sum.avgPower, U.W],
+    [tr('Avg heart rate'), sum.avgHr || '—', sum.avgHr ? U.bpm : ''],
+  ] : [[tr('Time'), '0:00', '']];
+  $('sum-hero').innerHTML = hero.map(([k, v, u]) => `<div><label>${k}</label><b>${v}</b><span>${u}</span></div>`).join('');
+  // W′bal: saved second by second since it was added, worked out from the 5 s power of older rides
+  const wPrime = e.wPrime || wPrimeJ(), wb = e.chart.wb || wbalSeries(e.chart.pw, e.ftp || settings.ftp, wPrime, e.chart.every);
+  const chartSamples = e.chart.pw.map((p, i) => ({ power: p, heartRate: e.chart.hr[i], target: e.chart.tg?.[i] || 0, cadence: e.chart.cd?.[i] || 0, wbal: wb[i] ?? wPrime }));
+  $('lg-plan').hidden = !e.chart.tg; $('lg-cad').hidden = !e.chart.cd;
+  renderZones(e);
+  renderIntervals(e);
+  requestAnimationFrame(() => drawSummaryChart($('sum-chart'), chartSamples, 2, e.ftp || settings.ftp, wPrime));
+  hoverSummaryChart(chartSamples, e.chart.every, wPrime);
+  const stats = sum ? [
+    [tr('Elevation gain'), `${Math.round(sum.elevationGain)} ${U.m}`],
+    ['NP', sum.normalizedPower ? `${sum.normalizedPower} ${U.W}` : '—'],
+    ['TSS', e.tss || '—'],
+    [tr('Max power'), `${sum.maxPower} ${U.W}`],
+    [tr('Max heart rate'), sum.maxHr ? `${sum.maxHr} ${U.bpm}` : '—'],
+    [tr('Avg cadence'), `${sum.avgCadence} ${U.rpm}`],
+    [tr('Work'), `${sum.kj} ${tr('kJ')}`],
+  ] : [];
+  // short pauses: how many, how long; older rides from their 5 s chart
+  const stops = e.stops || stopsOf(e.chart.pw, e.chart.every);
+  if (sum && stops.sec) stats.push([tr('Not pedaling'), `${fmtTime(stops.sec)} · ${stops.n} ${lang === 'uk' ? plural(stops.n, ['зупинка', 'зупинки', 'зупинок']) : stops.n === 1 ? 'stop' : 'stops'}`]);
+  if (sum) { const low = e.wbalMin ?? Math.min(...wb); stats.push([tr('Lowest W′bal'), `${(low / 1000).toFixed(1)} ${tr('kJ')} · ${Math.round((low / wPrime) * 100)}%`]); }
+  if (sum && e.ramp && sum.best1min) stats.push([tr('Estimated FTP'), `${Math.round(sum.best1min * 0.75)} ${U.W}`]);
+  if (e.ghostGap !== null && e.ghostGap !== undefined) stats.push([tr('vs {name}', { name: e.ghostName || tr('ghost') }), `${e.ghostGap >= 0 ? '+' : '−'}${Math.abs(e.ghostGap)} ${U.m} ${e.ghostGap >= 0 ? '🏆' : ''}`]);
+  // layout B's grid also holds the numbers of A's top row (its story has the time); hidden in A
+  const heroB = sum ? [[tr('Distance'), `${(sum.distance / 1000).toFixed(2)} ${U.km}`], [tr('Avg power'), `${sum.avgPower} ${U.W}`], [tr('Avg heart rate'), sum.avgHr ? `${sum.avgHr} ${U.bpm}` : '—']] : [];
+  $('sum-stats').innerHTML = heroB.map(([k, v]) => `<div class="b-only"><label>${k}</label><b>${v}</b></div>`).join('') + stats.map(([k, v]) => `<div><label>${k}</label><b>${v}</b></div>`).join('');
+  // laps and climbs of this ride, with personal bests
+  const rows = [
+    ...e.lapTimes.map((t, i) => [routes.find((x) => x.id === e.routeId)?.oneWay ? tr('Finish') : tr('Lap {n}', { n: i + 1 }), t, null, `${e.routeId}-lap`]),
+    ...e.efforts.map((x) => [x.name, x.time, x, x.segId]),
+    ...(e.splits || []).map((x, i) => [tr('Split {n}', { n: i + 1 }), x.time, { note: `${(x.dist / 1000).toFixed(2)} ${U.km} · ${x.power} ${U.W}` }]),
+  ];
+  $('sum-segments').hidden = !rows.length;
+  $('sum-seg-rows').innerHTML = rows.map(([name, t, x, seg]) => {
+    const lapRoute = routes.find((r) => r.id === e.routeId);
+    const pb = x ? x.pb : t <= ((lapRoute && bestLap(lapRoute)) ?? Infinity);
+    const vs = (x?.note ? esc(x.note) : x && x.best ? fmtDelta(t - x.best) : '') + (x?.top ? ` · ${x.top} ${tr('km/h')}` : '');
+    const lb = seg ? ` data-seg="${esc(seg)}" data-t="${Math.round(t * 10) / 10}"` : ''; // the place in its table goes beside it
+    return `<tr${lb}><td>${esc(name)}</td><td>${fmtTime(t)}</td><td>${pb ? `<span class="pb">🏆 ${tr('best')}</span>${x?.top ? ` · ${x.top} ${tr('km/h')}` : ''}` : vs}</td><td class="lb-cell"></td></tr>`;
+  }).join('');
+  decorateSummary();
+  // files and intervals.icu: the ride just finished, or an older one whose full record is still kept
+  shown = { entry: e, rec: live ? recorder : null };
+  groupRaceTable(e); // a group race: the results from the table, kept up to date
+  renderEarned(e);
+  renderStory(e);
+  $('btn-challenge').hidden = !(e.chart?.d?.length > 1 && !e.race && routes.some((r) => r.id === e.routeId && !r.custom));
+  const files = (on) => {
+    for (const id of ['btn-download', 'btn-download-tcx']) { $(id).hidden = !on; $(id).disabled = !sum; }
+    $('sum-fit-hint').hidden = !on; // (by id: «.hint:last-of-type» was the race card's, the first in the page)
+  };
+  const uploadUi = (can) => {
+    $('btn-icu-upload').hidden = !can;
+    $('btn-icu-upload').disabled = false;
+    $('btn-icu-upload').textContent = live ? tr('Upload to intervals.icu') : tr('Send to intervals.icu');
+    const st = $('icu-upload-status');
+    st.hidden = !e.uploadedId;
+    if (e.uploadedId) st.innerHTML = (e.uploadedId === true ? tr('Uploaded to intervals.icu ✓') : `${tr('Uploaded to intervals.icu ✓')} · <a href="${activityUrl(e.uploadedId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`) + againLink('icu');
+  };
+  const canUpload = (rec) => !!(rec && icuClient && sum && sum.duration >= 60);
+  const canStrava = (rec) => !!(rec && stravaClient && sum && sum.duration >= 60);
+  const canGarmin = (rec) => !!(rec && garminClient && sum && sum.duration >= 60);
+  const garminUi = (can) => {
+    $('btn-garmin-upload').hidden = !can;
+    $('btn-garmin-upload').disabled = false;
+    $('btn-garmin-upload').textContent = live ? tr('Upload to Garmin') : tr('Send to Garmin');
+    const st = $('garmin-upload-status');
+    st.hidden = !e.garminId;
+    if (e.garminId) st.innerHTML = (e.garminId === true ? tr('On Garmin Connect ✓') : `${tr('On Garmin Connect ✓')} · <a href="${garminActivityUrl(e.garminId)}" target="_blank" rel="noopener">${tr('open ride')}</a>`) + againLink('garmin');
+  };
+  const stravaUi = (can) => {
+    $('btn-strava-upload').hidden = !can;
+    $('btn-strava-upload').disabled = false;
+    $('btn-strava-upload').textContent = live ? tr('Upload to Strava') : tr('Send to Strava');
+    const st = $('strava-upload-status');
+    st.hidden = !e.stravaId;
+    if (e.stravaId) st.innerHTML = `${tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(e.stravaId)}" target="_blank" rel="noopener">View on Strava</a>${againLink('strava')}`;
+  };
+  files(live);
+  uploadUi(live && canUpload(recorder));
+  stravaUi(live && canStrava(recorder) && !e.stravaId);
+  garminUi(live && canGarmin(recorder) && !e.garminId);
+  $('btn-delete-ride').hidden = live;
+  $('btn-delete-ride').dataset.id = e.id;
+  $('btn-delete-ride').textContent = tr('Delete ride');
+  if (live) { scheduleUpload('icu', canUpload(recorder)); scheduleUpload('strava', canStrava(recorder) && !e.stravaId); scheduleUpload('garmin', canGarmin(recorder) && !e.garminId); return; }
+  scheduleUpload('icu', false); scheduleUpload('strava', false); scheduleUpload('garmin', false);
+  // the full record: kept on this device, or (a ride ridden on another) from the account
+  getRide(e.id).then((r) => r || accountRecord(e.id)).then((r) => {
+    if (!r || shown.entry !== e) return;
+    const rec = new Recorder();
+    rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0]; rec.position = positionOf(e.routeId);
+    shown.rec = rec;
+    files(true);
+    uploadUi(canUpload(rec) && !e.uploadedId);
+    stravaUi(canStrava(rec) && !e.stravaId);
+    garminUi(canGarmin(rec) && !e.garminId);
+  });
+}
+/** The ride on the summary screen: its history entry and, when kept, its full record. */
+let shown = { entry: null, rec: null };
+let storyRecs = []; // the power records of the ride on the summary: [duration, watts]
+
+/** 1st, 2nd, 3rd, 4th; «3-є» in Ukrainian. */
+const placeWord = (n) => (lang === 'uk' ? `${n}-є` : `${n}${['th', 'st', 'nd', 'rd'][n % 100 > 10 && n % 100 < 14 ? 0 : n % 10 < 4 ? n % 10 : 0]}`);
+
+/**
+ * Summary layout B opens with the story of the ride (it is built always, A just hides it): in a race the place,
+ * the time, the gap to the leader and W/kg; otherwise the time, distance and power; then what the ride earned.
+ */
+function renderStory(e) {
+  const box = $('sum-story'), sum = e.summary;
+  if (!sum) { box.innerHTML = ''; return; }
+  const date = new Date(e.date).toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'long' });
+  const kicker = [date, e.groupRace?.title, e.routeName, e.race ? '' : e.workoutName || tr('Free ride')].filter(Boolean).join(' · ');
+  const wkg = settings.weight ? (sum.avgPower / settings.weight).toFixed(1) : '—';
+  const gapText = (g) => (g < 0.05 ? '—' : g < 60 ? `+${g.toFixed(1)} ${tr('s')}` : `+${fmtTime(Math.round(g))}`);
+  let big = fmtTime(sum.duration), sub = `${(sum.distance / 1000).toFixed(1)} ${U.km} · ${sum.avgPower} ${U.W}`, cols;
+  cols = [[tr('Distance'), `${(sum.distance / 1000).toFixed(1)} ${U.km}`], [tr('Avg power'), `${sum.avgPower} ${U.W}`], [tr('Avg W/kg'), wkg]];
+  let mine = null, total = 0, myTime = 0, gap = 0, inCat = '';
+  if (raceTable.e === e && raceTable.rows.length) {
+    const rows = raceTable.rows, all = catResults(rows), me = all.find((x) => x.me);
+    if (me) {
+      mine = me.place; total = all.length; myTime = me.time_s; gap = me.gap;
+      if (me.cat && catsIn(rows).length > 1) inCat = tr('{place} in category {cat}', { place: placeWord(catResults(rows, me.cat).find((x) => x.me).place), cat: me.cat });
+    }
+  } else if (e.race) {
+    const me = e.race.find((x) => x.me);
+    if (me) { mine = e.race.indexOf(me) + 1; total = e.race.length; myTime = me.time; gap = me.time - e.race[0].time; }
+  }
+  if (mine) {
+    big = placeWord(mine);
+    sub = `${tr('of {m} in the race', { m: total })}${inCat ? ` · <b class="story-cat">${esc(inCat)}</b>` : ''}`;
+    cols = [[tr('Time'), fmtTime(Math.round(myTime))], [tr('Behind the leader'), gapText(gap)], [tr('Avg W/kg'), wkg]];
+  }
+  const chips = [
+    ...storyRecs.map(([d, w]) => `${tr('New {d} record: {w} W', { d: durLabel(+d), w })}`),
+    ...(e.earned?.levelUp ? [tr('Level {n}!', { n: e.earned.levelUp })] : []),
+    ...(e.earned?.badges || []).map((id) => BADGES.find((b) => b.id === id)).filter(Boolean).map((b) => badgeName(b)),
+  ];
+  box.innerHTML = `<span class="story-kicker">${esc(kicker)}</span>`
+    + `<div class="story-main"><div class="story-big"><b>${esc(big)}</b><span>${sub}</span></div>`
+    + `<div class="story-cols">${cols.map(([k]) => `<span>${esc(k)}</span>`).join('')}${cols.map(([, v]) => `<b>${esc(v)}</b>`).join('')}</div></div>`
+    + (chips.length ? `<div class="story-chips">${chips.map((c) => `<span>${esc(c)}</span>`).join('')}</div>` : '');
+}
+
+let summaryLayout = '';
+/** The summary in layout A (cards in a column) or B (the story first): a class on #summary, styled in css/style.css. */
+function applySummaryLayout() {
+  const v = variant('summary', { chosen: settings.summaryLayout });
+  $('f-summary-layout').value = v;
+  summaryLayout = v;
+  $('summary').classList.toggle('sum-b', v === 'b');
+  $('sum-story').hidden = v !== 'b';
+}
+/**
+ * «Upload again» after a ✓: for a ride deleted there (or gone wrong), as long as its full record is still here.
+ * kind: 'icu', 'strava' or 'garmin'.
+ */
+const againLink = (kind) => (shown.rec ? ` · <button class="link-btn up-again" data-again="${kind}" title="${esc(tr('Deleted it there? Upload this ride again'))}">${tr('Upload again')}</button>` : '');
+const AGAIN = { icu: ['uploadedId', () => uploadToIntervals()], strava: ['stravaId', () => uploadToStrava()], garmin: ['garminId', () => uploadToGarmin()] };
+$('summary').addEventListener('click', (ev) => {
+  const b = ev.target.closest('[data-again]');
+  const e = shown.entry, a = b && AGAIN[b.dataset.again];
+  if (!a || !e || !shown.rec) return;
+  track('upload-again', b.dataset.again);
+  e[a[0]] = null; // forgotten here, so it goes up as a new one
+  if (lastRide && shown.rec === recorder) lastRide[a[0]] = null;
+  a[1]();
+});
+
+/** Time in power zones (and heart rate zones when there are any), as bars. */
+function renderZones(e) {
+  const ftp = e.ftp || settings.ftp, every = e.chart.every;
+  const total = e.chart.pw.length * every;
+  const bars = (zones) => zones.map((z) => {
+    const pct = total ? (z.sec / total) * 100 : 0;
+    return `<div class="zb"><span class="zn">Z${z.z}</span><span class="zt">${esc(tr(z.name))}</span><span class="zbar"><i style="width:${pct.toFixed(1)}%;background:${z.color}"></i></span><span class="zs">${z.sec ? fmtTime(z.sec) : '—'}</span><span class="zp">${pct >= 0.5 ? Math.round(pct) : 0}%</span></div>`;
+  }).join('');
+  $('sum-zones-power').innerHTML = bars(timeInZones(e.chart.pw, ftp, POWER_ZONES, every));
+  const hz = (e.hrZones || e.lthr ? hrZones(e) : null) || hrZones(); // the zones as they were on the day, else today's
+  const hasHr = e.chart.hr.some((x) => x > 0);
+  $('sum-zones-hr-box').hidden = !hasHr;
+  $('sum-zones-hr').innerHTML = hz ? bars(timeInZones(e.chart.hr, 1, hz, every, { skipZero: true })) : `<p class="muted">${tr('Set your threshold heart rate (LTHR) in Profile, or connect intervals.icu, to see heart rate zones.')}</p>`;
+  $('sum-zones').hidden = !total;
+}
+
+/** The workout's intervals: target against what you rode, in the band or not. */
+function renderIntervals(e) {
+  const rows = e.intervals || [];
+  $('sum-intervals').hidden = !rows.length;
+  if (!rows.length) return;
+  const inBand = rows.filter((r) => r.target && r.ok).length, withT = rows.filter((r) => r.target).length;
+  $('sum-int-score').textContent = withT ? tr('{n} of {m} on target', { n: inBand, m: withT }) : '';
+  $('sum-int-rows').innerHTML = rows.map((r, i) => {
+    const tgt = r.ramp ? `${r.ramp[0]} → ${r.ramp[1]}` : r.lo !== null ? `${r.lo}–${r.hi}` : r.target || '—';
+    const d = r.diff === null ? '' : `${r.diff >= 0 ? '+' : '−'}${Math.abs(r.diff)}`;
+    const pct = r.target ? Math.round((r.power / r.target) * 100) : null;
+    return `<tr class="${r.target ? (r.ok ? 'ok' : r.diff > 0 ? 'over' : 'under') : ''}"><td>${i + 1}</td><td>${fmtTime(r.dur)}</td><td>${tgt}</td><td><b>${r.power}</b></td><td class="dv">${d}${pct !== null ? ` <small>${pct}%</small>` : ''}</td><td>${r.hr || '—'}</td><td>${r.cad || '—'}</td></tr>`;
+  }).join('');
+}
+
+/** Recent rides in the lobby (latest five) and the full list in the drawer. */
+/** "5 s", "1 min", "20 min", "1 h" */
+const durLabel = (d) => (d < 60 ? `${d} ${tr('s')}` : d < 3600 ? `${d / 60} ${U.min}` : `${d / 3600} ${tr('h')}`);
+
+/**
+ * "Your rides suggest FTP 226 W" with a button that sets it, in `el` (hidden when there is nothing to suggest);
+ * after a ramp test (`e`), its own result even when lower; and W′ from your best 5 and 20 minutes.
+ */
+function renderFtpTip(el, e = null) {
+  const rows = [];
+  const b1 = e?.ramp && (e.bests?.[60] || e.summary?.best1min);
+  if (b1 && rampFtp(b1) !== settings.ftp) {
+    rows.push({ title: tr('Ramp test: your FTP is {w} W', { w: rampFtp(b1) }), why: `${tr('75 % of your best minute in a ramp test ({w} W)', { w: Math.round(b1) })} · ${tr('now {w} W', { w: settings.ftp })}`,
+      button: tr('Set FTP to {w} W', { w: rampFtp(b1) }), set: () => { settings.ftp = rampFtp(b1); settings.ftpSet = true; $('f-ftp').value = settings.ftp; return tr('FTP set to {w} W', { w: settings.ftp }); } });
+  } else if (!e?.ramp) {
+    const s = ftpSuggestion(curveEntries(), settings.ftp);
+    if (s) {
+      const from = s.ramp ? tr('75 % of your best minute in a ramp test ({w} W)', { w: s.w }) : tr('95 % of your best 20 minutes ({w} W, {date})', { w: s.w, date: new Date(s.date).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) });
+      rows.push({ title: tr('Your rides suggest an FTP of {w} W', { w: s.ftp }), why: `${from} · ${tr('now {w} W', { w: settings.ftp })}`,
+        button: tr('Set FTP to {w} W', { w: s.ftp }), set: () => { settings.ftp = s.ftp; settings.ftpSet = true; $('f-ftp').value = s.ftp; return tr('FTP set to {w} W', { w: s.ftp }); } });
+    }
+  }
+  const wp = wPrimeSuggestion(curveEntries(), settings.wPrimeKj || DEFAULT_W_PRIME / 1000);
+  if (wp) {
+    rows.push({ title: tr('Your rides suggest a W′ of {kj} kJ', { kj: wp.kj }), why: `${tr('from your best 5 and 20 minutes ({a} W, {b} W)', { a: wp.p5, b: wp.p20 })} · ${tr('now {kj} kJ', { kj: settings.wPrimeKj || DEFAULT_W_PRIME / 1000 })}`,
+      button: tr('Set W′ to {kj} kJ', { kj: wp.kj }), set: () => { settings.wPrimeKj = wp.kj; $('f-wprime').value = wp.kj; return tr('W′ set to {kj} kJ', { kj: wp.kj }); } });
+  }
+  el.hidden = !rows.length;
+  el.innerHTML = rows.map((r, i) => `<div class="ftp-row"><div><b>${esc(r.title)}</b><small>${esc(r.why)}</small></div><button class="primary" data-i="${i}">${esc(r.button)}</button></div>`).join('');
+  for (const b of el.querySelectorAll('button')) b.onclick = () => {
+    const msg = rows[+b.dataset.i].set(); saveSettings(); toast(msg);
+    renderFtpTip(el, e); renderPowerCurve(); renderFtpBox();
+  };
+}
+
+/** Power curve in History: best power for each duration, all time and the last 6 weeks. */
+function renderPowerCurve() {
+  const all = powerCurve(curveEntries()), recent = powerCurve(curveEntries(), { days: 42 });
+  const box = $('power-curve-box');
+  box.hidden = !Object.keys(all).length;
+  if (box.hidden) return;
+  renderFtpTip($('pc-ftp'));
+  $('pc-table').innerHTML = DURS.filter((d) => all[d]).map((d) => `<div><label>${durLabel(d)}</label><b>${all[d].w}</b><small>${recent[d] ? `${recent[d].w} · 6 ${tr('wk')}` : '—'}</small></div>`).join('');
+  requestAnimationFrame(() => {
+    const c = $('pc-chart'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = c.clientWidth, H = c.clientHeight;
+    if (!W) return;
+    c.width = W * dpr; c.height = H * dpr;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const ds = DURS.filter((d) => all[d]), max = Math.max(...ds.map((d) => all[d].w)) * 1.08, padL = 34, padB = 18;
+    const x = (d) => padL + (Math.log(d / 5) / Math.log(3600 / 5)) * (W - padL - 8), y = (w) => (H - padB) - (w / max) * (H - padB - 6);
+    g.font = '11px system-ui'; g.fillStyle = 'rgba(255,255,255,.45)'; g.strokeStyle = 'rgba(255,255,255,.08)';
+    for (const d of [5, 60, 300, 1200, 3600]) { g.beginPath(); g.moveTo(x(d), 4); g.lineTo(x(d), H - padB); g.stroke(); g.fillText(durLabel(d), x(d) - 10, H - 4); }
+    for (const w of [Math.round(max / 3), Math.round(max * 2 / 3)]) { g.fillText(w, 2, y(w) + 4); g.beginPath(); g.moveTo(padL, y(w)); g.lineTo(W - 8, y(w)); g.stroke(); }
+    g.setLineDash([4, 4]); g.strokeStyle = 'rgba(255,255,255,.3)'; g.beginPath(); g.moveTo(padL, y(settings.ftp)); g.lineTo(W - 8, y(settings.ftp)); g.stroke(); g.setLineDash([]);
+    g.fillText(`FTP ${settings.ftp}`, W - 62, y(settings.ftp) - 4);
+    const line = (curve, color, width) => {
+      const pts = ds.filter((d) => curve[d]);
+      if (!pts.length) return;
+      g.beginPath(); pts.forEach((d, i) => (i ? g.lineTo(x(d), y(curve[d].w)) : g.moveTo(x(d), y(curve[d].w))));
+      g.strokeStyle = color; g.lineWidth = width; g.stroke();
+      for (const d of pts) { g.beginPath(); g.arc(x(d), y(curve[d].w), 2.5, 0, Math.PI * 2); g.fillStyle = color; g.fill(); }
+    };
+    line(all, 'rgba(255,194,26,.95)', 2.5);
+    line(recent, 'rgba(56,214,232,.9)', 1.6);
+  });
+}
+
+/** Fitness, fatigue and form over the last 90 days (#54). */
+function renderFitness() {
+  // intervals.icu's own when connected (it has every ride, Zwift's and these too), otherwise from the rides here
+  const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness : null;
+  const s = icu ? icu.map((p, i) => ({ date: p.date, ctl: p.ctl, atl: p.atl, form: i ? icu[i - 1].ctl - icu[i - 1].atl : p.ctl - p.atl })) : fitnessSeries(history, { days: 90 });
+  $('fit-src').hidden = !icu;
+  const box = $('fitness-box');
+  box.hidden = s.length < 2;
+  if (box.hidden) return;
+  const now = s[s.length - 1], band = formBand(now.form);
+  const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
+  $('fit-nums').innerHTML = `<div><label>${tr('Fitness')}</label><b class="c-fit">${Math.round(now.ctl)}</b></div><div><label>${tr('Fatigue')}</label><b class="c-fat">${Math.round(now.atl)}</b></div><div><label>${tr('Form')}</label><b class="c-form">${now.form >= 0 ? '+' : ''}${Math.round(now.form)}</b><small>${esc(BAND[band])}</small></div>`;
+  requestAnimationFrame(() => {
+    const c = $('fit-chart'), dpr = Math.min(window.devicePixelRatio || 1, 2), W = c.clientWidth, H = c.clientHeight;
+    if (!W) return;
+    c.width = W * dpr; c.height = H * dpr;
+    const g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const top = Math.max(10, ...s.map((p) => Math.max(p.ctl, p.atl))) * 1.1, lo = Math.min(0, ...s.map((p) => p.form)) * 1.1;
+    const span = top - lo, x = (i) => (i / (s.length - 1)) * W, y = (v) => H - 14 - ((v - lo) / span) * (H - 20);
+    // form as bars round zero: green fresh, grey neutral, orange productive, red overreaching
+    const bw = Math.max(1, W / s.length - 1);
+    s.forEach((p, i) => {
+      const b = formBand(p.form);
+      g.fillStyle = { transition: '#94a3b8', fresh: '#22c55e', neutral: '#64748b', optimal: '#f59e0b', overload: '#ef4444' }[b];
+      g.globalAlpha = 0.55;
+      g.fillRect(x(i) - bw / 2, Math.min(y(0), y(p.form)), bw, Math.abs(y(p.form) - y(0)));
+    });
+    g.globalAlpha = 1;
+    g.strokeStyle = 'rgba(255,255,255,.15)'; g.beginPath(); g.moveTo(0, y(0)); g.lineTo(W, y(0)); g.stroke();
+    const line = (k, color, w) => { g.beginPath(); s.forEach((p, i) => (i ? g.lineTo(x(i), y(p[k])) : g.moveTo(x(i), y(p[k])))); g.strokeStyle = color; g.lineWidth = w; g.stroke(); };
+    line('atl', '#f472b6', 1.5);
+    line('ctl', '#38bdf8', 2.5);
+    g.fillStyle = 'rgba(255,255,255,.45)'; g.font = '11px system-ui';
+    const fmt = (d) => new Date(`${d}T12:00:00`).toLocaleDateString(locale, { day: 'numeric', month: 'short' });
+    g.fillText(fmt(s[0].date), 2, H - 2);
+    g.fillText(fmt(now.date), W - 44, H - 2);
+  });
+}
+
+function renderHistory() {
+  renderWhy();
+  renderNoBt();
+  renderDaily();
+  renderFtpBox();
+  renderProgress();
+  renderChallenge();
+  renderPowerCurve();
+  renderFitness();
+  const row = (e) => {
+    const s = e.summary || {}, d = new Date(e.date);
+    const what = e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${e.race.findIndex((x) => x.me) + 1}/${e.race.length}` : ''}` : esc(e.workoutName || tr('Free ride'));
+    const sent = [e.uploadedId ? 'icu' : '', e.stravaId ? 'Strava' : '', e.garminId ? 'Garmin' : ''].filter(Boolean).map((x) => `<i>${x}</i>`).join('');
+    return `<button class="hist-row" data-id="${e.id}"><span class="hist-date"><b>${d.getDate()}</b><small>${esc(d.toLocaleDateString(locale, { weekday: 'short' }))}</small></span>`
+      + `<span class="hist-name"><b>${what}</b><small>${esc(e.routeName || '')}</small></span>`
+      + `<span class="hist-num"><b>${fmtTime(s.duration || 0)}</b><small>${tr('Time')}</small></span>`
+      + `<span class="hist-num"><b>${((s.distance || 0) / 1000).toFixed(1)}</b><small>${U.km}</small></span>`
+      + `<span class="hist-num"><b>${e.tss || 0}</b><small>TSS</small></span>`
+      + `<span class="hist-num"><b>${s.normalizedPower || s.avgPower || 0}</b><small>${U.W}</small></span>`
+      + `<span class="hist-sent">${sent}</span></button>`;
+  };
+  // a heading for each month, the rides under it
+  const month = (e) => new Date(e.date).toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const rows = (list) => { let last = ''; return list.map((e) => { const m = month(e), h = m !== last ? `<h3 class="hist-month">${esc(m)}</h3>` : ''; last = m; return h + row(e); }).join(''); };
+  // the lobby has no list of rides: they are in History
+  renderWeek();
+  $('hist-backup').hidden = !history.length;
+  $('history-all').innerHTML = history.length ? rows(history) : `<p class="muted">${tr('No rides yet. Finished rides show up here.')}</p>`;
+  renderHistWeek();
+  // (the week's numbers are on the lobby's tiles)
+  for (const b of document.querySelectorAll('.hist-row')) {
+    b.onclick = () => {
+      const panel = $('drawer').querySelector('.drawer-panel');
+      historyScroll = panel?.scrollTop || 0; // to come back to the same place in the list
+      $('drawer').hidden = true; const e = history.find((x) => x.id === b.dataset.id); if (e) showSummary(e, { from: 'history' });
+    };
+  }
+}
+
+/** History's top: this week from Monday, a bar a day by its TSS (time when there is none), and the week's totals. */
+function renderHistWeek() {
+  const box = $('hist-week');
+  box.hidden = !history.length;
+  if (box.hidden) return;
+  const now = new Date(), mon = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  const days = Array.from({ length: 7 }, (_, i) => new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + i));
+  const of = (d) => history.filter((e) => localDate(new Date(e.date)) === localDate(d));
+  const load = days.map((d) => of(d).reduce((a, e) => a + (e.tss || (e.summary?.duration || 0) / 60), 0));
+  const top = Math.max(1, ...load), week = days.flatMap(of);
+  const sum = (k) => week.reduce((a, e) => a + (k(e) || 0), 0);
+  const today = localDate(now);
+  box.innerHTML = `<div class="hw-days"><small class="hw-label">${tr('This week')}</small><div class="hw-bars">${days.map((d, i) => `<span class="hw-day${localDate(d) === today ? ' hw-now' : ''}${load[i] ? ' hw-ride' : ''}"><i style="height:${Math.round(8 + (load[i] / top) * 52)}px"></i><small>${esc(d.toLocaleDateString(locale, { weekday: 'short' }))}</small></span>`).join('')}</div></div>`
+    + `<div class="hw-tile"><small class="hw-label">${tr('Time')} · ${U.km}</small><b>${fmtTime(sum((e) => e.summary?.duration))}</b><small>${Math.round(sum((e) => e.summary?.distance) / 1000)} ${U.km} · ${week.length} ${lang === 'uk' ? plural(week.length, ['заїзд', 'заїзди', 'заїздів']) : week.length === 1 ? 'ride' : 'rides'}</small></div>`
+    + `<div class="hw-tile"><small class="hw-label">${tr('Load')}</small><b>${sum((e) => e.tss)} <small>TSS</small></b><small>${tr('this week')}</small></div>`;
+}
+
+/** The lobby's card for the rider: level and how far to the next, this week's rides, time, distance and TSS, form. */
+function renderWeek() {
+  const box = $('week-box');
+  box.hidden = !history.length;
+  if (box.hidden) return;
+  const L = levelOf(progress.xp);
+  const week = history.filter((e) => Date.now() - Date.parse(e.date) < 7 * 864e5);
+  const sum = (k) => week.reduce((a, e) => a + (k(e) || 0), 0);
+  const icu = settings.icuKey && icuStats?.fitness?.length > 1 ? icuStats.fitness : null;
+  const f = icu ? { ctl: icu.at(-1).ctl, form: icu.at(-2).ctl - icu.at(-2).atl } : fitnessSeries(history, { days: 90 }).at(-1);
+  const BAND = { transition: tr('very fresh: losing fitness'), fresh: tr('fresh: ready to race'), neutral: tr('neutral'), optimal: tr('productive load'), overload: tr('overreaching: rest') };
+  const tile = (label, big, small, extra = '') => `<span class="wb-tile"><small class="wb-label">${label}</small><b>${big}</b><small>${small}</small>${extra}</span>`;
+  box.innerHTML = [
+    f ? tile(tr('Form'), `<span class="c-form">${f.form >= 0 ? '+' : ''}${Math.round(f.form)}</span>`, `${esc(BAND[formBand(f.form)])} · ${tr('Fitness')} ${Math.round(f.ctl)}`) : '',
+    tile(tr('This week'), `${week.length} · ${fmtTime(sum((e) => e.summary?.duration))}`, `${Math.round(sum((e) => e.summary?.distance) / 1000)} ${U.km} · TSS ${sum((e) => e.tss)}`),
+    tile(tr('Level {n}', { n: L.level }), `${L.xp} XP`, tr('{left} to level {n}', { left: L.to - L.xp, n: L.level + 1 }), `<span class="lvl-bar"><i style="width:${Math.round(L.frac * 100)}%"></i></span>`),
+  ].join('');
+  box.lastElementChild?.classList.add('wb-level');
+  // the week in a line under the greeting too
+  $('greet-week').textContent = week.length ? ` · ${tr('this week')} ${week.length} ${lang === 'uk' ? plural(week.length, ['заїзд', 'заїзди', 'заїздів']) : week.length === 1 ? 'ride' : 'rides'} · ${fmtTime(sum((e) => e.summary?.duration))}${sum((e) => e.tss) ? ` · ${sum((e) => e.tss)} TSS` : ''}` : '';
+}
+// the tiles: the level opens Progress, the form and the week too (the form is there); History is only the rides
+$('week-box').addEventListener('click', () => openDrawer('progress'));
+
+/** Under «Time of day» with «By the sun»: when each look begins today here. */
+function renderTimeHint() {
+  const el = $('f-time-hint');
+  el.hidden = settings.timeOfDay !== 'auto';
+  if (el.hidden) return;
+  const p = phasesOfDay(new Date(), placeFromZone());
+  const hm = (d) => d ? d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : '—';
+  el.textContent = tr('Today here: morning {a} · day {b} · golden hour {c} · night {d}', { a: hm(p.morning), b: hm(p.midday), c: hm(p.evening), d: hm(p.night) });
+}
+// «By the sun»: mid-ride the look follows the sun as it moves (checked each minute, changed only when the look does)
+setInterval(() => {
+  if (!ride || settings.timeOfDay !== 'auto' || !scene) return;
+  const look = phaseOf(sunAt(new Date(), placeFromZone()));
+  if (ride.look && look !== ride.look) scene.setAtmosphere?.('auto', weatherNow(), { smooth: true }); // over 40 s, not in a jump
+  ride.look = look;
+}, 60000);
+
+/** The weather the scene shows now: the setting, or with «Changeable» the spell this ride is in. */
+function weatherNow() {
+  return settings.weather === 'changeable' ? (ride?.sky || 'clear') : settings.weather;
+}
+// «Changeable»: rain or fog comes and goes during the ride, over 40 s each time (checked every 20 s)
+setInterval(() => {
+  if (!ride || settings.weather !== 'changeable' || !scene || ride.race) return;
+  ride.sky ||= 'clear';
+  ride.skyUntil ??= ride.elapsed + 360 + Math.random() * 360; // the first dry spell
+  if (ride.elapsed < ride.skyUntil) return;
+  const next = nextWeather(ride.sky);
+  ride.sky = next.sky; ride.skyUntil = ride.elapsed + next.for;
+  scene.setAtmosphere?.(settings.timeOfDay, ride.sky, { smooth: true });
+}, 20000);
+
+/** The rail's profile button: your initial on your jersey's colour. */
+function renderAvatar() {
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  const a = $('avatar');
+  // your initial; before a name is set, a plain head-and-shoulders outline
+  if (named) a.textContent = settings.name.trim()[0].toUpperCase();
+  else a.innerHTML = '<svg viewBox="0 0 24 24" class="ic stroke"><circle cx="12" cy="9" r="3.6"/><path d="M5.5 19.5c1.2-3.3 3.6-5 6.5-5s5.3 1.7 6.5 5"/></svg>';
+  a.style.background = settings.jersey;
+  $('open-profile').title = named ? settings.name.trim() : tr('Profile');
+}
+
+/** «Good evening, Serhii» and the date over the lobby. */
+function renderGreeting() {
+  const h = new Date().getHours();
+  // «Good night» is a goodbye in English: late at night it says good evening there
+  const hello = h < 5 ? (lang === 'en' ? 'Good evening' : tr('Good night')) : h < 12 ? tr('Good morning') : h < 18 ? tr('Good afternoon') : tr('Good evening');
+  const named = settings.name?.trim() && settings.name.trim() !== DEFAULT_SETTINGS.name;
+  $('greet').textContent = named ? `${hello}, ${settings.name.trim()}` : hello;
+  $('greet-date').textContent = new Date().toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
+}
+
+/** The rail's dots: devices (green: ready to ride, amber: nothing to ride on) and intervals.icu (green: linked). */
+function renderRailDots() {
+  const dev = $('rail-dev-dot'), icu = $('rail-icu-dot');
+  if (dev) { dev.className = `rail-dot ${trainer.connected ? 'ok' : $('sim')?.checked ? '' : 'need'}`; }
+  if (icu) icu.className = `rail-dot ${icuClient ? 'ok' : ''}`;
+}
+
+/** Power (filled, smoothed over 10 s) and heart rate (line) over the whole ride. */
+/**
+ * The ride chart under the pointer (or a finger): a line at that moment and a card with the time, power, the
+ * plan, heart rate, cadence and W′bal there (each value the 5 s it was kept as).
+ */
+function hoverSummaryChart(samples, every, wPrime) {
+  const c = $('sum-chart'), line = $('sum-hover-line'), tip = $('sum-hover');
+  const hide = () => { line.hidden = tip.hidden = true; };
+  hide();
+  c.onpointerleave = hide;
+  const hasCad = samples.some((x) => x.cadence > 0); // a ride with cadence shows 0 in a pause, one without shows none
+  c.onpointermove = (ev) => {
+    if (!samples.length) return;
+    const r = c.getBoundingClientRect(), x = Math.max(0, Math.min(r.width, ev.clientX - r.left));
+    const i = Math.round((x / r.width) * (samples.length - 1)), s = samples[i];
+    const row = (dot, label, v) => (v !== '' ? `<span><i style="background:${dot}"></i>${label}<b>${v}</b></span>` : '');
+    tip.innerHTML = `<b class="tip-time">${fmtTime(i * every)}${s.power > 0 ? '' : ` · ${tr('paused')}`}</b>`
+      + row('#ffc21a', tr('Power'), `${Math.round(s.power || 0)} ${U.W}`)
+      + row('#ffffff', tr('Plan'), s.target ? `${Math.round(s.target)} ${U.W}` : '')
+      + row('#ff4d5e', tr('Heart rate'), s.heartRate ? `${Math.round(s.heartRate)} ${U.bpm}` : '')
+      + row('#38d6e8', tr('Cadence'), hasCad ? `${Math.round(s.cadence || 0)} ${U.rpm}` : '')
+      + row('#a78bfa', 'W′bal', s.wbal !== undefined && s.wbal < wPrime ? `${(s.wbal / 1000).toFixed(1)} ${tr('kJ')}` : '');
+    line.hidden = tip.hidden = false;
+    line.style.left = `${x}px`;
+    // the card on the side away from the edge
+    const right = x > r.width / 2;
+    tip.style.left = right ? '' : `${x + 12}px`;
+    tip.style.right = right ? `${r.width - x + 12}px` : '';
+  };
+}
+
+function drawSummaryChart(canvas, samples, smoothN = 10, ftp = settings.ftp, wPrime = wPrimeJ()) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext('2d');
+  g.scale(dpr, dpr);
+  g.clearRect(0, 0, w, h);
+  if (!samples.length) return;
+  // power and cadence keep their zeros (a pause drops to 0); heart rate skips them (a strap's dropout)
+  const smooth = (k, n, zeros = false) => samples.map((_, i) => {
+    let a = 0, c = 0;
+    for (let j = Math.max(0, i - n + 1); j <= i; j++) { const v = samples[j][k] || 0; if (zeros || v > 0) { a += v; c++; } }
+    return c ? a / c : 0;
+  });
+  const pw = smooth('power', smoothN, true), hr = smooth('heartRate', Math.max(1, Math.round(smoothN / 2)));
+  const pMax = Math.max(ftp * 1.3, ...pw), hMax = Math.max(190, ...hr);
+  const x = (i) => (i / Math.max(1, samples.length - 1)) * w;
+  // FTP reference line
+  const yF = h - (ftp / pMax) * (h - 8);
+  g.strokeStyle = 'rgba(255,255,255,.18)'; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
+  g.beginPath(); g.moveTo(0, h);
+  pw.forEach((v, i) => g.lineTo(x(i), h - (v / pMax) * (h - 8)));
+  g.lineTo(w, h); g.closePath();
+  const grad = g.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0, 'rgba(255,194,26,.85)'); grad.addColorStop(1, 'rgba(255,194,26,.15)');
+  g.fillStyle = grad; g.fill();
+  // cadence: thin, on its own scale (0–150 rpm)
+  const cad = smooth('cadence', Math.max(1, Math.round(smoothN / 2)), true);
+  if (cad.some((v) => v > 0)) {
+    g.strokeStyle = 'rgba(56,214,232,.55)'; g.lineWidth = 1; g.beginPath();
+    let started = false;
+    cad.forEach((v, i) => { const y = h - (v / 150) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
+    g.stroke();
+  }
+  // the plan: the workout's target as a white step line
+  if (samples.some((s) => s.target > 0)) {
+    g.strokeStyle = 'rgba(255,255,255,.9)'; g.lineWidth = 1.5; g.beginPath();
+    let started = false;
+    let py = 0;
+    samples.forEach((s, i) => { if (!(s.target > 0)) { started = false; return; } const y = h - (s.target / pMax) * (h - 8); if (started) { g.lineTo(x(i), py); g.lineTo(x(i), y); } else g.moveTo(x(i), y); py = y; started = true; });
+    g.stroke();
+  }
+  if (hr.some((v) => v > 0)) {
+    g.strokeStyle = '#ff4d5e'; g.lineWidth = 2; g.beginPath();
+    let started = false;
+    hr.forEach((v, i) => { if (!v) return; const y = h - (v / hMax) * (h - 8); started ? g.lineTo(x(i), y) : g.moveTo(x(i), y); started = true; });
+    g.stroke();
+  }
+  // pauses: faint bands where there was no power at all
+  g.fillStyle = 'rgba(148,163,184,.12)';
+  samples.forEach((s, i) => { if (!(s.power > 0)) g.fillRect(x(i) - w / samples.length / 2, 0, Math.max(1, w / samples.length), h); });
+  // W′bal: violet, from full at the top to empty at the bottom
+  if (samples.some((s) => s.wbal < wPrime)) {
+    g.strokeStyle = '#a78bfa'; g.lineWidth = 2; g.beginPath();
+    samples.forEach((s, i) => { const y = 4 + (1 - (s.wbal ?? wPrime) / wPrime) * (h - 8); i ? g.lineTo(x(i), y) : g.moveTo(x(i), y); });
+    g.stroke();
+  }
+  // the FTP line again on top of the fill, with its value
+  g.strokeStyle = 'rgba(255,255,255,.45)'; g.lineWidth = 1; g.setLineDash([4, 4]); g.beginPath(); g.moveTo(0, yF); g.lineTo(w, yF); g.stroke(); g.setLineDash([]);
+  ftpTag(g, 6, yF, ftp);
+}
+
+// ---------- A ride card to share (#52) ----------
+/** Draws the ride on a 1080×1350 canvas: title, route shape, big numbers, the power trace, records. */
+async function drawRideCard(e, c, format = 'story') {
+  // story: 9:16 with Instagram's top bar and reply field left clear; post: 4:5 for a feed
+  const story = format === 'story';
+  c.width = 1080; c.height = story ? 1920 : 1350;
+  const g = c.getContext('2d'), W = c.width, H = c.height, P = 72;
+  const sum = e.summary || {}, route = routes.find((r) => r.id === e.routeId);
+  const accent = '#ff7a1a';
+  // background: deep blue with a warm glow
+  const bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#0d1626'); bg.addColorStop(1, '#1a1f33');
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const glow = g.createRadialGradient(W * 0.85, H * 0.12, 20, W * 0.85, H * 0.12, 800);
+  glow.addColorStop(0, 'rgba(255,122,26,.28)'); glow.addColorStop(1, 'rgba(255,122,26,0)');
+  g.fillStyle = glow; g.fillRect(0, 0, W, H);
+  const font = (w, s) => `${w} ${s}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+  const maxW = W - P * 2;
+  /** Words of text in lines no wider than maxW, at most n; the last one ends in … when cut. */
+  const wrap = (text, n) => {
+    const lines = [];
+    let line = '';
+    for (const w of String(text).split(/\s+/)) {
+      const t = line ? `${line} ${w}` : w;
+      if (g.measureText(t).width <= maxW || !line) line = t; else { lines.push(line); line = w; }
+    }
+    if (line) lines.push(line);
+    if (lines.length > n) { lines.length = n; lines[n - 1] += '…'; }
+    return lines.map((l) => { while (g.measureText(l).width > maxW && l.length > 2) l = `${l.slice(0, -2)}…`; return l; });
+  };
+  let y = story ? 250 : P; // the top of the content
+  // brand, and the date under it (on the left: Instagram's buttons sit at the top right)
+  try {
+    const img = new Image(); img.src = 'logo.svg'; await img.decode();
+    g.drawImage(img, P, y - 6, 64, 56);
+  } catch { /* no logo */ }
+  g.fillStyle = '#fff'; g.font = font(800, 44); g.fillText('Gruppetto', P + 92, y + 38);
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(500, 30);
+  g.fillText(new Date(e.date).toLocaleDateString(locale, { day: 'numeric', month: 'long', year: 'numeric' }), P, y + 100);
+  y += 100;
+  // title: route and what it was, the size fitted to the width and the rest wrapped, never cut at the edge
+  const kind = e.race ? `🏁 ${tr('Race')}${e.race.findIndex((x) => x.me) >= 0 ? ` · ${tr('{n} of {m}', { n: e.race.findIndex((x) => x.me) + 1, m: e.race.length })}` : ''}` : e.workoutName || tr('Free ride');
+  let size = 84;
+  g.font = font(800, size);
+  while (size > 56 && g.measureText(e.routeName || '').width > maxW) g.font = font(800, (size -= 4));
+  g.fillStyle = '#fff';
+  for (const l of wrap(e.routeName || '', 2)) { y += size * 1.15; g.fillText(l, P, y); }
+  g.fillStyle = accent; g.font = font(700, 40);
+  y += 12;
+  for (const l of wrap(kind, 2)) { y += 52; g.fillText(l, P, y); }
+  // the numbers, the trace and the records from the bottom up; the route's shape fills what is between
+  const bottom = story ? H - 330 : H - 50;
+  const statsY = bottom - 520;
+  if (route) {
+    const { pts } = routeShape(route);
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, yy] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, yy); x1 = Math.max(x1, x); y1 = Math.max(y1, yy); }
+    const bx = P, by = y + 50, bw = maxW, bh = Math.max(200, statsY - 90 - by), k = Math.min(bw / Math.max(1, x1 - x0), bh / Math.max(1, y1 - y0)) * 0.9;
+    const ox = bx + (bw - (x1 - x0) * k) / 2 - x0 * k, oy = by + (bh - (y1 - y0) * k) / 2 - y0 * k;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    for (const [w, col] of [[22, 'rgba(255,122,26,.18)'], [8, accent]]) {
+      g.beginPath(); pts.forEach(([x, yy], i) => (i ? g.lineTo(ox + x * k, oy + yy * k) : g.moveTo(ox + x * k, oy + yy * k)));
+      g.strokeStyle = col; g.lineWidth = w; g.stroke();
+    }
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(ox + pts[0][0] * k, oy + pts[0][1] * k, 12, 0, Math.PI * 2); g.fill();
+  }
+  const stats = [
+    [tr('Time'), fmtTime(sum.duration || 0)],
+    [tr('Distance'), `${((sum.distance || 0) / 1000).toFixed(1)} ${U.km}`],
+    [tr('Avg power'), `${sum.avgPower || 0} ${U.W}`],
+    ['NP', `${sum.normalizedPower || sum.avgPower || 0} ${U.W}`],
+    [tr('Elevation gain'), `${Math.round(sum.elevationGain || 0)} ${U.m}`],
+    ['TSS', `${e.tss || 0}`],
+  ];
+  const cw = maxW / 3;
+  stats.forEach(([label, v], i) => {
+    const x = P + (i % 3) * cw, sy = statsY + Math.floor(i / 3) * 150;
+    g.fillStyle = 'rgba(255,255,255,.55)'; g.font = font(600, 26); g.fillText(label.toUpperCase(), x, sy, cw - 16);
+    g.fillStyle = '#fff'; g.font = font(800, 62); g.fillText(v, x, sy + 66, cw - 16);
+  });
+  // power trace, coloured by zone
+  const pw = e.chart?.pw || [], ftp = e.ftp || settings.ftp;
+  if (pw.length) {
+    const ty = bottom - 190, th = 110, n = Math.min(pw.length, 270), per = pw.length / n, bwid = maxW / n;
+    const max = Math.max(ftp * 1.5, ...pw);
+    for (let i = 0; i < n; i++) {
+      let s2 = 0, c2 = 0;
+      for (let j = Math.floor(i * per); j < Math.floor((i + 1) * per); j++) { s2 += pw[j] || 0; c2++; }
+      const p = c2 ? s2 / c2 : 0, h = (p / max) * th;
+      g.fillStyle = zoneColor(p / ftp);
+      g.fillRect(P + i * bwid, ty + th - h, Math.max(1, bwid - 1), h);
+    }
+  }
+  // records, or the address
+  const before = powerCurve(history.filter((x) => x !== e && Date.parse(x.date) < Date.parse(e.date)));
+  const recs = Object.entries(e.bests || {}).filter(([d, w]) => before[d] && w > before[d].w).slice(0, 3);
+  g.font = font(700, 28);
+  let rx = P;
+  for (const [d, w] of recs) {
+    const t = `🏆 ${durLabel(+d)} ${w} ${U.W}`, tw = g.measureText(t).width + 36;
+    g.fillStyle = 'rgba(255,122,26,.18)'; g.strokeStyle = accent; g.lineWidth = 2;
+    g.beginPath(); g.roundRect(rx, bottom - 42, tw, 44, 22); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.fillText(t, rx + 18, bottom - 10);
+    rx += tw + 12;
+  }
+  if (!recs.length) { g.fillStyle = 'rgba(255,255,255,.4)'; g.font = font(500, 26); g.fillText('automation-remarks.com/gruppetto', P, bottom - 10); }
+}
+async function openRideCard() {
+  const e = shown.entry;
+  if (!e) return;
+  const c = $('card-canvas');
+  let format = 'story';
+  try { format = localStorage.getItem('gruppetto-card-format') || 'story'; } catch { /* private mode */ }
+  for (const b of document.querySelectorAll('[data-card-format]')) {
+    b.classList.toggle('sel', b.dataset.cardFormat === format);
+    b.onclick = () => { try { localStorage.setItem('gruppetto-card-format', b.dataset.cardFormat); } catch { /* private mode */ } openRideCard(); };
+  }
+  await drawRideCard(e, c, format);
+  $('card-view').hidden = false;
+  const blob = () => new Promise((res) => c.toBlob(res, 'image/png'));
+  const name = `gruppetto-${(e.date || '').slice(0, 10)}.png`;
+  $('card-download').onclick = async () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(await blob()); a.download = name; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  const b = await blob(), file = new File([b], name, { type: 'image/png' });
+  const canShare = !!navigator.canShare?.({ files: [file] });
+  $('card-share').hidden = !canShare;
+  $('card-share').onclick = () => { track('card-share', format); navigator.share({ files: [file], title: 'Gruppetto' }).catch(() => {}); };
+}
+$('btn-card').onclick = openRideCard;
+$('card-view').addEventListener('click', (ev) => { if (ev.target.closest('[data-card-close]')) $('card-view').hidden = true; });
+
+/** What a ride's files are named after: its workout, else its route. */
+const rideTitle = (e) => e?.workoutName || e?.routeName || '';
+function download(kind) {
+  const rec = shown.rec || recorder;
+  const d = rec.startTime || new Date();
+  const fit = kind === 'fit';
+  const blob = fit ? new Blob([rec.toFIT()], { type: 'application/vnd.ant.fit' }) : new Blob([rec.toTCX()], { type: 'application/vnd.garmin.tcx+xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${rideFileName(d, rideTitle(shown.entry))}.${fit ? 'fit' : 'tcx'}`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/**
+ * Every ride kept in full (the latest 50) as .FIT in one .zip: a backup, or a move to another app. An older ride
+ * has only its summary left, so it is counted, not packed.
+ */
+async function downloadAllRides() {
+  const btn = $('btn-backup'), label = btn.textContent;
+  btn.disabled = true;
+  const files = [];
+  let missing = 0;
+  try {
+    for (const [i, e] of history.entries()) {
+      btn.textContent = tr('Preparing… {n} of {total}', { n: i + 1, total: history.length });
+      const r = await getRide(e.id);
+      if (!r?.samples?.length) { missing++; continue; }
+      const rec = new Recorder();
+      rec.samples = r.samples; rec.startTime = new Date(r.start); rec.lapStarts = r.lapStarts || [0]; rec.position = positionOf(e.routeId);
+      files.push({ name: `${rideFileName(rec.startTime, rideTitle(e))}.fit`, data: rec.toFIT(), date: rec.startTime });
+    }
+    track('backup', !files.length ? 'empty' : files.length < 10 ? '1-9' : files.length < 30 ? '10-29' : '30+');
+    if (!files.length) { toast(tr('No full ride data is stored on this device yet')); return; }
+    const d = new Date(), p = (n) => String(n).padStart(2, '0');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([makeZip(files)], { type: 'application/zip' }));
+    a.download = `gruppetto-rides-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast(missing ? tr('{n} rides as .FIT; {m} older ones keep only their summary', { n: files.length, m: missing }) : tr('{n} rides as .FIT', { n: files.length }));
+  } finally {
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+$('btn-backup').onclick = downloadAllRides;
+
+// ---------- intervals.icu ----------
+let icuClient = null;
+let icuWorkouts = [];
+let lastRide = null;
+
+function initIntervals() {
+  $('f-icu-key').value = settings.icuKey;
+  $('f-icu-athlete').value = settings.icuAthlete;
+  $('f-icu-upload').checked = settings.icuUpload;
+  $('f-icu-upload').onchange = () => { settings.icuUpload = $('f-icu-upload').checked; saveSettings(); };
+  $('btn-icu').onclick = () => connectIntervals();
+  $('btn-icu-forget').onclick = forgetIntervals;
+  $('btn-icu-upload').onclick = uploadToIntervals;
+  if (settings.icuKey) connectIntervals({ quiet: true });
+}
+
+async function connectIntervals({ quiet = false } = {}) {
+  const key = $('f-icu-key').value.trim();
+  if (!key) { $('icu-status').textContent = tr('Paste your intervals.icu API key.'); return; }
+  const client = new IntervalsClient({ apiKey: key, athleteId: $('f-icu-athlete').value });
+  $('btn-icu').disabled = true;
+  $('icu-status').textContent = tr('Connecting…');
+  try {
+    const athlete = await client.athlete();
+    const today = new Date();
+    const week = new Date(today.getTime() + 6 * 86400000);
+    icuWorkouts = await client.plannedWorkouts(localDate(today), localDate(week), { lthr: athlete.lthr, maxHr: athlete.maxHr, hrZones: athlete.hrZones });
+    // a workout already ridden today (here, in Zwift, on a Garmin: any activity paired with it) is not offered again
+    const done = await client.doneEventIds(localDate(today), localDate(today)).catch(() => new Set());
+    const stats = icuWorkouts.stats;
+    icuWorkouts = icuWorkouts.filter((w) => !done.has(String(w.eventId)));
+    icuWorkouts.stats = stats;
+    icuClient = client;
+    settings.icuKey = key;
+    settings.icuAthlete = $('f-icu-athlete').value.trim();
+    if (athlete.ftp) { settings.ftp = athlete.ftp; settings.ftpSet = true; $('f-ftp').value = athlete.ftp; }
+    if (athlete.weight) { settings.weight = Math.round(athlete.weight); $('f-weight').value = settings.weight; }
+    // heart rate zones and max HR as set in intervals.icu
+    if (athlete.hrZones) { settings.hrZones = athlete.hrZones; settings.hrZoneNames = athlete.hrZoneNames; }
+    const maxHr = athlete.maxHr || athlete.hrZones?.at(-1);
+    if (maxHr) settings.maxHr = maxHr;
+    if (athlete.lthr) { settings.lthr = athlete.lthr; $('f-lthr').value = athlete.lthr; }
+    if (athlete.wPrime) { settings.wPrimeKj = Math.round(athlete.wPrime / 100) / 10; $('f-wprime').value = settings.wPrimeKj; }
+    if (!quiet && icuWorkouts.length) settings.mode = icuWorkouts[0].id;
+    saveSettings();
+    if (!quiet) track('icu-connect');
+    renderRailDots();
+    renderFtpBox();
+    loadIcuHistory(client); // your power curve and form there, Zwift's rides included: not waited for
+    const n = icuWorkouts.length, st = icuWorkouts.stats || {};
+    const notes = [];
+    if (st.otherSport) notes.push(tr('other sports skipped: {n}', { n: st.otherSport }));
+    if (st.unstructured) notes.push(tr('without intervals (free ride): {n}', { n: st.unstructured }));
+    const found = n ? tr('cycling workouts in the next 7 days: {n}, listed first in “Workouts”', { n }) : tr('no cycling workouts in your calendar for the next 7 days');
+    $('icu-status').textContent = `${athlete.name ? `${athlete.name} · ` : ''}FTP ${settings.ftp} ${U.W} · ${found}${notes.length ? ` (${notes.join(', ')})` : ''}`;
+    $('btn-icu').textContent = tr('Refresh');
+    $('btn-icu-forget').hidden = false;
+    renderModes();
+  } catch (e) {
+    icuClient = null;
+    $('icu-status').textContent = e.message;
+  } finally {
+    $('btn-icu').disabled = false;
+  }
+}
+
+// ---------- Your history in intervals.icu (Zwift's rides there too) ----------
+// The power curve and the form come from intervals.icu when it is connected: someone coming from Zwift has
+// their records and fitness from the first day, not from zero. Kept on this device for when it is offline.
+const ICU_STATS_KEY = 'gruppetto-icu-stats';
+let icuStats = (() => { try { return JSON.parse(localStorage.getItem(ICU_STATS_KEY) || 'null'); } catch { return null; } })();
+async function loadIcuHistory(client) {
+  const today = new Date();
+  const [curves, fitness] = await Promise.all([
+    client.powerCurves(DURS).catch(() => null),
+    client.fitness(localDate(new Date(today.getTime() - 90 * 864e5)), localDate(today)).catch(() => null),
+  ]);
+  if (!curves && !fitness) return;
+  icuStats = { at: Date.now(), curves: curves || icuStats?.curves || null, fitness: fitness?.length ? fitness : icuStats?.fitness || null };
+  try { localStorage.setItem(ICU_STATS_KEY, JSON.stringify(icuStats)); } catch { /* private mode */ }
+  renderPowerCurve(); renderFitness();
+}
+/**
+ * Your rides with intervals.icu's curve as two more «rides»: its all-time bests dated long ago (so they count
+ * for all time only) and its last 42 days dated today; for the power curve and the FTP and W′ suggestions.
+ */
+function curveEntries() {
+  const c = icuStats?.curves;
+  if (!c || !settings.icuKey) return history;
+  return [...history,
+    ...(Object.keys(c.all || {}).length ? [{ id: 'icu-all', date: '2000-01-01T00:00:00Z', bests: c.all, icu: true }] : []),
+    ...(Object.keys(c.recent || {}).length ? [{ id: 'icu-42d', date: new Date(icuStats.at).toISOString(), bests: c.recent, icu: true }] : [])];
+}
+
+function forgetIntervals() {
+  icuClient = null;
+  icuWorkouts = [];
+  settings.icuKey = '';
+  settings.icuAthlete = '';
+  icuStats = null;
+  try { localStorage.removeItem(ICU_STATS_KEY); } catch { /* private mode */ }
+  renderRailDots();
+  if (settings.mode.startsWith('icu:')) settings.mode = 'free';
+  saveSettings();
+  $('f-icu-key').value = '';
+  $('f-icu-athlete').value = '';
+  $('icu-status').textContent = tr('Key removed from this browser.');
+  $('btn-icu').textContent = tr('Connect');
+  $('btn-icu-forget').hidden = true;
+  renderModes();
+}
+
+/**
+ * The finish screen's "Upload to intervals.icu" and "Upload to Strava" switches (remembered for next time): when
+ * on, the ride goes up after a 10 s countdown, or at once on leaving the screen; switched off, nothing is sent.
+ */
+const AUTO_UPLOAD = {
+  icu: { wrap: 'sum-icu', box: 'sum-icu-auto', count: 'sum-icu-count', key: 'icuUpload', profile: 'f-icu-upload', run: () => uploadToIntervals(), done: () => shown.entry?.uploadedId || lastRide?.uploadedId },
+  strava: { wrap: 'sum-strava', box: 'sum-strava-auto', count: 'sum-strava-count', key: 'stravaUpload', profile: 'f-strava-upload', run: () => uploadToStrava(), done: () => shown.entry?.stravaId },
+  garmin: { wrap: 'sum-garmin', box: 'sum-garmin-auto', count: 'sum-garmin-count', key: 'garminUpload', profile: 'f-garmin-upload', run: () => uploadToGarmin(), done: () => shown.entry?.garminId },
+};
+const uploadTimers = {};
+function stopUploadTimer(kind) {
+  clearInterval(uploadTimers[kind]); uploadTimers[kind] = null;
+  $(AUTO_UPLOAD[kind].count).textContent = '';
+}
+function scheduleUpload(kind, can) {
+  const a = AUTO_UPLOAD[kind];
+  stopUploadTimer(kind);
+  const box = $(a.box), count = $(a.count);
+  $(a.wrap).hidden = !can;
+  if (!can) return;
+  box.checked = !!settings[a.key];
+  let left = 10;
+  const tick = () => {
+    if (left <= 0) { stopUploadTimer(kind); a.run(); return; }
+    count.textContent = tr('in {s} s', { s: left }); left--;
+  };
+  const start = () => { if (a.done() || uploadTimers[kind]) return; left = 10; uploadTimers[kind] = setInterval(tick, 1000); tick(); };
+  box.onchange = () => {
+    settings[a.key] = box.checked; saveSettings(); $(a.profile).checked = box.checked;
+    if (box.checked) start(); else stopUploadTimer(kind);
+  };
+  if (box.checked) start();
+}
+/** Leaving the finish screen: a pending upload goes now. */
+function flushUpload() {
+  for (const kind of Object.keys(AUTO_UPLOAD)) {
+    if (!uploadTimers[kind]) continue;
+    stopUploadTimer(kind);
+    AUTO_UPLOAD[kind].run();
+  }
+}
+
+async function uploadToIntervals() {
+  stopUploadTimer('icu');
+  const e = shown.entry, rec = shown.rec;
+  if (!icuClient || !e?.summary || !rec || e.uploadedId) return;
+  const status = $('icu-upload-status');
+  const btn = $('btn-icu-upload');
+  status.hidden = false;
+  status.textContent = tr('Uploading to intervals.icu…');
+  btn.disabled = true;
+  const sum = e.summary;
+  const fromIcu = !!e.eventId;
+  const name = `Gruppetto: ${e.workoutName || e.routeName}`;
+  const description = `${e.routeName} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`;
+  try {
+    const id = await icuClient.uploadActivity(rec.toFIT(), {
+      name, description, eventId: fromIcu ? e.eventId : undefined, filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit`,
+    });
+    e.uploadedId = id || true;
+    if (lastRide && rec === recorder) lastRide.uploadedId = e.uploadedId;
+    if (history.includes(e)) saveHistory();
+    status.innerHTML = id
+      ? `${tr('Uploaded to intervals.icu ✓')}${fromIcu ? ` · ${icuClient.unpaired ? tr('not matched to the planned workout (moved or deleted?)') : tr('marked as completed')}` : ''} · <a href="${activityUrl(id)}" target="_blank" rel="noopener">${tr('open ride')}</a>${againLink('icu')}`
+      : `${tr('Uploaded to intervals.icu ✓')}${againLink('icu')}`;
+    btn.hidden = true;
+    $('sum-icu').hidden = true;
+  } catch (e) {
+    status.textContent = tr('Upload failed: {error}', { error: e.message });
+    btn.disabled = false;
+    btn.textContent = tr('Try again');
+  }
+}
+
+// ---------- Strava ----------
+let stravaClient = null;
+
+/**
+ * Strava stays out of sight until its app may connect more than its owner (Strava's athlete capacity of 1 before
+ * review): ?strava=1 shows it in this browser for good, ?strava=0 hides it again. Linked, or on the way back from
+ * Strava's page, it shows anyway.
+ */
+const STRAVA_ON_KEY = 'gruppetto.strava-on';
+function stravaShown() {
+  const url = new URL(location.href), flag = url.searchParams.get('strava');
+  if (flag !== null) {
+    try { if (flag === '1') localStorage.setItem(STRAVA_ON_KEY, '1'); else localStorage.removeItem(STRAVA_ON_KEY); } catch { /* private mode */ }
+    url.searchParams.delete('strava');
+    window.history.replaceState(null, '', url);
+  }
+  let on = false;
+  try { on = !!localStorage.getItem(STRAVA_ON_KEY); } catch { /* private mode */ }
+  return on || !!StravaClient.saved() || !!stravaReturn(location.search);
+}
+
+function initStrava() {
+  const shownHere = stravaShown();
+  $('strava-card').hidden = !shownHere;
+  $('strava-card').dataset.off = shownHere ? '' : '1'; // the Profile page shows its cards: this one stays out
+  if (!shownHere) return;
+  stravaClient = StravaClient.saved();
+  $('f-strava-upload').checked = settings.stravaUpload;
+  $('f-strava-upload').onchange = () => { settings.stravaUpload = $('f-strava-upload').checked; saveSettings(); };
+  $('btn-strava').onclick = () => { track('strava', 'connect'); location.href = stravaAuthorizeUrl(stravaRedirect()); };
+  $('btn-strava-forget').onclick = () => { track('strava', 'forget'); stravaClient?.forget(); stravaClient = null; renderStrava(); };
+  $('btn-strava-upload').onclick = uploadToStrava;
+  renderStrava();
+  // back from Strava's page: the code becomes tokens, and the address loses it
+  const back = stravaReturn(location.search);
+  if (!back) return;
+  const url = new URL(location.href);
+  for (const k of ['state', 'code', 'scope', 'error']) url.searchParams.delete(k);
+  window.history.replaceState(null, '', url);
+  openDrawer('profile', 'links');
+  requestAnimationFrame(() => $('strava-card').scrollIntoView({ block: 'start' }));
+  if (back.error) {
+    $('strava-status').textContent = back.error === 'no-write' ? tr('Strava: check “Upload your activities” to let Gruppetto upload rides') : tr('Strava: not connected');
+    track('strava', back.error);
+    return;
+  }
+  $('strava-status').textContent = tr('Connecting to Strava…');
+  StravaClient.connect(back.code).then((c) => {
+    stravaClient = c; track('strava', 'connected');
+    renderStrava();
+    toast(tr('Strava connected'));
+  }).catch((err) => { $('strava-status').textContent = tr('Strava: {error}', { error: err.message }); });
+}
+
+function renderStrava() {
+  $('btn-strava').hidden = !!stravaClient;
+  $('btn-strava-forget').hidden = !stravaClient;
+  $('strava-status').textContent = stravaClient ? (stravaClient.name ? tr('Connected: {name}', { name: stravaClient.name }) : tr('Connected')) : '';
+}
+
+async function uploadToStrava() {
+  stopUploadTimer('strava');
+  const e = shown.entry, rec = shown.rec;
+  if (!stravaClient || !e?.summary || !rec || e.stravaId) return;
+  const status = $('strava-upload-status'), btn = $('btn-strava-upload');
+  status.hidden = false;
+  status.textContent = tr('Uploading to Strava…');
+  btn.disabled = true;
+  const sum = e.summary;
+  try {
+    const { activityId, duplicate } = await stravaClient.upload(rec.toFIT(), {
+      name: `Gruppetto: ${e.workoutName || e.routeName}`,
+      description: `${e.routeName} · ${(sum.distance / 1000).toFixed(1)} km · avg ${sum.avgPower} W · NP ${sum.normalizedPower || '—'} W`,
+      externalId: `gruppetto-${e.id}`,
+      filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit`,
+      gps: !!rec.position,
+    });
+    e.stravaId = activityId;
+    if (history.includes(e)) saveHistory();
+    track('strava', duplicate ? 'duplicate' : 'uploaded');
+    status.innerHTML = `${duplicate ? tr('Already on Strava') : tr('On Strava ✓')} · <a class="strava-link" href="${stravaActivityUrl(activityId)}" target="_blank" rel="noopener">View on Strava</a>${againLink('strava')}`;
+    btn.hidden = true;
+    $('sum-strava').hidden = true;
+  } catch (err) {
+    track('strava', 'failed');
+    status.textContent = tr('Upload failed: {error}', { error: err.message });
+    btn.disabled = false;
+    btn.textContent = tr('Try again');
+  }
+}
+
+// ---------- Garmin Connect ----------
+let garminClient = null;
+let garminMfa = null; // Garmin's code step: the state to send back with the code
+
+async function initGarmin() {
+  if (!garminOn()) return;
+  garminClient = GarminClient.saved();
+  // the card shows once the function answers (it is deployed apart from the page)
+  if (!garminClient && !(await garminAvailable())) return;
+  // on: from now the Profile page shows it with the others; on screen at once only if that page is open
+  // (this answer comes late, often with Devices open, where the card does not belong)
+  $('garmin-card').dataset.off = '';
+  $('garmin-card').hidden = $('drawer').hidden || !$('drawer').querySelector('.drawer-tabs [data-open="profile"]')?.classList.contains('sel');
+  $('f-garmin-upload').checked = settings.garminUpload;
+  $('f-garmin-upload').onchange = () => { settings.garminUpload = $('f-garmin-upload').checked; saveSettings(); };
+  $('garmin-login').onsubmit = async (ev) => {
+    ev.preventDefault();
+    const btn = $('btn-garmin'), st = $('garmin-status');
+    btn.disabled = true;
+    st.textContent = tr('Connecting to Garmin…');
+    try {
+      let got;
+      if (garminMfa) got = await GarminClient.verify(garminMfa, $('f-garmin-code').value);
+      else got = await GarminClient.connect($('f-garmin-email').value.trim(), $('f-garmin-password').value);
+      if (got.mfa) {
+        garminMfa = got.mfa;
+        $('f-garmin-code').hidden = false; $('f-garmin-code').required = true; $('f-garmin-code').focus();
+        st.textContent = tr('Garmin sent you a code. Enter it to continue');
+        btn.textContent = tr('Confirm');
+        return;
+      }
+      garminClient = got; garminMfa = null;
+      $('f-garmin-password').value = ''; $('f-garmin-code').value = '';
+      track('garmin', 'connected');
+      renderGarmin();
+      toast(tr('Garmin connected'));
+    } catch (err) {
+      // 429: Garmin's gate is limiting sign-ins (its "token 429" said nothing); trying again at once makes it longer
+      st.innerHTML = esc(err.status === 429
+        ? tr('Garmin is rate-limiting sign-ins right now (429). Your password was correct. Wait an hour and try again; repeated attempts make the wait longer.')
+        : tr('Garmin: {error}', { error: err.message.replace(/^Garmin: /, '') }))
+        + ` <span class="g-hand">${esc(tr('Meanwhile you can upload a ride manually: Download .FIT on the finish screen, then'))} <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a>.</span>`;
+      track('garmin', err.status === 429 ? 'limited' : 'failed');
+    } finally { btn.disabled = false; }
+  };
+  $('btn-garmin-forget').onclick = () => { track('garmin', 'forget'); garminClient?.forget(); garminClient = null; renderGarmin(); };
+  $('btn-garmin-upload').onclick = uploadToGarmin;
+  renderGarmin();
+}
+
+function renderGarmin() {
+  garminMfa = null;
+  $('garmin-login').hidden = !!garminClient;
+  $('f-garmin-code').hidden = true; $('f-garmin-code').required = false;
+  $('btn-garmin').textContent = tr('Connect Garmin');
+  $('btn-garmin-forget').hidden = !garminClient;
+  $('garmin-status').textContent = garminClient ? (garminClient.name ? tr('Connected: {name}', { name: garminClient.name }) : tr('Connected')) : '';
+}
+
+/** Garmin Connect's page for importing a file: the way round when the sign-in or the upload does not work. */
+const GARMIN_IMPORT = 'https://connect.garmin.com/modern/import-data';
+
+async function uploadToGarmin() {
+  stopUploadTimer('garmin');
+  const e = shown.entry, rec = shown.rec;
+  if (!garminClient || !e?.summary || !rec || e.garminId) return;
+  const status = $('garmin-upload-status'), btn = $('btn-garmin-upload');
+  status.hidden = false;
+  status.textContent = tr('Uploading to Garmin Connect…');
+  btn.disabled = true;
+  try {
+    const { activityId, duplicate } = await garminClient.upload(rec.toFIT(), { filename: `${rideFileName(rec.startTime || new Date(), rideTitle(e))}.fit` });
+    e.garminId = activityId || true;
+    if (history.includes(e)) saveHistory();
+    track('garmin', duplicate ? 'duplicate' : 'uploaded');
+    const label = duplicate ? tr('Already on Garmin Connect') : tr('On Garmin Connect ✓');
+    status.innerHTML = (activityId ? `${label} · <a href="${garminActivityUrl(activityId)}" target="_blank" rel="noopener">${tr('open ride')}</a>` : label) + againLink('garmin');
+    btn.hidden = true;
+    $('sum-garmin').hidden = true;
+  } catch (err) {
+    track('garmin', 'failed');
+    // the way that always works: the file, and Garmin Connect's own import page
+    status.innerHTML = `${esc(tr('Upload failed: {error}', { error: err.status === 429 ? tr('Garmin is rate-limiting requests right now (429). Try again later') : err.message }))}`
+      + ` <span class="g-hand">${esc(tr('Upload it manually:'))} <button class="link-btn" data-g-fit>${esc(tr('Download .FIT'))}</button> → <a href="${GARMIN_IMPORT}" target="_blank" rel="noopener">${esc(tr('Import on Garmin Connect'))}</a></span>`;
+    status.querySelector('[data-g-fit]').onclick = () => { track('garmin', 'by-hand'); download('fit'); };
+    btn.disabled = false;
+    btn.textContent = tr('Try again');
+    if (/connect again/.test(err.message)) { garminClient?.forget(); garminClient = null; renderGarmin(); }
+  }
+}
+
+function dayLabel(date) {
+  const today = localDate();
+  const tomorrow = localDate(new Date(Date.now() + 86400000));
+  if (date === today) return 'today';
+  if (date === tomorrow) return 'tomorrow';
+  const d = new Date(`${date}T12:00:00`);
+  return d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'numeric' });
+}
+
+// ---------- Screen wake lock ----------
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+    } else if (!on && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch { /* not supported or refused: the ride still works */ }
+}
+document.addEventListener('visibilitychange', () => {
+  if (ride && document.visibilityState === 'visible') { advance(); keepAwake(true); }
+});
+
+// ---------- Helpers ----------
+let toastTimer = null;
+function toast(msg) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, 3000);
+}
+
+function fmtTime(sec) {
+  sec = Math.max(0, Math.floor(sec));
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// ---------- Wire up ----------
+$('btn-pause').onclick = togglePause;
+let finishArmed = null;
+$('btn-finish').onclick = () => {
+  const btn = $('btn-finish');
+  if (finishArmed) { clearTimeout(finishArmed); finishArmed = null; btn.textContent = tr('Finish'); finishRide(); return; }
+  btn.textContent = tr('Sure? Tap again');
+  finishArmed = setTimeout(() => { finishArmed = null; btn.textContent = tr('Finish'); }, 3000);
+};
+$('btn-download').onclick = () => download('fit');
+$('wk-int-down').onclick = () => changeIntensity(-5);
+$('wk-int-up').onclick = () => changeIntensity(+5);
+$('f-pacer').checked = settings.pacer === true;
+$('f-pacer-name').value = settings.pacerName || '';
+$('f-pacer-name').oninput = () => {
+  settings.pacerName = $('f-pacer-name').value; saveSettings();
+  if (ride?.pacer) ride.pacer.name = settings.pacerName.trim() || tr('Pacer');
+};
+$('btn-settings').onclick = () => openDrawer('profile', 'settings');
+$('rail-workouts').onclick = () => openWorkoutMenu();
+for (const id of ['f-name', 'f-jersey']) $(id).addEventListener('input', () => { renderAvatar(); renderGreeting(); });
+$('btn-challenge').onclick = () => challengeFriend(shown.entry);
+$('btn-dev-lost').onclick = () => openDrawer('devices');
+$('f-pacer').onchange = () => { settings.pacer = $('f-pacer').checked; saveSettings(); };
+$('f-attacks').checked = settings.attacks !== false;
+$('f-attacks').onchange = () => { settings.attacks = $('f-attacks').checked; saveSettings(); if (ride && !ride.race && !ride.workout) ride.attacks = settings.attacks ? attackState() : null; };
+$('f-free-pacer').checked = !!settings.freePacer;
+$('f-free-pacer').onchange = () => { settings.freePacer = $('f-free-pacer').checked; saveSettings(); updateSummary(); if (ride && !ride.workout && settings.freePacer) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; } };
+$('f-free-wkg').value = settings.freePacerWkg;
+$('f-free-wkg').oninput = () => { const v = Number($('f-free-wkg').value); if (v >= 0.5 && v <= 7) { settings.freePacerWkg = v; saveSettings(); updateSummary(); } };
+$('wk-pacer-btn').onclick = () => togglePacer();
+$('wk-erg-btn').onclick = () => toggleErg();
+/**
+ * ERG on or off during a workout: on, the trainer holds the target power; off, it simulates the road
+ * like a free ride (gears work again) while the targets stay on screen to ride to by feel.
+ */
+function toggleErg() {
+  if (!ride) return;
+  if (!ride.workout || ride.workoutDone) { toggleHold(); return; }
+  ride.ergOff = !ride.ergOff;
+  ride.lastSentTarget = null; ride.lastSentGrade = null; ride.lastSentWheel = null;
+  ride.ergFactor = 1; ride.lowFor = 0;
+  $('wk-erg-btn').classList.toggle('on', !ride.ergOff);
+  if (ride.simulated && ride.ergOff && ride.target) { const sp = $('sim-power'); sp.value = ride.target; sp.oninput?.(); } // the slider takes over from the target
+  updateGear();
+  toast(ride.ergOff ? tr('ERG off: the trainer simulates the road, ride to the target by feel') : tr('ERG on: the trainer holds the target power'));
+}
+function togglePacer() {
+  // in a workout the workout pacer, on a free ride the free-ride pacer
+  const key = ride && !ride.workout ? 'freePacer' : 'pacer';
+  settings[key] = !(key === 'pacer' ? settings.pacer === true : settings.freePacer);
+  saveSettings();
+  $('f-pacer').checked = settings.pacer === true;
+  $('f-free-pacer').checked = !!settings.freePacer;
+  $('wk-pacer-btn').classList.toggle('on', settings.pacer === true);
+  const on = settings[key];
+  if (ride?.pacer && on) { ride.pacer.dist = ride.dist; ride.pacer.v = ride.v; ride.pacer.waitAt = null; } // rejoin beside you
+  const who = settings.pacerName?.trim() || tr('Pacer');
+  toast(on ? tr('{name} is riding with you', { name: who }) : tr('{name} dropped back', { name: who }));
+  updateSummary();
+}
+
+/** The pacer is out on the road: the workout pacer in a workout, the free-ride pacer otherwise. */
+/** A group ride: your position to the others, once a second (also while waiting on the line, so they see you there). */
+function groupSend() {
+  const G = ride?.group, now = performance.now();
+  if (G && now - G.shownAt > 1000) { G.shownAt = now; chatRender(); } // old messages fade, the spectators' count keeps up
+  if (!G?.live?.joined || now - G.sentAt < 1000) return;
+  G.sentAt = now;
+  G.live.send(groupPacket({
+    id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }), power: wkgNow({ me: true }) * Math.max(30, settings.weight),
+    finish: ride.race?.done ? ride.race.myTime : 0,
+    look: { jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, figure: settings.figure, pattern: myPattern() },
+  }, Date.now()));
+}
+
+// ---------- Chat in a group ride (#85) and the spectators' reactions (#86) ----------
+/** The chat on the road: the last messages (younger than 20 s; open, the last eight), who is watching, and your name to mute. */
+function chatRender() {
+  const G = ride?.group;
+  if (!G) return;
+  const now = Date.now(), open = !$('chat-bar').hidden;
+  const items = G.chat.recent(now, open ? 8 : 4, open ? 0 : 20000);
+  const n = G.watchers.count(now);
+  $('chat-watch').hidden = !n;
+  $('chat-watch').textContent = `👀 ${n}`;
+  $('chat-watch').title = tr('{n} watching', { n });
+  $('chat-feed').innerHTML = items.map((m) => `<div class="chat-msg${m.me ? ' me' : ''}${m.quick ? ' quick' : ''}">`
+    + (m.me ? `<b>${esc(tr('You'))}</b>` : `<button class="chat-who" data-mute="${esc(m.from)}" title="${esc(tr('Mute {name} for this ride', { name: m.name }))}">${esc(m.name)}</button>`)
+    + ` <span>${esc(m.quick ? tr(m.text) : m.text)}</span></div>`).join('');
+}
+/** The field to write in, with the quick phrases (open), or closed back to the road. */
+function chatOpen(show, focus = true) {
+  const bar = $('chat-bar');
+  if (!bar) return;
+  // in the wide lobby the field stays open: sending or Esc only clears it (it is a place of its own, not over the road)
+  if (!show && $('chat-box').classList.contains('lobby')) { $('chat-input').value = ''; $('chat-input').blur(); chatRender(); return; }
+  if (show && !bar.dataset.ready) {
+    bar.dataset.ready = '1';
+    $('chat-quick').innerHTML = QUICK.map((q, i) => `<button class="pill-btn chat-q" data-q="${q.id}" title="${i + 1}">${esc(tr(q.text))}</button>`).join('');
+  }
+  bar.hidden = !show;
+  if (show) { if (focus) $('chat-input').focus(); } else { $('chat-input').value = ''; $('chat-input').blur(); }
+  chatRender();
+}
+/** Send a message ({ m }) or a quick phrase ({ q }), at the pace the others' screens allow. */
+function chatSend(body) {
+  const G = ride?.group;
+  if (!G?.live?.joined) { toast(tr('Not connected to the group ride yet')); return false; }
+  const msg = { u: G.me.id, n: G.me.name, ...body };
+  if (!G.gate.ok(Date.now())) { toast(tr('Slow down: one message a second')); return false; }
+  const shown = G.chat.receive(msg, Date.now(), { mine: true });
+  if (!shown) return false;
+  G.live.say('chat', body.q ? msg : { ...msg, m: shown.text });
+  track('group-chat', body.q ? 'quick' : 'text');
+  chatRender();
+  return true;
+}
+$('chat-input').addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Escape') { e.preventDefault(); chatOpen(false); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const t = $('chat-input').value.trim();
+    if (!t) { chatOpen(false); return; }
+    if (chatSend({ m: t })) chatOpen(false);
+    return;
+  }
+  const k = /^[1-6]$/.test(e.key) && !$('chat-input').value ? Number(e.key) : 0; // the field empty: a digit is a quick phrase
+  if (k) { e.preventDefault(); if (chatSend({ q: QUICK[k - 1].id })) chatOpen(false); }
+});
+$('chat-quick').onclick = (e) => { const b = e.target.closest('[data-q]'); if (b && chatSend({ q: b.dataset.q })) chatOpen(false); };
+$('chat-send').onclick = () => { const t = $('chat-input').value.trim(); if (t && chatSend({ m: t })) chatOpen(false); };
+$('btn-chat').onclick = () => chatOpen($('chat-bar').hidden);
+$('chat-watch-link').onclick = async () => { // friends watch you live (#86), followed from the start
+  const G = ride?.group;
+  if (!G) return;
+  const url = `${location.origin}${location.pathname}#watch=${G.id}&follow=${G.me.id}`;
+  try { await navigator.clipboard.writeText(url); toast(tr('Link copied: whoever opens it watches you live')); } catch { toast(url); }
+  track('group-watch-link');
+};
+$('chat-feed').onclick = (e) => {
+  const b = e.target.closest('[data-mute]');
+  if (!b || !ride?.group) return;
+  if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = tr('Mute?'); setTimeout(() => chatRender(), 3000); return; }
+  ride.group.chat.mute(b.dataset.mute);
+  toast(tr('Muted for this ride'));
+  chatRender();
+};
+/** A spectator's reaction to you: the emoji up the screen, and who sent it. */
+function reactPop(r) {
+  const el = document.createElement('div');
+  el.className = 'react-pop';
+  el.style.left = `${55 + Math.random() * 30}%`;
+  el.innerHTML = `<span>${esc(r.emoji)}</span>${r.name ? `<small>${esc(r.name)}</small>` : ''}`;
+  $('ride').append(el);
+  setTimeout(() => el.remove(), 2600);
+}
+
+function pacerOn() {
+  if (!ride?.pacer) return false;
+  return ride.pacer.free ? !!settings.freePacer : settings.pacer === true;
+}
+
+/**
+ * Free-ride pacer: at the bottom of a climb, when you are more than 40 m back, he stops and waits
+ * until you are there, so you go up together.
+ */
+function pacerRegroup(P, dt) {
+  const R = ride.route, L = R.length;
+  if (P.waitAt != null) {
+    // you are coming: set off as you arrive, at your speed, so you go up side by side
+    if (ride.dist >= P.waitAt - 2) { P.waitAt = null; P.v = Math.max(P.v, ride.v); return; }
+    P.v = 0;
+    return;
+  }
+  for (const c of R.climbs) {
+    const foot = R.oneWay ? c.start : c.start + Math.ceil((P.dist - c.start) / L) * L; // the next foot ahead
+    if (foot >= P.dist && foot <= P.dist + P.v * dt + 0.01 && ride.dist < foot - 40) {
+      P.dist = foot; P.v = 0; P.waitAt = foot;
+      toast(tr('{name} waits for you at the bottom of {climb}', { name: P.name, climb: c.name }));
+      return;
+    }
+  }
+}
+$('f-stats').checked = settings.stats !== false;
+$('f-stats').onchange = () => {
+  settings.stats = $('f-stats').checked; saveSettings();
+  if (settings.stats) initStats(true); else stopStats();
+};
+$('f-sound').checked = !!settings.sound;
+$('f-sound').onchange = () => {
+  settings.sound = settings.voice = $('f-sound').checked;
+  saveSettings();
+  if (settings.sound) { unlockAudio(); beep(880, 0.1); }
+};
+$('f-crowd').checked = settings.crowd !== false;
+$('f-crowd').onchange = () => { settings.crowd = $('f-crowd').checked; saveSettings(); };
+$('btn-download-tcx').onclick = () => download('tcx');
+let historyScroll = 0;
+$('btn-again').onclick = () => {
+  flushUpload(); $('summary').hidden = true; $('lobby').hidden = false; renderHistory(); showRoute();
+  // a ride opened from History: back to History, where it was in the list
+  if (summaryFrom === 'history') {
+    summaryFrom = null;
+    openDrawer('history');
+    requestAnimationFrame(() => { const p = $('drawer').querySelector('.drawer-panel'); if (p) p.scrollTop = historyScroll; });
+  }
+};
+// The Gruppetto mark goes home: from the summary to the lobby (as «Ride again»), on the lobby it closes what is open
+// over it and scrolls up. No reload: an upload in flight and the state stay.
+for (const a of document.querySelectorAll('[data-home]')) a.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (!$('summary').hidden) { summaryFrom = null; $('btn-again').onclick(); } // the mark goes home, not back to History
+  for (const id of ['drawer', 'wk-menu', 'wk-detail', 'wk-builder']) if ($(id)) $(id).hidden = true;
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+$('btn-delete-ride').onclick = () => {
+  const b = $('btn-delete-ride');
+  if (b.textContent !== tr('Tap again to delete')) { b.textContent = tr('Tap again to delete'); return; }
+  forgetRide(b.dataset.id);
+  renderHistory();
+  $('summary').hidden = true; $('lobby').hidden = false;
+};
+$('sim-power').oninput = () => { $('sim-val').textContent = $('sim-power').value; };
+// ---------- Virtual gears & controller actions ----------
+
+const BUTTON_LABELS = {
+  shiftUpL: 'left shift (gear −)', shiftDownL: 'left shift (gear −)', shiftUpR: 'right shift (gear +)', shiftDownR: 'right shift (gear +)',
+  paddleL: 'left paddle (lane ◀)', paddleR: 'right paddle (lane ▶)',
+  up: '▲', down: '▼', left: '◀ (easier: −5 % / −10 %)', right: '▶ (harder: +5 % / +10 %)', a: 'A (ERG / hold power)', b: 'B (pause)', y: 'Y (camera)', z: 'Z (skip interval / new lap)',
+  powerUpL: 'Power-up left (pacer)', powerUpR: 'Power-up right (HUD)', onOffL: 'on/off left', onOffR: 'on/off right',
+};
+
+function onControllerButton(name) {
+  lastButtonLabel = BUTTON_LABELS[name] || name;
+  updateDeviceUI();
+  ctlMapHit(name);
+  const intent = rideIntent(name, settings.ctlMap);
+  if (intent) runIntent(intent);
+}
+
+function onObcButtons(changes) {
+  const pressed = changes.filter((c) => c.value !== 0);
+  if (pressed.length) {
+    lastObcLabel = pressed.map((c) => OBC_LABELS[c.id] || `0x${c.id.toString(16).padStart(2, '0')}`).join(' / ');
+    updateDeviceUI();
+  }
+  const intents = obcIntents(changes, obcState);
+  for (const [intent, value] of intents) runIntent(intent, value);
+  if (intents.has('harder') || intents.has('easier') || intents.has('gear')) obc.haptic(1);
+}
+
+/**
+ * The big step (◀ / ▶ on the Zwift Ride): in a workout the intensity by 5 %, on a free ride the
+ * climb difficulty by 10 %, which the trainer feels on the next grade it is sent.
+ */
+function bigStep(dir) {
+  if (ride.workout && !ride.workoutDone) {
+    changeIntensity(dir * 5);
+    toast(`${tr('Intensity')} ${settings.intensity}%`);
+    return;
+  }
+  if (inHold()) { setHold(ride.hold + dir * 20); toast(`ERG ${ride.hold} ${U.W}`); updateGear(); return; }
+  settings.difficulty = Math.max(0, Math.min(100, settings.difficulty + dir * 10));
+  saveSettings();
+  $('f-diff').value = settings.difficulty;
+  $('diff-val').textContent = `${settings.difficulty}%`;
+  ride.lastSentGrade = null;
+  toast(`${tr('Climb difficulty')} ${settings.difficulty}%`);
+}
+
+/**
+ * Free ride: hold the power you are riding at (rounded to 5 W) in ERG, whatever the road does, or
+ * let the trainer simulate the road again. The shifters then move the held power by 5 W, ◀ ▶ by 20 W.
+ */
+function toggleHold() {
+  if (ride.hold) {
+    ride.hold = null;
+    ride.lastSentTarget = null; ride.lastSentGrade = null; ride.lastSentWheel = null;
+    toast(tr('ERG off: the trainer simulates the road again'));
+  } else {
+    const now = Math.round(powerOver(3) / 5) * 5; // the 3 s power
+    setHold(now >= 50 ? now : Math.round((settings.ftp * 0.6) / 5) * 5);
+    toast(tr('ERG: holding {w} W', { w: ride.hold }));
+  }
+  updateGear();
+}
+function setHold(w) {
+  ride.hold = Math.max(50, Math.min(1500, w));
+  if (ride.simulated) { const s = $('sim-power'); s.value = ride.hold; s.oninput?.(); }
+}
+
+/** Free ride: a lap by hand (Z on the Zwift Ride, or N): a lap in the FIT/TCX file and a split in the summary. */
+function manualLap() {
+  const F = ride.splitFrom, samples = recorder.samples.slice(F.i);
+  const t = ride.elapsed - F.t, d = ride.dist - F.d;
+  if (t < 5) return;
+  const avg = samples.length ? Math.round(samples.reduce((a, x) => a + (x.power || 0), 0) / samples.length) : 0;
+  ride.splits.push({ time: t, dist: d, power: avg });
+  recorder.markLap();
+  ride.splitFrom = { t: ride.elapsed, d: ride.dist, i: recorder.samples.length };
+  cueBeep(1040, 0.2);
+  toast(tr('Split {n}: {time} · {km} km · {w} W', { n: ride.splits.length, time: fmtTime(t), km: (d / 1000).toFixed(2), w: avg }));
+}
+
+/** The camera views, in the order of keys 1–9, then 0 (the TV director, cutting between shots); the ones after have no key (C and the menu). */
+const CAMERAS = ['chase', 'eyes', 'iso', 'side', 'front', 'far', 'back', 'post', 'heli', 'tv', 'top', 'drone', 'tight', 'high', 'offset', 'long', 'car'];
+const CAMERA_NAMES = {
+  chase: 'Camera: chase', eyes: 'Camera: rider\'s eyes', iso: 'Camera: isometric', side: 'Camera: over the shoulder', front: 'Camera: front view',
+  far: 'Camera: far behind', back: 'Camera: looking back', post: 'Camera: roadside', heli: 'Camera: helicopter', tv: 'Camera: TV broadcast', top: 'Camera: overhead', drone: 'Camera: drone',
+  tight: 'Camera: close behind', high: 'Camera: high behind', offset: 'Camera: behind, to the right', long: 'Camera: long lens', car: 'Camera: team car',
+};
+function setCameraView(mode) {
+  if (!scene?.setCamera || !CAMERAS.includes(mode)) return;
+  settings.camera = mode;
+  saveSettings();
+  scene?.setCamera?.(mode);
+  $('f-camera').value = mode;
+  const i = CAMERAS.indexOf(mode);
+  toast(i < 10 ? `${(i + 1) % 10} · ${tr(CAMERA_NAMES[mode])}` : tr(CAMERA_NAMES[mode]));
+}
+/** The next camera view (C, or Y on the Zwift Ride). */
+function nextCamera() {
+  setCameraView(CAMERAS[(CAMERAS.indexOf(settings.camera) + 1) % CAMERAS.length]);
+}
+
+function runIntent(intent, value) {
+  if (!ride) return;
+  switch (intent) {
+    case 'harder': shift(+1); break;
+    case 'easier': shift(-1); break;
+    case 'gear': setGear(value); break;
+    case 'left': steer(-1); break;
+    case 'right': steer(+1); break;
+    case 'steer': ride.laneTarget = Math.max(-2.4, Math.min(2.4, (value / 25) * 2.4)); break;
+    case 'togglePause': togglePause(); break;
+    case 'pause': if (!ride.paused) togglePause(); break;
+    case 'resume': if (ride.paused) togglePause(); break;
+    case 'skip': skipInterval(); break;
+    case 'toggleErg': toggleErg(); break;
+    case 'camera': nextCamera(); break;
+    case 'pacer': if (ride.pacer) togglePacer(); break;
+    case 'bigEasier': bigStep(-1); break;
+    case 'bigHarder': bigStep(+1); break;
+    case 'hud': $('ride').classList.toggle('hud-hidden'); break;
+    default: break;
+  }
+}
+
+/** Sends the virtual gear as a wheel circumference; falls back to grade offsets if the trainer refuses. */
+/**
+ * Gears on the bike: the trainer gets the real wheel size once (a virtual gear left from an earlier ride
+ * would make every gear feel wrong); a trainer that cannot take it already uses the real one.
+ */
+function sendRealWheel() {
+  if (ride.lastSentWheel === 'real' || ride.wheelPending) return;
+  ride.wheelPending = true;
+  trainer.setWheelCircumference(shiftPlan('off').wheelMm).then(() => {
+    if (!ride) return;
+    ride.wheelPending = false;
+    ride.lastSentWheel = 'real';
+  });
+}
+
+function sendVirtualGear() {
+  if (ride.gear === ride.lastSentWheel || ride.wheelPending) return;
+  const gear = ride.gear;
+  ride.wheelPending = true;
+  trainer.setWheelCircumference(virtualWheelMm(gear, settings.chainring, settings.cog || 14)).then((ok) => {
+    if (!ride) return;
+    ride.wheelPending = false;
+    if (ok) { ride.lastSentWheel = gear; return; }
+    ride.shiftMode = 'grade';
+    ride.lastSentGrade = null;
+    toast(tr('The trainer does not accept wheel size. Using grade-based gears'));
+  });
+}
+
+// ---------- ERG helpers ----------
+const scaleW = (w) => (w === null || w === undefined ? null : Math.round((w * settings.intensity) / 100));
+
+/** ERG target for a workout position: plan × intensity + manual bias; null for free-ride steps. */
+function ergTarget(t) {
+  const w = scaleW(t.watts);
+  return w === null ? null : Math.max(0, w + (ride?.ergBias || 0));
+}
+
+/** Target actually sent to the trainer (reduced while the spiral guard is active). */
+const effectiveTarget = () => (ride.target === null ? null : Math.round(ride.target * ride.ergFactor));
+
+/**
+ * "Spiral of death" guard: when cadence (or, without a cadence source, power) collapses in ERG,
+ * halve the target so the legs can spin up again, then restore it over ~5 s.
+ */
+/**
+ * The ramp test (#ftp-test): its best minute so far, and its end. Past the warm-up, 10 s in a row under 80 % of
+ * the step (or under 50 rpm) is the failure the test rides to: the workout ends there, ERG lets go, and the
+ * result is said aloud and shown.
+ */
+function rampWatch(power, cadence) {
+  const w = (ride.rampWin ||= []);
+  w.push(power); if (w.length > 60) w.shift();
+  if (w.length === 60) ride.rampBest = Math.max(ride.rampBest || 0, w.reduce((a, b) => a + b, 0) / 60);
+  const warm = ride.workout.steps[0].dur;
+  if (ride.workoutT < warm + 60 || !ride.target) { ride.rampLow = 0; return; }
+  const failing = power < ride.target * 0.8 || (cadence > 0 && cadence < 50);
+  ride.rampLow = failing ? (ride.rampLow || 0) + 1 : 0;
+  if (ride.rampLow < 10) return;
+  ride.workoutDone = true;
+  ride.target = null;
+  recorder.markLap();
+  const ftp = ride.rampBest ? rampFtp(ride.rampBest) : null;
+  track('ramp-done');
+  cueBeep(1040, 0.5);
+  cueSay(ftp ? 'Test over. Your F T P is about {w} watts. Spin easy now.' : 'Test over. Spin easy now.', { w: ftp });
+  toast(ftp ? tr('Ramp test over: FTP ≈ {w} W. Spin easy to cool down, then finish', { w: ftp }) : tr('Ramp test over. Spin easy to cool down'));
+  updateGear();
+  if (ride.simulated) $('sim-power').value = Math.round(settings.ftp * 0.5);
+}
+
+function updateSpiralGuard(power, cadence) {
+  if (!inErgStep() || ride.simulated) { ride.ergFactor = 1; ride.lowFor = 0; return; }
+  const eff = effectiveTarget();
+  const hasCadence = live.cadAt > 0 && performance.now() - live.cadAt < 5000; // a cadence source is actually reporting
+  const low = hasCadence ? cadence < 55 : eff > 60 && power < eff * 0.6;
+  ride.lowFor = low ? ride.lowFor + 1 : 0;
+  if (ride.lowFor >= 3 && ride.ergFactor > 0.5) {
+    ride.ergFactor = 0.5;
+    toast(hasCadence ? tr('Low cadence: ERG power temporarily reduced') : tr('Power dropped: ERG power temporarily reduced'));
+    cueSay('Spin up your cadence');
+  } else if (ride.ergFactor < 1) {
+    // restore only once the rider has clearly recovered (hysteresis avoids bouncing)
+    const recovered = hasCadence ? cadence >= 70 : power >= eff * 0.85;
+    if (recovered) ride.ergFactor = Math.min(1, Math.round((ride.ergFactor + 0.1) * 10) / 10);
+  }
+}
+
+function describeStep(step, watts, L = lang) {
+  const what = watts === null || watts === undefined ? tIn(L, 'free ride') : tIn(L, '{n} watts', { n: watts });
+  const cad = step.cad ? `, ${tIn(L, 'cadence {a} to {b}', { a: step.cad[0], b: step.cad[1] })}` : '';
+  // the workout's own note is in whatever language it was written: read only in the interface's
+  return `${what}, ${spokenDuration(step.dur, L)}${cad}${step.text && L === lang ? `. ${step.text}` : ''}`;
+}
+
+const cueBeep = (f, d) => { if (settings.sound) beep(f, d); };
+/** Sound off or on mid-ride with one key (on a call the cues and the crowd are in your ear). */
+function toggleSound() {
+  settings.sound = settings.voice = !settings.sound;
+  $('f-sound').checked = settings.sound;
+  saveSettings();
+  if (!settings.sound) { crowdOff(); try { speechSynthesis.cancel(); } catch { /* none */ } }
+  else { unlockAudio(); beep(880, 0.1); }
+  toast(settings.sound ? tr('Sound on') : tr('Sound off'));
+}
+let voiceTold = false;
+/**
+ * A spoken cue, in Ukrainian or English only: `s` an English phrase (with `vars`) or a function of the language
+ * that builds it. Ukrainian with no Ukrainian voice on the device: English, said once; no voice at all: beeps only.
+ */
+const cueSay = (s, vars) => {
+  if (!settings.voice) return;
+  const L = speechLang();
+  if (!voiceTold && L !== lang && typeof speechSynthesis !== 'undefined') {
+    voiceTold = true;
+    toast(L ? tr('No Ukrainian voice on this device, so cues are in English. Add one in system settings (Windows: Time & language → Speech) or open the app in Edge')
+      : tr('No voice on this device, so cues are beeps'));
+  }
+  if (L) say(typeof s === 'function' ? s(L) : tIn(L, s, vars), L);
+};
+
+function changeIntensity(delta) {
+  settings.intensity = Math.max(50, Math.min(150, settings.intensity + delta));
+  saveSettings();
+  if (ride?.workout && !ride.workoutDone) {
+    const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+    if (t) ride.target = ergTarget(t);
+  }
+  $('wk-int').textContent = `${settings.intensity}%`;
+  if (ride?.workout) drawWorkoutChart($('wk-chart'), ride.workout, ride.workoutT);
+  updateGear();
+}
+
+const inErgStep = () => !!(ride?.workout && !ride.workoutDone && ride.target !== null && !ride.ergOff);
+/** Free ride with the power held in ERG (A on the Zwift Ride, or E). */
+const inHold = () => !!(ride?.hold && !(ride.workout && !ride.workoutDone));
+
+function setGear(gear) {
+  if (!ride || inErgStep() || inHold() || ride.shiftMode === 'off') return;
+  const g = Math.max(1, Math.min(GEARS, Math.round(gear)));
+  if (g !== ride.gear) shift(g - ride.gear);
+}
+
+function shift(dir) {
+  if (!ride || ride.paused) return;
+  if (inErgStep()) {
+    // in ERG the shifters move the workout's intensity, 1 % a click (the on-screen − / + do 5 %)
+    changeIntensity(Math.sign(dir));
+    toast(`${tr('Intensity')} ${settings.intensity}% · ${effectiveTarget()} ${U.W}`);
+  } else if (inHold()) {
+    setHold(ride.hold + Math.sign(dir) * 5);
+    toast(`ERG ${ride.hold} ${U.W}`);
+    updateGear();
+  } else if (ride.shiftMode === 'off') {
+    // the gears are on the bike: the simulator's slider still moves, a real trainer is left alone
+    if (ride.simulated) { const s = $('sim-power'); s.value = Number(s.value) + dir * 5; s.oninput(); }
+    else if (!ride.offShiftTold) { ride.offShiftTold = true; toast(tr('Gears are on your bike (Profile → Gears)')); }
+    return;
+  } else {
+    const next = Math.max(1, Math.min(GEARS, ride.gear + dir));
+    if (next === ride.gear) return;
+    ride.gear = next;
+    ride.lastSentGrade = null; // send the new resistance on the next tick
+    if (ride.simulated) {
+      const s = $('sim-power');
+      s.value = Number(s.value) + dir * 5;
+      s.oninput();
+    }
+  }
+  updateGear();
+}
+
+/** The on-screen shifters: a tap is one gear; held, they keep shifting (as a held key does). */
+function holdToShift(btn, dir) {
+  let timer = 0;
+  const stop = () => {
+    clearTimeout(timer); timer = 0; btn.classList.remove('pressed');
+    window.removeEventListener('pointerup', stop); window.removeEventListener('pointercancel', stop); window.removeEventListener('blur', stop);
+  };
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button > 0) return; // a right click is not a shift
+    e.preventDefault(); e.stopPropagation(); // not a drag of the camera
+    stop();
+    btn.classList.add('pressed');
+    shift(dir);
+    // let go anywhere (the finger may slide off the button): the shifting stops
+    window.addEventListener('pointerup', stop); window.addEventListener('pointercancel', stop); window.addEventListener('blur', stop);
+    let n = 0;
+    const again = (ms) => { timer = setTimeout(() => { shift(dir); if (++n < GEARS) again(180); else stop(); }, ms); };
+    again(450);
+  });
+  btn.addEventListener('click', (e) => e.stopPropagation());
+  btn.addEventListener('contextmenu', (e) => e.preventDefault()); // a long press is not a menu
+}
+holdToShift($('shift-up'), +1);
+holdToShift($('shift-down'), -1);
+
+function steer(dir) {
+  if (!ride) return;
+  ride.laneTarget = Math.max(-2.4, Math.min(2.4, ride.laneTarget + dir * 1.2));
+  ride.laneHome = ride.laneTarget; ride.steeredAt = ride.elapsed; ride.autoLane = false;
+}
+
+function skipInterval() {
+  if (!ride) return;
+  if (!ride.workout || ride.workoutDone) { manualLap(); return; }
+  const t = targetAt(ride.workout, Math.max(0, ride.workoutT - 1), settings.ftp);
+  if (!t) return;
+  ride.workoutT = Math.max(0, ride.workoutT - 1) + t.remaining;
+  toast(tr('Interval skipped ⏭'));
+}
+
+function updateGear() {
+  if (!ride) return;
+  const inErg = inErgStep(), hold = inHold();
+  // gears on the bike: nothing to show in a free ride (the cell is back for ERG, where the shifters move the target)
+  const nothingToShift = ride.shiftMode === 'off' && !inErg && !hold;
+  document.querySelector('.stat.gear').hidden = nothingToShift;
+  $('shifters').hidden = nothingToShift || settings.shiftButtons === false;
+  $('m-gear-label').textContent = inErg || hold ? 'ERG' : tr('Gear');
+  $('m-gear').textContent = hold ? ride.hold : inErg ? settings.intensity : ride.gear; // what the shifters move
+  $('m-gear-unit').textContent = hold ? U.W : inErg ? '%' : `/${GEARS}`;
+  $('m-gear-ratio').textContent = hold || inErg ? '' : ` · ${ratioOf(ride.gear).toFixed(2)}`; // its own span: a phone has no room for it
+}
+
+// Pause / Finish and the simulator slider stay hidden while riding: they show when the mouse moves (for a few seconds, or as
+// long as it rests on them), on a tap, while paused, and Esc toggles them.
+let controlsTimer = 0, controlsPinned = false;
+function showControls(ms = 3000) {
+  $('ride').classList.add('show-controls');
+  clearTimeout(controlsTimer);
+  if (ms) controlsTimer = setTimeout(() => { if (!controlsPinned && !ride?.paused) $('ride').classList.remove('show-controls'); }, ms);
+}
+function hideControls() {
+  clearTimeout(controlsTimer);
+  controlsPinned = false;
+  if (!ride?.paused) $('ride').classList.remove('show-controls');
+}
+$('ride').addEventListener('mousemove', () => showControls());
+$('ride').addEventListener('touchstart', () => showControls(4000), { passive: true });
+for (const el of [document.querySelector('#ride .controls'), $('sim-ctl'), $('shifters')]) {
+  el.addEventListener('mouseenter', () => { controlsPinned = true; showControls(0); });
+  el.addEventListener('mouseleave', () => { controlsPinned = false; showControls(); });
+  // touch: kept out while a finger is on them (dragging the slider), then a few seconds more
+  el.addEventListener('touchstart', () => { controlsPinned = true; showControls(0); }, { passive: true });
+  const release = () => { controlsPinned = false; showControls(4000); };
+  el.addEventListener('touchend', release, { passive: true });
+  el.addEventListener('touchcancel', release, { passive: true });
+}
+$('ride').addEventListener('touchmove', () => { if (!controlsPinned) showControls(4000); }, { passive: true });
+
+/** Everything from the keyboard, for riders without a controller. */
+const KEYS = [
+  [['Space'], 'Pause / resume'],
+  [['↑', 'W'], 'Harder: next gear (in ERG +1 % intensity)'],
+  [['↓', 'S'], 'Easier: previous gear (in ERG −1 % intensity)'],
+  [['⇧ ↑', 'PgUp'], 'Big step harder: workout +5 %, free ride climbs +10 %, hold +20 W'],
+  [['⇧ ↓', 'PgDn'], 'Big step easier'],
+  [['←', 'A'], 'Lane left'],
+  [['→', 'D'], 'Lane right'],
+  [['E'], 'ERG on / off (free ride: hold this power)'],
+  [['N'], 'Skip the interval (free ride: new lap)'],
+  [['V'], 'Sound on/off'],
+  [['P'], 'Pacer on / off'],
+  [['1', '–', '5'], 'Camera: chase · rider\'s eyes · isometric · over the shoulder · front'],
+  [['6', '–', '9'], 'Camera: far behind · looking back · roadside · helicopter'],
+  [['0'], 'Camera: TV broadcast, cutting between shots'],
+  [['C'], 'Next camera'],
+  [['H'], 'Hide / show the dashboard'],
+  [['F'], 'Full screen'],
+  [['M'], 'Map zoom'],
+  [['I'], 'Mini window over other apps (movie, football, YouTube)'],
+  [['R'], 'Switch the rider: man / woman'],
+  [['+', '−'], 'Simulator: power ±10 W'],
+  [['Enter'], 'Group ride: chat (1–6 with the field empty: a quick phrase)'],
+  [['Esc'], 'Menu: Finish and Settings'],
+  [['?'], 'This list'],
+];
+/** The Zwift controllers' buttons (js/controls.js RIDE_TO_INTENT); a string alone is a heading. */
+const ZWIFT_KEYS = [
+  'Zwift Ride and Zwift Play',
+  [['+ (right)', '− (left)'], 'Harder / easier gear, as in Zwift (in ERG ±1 % intensity)'],
+  [['▲', '▼'], 'Harder / easier gear'],
+  [['◀', '▶'], 'Big step easier / harder: workout ±5 %, free ride climbs ±10 %'],
+  [['Left paddle', 'Right paddle'], 'Lane left / right'],
+  [['A'], 'ERG on / off (free ride: hold this power)'],
+  [['B'], 'Pause / resume'],
+  [['Y'], 'Next camera'],
+  [['Z'], 'Skip the interval (free ride: new lap)'],
+  [['Power-up L'], 'Pacer on / off'],
+  [['Power-up R'], 'Hide / show the dashboard'],
+  'Zwift Click',
+  [['+', '−'], 'Harder / easier gear (in ERG ±1 % intensity)'],
+];
+/** OpenBikeControl's standard buttons (js/controls.js OBC_DIGITAL); the BikeControl app maps a device's own to these. */
+const OBC_KEYS = [
+  [['Shift up', 'Shift down'], 'Harder / easier gear'],
+  [['Gear select'], 'Straight to that gear'],
+  [['ERG +', 'ERG −'], 'Harder / easier (in ERG ±1 % intensity)'],
+  [['▲', '▼'], 'Harder / easier gear'],
+  [['◀', '▶', 'Steer'], 'Lane left / right; a steering angle gives smooth steering'],
+  [['Skip'], 'Skip the interval (free ride: new lap)'],
+  [['Pause', 'Resume'], 'Pause / resume'],
+  [['HUD'], 'Hide / show the dashboard'],
+];
+const KEYS_NOTES = {
+  keys: '',
+  zwift: 'Connect them in Devices. A Zwift Ride is two units: add the left and the right one. The last button you pressed appears there so you can check it.',
+  obc: 'Any controller supported by the BikeControl app (Elite, Wahoo, Shimano, a gamepad) connects through OpenBikeControl. Connect it in Devices.',
+};
+let keysTab = 'keys';
+const keysRows = (rows) => rows.map((r) => typeof r === 'string'
+  ? `<dt class="keys-sub">${esc(tr(r))}</dt>`
+  : `<dt>${r[0].map((x) => `<kbd>${esc(tr(x))}</kbd>`).join(' ')}</dt><dd>${esc(tr(r[1]))}</dd>`).join('');
+function renderKeysHelp() {
+  $('keys-list').innerHTML = keysRows({ keys: KEYS, zwift: ZWIFT_KEYS, obc: OBC_KEYS }[keysTab]);
+  const note = KEYS_NOTES[keysTab];
+  $('keys-note').hidden = !note;
+  $('keys-note').textContent = note ? tr(note) : '';
+  for (const b of document.querySelectorAll('#keys-tabs [data-keys-tab]')) b.setAttribute('aria-selected', String(b.dataset.keysTab === keysTab));
+}
+function toggleKeysHelp(show = $('keys-help').hidden) {
+  // a rider with a controller on sees its buttons first
+  if (show) keysTab = controller.connected ? 'zwift' : obc.connected ? 'obc' : keysTab;
+  renderKeysHelp();
+  $('keys-help').hidden = !show;
+}
+for (const b of document.querySelectorAll('#keys-tabs [data-keys-tab]')) b.onclick = () => { keysTab = b.dataset.keysTab; renderKeysHelp(); };
+$('btn-keys').onclick = () => toggleKeysHelp();
+
+/** Who rides: the man or the woman. The renderer rebuilds your rider as soon as settings.figure changes. */
+function setFigure(f) {
+  settings.figure = f === 'female' ? 'female' : 'male';
+  $('f-figure').value = settings.figure;
+  saveSettings(); renderFigure(); renderGarageBits();
+}
+function renderFigure() {
+  const f = settings.figure === 'female' ? 'female' : 'male';
+  for (const b of document.querySelectorAll('#figure-pick [data-figure]')) b.classList.toggle('sel', b.dataset.figure === f);
+  $('btn-figure').textContent = tr(f === 'female' ? 'Man' : 'Woman'); // the button names who you switch to
+}
+for (const b of document.querySelectorAll('#figure-pick [data-figure]')) b.onclick = () => setFigure(b.dataset.figure);
+$('btn-figure').onclick = () => setFigure(settings.figure === 'female' ? 'male' : 'female');
+renderFigure();
+// ----- jersey patterns (js/kits.js): a few open to all, the rest earned by level or won in a race -----
+const kitState = () => ({ level: levelOf(progress?.xp || 0).level, jerseys: progress?.jerseys || {} });
+const kitOpen = (p) => patternOpen(p, kitState());
+/** The pattern you wear: the one picked, if it is open to you (a setting synced from elsewhere may not be). */
+function myPattern() { const p = patternOf(settings.pattern); return kitOpen(p) ? p.id : 'plain'; }
+const myKit = () => kitLook(myPattern(), { jersey: settings.jersey, stripe: settings.stripe });
+
+/** A small swatch of a pattern in your colours (CSS only: the 3D rider shows it for real). */
+function patternSwatch(p) {
+  const k = kitLook(p.id, { jersey: settings.jersey, stripe: settings.stripe }), m = k.main, c = k.pattern;
+  const bg = {
+    plain: m, band: `linear-gradient(${m} 0 34%, ${c} 34% 56%, ${m} 56%)`,
+    hoops: `repeating-linear-gradient(0deg, ${m} 0 7px, ${c} 7px 14px)`, pinstripes: `repeating-linear-gradient(90deg, ${m} 0 7px, ${c} 7px 9px)`,
+    sash: `linear-gradient(135deg, ${m} 38%, ${c} 38% 58%, ${m} 58%)`, chevron: `linear-gradient(135deg, ${c} 25%, transparent 25%) -7px 0 / 14px 14px, linear-gradient(225deg, ${c} 25%, transparent 25%) -7px 0 / 14px 14px, ${m}`,
+    split: `linear-gradient(90deg, ${m} 50%, ${c} 50%)`, fade: `linear-gradient(0deg, ${m}, ${c})`, ukraine: `linear-gradient(${m} 50%, ${c} 50%)`,
+    polka: `radial-gradient(${c} 28%, transparent 31%) 0 0 / 11px 11px, ${m}`, yellow: m, green: m,
+  }[p.id] || m;
+  return `<i style="background:${esc(bg)}"></i>`;
+}
+function renderPatterns() {
+  const box = $('garage-patterns');
+  if (!box) return;
+  const now = myPattern();
+  box.innerHTML = PATTERNS.map((p) => {
+    const open = kitOpen(p), how = patternHow(p);
+    const title = open ? tr(p.name) : `${tr(p.name)}: ${tr(how.text, { n: how.n })}`;
+    return `<button type="button" class="garage-pat${p.id === now ? ' sel' : ''}${open ? '' : ' locked'}" data-pattern="${p.id}" title="${esc(title)}">${patternSwatch(p)}<span>${esc(tr(p.name))}</span>${open ? '' : '<b class="lock">🔒</b>'}</button>`;
+  }).join('');
+}
+// the summary's chip of a jersey or pattern just earned: put it on
+$('sum-earned').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-wear]');
+  if (!b || !kitOpen(patternOf(b.dataset.wear))) return;
+  settings.pattern = b.dataset.wear; saveSettings(); track('pattern', `wear-${b.dataset.wear}`);
+  toast(tr('{name}: on for your next ride', { name: tr(patternOf(b.dataset.wear).name) }));
+  b.classList.add('sel');
+});
+$('garage-patterns').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pattern]');
+  if (!b) return;
+  const p = patternOf(b.dataset.pattern);
+  if (!kitOpen(p)) { const how = patternHow(p); toast(`🔒 ${tr(p.name)}: ${tr(how.text, { n: how.n })}`); return; }
+  settings.pattern = p.id; saveSettings(); track('pattern', p.id);
+  renderPatterns(); renderGarageBits();
+});
+
+// ----- the garage: your rider on a turntable beside the colour pickers (js/garage.js) -----
+// the pickers live in the garage; their ids and bindings are the same as when they sat in the profile
+const LOOK_KEYS = { 'f-jersey': 'jersey', 'f-stripe': 'stripe', 'f-bike': 'bikeColor', 'f-tape': 'tapeColor', 'f-decal': 'decalColor', 'f-helmet': 'helmetColor', 'f-lens': 'lensColor' };
+const lookNow = () => ({
+  jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null,
+  decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male',
+  kit: myKit(),
+});
+/** Ready-made kits: jersey, accent, frame, bar tape, wheel decals, helmet, lenses. */
+const GARAGE_KITS = [
+  ['Gruppetto', ['#16a0a8', '#ff8a1f', '#16a0a8', '#141416', '#ff8a1f', '#f2f2f2', '#1c2230']],
+  ['Blue & yellow', ['#0057b7', '#ffd500', '#0057b7', '#ffd500', '#ffd500', '#ffd500', '#1c2230']],
+  ['Night', ['#15171d', '#2fd4f0', '#1a1d24', '#15171d', '#2fd4f0', '#1a1d24', '#2fd4f0']],
+  ['Sunrise', ['#ff7a1a', '#ffd23f', '#f4f4f4', '#ff7a1a', '#ff7a1a', '#ffffff', '#ff4d2e']],
+  ['Forest', ['#2f6b3a', '#e8d9a8', '#2a2f2a', '#e8d9a8', '#e8d9a8', '#2f6b3a', '#3a2a14']],
+  ['Ice', ['#e8f1f8', '#2b6cb0', '#ffffff', '#ffffff', '#2b6cb0', '#e8f1f8', '#6fb7ff']],
+];
+const swatches = (c) => c.map((x) => `<b style="background:${esc(x)}"></b>`).join('');
+/** Sets the pickers as if you had picked each colour: the same path saves, syncs and repaints. */
+function applyLook(colors) {
+  Object.keys(LOOK_KEYS).forEach((id, i) => {
+    const el = $(id);
+    if (!colors[i] || el.value === colors[i]) return;
+    el.value = colors[i];
+    el.dispatchEvent(new Event('input'));
+  });
+}
+function surpriseLook() {
+  const hex = (h, s, l) => { // HSL (degrees, 0..1, 0..1) to #rrggbb
+    const f = (n) => { const k = (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0'); };
+    return `#${f(0)}${f(8)}${f(4)}`;
+  };
+  const pick = (a) => a[Math.floor(Math.random() * a.length)];
+  const h = Math.random() * 360, jersey = hex(h, 0.55 + Math.random() * 0.3, 0.32 + Math.random() * 0.25);
+  const accent = hex((h + 150 + Math.random() * 60) % 360, 0.85, 0.55);
+  const dark = '#18191e', white = '#f2f2f2';
+  applyLook([jersey, accent, pick([jersey, dark, white]), pick([dark, accent, white]), accent, pick([white, jersey, dark]), pick(['#1c2230', accent, '#3a2a14'])]);
+}
+function renderGarageBits() {
+  const L = lookNow();
+  const sw = $('garage-swatches');
+  if (sw) sw.innerHTML = swatches([L.jersey, L.stripe, L.bike || L.jersey]);
+  const now = Object.values(LOOK_KEYS).map((k, i) => (i === 2 ? settings.bikeColor || settings.jersey : i === 4 ? settings.decalColor || settings.stripe : settings[k]).toLowerCase());
+  for (const b of document.querySelectorAll('#garage-kits [data-kit]')) b.classList.toggle('sel', GARAGE_KITS[b.dataset.kit][1].every((c, i) => c === now[i]));
+  garage?.setLook(L);
+  if (!$('garage').hidden) renderPatterns();
+}
+let garage = null;
+async function openGarage() {
+  const box = $('garage');
+  box.hidden = false;
+  $('garage-loading').hidden = !!garage?.rider;
+  try {
+    if (!garage) {
+      const { Garage } = await import('./garage.js');
+      garage = new Garage($('garage-canvas'));
+      garage.onReady = () => { $('garage-loading').hidden = true; };
+      garage.setSpin(garageSpin);
+    }
+    renderPatterns(); renderGarageBits();
+    if (!box.hidden) garage.start();
+  } catch (e) {
+    console.warn('Garage unavailable', e);
+    $('garage-loading').textContent = tr('3D graphics are not available in this browser. Using 2D');
+  }
+}
+function closeGarage() {
+  $('garage').hidden = true;
+  garage?.stop();
+}
+$('garage-kits').innerHTML = GARAGE_KITS.map(([name, c], i) => `<button class="garage-kit" data-kit="${i}"><i>${swatches(c.slice(0, 3))}</i>${esc(tr(name))}</button>`).join('');
+$('garage-kits').addEventListener('click', (e) => { const b = e.target.closest('[data-kit]'); if (b) applyLook(GARAGE_KITS[b.dataset.kit][1]); });
+$('garage-random').onclick = surpriseLook;
+// the turntable: turning or held still, as you left it last time
+const SPIN_KEY = 'gruppetto.garageSpin';
+let garageSpin = (() => { try { return localStorage.getItem(SPIN_KEY) !== '0'; } catch { return true; } })();
+function renderSpin() {
+  $('garage-spin').textContent = garageSpin ? tr('⏸ Stop') : tr('▶ Turn');
+  $('garage-spin').setAttribute('aria-pressed', String(garageSpin));
+  garage?.setSpin(garageSpin);
+}
+$('garage-spin').onclick = () => { garageSpin = !garageSpin; try { localStorage.setItem(SPIN_KEY, garageSpin ? '1' : '0'); } catch { /* private mode */ } renderSpin(); };
+renderSpin();
+if ($('btn-garage')) $('btn-garage').onclick = openGarage; // the Garage is in the rail; a button here only if the page has one
+$('rail-garage').onclick = openGarage;
+$('garage').addEventListener('click', (e) => { if (e.target.closest('[data-garage-close], #garage-done')) closeGarage(); });
+$('garage-views').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-gview]');
+  if (!b) return;
+  for (const x of $('garage-views').querySelectorAll('[data-gview]')) x.classList.toggle('sel', x === b);
+  garage?.setView(b.dataset.gview);
+});
+// Escape closes the garage first (and only it: the drawer under it stays open)
+window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !$('garage').hidden) { e.stopImmediatePropagation(); closeGarage(); } }, true);
+// after the field's own handler has stored the colour (that one is bound later, in the profile's setup): a task,
+// not a microtask, since a real click runs microtasks between one listener and the next, before the value is stored
+for (const id of [...Object.keys(LOOK_KEYS), 'f-figure']) $(id).addEventListener('input', () => setTimeout(renderGarageBits, 0));
+renderGarageBits();
+$('keys-help').addEventListener('click', (e) => { if (e.target === $('keys-help') || e.target.closest('[data-keys-close]')) toggleKeysHelp(false); });
+function toggleFullscreen() {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => {});
+}
+
+window.addEventListener('keydown', onRideKey);
+function onRideKey(e) {
+  // the workout page in the lobby: Enter rides it
+  if (!ride && !$('wk-detail').hidden && e.code === 'Enter' && !e.target.closest?.('button')) { e.preventDefault(); $('wkd-ride').click(); return; }
+  if (!ride) return;
+  // settings open, or typing in a field: the keys belong to them, not to the ride
+  if (!$('drawer').hidden || !$('garage').hidden || e.target.closest?.('input, select, textarea')) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const c = e.code;
+  if (c === 'Escape') {
+    if ($('ride').classList.contains('hud-hidden')) { $('ride').classList.remove('hud-hidden'); return; } // H's clean view: back to the board
+    if (!$('keys-help').hidden) toggleKeysHelp(false);
+    else if ($('ride').classList.contains('show-controls')) hideControls();
+    else { showControls(0); $('btn-pause').focus(); }
+    return;
+  }
+  if (c === 'Slash' || c === 'KeyK') { toggleKeysHelp(); return; }
+  if ((c === 'Enter' || c === 'NumpadEnter') && ride.group) { e.preventDefault(); chatOpen(true); return; } // a group ride: say something
+  if (e.repeat && !['ArrowUp', 'ArrowDown', 'KeyW', 'KeyS', 'Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract', 'BracketLeft', 'BracketRight'].includes(c)) return;
+  const up = c === 'ArrowUp' || c === 'KeyW', down = c === 'ArrowDown' || c === 'KeyS';
+  if (c === 'Space') { e.preventDefault(); togglePause(); }
+  else if (c === 'PageUp' || (up && e.shiftKey)) { e.preventDefault(); bigStep(+1); }
+  else if (c === 'PageDown' || (down && e.shiftKey)) { e.preventDefault(); bigStep(-1); }
+  else if (up || c === 'BracketRight') { e.preventDefault(); shift(+1); }
+  else if (down || c === 'BracketLeft') { e.preventDefault(); shift(-1); }
+  else if (c === 'ArrowLeft' || c === 'KeyA') { e.preventDefault(); steer(-1); }
+  else if (c === 'ArrowRight' || c === 'KeyD') { e.preventDefault(); steer(+1); }
+  else if (c === 'KeyN') skipInterval();
+  else if (c === 'KeyV') toggleSound();
+  else if (c === 'KeyP') { if (ride.pacer) togglePacer(); }
+  else if (c === 'KeyE') toggleErg();
+  else if (c === 'KeyC') nextCamera();
+  else if (/^(Digit|Numpad)[0-9]$/.test(c)) setCameraView(CAMERAS[(Number(c.slice(-1)) + 9) % 10]);
+  else if (c === 'KeyH') runIntent('hud');
+  else if (c === 'KeyF') toggleFullscreen();
+  else if (c === 'KeyM') toggleMinimap();
+  else if (c === 'KeyI') togglePip();
+  else if (c === 'KeyR') setFigure(settings.figure === 'female' ? 'male' : 'female');
+  else if (ride.simulated && ['Equal', 'Minus', 'NumpadAdd', 'NumpadSubtract'].includes(c)) {
+    const s = $('sim-power');
+    s.value = Number(s.value) + (c === 'Equal' || c === 'NumpadAdd' ? 5 : -5);
+    s.oninput();
+  }
+}
+
+// interface language (#31): the static page, the built-in routes, climbs and workouts, power zones
+translateDom();
+segmentAll(document.body, tr); // after the options are translated: the buttons take their words
+for (const r of routes) {
+  if (!r.custom) { r.name = tr(r.name); r.description = tr(r.description); }
+  localizeClimbs(r);
+}
+for (const w of workouts) { w.name = tr(w.name); w.description = tr(w.description); }
+/**
+ * The ride's dashboard, A or B (an A/B test, js/experiments.js; the rider's pick in Settings wins).
+ * B moves the boards (power, heart rate, cadence, W′bal; speed, time, distance; grade, gear, climbed)
+ * into one strip at the bottom; A puts each back where it was. The elements keep their ids and handlers.
+ */
+// a workout's panel goes first in the strip, across it (the mockup's RideWorkoutB), its intensity at the end
+const HUD_MOVED = ['#workout-panel', '#ride .hud-left > .board:not(.intensity):not(.wk-steps)', '#ride .hud-center > .topbar', '#ride .hud-right > .board:not(.minimap):not(.race-board):not(.ahead)', '#wk-intensity'];
+const hudHome = new Map(); // element -> [parent, next sibling] in layout A
+let hudLayout = '';
+function applyHudLayout() {
+  const v = variant('hud', { chosen: settings.hudLayout });
+  $('f-hud-layout').value = v;
+  if (v === hudLayout) return;
+  hudLayout = v;
+  if (!hudHome.size) for (const q of HUD_MOVED) { const el = document.querySelector(q); if (el) hudHome.set(el, [el.parentNode, el.nextSibling]); }
+  if (v === 'b') for (const el of hudHome.keys()) $('hud-strip').appendChild(el);
+  else for (const [el, [parent, next]] of hudHome) parent.insertBefore(el, next && next.parentNode === parent ? next : parent.firstChild);
+  $('hud-strip').hidden = v !== 'b';
+  $('ride').classList.toggle('hud-b', v === 'b');
+}
+applyHudLayout();
+applySummaryLayout();
+$('f-summary-layout').onchange = () => { settings.summaryLayout = $('f-summary-layout').value; saveSettings(); applySummaryLayout(); track('exp', `summary-${summaryLayout}-picked`); };
+$('f-hud-layout').onchange = () => { settings.hudLayout = $('f-hud-layout').value; saveSettings(); applyHudLayout(); track('exp', `hud-${hudLayout}-picked`); };
+
+$('f-lang').innerHTML = LANGS.map((l) => `<option value="${l.id}">${l.name}</option>`).join('');
+$('f-lang').value = lang;
+$('f-lang').onchange = () => setLang($('f-lang').value);
+initLobby();
+offerDraft();
+restoreSummaries().catch(() => {});
+// the page closing mid-ride (a reload, the lid shut): what was ridden is kept, to go on with
+window.addEventListener('pagehide', () => { if (ride) saveDraft(); });
+// accounts and leaderboards: nothing at all without a project in social-config.js
+initSocialUi({
+  settings, records, lang, locale, tr, esc, fmtTime, track, toast, openDrawer, stravaState: STRAVA_STATE,
+  getProgress: () => progress, setProgress: (p) => { progress = p; saveProgress(); },
+  saveSettingsRaw: writeSettings, saveRecords,
+  // full sync: your own workouts and the ride history, written here without sending them straight back
+  getWorkouts: () => myWorkouts, workoutsDeleted: () => myWorkoutsDeleted,
+  setWorkouts: (list, deleted) => {
+    myWorkouts = list; myWorkoutsDeleted = deleted; writeJson(MY_DEL_KEY, deleted);
+    seenWorkouts.clear(); stampChanged(myWorkouts, seenWorkouts); writeMyWorkouts(); renderModes();
+  },
+  getHistory: () => history, historyDeleted: () => historyDeleted, getRide, putRide, deleteRide, swapDraft,
+  setHistory: (list, removed) => {
+    for (const id of removed) deleteRide(id);
+    history = list; seenHistory.clear(); stampChanged(history, seenHistory); writeHistory(); renderHistory(); renderProgress();
+  },
+  currentRoute: () => routes.find((x) => x.id === settings.routeId) || routes[0],
+  routes: () => routes.filter((x) => !x.custom),
+  startGroupRide: (g) => { if (!ride) startRide({ group: g }); },
+  routeOfSegment: (seg) => routes.find((x) => !x.custom && seg.startsWith(`${x.id}-`) && (seg === `${x.id}-lap` || [...x.climbs, ...(x.sprints || [])].some((c) => c.id === seg))),
+  refresh: () => { refreshProfileForm(); updateSummary(); renderProgress(); renderFtpBox(); },
+});
+// leaving in the middle of a ride: keep what is there and ask first
+window.addEventListener('beforeunload', (e) => {
+  if (!ride || ride.elapsed < 10) return;
+  saveDraft();
+  e.preventDefault();
+  e.returnValue = '';
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && ride) saveDraft(); });
+// the 3D models download while you pick a route, so the ride opens with the real rider and bike
+(window.requestIdleCallback || ((f) => setTimeout(f, 800)))(() => {
+  import('./render3d.js').then((m) => m.webglAvailable() && m.preloadModels()).catch(() => {});
+});
+
+// ---------- Install as an app (#30) ----------
+// the service worker keeps the app usable offline; Chrome then offers to install it, and so do we
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  navigator.serviceWorker.register('sw.js').catch(() => { /* no offline, the app still works */ });
+}
+let installPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; $('btn-install').hidden = false; });
+window.addEventListener('appinstalled', () => { track('install'); installPrompt = null; $('btn-install').hidden = true; toast(tr('Gruppetto is installed')); });
+$('btn-install').onclick = async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  await installPrompt.userChoice.catch(() => null);
+  installPrompt = null;
+  $('btn-install').hidden = true;
+};
+
+// ---------- ?demo: a ride a little below the first climb's crowd, started with a click ----------
+// (the click lets the browser play sound: a ride started on its own stayed silent)
+if (new URLSearchParams(location.search).has('demo')) {
+  const go = document.createElement('button');
+  go.className = 'demo-start primary';
+  go.textContent = tr('▶ Start the demo');
+  document.body.appendChild(go);
+  go.onclick = async () => {
+    go.remove();
+    unlockAudio();
+    const route = routes.find((r) => r.climbs?.length) || routes[0];
+    settings.routeId = route.id;
+    settings.mode = 'free';
+    settings.camera = 'chase'; // seen from behind the rider
+    $('sim').checked = true;
+    await startRide();
+    if (!ride) return;
+    ride.dist = Math.max(0, (route.climbs[0]?.end ?? 0) - 230);
+    const s = $('sim-power');
+    s.value = 260; s.oninput?.();
+  };
+}
+
+// a challenge link: when the page opens with one, and when one is opened in the app already open
+openChallenge();
+window.addEventListener('hashchange', openChallenge);
