@@ -7,7 +7,7 @@ import { stepSpeed, packDraft, DEFAULTS, riderCdA, windComponents, windGrade } f
 import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
 import { parseGpx, routeFromTrack, trackKm, MAX_KM, LONG_KM } from './gpx.js';
 import { loadTerrain } from './dem.js';
-import { fetchOsm } from './osm.js';
+import { fetchOsm, OSM_TIMEOUT_MS, OSM_SERVERS } from './osm.js';
 import { PerfLog } from './perf.js';
 import { t as tr, tIn, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { WORKOUT_KINDS, workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
@@ -740,6 +740,7 @@ function markRoute() {
 }
 
 let restoreStart = null;
+let importing = false; // a GPX being built into a route: no ride starts till it is done
 async function importGpx(ev) {
   const file = ev.target.files?.[0];
   ev.target.value = '';
@@ -761,41 +762,50 @@ async function importGpxText(text, fileName) {
     // real elevations from a terrain model along the road (#25); without a network, the file's own
     // and the woods, water and buildings beside it from OpenStreetMap; each is optional
     // no riding off on the previously chosen route while this one is still being built
-    const start = $('btn-start'), startText = start.textContent;
-    start.disabled = true; start.textContent = tr('Importing GPX…');
-    restoreStart = () => { start.disabled = false; start.textContent = startText; };
+    const start = $('btn-start'), more = $('btn-start-more'), startText = start.textContent;
+    importing = true; start.disabled = more.disabled = true; $('start-menu').hidden = true; start.textContent = tr('Importing GPX…');
+    restoreStart = () => { importing = false; start.disabled = more.disabled = false; start.textContent = startText; };
     // what the import waits for, said plainly: the heights come in tiles (a count), the map is one query to a
-    // public server that may take a minute or more (a clock, which server, and a way to go on without it)
-    const t0 = performance.now(), skip = new AbortController();
-    let tiles = '…', mapState = 'wait', server = 1, servers = 1;
-    let building = false;
+    // public server that answers all at once, so it has no progress of its own, only a limit: each server is
+    // waited for OSM_TIMEOUT_MS, then the next. The bar runs to the longest the import can still take
+    const t0 = performance.now();
+    let tiles = '…', mapState = 'wait', server = 1, servers = OSM_SERVERS, tryAt = t0, tilesDone = 0, tilesTotal = 0;
+    let building = false, frac = 0;
     const show = () => {
-      const sec = Math.round((performance.now() - t0) / 1000);
+      const now = performance.now(), gone = (now - t0) / 1000;
+      // the map: what is left of this server's wait and the whole waits of the servers after it (a limit, not a guess)
+      const mapLeft = mapState === 'wait' ? Math.max(0, OSM_TIMEOUT_MS - (now - tryAt)) / 1000 + (servers - server) * OSM_TIMEOUT_MS / 1000 : 0;
+      // the heights: at the pace the tiles came so far
+      const hLeft = tilesTotal && tilesDone < tilesTotal && tilesDone ? gone * (tilesTotal - tilesDone) / tilesDone : 0;
+      const left = Math.max(mapLeft, hLeft);
+      // never back: a server that failed fast only shortens the limit; the road being built holds it near the end
+      frac = building ? Math.max(frac, .97) : Math.max(frac, Math.min(.97, gone / (gone + left || 1)));
+      const t = Math.ceil(left), clock = t >= 60 ? `${Math.floor(t / 60)} ${U.min} ${t % 60} ${tr('s')}` : `${t} ${tr('s')}`;
+      const note = building || !t ? '' : mapLeft ? tr('up to {t} left', { t: clock }) : tr('≈ {t} left', { t: clock });
       // one row per step: a spinner while it runs, a tick when done, a dash when it went without
       const heights = tiles === '…' ? ['run', tr('Heights'), ''] : tiles === tr('from the file') ? ['off', tr('Heights'), tiles] : [/✓/.test(tiles) ? 'ok' : 'run', tr('Heights'), tiles.replace('✓ ', '')];
       const map = [mapState === 'ok' ? 'ok' : mapState === 'wait' ? 'run' : 'off', tr('Buildings, woods and water from the map'),
-        mapState === 'ok' ? '' : mapState === 'skip' ? tr('skipped, simple scenery') : mapState === 'off' ? tr('unavailable, simple scenery')
-          : `${servers > 1 && server > 1 ? `${tr('server {i} of {n}', { i: server, n: servers })} · ` : ''}${sec} ${tr('s')}`];
+        mapState === 'ok' ? '' : mapState === 'off' ? tr('unavailable, simple scenery')
+          : servers > 1 && server > 1 ? tr('server {i} of {n}', { i: server, n: servers }) : ''];
       const rows = [heights, map, ...(building ? [['run', tr('Building the road…'), '']] : [])];
       const el = $('lobby-msg');
       el.innerHTML = `<div class="imp"><div class="imp-main"><b class="imp-title">${esc(tr('Importing {name}', { name: track.name || file.name }))}</b>`
-        + `<ul class="imp-steps">${rows.map(([st, what, more]) => `<li class="imp-${st}"><i aria-hidden="true"></i><span>${esc(what)}</span>${more ? `<small>${esc(more)}</small>` : ''}</li>`).join('')}</ul></div>`
-        + `${mapState === 'wait' ? `<button class="pill-btn imp-skip" id="imp-skip" title="${esc(tr('The road, elevation and bends are real; buildings, woods and water are generated'))}">${esc(tr('Skip the map'))}</button>` : ''}</div>`;
+        + `<ul class="imp-steps">${rows.map(([st, what, more]) => `<li class="imp-${st}"><i aria-hidden="true"></i><span>${esc(what)}</span>${more ? `<small>${esc(more)}</small>` : ''}</li>`).join('')}</ul>`
+        + `<div class="imp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(frac * 100)}"><span style="width:${(frac * 100).toFixed(1)}%"></span></div>`
+        + `${note ? `<small class="imp-left">${esc(note)}</small>` : ''}</div></div>`;
       el.hidden = false; el.classList.add('info'); clearTimeout(alertBox.t);
-      const btn = $('imp-skip');
-      if (btn) btn.onclick = () => { mapState = 'skip'; skip.abort(); show(); };
     };
     show();
-    const clock = setInterval(() => { if (mapState === 'wait') show(); }, 1000);
+    const clock = setInterval(() => { if (!building) show(); }, 1000);
     let elevation, osm;
     try {
       [elevation, osm] = await Promise.all([
-        loadTerrain(track.points, { z: km > LONG_KM ? 12 : 13, onProgress: (done, total) => { tiles = done >= total ? `✓ ${total}/${total}` : `${done}/${total}`; show(); } })
+        loadTerrain(track.points, { z: km > LONG_KM ? 12 : 13, onProgress: (done, total) => { tilesDone = done; tilesTotal = total; tiles = done >= total ? `✓ ${total}/${total}` : `${done}/${total}`; show(); } })
           .then((e) => { if (tiles === '…') { tiles = '✓'; show(); } return e; })
           .catch((err) => { console.info('Terrain model unavailable, using the GPX elevations', err); tiles = tr('from the file'); show(); return null; }),
-        fetchOsm(track.points, { signal: skip.signal, onTry: (i, n) => { server = i; servers = n; show(); } })
+        fetchOsm(track.points, { onTry: (i, n) => { server = i; servers = n; tryAt = performance.now(); show(); } })
           .then((d) => { mapState = 'ok'; show(); return d; })
-          .catch((err) => { console.info('Map data unavailable, generic scenery', err); if (mapState !== 'skip') mapState = 'off'; show(); return null; }),
+          .catch((err) => { console.info('Map data unavailable, generic scenery', err); mapState = 'off'; show(); return null; }),
       ]);
     } finally { clearInterval(clock); }
     // building the road and its scenery holds the page a moment: say so, and let the message paint first
@@ -1886,6 +1896,8 @@ $('gr-host').addEventListener('click', async (e) => {
 });
 
 async function startRide(opts) {
+  // every way in (the ▾ menu, a workout's Ride, a challenge, a group ride) waits for a GPX being imported
+  if (importing) { toast(tr('Wait for the GPX import to finish')); return; }
   // Watch & ride (#watch, from the Ride button's menu): the mini window opens now, while the click counts, and the
   // 3D world is not even loaded
   // with the Mac overlay (Gruppetto HUD) running, the numbers go to it, not to the browser's mini window
