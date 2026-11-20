@@ -3077,6 +3077,27 @@ export class Scene3D {
     });
   }
 
+  /**
+   * A rider gone from the road (an oncoming rider passed, a ghost or a group mate left): its own materials,
+   * textures (jersey, name tag) and skeleton (a bone texture) freed. They were only taken out of the scene and stayed on the graphics card for
+   * the rest of the ride. Shapes are the models' (shared), and anything still used in the scene stays.
+   */
+  _freeRider(R) {
+    const inUse = new Set();
+    const mats = (o) => (o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []);
+    this.scene.traverse((o) => { for (const m of mats(o)) { inUse.add(m); for (const v of Object.values(m)) if (v?.isTexture) inUse.add(v); } });
+    const bones = new Set();
+    this.scene.traverse((o) => { if (o.skeleton) bones.add(o.skeleton); });
+    R.group.traverse((o) => {
+      if (o.skeleton && !bones.has(o.skeleton)) o.skeleton.dispose(); // its bone texture (one per rider model)
+      for (const m of mats(o)) {
+        if (inUse.has(m)) continue;
+        for (const v of Object.values(m)) if (v?.isTexture && !inUse.has(v) && v !== TOON_RAMP) v.dispose();
+        m.dispose();
+      }
+    });
+  }
+
   _dispose(group) {
     this.scene.remove(group);
     const shared = new Set(Object.values(this.models || {}));
@@ -3084,7 +3105,16 @@ export class Scene3D {
     if (this.crowdModels) for (const k of ['body', 'flagUA', 'flagTeam']) shared.add(this.crowdModels[k]);
     for (const k of ['wallGeom', 'portalGeom', 'lampGeom', 'poolGeom']) if (this[k]) shared.add(this[k]); // bridges' and tunnels' shared shapes
     group.traverse((o) => {
-      if (o.geometry?.userData.borrowed) return; // its tiny per-fan colours go with the garbage collector
+      // fans: the geometry borrows the shared body's attributes and adds its own colours. Never disposed, three.js
+      // kept every one it had drawn (and their buffers): +70 at each climb's top, every lap. The borrowed
+      // attributes go first, so freeing it frees only the colours.
+      if (o.geometry?.userData.borrowed) {
+        const g = o.geometry;
+        for (const k of Object.keys(g.attributes)) if (!g.attributes[k].isInstancedBufferAttribute) g.deleteAttribute(k);
+        g.setIndex(null); g.dispose();
+        if (o.isInstancedMesh) o.dispose();
+        return;
+      }
       if (o.geometry && !shared.has(o.geometry) && !this.natureKeep?.has(o.geometry)) o.geometry.dispose();
       if (o.isInstancedMesh) o.dispose();
     });
@@ -3256,7 +3286,7 @@ export class Scene3D {
       }
       if (r.self) me = { f, lane, R, head: head + (R.yaw || 0) };
     });
-    for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); }
+    for (const [k, R] of this.riders) if (!seen.has(k)) { this.scene.remove(R.group); this.riders.delete(k); this._freeRider(R); }
 
     // the camera: the chosen view, or on the TV director's (0) the shot it is on now
     const cm = this._cm = this.camMode === 'tv' && me ? this._tvShot(dt, dist) : this.camMode;
