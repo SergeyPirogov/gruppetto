@@ -869,7 +869,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
   #ride .hud-left { width: calc(60% - 10px); gap: 4px; }
   #ride .hud-right { width: calc(40% - 10px); gap: 4px; }
   /* the two boards become one row each: label over number, no icons */
-  #ride .hud-left > .board:first-child, #ride .hud-right > .board:first-child { flex-direction: row; border-radius: 10px; }
+  #ride .hud-left > .board:first-child, #ride .hud-right > .board:first-child, #ride .hud-right > .fps-board + .board { flex-direction: row; border-radius: 10px; }
   #ride .board .stat { flex: 1 1 0; min-width: 0; display: block; padding: 4px 6px 5px; border-left: 0; border-top: 3px solid var(--c); }
   #ride .board .stat + .stat { border-left: 1px solid rgba(255, 255, 255, .08); }
   #ride .board .stat .ic, #ride .board .stat small, #ride .stat.climb { display: none; }
@@ -2614,15 +2614,16 @@ input.switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2
 /* your route's delete: a round button you can see and hit, not a faint ✕ over the profile */
 .route-cards .rc-del { top: auto; bottom: 8px; right: 8px; width: 24px; height: 24px; padding: 0; display: grid; place-items: center; border-radius: 50%; background: rgba(10, 14, 22, .78); border: 1px solid rgba(255, 255, 255, .18); color: #e8edf5; font-size: .75rem; line-height: 1; }
 .route-cards .rc-del:hover { background: rgba(239, 68, 68, .85); border-color: transparent; color: #fff; }
-/* the lag log's frame counter: a board like the others, under Grade and Gear */
-.fps-board { min-width: 0; padding: 6px 12px 7px; gap: 1px; }
+/* the lag log's frame counter: a board like the others, in the top right corner over Grade and Gear
+   (on a phone, under the top boards) */
+.fps-board { min-width: 0; align-self: stretch; padding: 6px 12px 7px; gap: 1px; }
 .fps-board[hidden] { display: none; }
 .fps-board label { font-size: .58rem; text-transform: uppercase; letter-spacing: .08em; color: #9fb0c6; }
 .fps-board .fps-val { display: flex; align-items: baseline; gap: 5px; line-height: 1; }
 .fps-board .fps-val b { font-size: 1.3rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .fps-board .fps-val span, .fps-board small { font-size: .7rem; color: #c9d4e3; font-variant-numeric: tabular-nums; }
 .fps-board small { color: #9fb0c6; }
-@media (max-width: 760px) { #ride .fps-board { align-self: flex-end; flex-direction: row; align-items: baseline; gap: 6px; padding: 3px 8px; border-radius: 10px; } #ride .fps-board label { font-size: .5rem; } #ride .fps-board .fps-val b { font-size: .95rem; } #ride .fps-board .fps-val { white-space: nowrap; gap: 3px; } #ride .fps-board small { display: none; } }
+@media (max-width: 760px) { #ride .hud-right > .fps-board { order: 1; } #ride .hud-right > .fps-board ~ .board:not(.fps-board + .board) { order: 2; } #ride .fps-board { align-self: flex-end; flex-direction: row; align-items: baseline; gap: 6px; padding: 3px 8px; border-radius: 10px; } #ride .fps-board label { font-size: .5rem; } #ride .fps-board .fps-val b { font-size: .95rem; } #ride .fps-board .fps-val { white-space: nowrap; gap: 3px; } #ride .fps-board small { display: none; } }
 /* in a ride: Devices, Profile and Progress as an overlay over the road (as the lobby's pages), not a side menu;
    one size for every tab (a fixed height, room kept for the scrollbar), so switching tabs does not resize it */
 .drawer.in-ride .drawer-bg { background: rgba(5, 8, 14, .55); backdrop-filter: blur(4px); }
