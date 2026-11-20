@@ -25,29 +25,7 @@ export class Recorder {
     this.samples.push(sample);
   }
 
-  summary() {
-    const s = this.samples;
-    if (!s.length) return null;
-    const avg = (k) => {
-      const v = s.map((x) => x[k]).filter((x) => x > 0);
-      return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0;
-    };
-    const max = (k) => Math.max(0, ...s.map((x) => x[k] || 0));
-    const last = s[s.length - 1];
-    return {
-      duration: s.length,
-      distance: last.distance,
-      elevationGain: last.elevationGain,
-      avgPower: avg('power'),
-      maxPower: max('power'),
-      normalizedPower: normalizedPower(s.map((x) => x.power || 0)),
-      avgHr: avg('heartRate'),
-      maxHr: max('heartRate'),
-      avgCadence: avg('cadence'),
-      kj: Math.round(s.reduce((a, x) => a + (x.power || 0), 0) / 1000),
-      best1min: bestAverage(s.map((x) => x.power || 0), 60),
-    };
-  }
+  summary() { return summarize(this.samples); }
 
   toTCX() {
     const start = this.startTime || new Date();
@@ -119,4 +97,28 @@ export function rideFileName(d, title = '') {
   const slug = String(title || '').toLowerCase().normalize('NFC')
     .replace(/[^\p{L}\p{N}]+/gu, '-').slice(0, 40).replace(/^-+|-+$/g, '');
   return `gruppetto-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${slug ? `-${slug}` : ''}`;
+}
+
+/** A ride's summary from its samples (one a second): time, distance, climbing, power, heart rate, cadence; null if none. */
+export function summarize(s) {
+  if (!s?.length) return null;
+  const avg = (k) => {
+    const v = s.map((x) => x[k]).filter((x) => x > 0);
+    return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : 0;
+  };
+  const max = (k) => s.reduce((m, x) => Math.max(m, x[k] || 0), 0); // reduce: a 24 h ride is too many arguments for Math.max(...)
+  const last = s[s.length - 1];
+  return {
+    duration: s.length,
+    distance: last.distance,
+    elevationGain: last.elevationGain,
+    avgPower: avg('power'),
+    maxPower: max('power'),
+    normalizedPower: normalizedPower(s.map((x) => x.power || 0)),
+    avgHr: avg('heartRate'),
+    maxHr: max('heartRate'),
+    avgCadence: avg('cadence'),
+    kj: Math.round(s.reduce((a, x) => a + (x.power || 0), 0) / 1000),
+    best1min: bestAverage(s.map((x) => x.power || 0), 60),
+  };
 }

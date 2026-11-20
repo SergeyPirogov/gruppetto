@@ -1394,3 +1394,26 @@ test('language of a first visit: Ukrainian for a Ukrainian browser, or a Russian
   assert.equal(pickLang(['pl-PL'], 'Europe/Warsaw'), 'en');
   assert.equal(pickLang([], ''), 'en');
 });
+
+test('a ride saved with no summary: its summary comes back from the samples, and the progress catches up once', async () => {
+  const { summarize } = await import('../js/recorder.js');
+  const { addRide, addSummary } = await import('../js/progress.js');
+  const samples = Array.from({ length: 3600 }, (_, i) => ({ power: 200, heartRate: 140, cadence: 90, distance: i * 10, elevationGain: i / 3 }));
+  const sum = summarize(samples);
+  assert.equal(sum.duration, 3600);
+  assert.equal(sum.distance, 35990);
+  assert.equal(sum.avgPower, 200);
+  assert.equal(sum.maxHr, 140);
+  assert.equal(summarize([]), null);
+  assert.equal(summarize(Array.from({ length: 90000 }, () => ({ power: 1, distance: 1, elevationGain: 0 }))).maxPower, 1); // a 25 h ride: no spread
+  const e = { id: 'r1', date: '2026-11-20T10:00:00Z' };
+  const p1 = addRide(null, e).progress; // counted with no summary, as the bug did
+  assert.equal(p1.xp, 0); assert.equal(p1.rides, 1);
+  const got = addSummary(p1, { ...e, summary: sum });
+  assert.equal(got.progress.xp, Math.round(35990 / 100 + 1199.67 + 60)); // km, metres, minutes
+  assert.equal(got.progress.rides, 1); // not counted again
+  assert.equal(got.progress.km, 36);
+  assert.ok(got.badges.some((b) => b.id === 'hour'));
+  assert.ok(got.badges.some((b) => b.id === 'climb1000'));
+  assert.equal(addSummary(p1, { id: 'other', summary: sum }).progress.xp, 0); // a ride never counted is not this
+});

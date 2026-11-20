@@ -17,7 +17,7 @@ const hrZones = (s = settings) => hrZonesBpm({ bpm: s.hrZones, names: s.hrZoneNa
 import { parseZwo, toZwo } from './zwo.js';
 import { DURS, bestsFromSamples, stopsOf, powerCurve, ftpSuggestion, wPrimeSuggestion, rampFtp, fitnessSeries, formBand } from './power.js';
 import { putRide, getRide, deleteRide, putDraft, getDraft, deleteDraft, swapDraft, getRoutes, putRoute, deleteRoute } from './ride-store.js';
-import { Recorder, rideFileName } from './recorder.js';
+import { Recorder, rideFileName, summarize } from './recorder.js';
 import { makeZip } from './zip.js';
 import { attackState, attackFactor, attacking, nextAttack } from './attacks.js';
 import { bunchPower, BUNCH } from './bunch.js';
@@ -26,7 +26,7 @@ import { GarminClient, garminOn, garminAvailable, garminActivityUrl } from './ga
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
-import { BADGES, addRide, progressFrom, levelOf } from './progress.js';
+import { BADGES, addRide, addSummary, progressFrom, levelOf } from './progress.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
@@ -3490,6 +3490,26 @@ function saveToHistory(r, samples) {
   return e;
 }
 
+// ---------- Rides saved with no summary (2026-11-20) ----------
+// For a day a comment swallowed `summary` in historyEntry: rides were kept with their full record but no time,
+// distance or power, and earned no XP, km or climbing. Their summaries come back from the record kept on this
+// device, once, and the progress gets what they should have earned.
+async function restoreSummaries() {
+  const lost = history.filter((e) => !e.summary && e.chart?.pw?.length);
+  let fixed = 0;
+  for (const e of lost) {
+    let r = null;
+    try { r = await getRide(e.id); } catch { /* IndexedDB blocked */ }
+    const sum = summarize(r?.samples);
+    if (!sum || sum.duration < 30) continue;
+    e.summary = sum; e.tss = tss(sum, e.ftp || settings.ftp);
+    progress = addSummary(progress, e).progress;
+    fixed++;
+  }
+  if (!fixed) return;
+  saveProgress(); saveHistory(); renderHistory(); renderProgress(); renderWeek();
+}
+
 // ---------- Levels and achievements (#progress) ----------
 const PROGRESS_KEY = 'gruppetto-progress';
 let progress = (() => { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY) || 'null'); } catch { return null; } })() || progressFrom(history);
@@ -5687,6 +5707,7 @@ $('f-lang').value = lang;
 $('f-lang').onchange = () => setLang($('f-lang').value);
 initLobby();
 offerDraft();
+restoreSummaries().catch(() => {});
 // the page closing mid-ride (a reload, the lid shut): what was ridden is kept, to go on with
 window.addEventListener('pagehide', () => { if (ride) saveDraft(); });
 // accounts and leaderboards: nothing at all without a project in social-config.js
