@@ -2235,7 +2235,10 @@ function perfFrame(t0, t1) {
   P.n++;
   if (t0 - P.show < 500) return;
   const fps = (P.n * 1000) / (t0 - P.show || 1), w = P.log.w;
-  hud.textContent = `${Math.round(fps)} fps · ${Math.round(t1 - t0)} ms · worst ${Math.round(w.worst)} ms`;
+  $('fps-n').textContent = Math.round(fps);
+  $('fps-n').style.color = fps < 30 ? '#f87171' : fps < 50 ? '#fbbf24' : ''; // red under 30, amber under 50
+  $('fps-ms').textContent = `${Math.round(t1 - t0)} ${tr('ms')}`;
+  $('fps-worst').textContent = tr('worst {n} ms', { n: Math.round(w.worst) });
   hud.hidden = false; P.show = t0; P.n = 0;
 }
 /** At the ride's end: the log, with this device and its graphics, for "Copy the last ride's lag log". */

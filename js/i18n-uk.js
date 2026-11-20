@@ -606,5 +606,5 @@ export const UK = {
   'Show FPS': 'Показувати FPS', 'Frames per second on the ride screen': 'Кадри за секунду на екрані заїзду',
   "Copy the last ride's lag log": 'Скопіювати лог лагів останнього заїзду',
   "The last ride's frame rate, every 10 s, and this device's graphics card: paste it to us when a ride lags": 'Частота кадрів останнього заїзду кожні 10 с і відеокарта цього пристрою: надішли нам, коли заїзд лагає',
-  'Copied: paste it in a message to us': 'Скопійовано: встав у повідомлення нам', 'Could not copy': 'Не вдалося скопіювати',
+  'ms': 'мс', 'worst {n} ms': 'найгірший {n} мс', 'Copied: paste it in a message to us': 'Скопійовано: встав у повідомлення нам', 'Could not copy': 'Не вдалося скопіювати',
 };
