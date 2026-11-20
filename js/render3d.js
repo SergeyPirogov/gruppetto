@@ -2214,12 +2214,15 @@ export class Scene3D {
     const terrain = new THREE.Mesh(tg, this.mat);
     terrain.receiveShadow = true;
     group.add(terrain);
-    // the water's surface: flat over each cell with three wet corners or four; the shore is where it meets the land
+    // the water's surface: flat over every cell with a wet corner, so the shore is where the land rises out of it
+    // (over the cells with three wet corners or more it ran along the grid's lines, a straight edge across the lake)
     if (wet.some(Boolean)) {
-      const wp = [];
+      const wp = [], others = this._otherRoadsNear(a0, frames);
+      // never over another stretch of the road lower than the water (a hairpin coming down beside a lake)
+      const overRoad = (i, wy) => { const o = others?.(pos[i * 3], pos[i * 3 + 2]); return o && o.dist < ROAD_HALF + 6 && o.y < wy + 0.5; };
       for (let r = 0; r < rows - 1; r++) for (let k = 0; k < nc - 1; k++) {
         const q = [r * nc + k, r * nc + k + 1, (r + 1) * nc + k, (r + 1) * nc + k + 1];
-        if (q.filter((i) => wet[i]).length < 3) continue;
+        if (!q.some((i) => wet[i]) || q.some((i) => overRoad(i, waterY[Math.floor(i / nc)]))) continue;
         const v = (i) => [pos[i * 3], waterY[Math.floor(i / nc)], pos[i * 3 + 2]];
         wp.push(...v(q[0]), ...v(q[1]), ...v(q[2]), ...v(q[1]), ...v(q[3]), ...v(q[2]));
       }
@@ -2717,8 +2720,10 @@ export class Scene3D {
       // the vault: half rings every 2.5 m, from the first mouth to the second, clipped to this chunk
       const from = Math.max(s - SEG, d0), to = Math.min(e + SEG, d1);
       if (to > from) {
-        // the profile: straight walls, then a half circle over them
-        const prof = [[TUNNEL_R, -0.3], ...Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * Math.PI; return [Math.cos(t) * TUNNEL_R, TUNNEL_WALL + Math.sin(t) * TUNNEL_R]; }), [-TUNNEL_R, -0.3]];
+        // the profile: a floor from under the asphalt's edge out to the wall (the land there is up on the hill, and
+        // the gap between the road and the wall showed the sky through), straight walls, a half circle over them
+        const F = ROAD_HALF - 0.4, FY = -0.03; // under the verge (+0.02) and the asphalt (+0.05): no flicker with them
+        const prof = [[F, FY], [TUNNEL_R, FY], ...Array.from({ length: 13 }, (_, k) => { const t = (k / 12) * Math.PI; return [Math.cos(t) * TUNNEL_R, TUNNEL_WALL + Math.sin(t) * TUNNEL_R]; }), [-TUNNEL_R, FY], [-F, FY]];
         const ARC = prof.length - 1, ringsN = Math.ceil((to - from) / 2.5) + 1, p = [], idx = [];
         for (let i = 0; i < ringsN; i++) {
           const f = this.frame(Math.min(to, from + i * 2.5));
