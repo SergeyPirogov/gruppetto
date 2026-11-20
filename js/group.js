@@ -30,6 +30,7 @@ export function packet(me, now) {
   return {
     u: me.id, n: String(me.name || '').slice(0, 40), d: round(me.dist, 10), v: round(me.v, 100), l: round(me.lane, 100), p: Math.max(0, Math.min(3000, Math.round(me.power || 0))), w: round(me.wkg || 0, 10),
     j: L.jersey || null, s: L.stripe || null, b: L.bike || null, f: L.figure === 'female' ? 'female' : 'male', t: now,
+    ...(L.pattern && L.pattern !== 'plain' ? { k: L.pattern } : {}),
     ...(me.finish > 0 ? { x: round(me.finish, 10) } : {}),
   };
 }
@@ -50,6 +51,7 @@ export class Mates {
     this.by.set(p.u, {
       id: p.u, name: String(p.n || '').slice(0, 40), d, v, lane: Math.max(-2.6, Math.min(2.6, Number(p.l) || 0)), wkg: Number(p.w) || 0, power: Math.max(0, Math.min(3000, Number(p.p) || 0)),
       color: look(p.j) || '#64748b', stripe: look(p.s) || '#e2e8f0', bike: look(p.b), figure: p.f === 'female' ? 'female' : 'male',
+      pattern: typeof p.k === 'string' && /^[a-z]{2,12}$/.test(p.k) ? p.k : null, // js/kits.js; an unknown one is drawn plain
       at: now, shown: was && Math.abs(was.shown - d) < 30 ? was.shown : d, seen: was?.seen ?? now,
     });
     // a race: the finish time, kept after the rider has gone (the first one heard stands)

@@ -26,8 +26,9 @@ import { GarminClient, garminOn, garminAvailable, garminActivityUrl } from './ga
 import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
-import { BADGES, addRide, addSummary, progressFrom, levelOf } from './progress.js';
+import { BADGES, addRide, addSummary, progressFrom, levelOf, rideXp } from './progress.js';
 import { dailyGoal, goalProgress, streakOf, markDone, localDay } from './daily.js';
+import { PATTERNS, patternOf, patternOpen, patternHow, kitLook, botPattern, jerseysWon } from './kits.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
@@ -1677,7 +1678,7 @@ function makeBots(n, { race = false } = {}) {
     // a ride: 55–95 % of your FTP in W/kg; a race: 82–108 %, so some of them are stronger than you
     const level = (race ? 0.82 : 0.55) + (n > 1 ? i / (n - 1) : 0.5) * (race ? 0.26 : 0.4) + rnd(-0.04, 0.04);
     return {
-      name: lang === 'uk' ? uk : en, figure: female ? 'female' : 'male', color, stripe, weight, cda: riderCdA(height, weight),
+      name: lang === 'uk' ? uk : en, figure: female ? 'female' : 'male', color, stripe, pattern: botPattern(i), weight, cda: riderCdA(height, weight),
       wkg: Math.round(ftpWkg * level * 10) / 10, rpm: Math.round(rnd(82, 98)), phase: rnd(0, 6.28),
       climber: race && Math.random() < 0.4, // attacks on the climbs
       passAfter: rnd(2, 5), // s on a wheel before pulling out to pass: some wait, some go at once
@@ -1936,7 +1937,7 @@ async function startRide(opts) {
         return { ...b, dist: -1.6 - Math.floor(i / 3) * 1.9, v: 0, pedal: i, lane, home, laneTarget: lane, line: BUNCH.lines[i % 2] };
       })
       : group ? [] : makeBots(settings.bots ?? 5).map((b, i) => ({ ...b, dist: 15 + i * 12, v: 0, pedal: i, lane: i % 2 ? -1.6 : 1.6, home: i % 2 ? -1.6 : 1.6, laneTarget: i % 2 ? -1.6 : 1.6 })),
-    race: racing || groupRace ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false } : null,
+    race: racing || groupRace ? { laps, distance: route.length * laps, countdown: 5, go: false, finish: new Map(), done: false, tops: {}, was: new Map() } : null,
     attacks: !racing && !workout && !group && settings.attacks ? attackState() : null, // free ride (#48): riders go clear now and then
     // workout pacer: a virtual training partner riding the target power exactly, at your weight
     ghost: racing || group ? null : (() => { const g = rideGhost(route.id); return g ? { entry: g, name: ghostLabel(g), color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, dist: 0, pedal: 0.3, lane: START_LANE - 1.3, ghost: true } : null; })(),
@@ -2306,7 +2307,7 @@ function frame(now) {
     }
   }
   const riders = [
-    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null, decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, stand: !!ride.stand, self: true, name: settings.name, lane: ride.lane, v: ride.v },
+    { dist: ride.dist, color: settings.jersey, stripe: settings.stripe, kit: myKit(), bike: settings.bikeColor || null, tape: settings.tapeColor || null, decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male', pedal: ride.pedal, stand: !!ride.stand, self: true, name: settings.name, lane: ride.lane, v: ride.v },
     ...ride.bots,
     ...(pacerOn() ? [ride.pacer] : []),
     ...(ride.ghost ? [ride.ghost] : []),
@@ -2566,6 +2567,7 @@ function tick(power, cadence, hr) {
     if (!ride.workout || ride.workoutDone) recorder.markLap();
   }
   updateSegments();
+  raceTops();
 
   // workout / trainer control
   const grade = route.gradeAt(ride.dist);
@@ -3024,6 +3026,29 @@ function noteLap(t) {
   ride.lapStartI = n;
 }
 
+/**
+ * A race against the bots: who is first over each climb's top and each sprint's line (each lap), for the green
+ * and polka-dot jerseys. You move before the bots in a tick, so a dead heat is yours.
+ */
+function raceTops() {
+  const R = ride.race;
+  if (!R?.go || ride.group) return;
+  const L = ride.route.length, marks = [...ride.route.climbs, ...(ride.route.sprints || []).map((x) => ({ ...x, sprint: true }))];
+  for (const [r, key] of [[ride, 'me'], ...ride.bots.map((b, i) => [b, `b${i}`])]) {
+    const prev = R.was.get(key) ?? r.dist, cur = r.dist;
+    R.was.set(key, cur);
+    if (cur <= prev || prev >= R.distance) continue;
+    for (const c of marks) {
+      const at = c.start + c.length, lap = Math.floor((cur - at) / L);
+      if (Math.floor((prev - at) / L) >= lap || lap < 0) continue;
+      const id = `${c.id}:${lap}`;
+      if (R.tops[id]) continue;
+      R.tops[id] = { kind: c.sprint ? 'sprint' : 'climb', who: key };
+      if (key === 'me') toast(c.sprint ? tr('⚡ First over the line: {name}', { name: c.name }) : tr('⛰ First to the top: {name}', { name: c.name }));
+    }
+  }
+}
+
 /** Climb segments: start the timer at the foot, stop it at the top, compare with the best. */
 function updateSegments() {
   const { route } = ride, L = route.length, prev = ride.prevDist, cur = ride.dist;
@@ -3382,7 +3407,7 @@ function finishRide() {
   const sum = recorder.summary();
   const dailyStreak = ride.dailyStreak || 0;
   const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
-  lastRide = { race: raceResults(), raceLaps: ride.race?.laps, groupRace: ride.group && ride.race ? { id: ride.group.id, title: ride.group.title, sent: ride.group.sent || null } : null, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, daily: dailyStreak, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
+  lastRide = { race: raceResults(), jerseys: ride.race && !ride.group ? jerseysWon(ride.race.done ? ride.race.place : 0, ride.race.tops) : [], raceLaps: ride.race?.laps, groupRace: ride.group && ride.race ? { id: ride.group.id, title: ride.group.title, sent: ride.group.sent || null } : null, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, daily: dailyStreak, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
   // the ride's laps, climbs and sprints for the leaderboards (a real ride on a built-in route only)
   const socialItems = ride.route.custom ? [] : rideItems({
     route: ride.route, version: versionOf(ride.route), simulated: ride.simulated && !window.__pretendTrainer,
@@ -3455,7 +3480,7 @@ function historyEntry(r, samples) {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(wbal.reduce((m, v) => Math.min(m, v), Infinity)) : wPrime, summary: r.summary, // reduce, not Math.min(...): a 24 h brevet is 86 400 seconds, too many arguments for one call
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
-    daily: r.daily || 0, race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
+    daily: r.daily || 0, jerseys: r.jerseys?.length ? r.jerseys : undefined, race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
     maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
     stops: stopsOf(samples.map((x) => x.power || 0)), // short pauses: how many and how long in all
@@ -3485,7 +3510,8 @@ function saveToHistory(r, samples) {
   track('exp', `hud-${hudLayout}`); // rides finished by dashboard, to compare A and B
   if (rideMilestone(progress.rides)) track('ride-count', rideMilestone(progress.rides));
   for (const b of got.badges) track('badge', b.id);
-  e.earned = { xp: got.progress.xp, badges: got.badges.map((b) => b.id), levelUp: got.levelUp ? levelOf(got.progress.xp).level : 0 };
+  for (const j of got.jerseys) track('jersey', j);
+  e.earned = { xp: got.progress.xp, badges: got.badges.map((b) => b.id), levelUp: got.levelUp ? levelOf(got.progress.xp).level : 0, jerseys: got.jerseys, patterns: newPatterns(e, got) };
   history.unshift(e);
   history = history.slice(0, 100);
   saveHistory();
@@ -3550,10 +3576,21 @@ function renderProgress() {
 }
 
 /** What a ride earned, on its summary: a new level and new badges. */
+/** Patterns a level-up opened (the level before this ride, and after). */
+function newPatterns(e, got) {
+  if (!got.levelUp) return [];
+  const before = levelOf(got.progress.xp - rideXp(e)).level;
+  return PATTERNS.filter((p) => p.level && p.level > before && p.level <= got.levelUp).map((p) => p.id);
+}
 function renderEarned(e) {
   const box = $('sum-earned'), got = e.earned;
   const items = got ? [...(got.levelUp ? [`<span class="earn-lvl">⬆ ${tr('Level {n}!', { n: got.levelUp })}</span>`] : []),
     ...got.badges.map((id) => BADGES.find((b) => b.id === id)).filter(Boolean).map((b) => `<span class="earn-badge" title="${esc(tr(b.how))}">${badgeName(b)}</span>`)] : [];
+  // the leader's jerseys and patterns this ride opened: wear them in the garage
+  for (const id of [...(got?.jerseys || []), ...(got?.patterns || [])]) {
+    const p = patternOf(id);
+    if (p.id === id) items.push(`<button type="button" class="earn-badge earn-kit" data-wear="${p.id}" title="${esc(tr('Wear it'))}">${patternSwatch(p)} ${esc(tr(p.name))}</button>`);
+  }
   if (e.daily) items.unshift(`<span class="earn-badge earn-daily">🎯 ${esc(tr('Challenge of the day'))} · ${esc(streakText(e.daily))}</span>`);
   box.hidden = !items.length;
   box.innerHTML = items.length ? `<span class="pr-head">${tr('Earned on this ride')}</span>${items.join('')}` : '';
@@ -4993,7 +5030,7 @@ function groupSend() {
   G.live.send(groupPacket({
     id: G.me.id, name: G.me.name, dist: ride.dist, v: ride.v, lane: ride.lane, wkg: wkgNow({ me: true }), power: wkgNow({ me: true }) * Math.max(30, settings.weight),
     finish: ride.race?.done ? ride.race.myTime : 0,
-    look: { jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, figure: settings.figure },
+    look: { jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, figure: settings.figure, pattern: myPattern() },
   }, Date.now()));
 }
 
@@ -5615,12 +5652,59 @@ function renderFigure() {
 for (const b of document.querySelectorAll('#figure-pick [data-figure]')) b.onclick = () => setFigure(b.dataset.figure);
 $('btn-figure').onclick = () => setFigure(settings.figure === 'female' ? 'male' : 'female');
 renderFigure();
+// ----- jersey patterns (js/kits.js): a few open to all, the rest earned by level or won in a race -----
+const kitState = () => ({ level: levelOf(progress?.xp || 0).level, jerseys: progress?.jerseys || {} });
+const kitOpen = (p) => patternOpen(p, kitState());
+/** The pattern you wear: the one picked, if it is open to you (a setting synced from elsewhere may not be). */
+function myPattern() { const p = patternOf(settings.pattern); return kitOpen(p) ? p.id : 'plain'; }
+const myKit = () => kitLook(myPattern(), { jersey: settings.jersey, stripe: settings.stripe });
+
+/** A small swatch of a pattern in your colours (CSS only: the 3D rider shows it for real). */
+function patternSwatch(p) {
+  const k = kitLook(p.id, { jersey: settings.jersey, stripe: settings.stripe }), m = k.main, c = k.pattern;
+  const bg = {
+    plain: m, band: `linear-gradient(${m} 0 34%, ${c} 34% 56%, ${m} 56%)`,
+    hoops: `repeating-linear-gradient(0deg, ${m} 0 7px, ${c} 7px 14px)`, pinstripes: `repeating-linear-gradient(90deg, ${m} 0 7px, ${c} 7px 9px)`,
+    sash: `linear-gradient(135deg, ${m} 38%, ${c} 38% 58%, ${m} 58%)`, chevron: `linear-gradient(135deg, ${c} 25%, transparent 25%) -7px 0 / 14px 14px, linear-gradient(225deg, ${c} 25%, transparent 25%) -7px 0 / 14px 14px, ${m}`,
+    split: `linear-gradient(90deg, ${m} 50%, ${c} 50%)`, fade: `linear-gradient(0deg, ${m}, ${c})`, ukraine: `linear-gradient(${m} 50%, ${c} 50%)`,
+    polka: `radial-gradient(${c} 28%, transparent 31%) 0 0 / 11px 11px, ${m}`, yellow: m, green: m,
+  }[p.id] || m;
+  return `<i style="background:${esc(bg)}"></i>`;
+}
+function renderPatterns() {
+  const box = $('garage-patterns');
+  if (!box) return;
+  const now = myPattern();
+  box.innerHTML = PATTERNS.map((p) => {
+    const open = kitOpen(p), how = patternHow(p);
+    const title = open ? tr(p.name) : `${tr(p.name)}: ${tr(how.text, { n: how.n })}`;
+    return `<button type="button" class="garage-pat${p.id === now ? ' sel' : ''}${open ? '' : ' locked'}" data-pattern="${p.id}" title="${esc(title)}">${patternSwatch(p)}<span>${esc(tr(p.name))}</span>${open ? '' : '<b class="lock">🔒</b>'}</button>`;
+  }).join('');
+}
+// the summary's chip of a jersey or pattern just earned: put it on
+$('sum-earned').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-wear]');
+  if (!b || !kitOpen(patternOf(b.dataset.wear))) return;
+  settings.pattern = b.dataset.wear; saveSettings(); track('pattern', `wear-${b.dataset.wear}`);
+  toast(tr('{name}: on for your next ride', { name: tr(patternOf(b.dataset.wear).name) }));
+  b.classList.add('sel');
+});
+$('garage-patterns').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-pattern]');
+  if (!b) return;
+  const p = patternOf(b.dataset.pattern);
+  if (!kitOpen(p)) { const how = patternHow(p); toast(`🔒 ${tr(p.name)}: ${tr(how.text, { n: how.n })}`); return; }
+  settings.pattern = p.id; saveSettings(); track('pattern', p.id);
+  renderPatterns(); renderGarageBits();
+});
+
 // ----- the garage: your rider on a turntable beside the colour pickers (js/garage.js) -----
 // the pickers live in the garage; their ids and bindings are the same as when they sat in the profile
 const LOOK_KEYS = { 'f-jersey': 'jersey', 'f-stripe': 'stripe', 'f-bike': 'bikeColor', 'f-tape': 'tapeColor', 'f-decal': 'decalColor', 'f-helmet': 'helmetColor', 'f-lens': 'lensColor' };
 const lookNow = () => ({
   jersey: settings.jersey, stripe: settings.stripe, bike: settings.bikeColor || null, tape: settings.tapeColor || null,
   decal: settings.decalColor || null, helmet: settings.helmetColor || null, lens: settings.lensColor || null, figure: settings.figure || 'male',
+  kit: myKit(),
 });
 /** Ready-made kits: jersey, accent, frame, bar tape, wheel decals, helmet, lenses. */
 const GARAGE_KITS = [
@@ -5659,6 +5743,7 @@ function renderGarageBits() {
   const now = Object.values(LOOK_KEYS).map((k, i) => (i === 2 ? settings.bikeColor || settings.jersey : i === 4 ? settings.decalColor || settings.stripe : settings[k]).toLowerCase());
   for (const b of document.querySelectorAll('#garage-kits [data-kit]')) b.classList.toggle('sel', GARAGE_KITS[b.dataset.kit][1].every((c, i) => c === now[i]));
   garage?.setLook(L);
+  if (!$('garage').hidden) renderPatterns();
 }
 let garage = null;
 async function openGarage() {
@@ -5672,7 +5757,7 @@ async function openGarage() {
       garage.onReady = () => { $('garage-loading').hidden = true; };
       garage.setSpin(garageSpin);
     }
-    renderGarageBits();
+    renderPatterns(); renderGarageBits();
     if (!box.hidden) garage.start();
   } catch (e) {
     console.warn('Garage unavailable', e);

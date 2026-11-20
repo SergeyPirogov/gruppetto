@@ -51,15 +51,15 @@ export const BADGES = [
 ];
 
 /** Empty totals. */
-export const newProgress = () => ({ xp: 0, rides: 0, km: 0, gain: 0, days: [], badges: {}, counted: [] });
+export const newProgress = () => ({ xp: 0, rides: 0, km: 0, gain: 0, days: [], badges: {}, counted: [], jerseys: {} });
 
 /**
  * Adds a ride to the totals (once per ride id): the new totals, the badges it earned and whether the level went
  * up. days keeps the last 30 ride days (for streaks), counted the last 300 ride ids.
  */
 export function addRide(p0, e) {
-  const p = { ...newProgress(), ...p0, days: [...(p0?.days || [])], badges: { ...(p0?.badges || {}) }, counted: [...(p0?.counted || [])] };
-  if (!e?.id || p.counted.includes(e.id)) return { progress: p, badges: [], levelUp: false };
+  const p = { ...newProgress(), ...p0, days: [...(p0?.days || [])], badges: { ...(p0?.badges || {}) }, counted: [...(p0?.counted || [])], jerseys: { ...(p0?.jerseys || {}) } };
+  if (!e?.id || p.counted.includes(e.id)) return { progress: p, badges: [], levelUp: false, jerseys: [] };
   const before = levelOf(p.xp).level;
   p.xp += rideXp(e);
   p.rides += 1;
@@ -69,7 +69,10 @@ export function addRide(p0, e) {
   p.counted = [...p.counted, e.id].slice(-300);
   const earned = BADGES.filter((b) => !p.badges[b.id] && b.test(p, e));
   for (const b of earned) p.badges[b.id] = day(e.date);
-  return { progress: p, badges: earned, levelUp: levelOf(p.xp).level > before };
+  // the leader's jerseys (js/kits.js): won once, worn from then on; a race won before jerseys existed gives yellow
+  const jerseys = [...new Set([...(e.jerseys || []), ...(e.race?.[0]?.me === true ? ['yellow'] : [])])].filter((j) => !p.jerseys[j]);
+  for (const j of jerseys) p.jerseys[j] = day(e.date);
+  return { progress: p, badges: earned, levelUp: levelOf(p.xp).level > before, jerseys };
 }
 
 /**
