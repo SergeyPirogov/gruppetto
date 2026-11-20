@@ -131,6 +131,37 @@ const ROUTES = [
     hills: [[130, 16000, -Math.PI / 2], [6, 2000, 0.5], [2.5, 800, 1.5]],
     curves: [[0.012, 2000, 0], [0.006, 800, 1]],
   },
+  {
+    // a hill climb: one steep wall of 6.7 km (about 5 %, ramps to 10 %) up through the spruce, and the same back
+    // down. For climbing races and threshold work out of the saddle
+    id: 'dragobrat', theme: 'carpathians',
+    name: 'Drahobrat Wall',
+    description: 'A hill climb: 6.7 km at about 5% with ramps to 10% through the spruce, then the same back down.',
+    length: 13000,
+    hills: [[170, 13000, -Math.PI / 2], [4, 2600, 0.3], [1.5, 650, 1.2]],
+    curves: [[0.018, 1625, 0.2], [0.009, 650, 1]],
+  },
+  {
+    // a city-park loop with short, sharp kicks up from the river, like Kyiv's slopes: a criterium course,
+    // 6 km a lap, an attack on every rise
+    id: 'dnipro', theme: 'autumn',
+    name: 'Dnipro Slopes',
+    description: 'A 6 km park loop with six short, sharp kicks up to 10% from the river. A criterium course: attack on every rise.',
+    length: 6000,
+    hills: [[9, 3000, 0], [9, 1000, 1], [2, 500, 2]],
+    curves: [[0.014, 1500, 0.6], [0.01, 600, 1.4]],
+    // between the kicks there is no flat 250 m clear of them by 150 m both ways, which findSprints wants: two, set here
+    fixedSprints: [{ start: 1240, length: 250, name: 'Embankment Sprint' }, { start: 4240, length: 250, name: 'Khreshchatyk Sprint' }],
+  },
+  {
+    // a gran fondo: 40 km along a winding river in a canyon, out of it and back down again four times
+    id: 'dnister', theme: 'river',
+    name: 'Dnister Canyon',
+    description: 'A 40 km gran fondo along a winding river: four 3 km climbs out of the canyon (up to 7%) and fast roads back down.',
+    length: 40000,
+    hills: [[32, 10000, 0], [26, 5000, 1.1], [6, 2000, 0.4], [2, 800, 2]],
+    curves: [[0.007, 10000, 0.3], [0.009, 2500, 1.2], [0.005, 1000, 0.5]],
+  },
 ];
 
 function wave(d, parts) {
@@ -220,6 +251,9 @@ const CLIMB_NAMES = {
   winter: ['Snowdrift Rise'],
   steppe: ['Sunflower Kurgan'],
   flat: ['Bridge Ramp'],
+  dragobrat: ['Drahobrat Wall'],
+  dnipro: ['Lavra Kick', 'Andriyivsky Ramp', 'Park Steps', 'Pechersk Rise', 'Arch Hill', 'Volodymyr Hill'],
+  dnister: ['Bakota Climb', 'Khotyn Road', 'Kamianets Rise', 'Canyon Rim', 'Stara Ushytsia'],
 };
 
 /**
