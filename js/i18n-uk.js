@@ -612,4 +612,14 @@ export const UK = {
   'Ride {km} km, any route': 'Проїдь {km} км, будь-який маршрут', 'Ride {min} minutes, any route': 'Крути {min} хвилин, будь-який маршрут',
   'Start a streak: one a day': 'Почни серію: один на день', 'Done today. A new one tomorrow': 'Сьогодні виконано. Завтра новий',
   'Take it ▶': 'Вперед ▶', 'Pick the route ▶': 'Обрати маршрут ▶', 'Challenge of the day done!': 'Челендж дня виконано!',
+  // no Bluetooth in this browser
+  'Ride on a computer or Android': 'Крути з комп\'ютера або Android',
+  'iPhone and iPad do not let a browser use Bluetooth, so a trainer cannot connect here. Open Gruppetto in Chrome or Edge on a computer or an Android phone.': 'iPhone та iPad не дають браузеру Bluetooth, тож тренажер тут не підключиться. Відкрий Gruppetto в Chrome чи Edge на комп\'ютері або на Android-телефоні.',
+  'Open it in Chrome': 'Відкрий у Chrome',
+  'This browser does not support Bluetooth. In Chrome on this phone the trainer, heart rate monitor and controllers connect.': 'Цей браузер не підтримує Bluetooth. У Chrome на цьому телефоні тренажер, пульсометр і контролери підключаться.',
+  'Open it in Chrome or Edge': 'Відкрий у Chrome чи Edge',
+  'This browser does not support Bluetooth, so a trainer cannot connect here. Chrome and Edge can, on a computer or Android.': 'Цей браузер не підтримує Bluetooth, тож тренажер тут не підключиться. Chrome і Edge можуть, на комп\'ютері чи Android.',
+  '📲 Send the link to myself': '📲 Надіслати посилання собі', '📋 Copy the link': '📋 Скопіювати посилання',
+  'Try it in the simulator': 'Спробувати в симуляторі', 'Indoor cycling in the browser. Free.': 'Велотренажер у браузері. Безкоштовно.',
+  'Link copied. Open it on the computer': 'Посилання скопійовано: відкрий його на комп\'ютері',
 };

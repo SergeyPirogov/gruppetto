@@ -30,6 +30,16 @@ export const APP_VERSION = '0.3.0';
 
 export const bluetoothAvailable = () => typeof navigator !== 'undefined' && !!navigator.bluetooth;
 
+/**
+ * Where a browser without Bluetooth is: 'ios' (an iPhone or iPad, where no browser gets Bluetooth; an iPad says
+ * it is a Mac with a touch screen), 'android' (a browser there that lacks it, Chrome has it) or 'desktop'.
+ */
+export function platformOf(ua = '', touchPoints = 0) {
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && touchPoints > 1)) return 'ios';
+  if (/Android/.test(ua)) return 'android';
+  return 'desktop';
+}
+
 // Diagnostic mode: list every nearby Bluetooth device instead of filtering by service.
 let showAllDevices = false;
 export const setShowAllDevices = (on) => { showAllDevices = !!on; };

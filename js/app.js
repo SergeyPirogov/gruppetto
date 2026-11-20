@@ -1,4 +1,4 @@
-import { WIND_CW, bluetoothAvailable, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
+import { WIND_CW, bluetoothAvailable, platformOf, setShowAllDevices, knownDevices, Trainer, HeartRateMonitor, CadenceSensor, ZwiftController, OpenBikeControlDevice, setKeepReconnecting } from './ble.js';
 import { obcIntents, rideIntent, OBC_LABELS, ctlEntryOf, ctlDevice, ctlMigrate, CTL_LAYOUT, CTL_ACTIONS, CTL_DEFAULTS } from './controls.js';
 import { variant } from './experiments.js';
 import { segmentAll } from './settings-ui.js';
@@ -3559,6 +3559,37 @@ function renderEarned(e) {
   box.innerHTML = items.length ? `<span class="pr-head">${tr('Earned on this ride')}</span>${items.join('')}` : '';
 }
 
+// ---------- No Bluetooth here: where to ride, and the link to send there ----------
+// 40% of visits come from phones, a quarter from iPhones, where no browser can connect a trainer. Rather than
+// Connect buttons that cannot work: say so, where it works, send the link there, or look around in the simulator.
+const NOBT_KEY = 'gruppetto-nobt-closed';
+const NOBT = {
+  ios: ['Ride on a computer or Android', 'iPhone and iPad do not let a browser use Bluetooth, so a trainer cannot connect here. Open Gruppetto in Chrome or Edge on a computer or an Android phone.', '📲 Send the link to myself'],
+  android: ['Open it in Chrome', 'This browser does not support Bluetooth. In Chrome on this phone the trainer, heart rate monitor and controllers connect.', '📋 Copy the link'],
+  desktop: ['Open it in Chrome or Edge', 'This browser does not support Bluetooth, so a trainer cannot connect here. Chrome and Edge can, on a computer or Android.', '📋 Copy the link'],
+};
+const nobtPlace = () => platformOf(navigator.userAgent, navigator.maxTouchPoints || 0);
+function renderNoBt() {
+  let closed = false;
+  try { closed = !!localStorage.getItem(NOBT_KEY); } catch { /* private mode */ }
+  const box = $('nobt-box');
+  document.body.classList.toggle('no-bt', !bluetoothAvailable()); // no Connect chips that cannot work
+  box.hidden = bluetoothAvailable() || closed;
+  if (box.hidden) return;
+  const [title, why, send] = NOBT[nobtPlace()];
+  $('nobt-title').textContent = tr(title); $('nobt-why').textContent = tr(why); $('nobt-send').textContent = tr(send);
+}
+$('nobt-send').onclick = async () => {
+  const url = new URL('./?utm_campaign=self-send', location.href).href; // in GoatCounter: the links riders sent on
+  track('nobt', `send-${nobtPlace()}`);
+  if (navigator.share && nobtPlace() === 'ios') {
+    try { await navigator.share({ title: 'Gruppetto', text: tr('Indoor cycling in the browser. Free.'), url }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast(tr('Link copied. Open it on the computer')); } catch { prompt(tr('Copy the link'), url); }
+};
+$('nobt-sim').onclick = () => { track('nobt', `sim-${nobtPlace()}`); $('btn-start').click(); };
+$('nobt-close').onclick = () => { track('nobt', 'close'); try { localStorage.setItem(NOBT_KEY, '1'); } catch { /* private mode */ } renderNoBt(); };
+
 // ---------- The challenge of the day (#55) ----------
 // One small goal a day, the same for everyone (js/daily.js), and a streak of days in a row; a simulator ride
 // counts too. Done in the ride: a toast at once, and a chip on the ride's summary.
@@ -4067,6 +4098,7 @@ function renderFitness() {
 
 function renderHistory() {
   renderWhy();
+  renderNoBt();
   renderDaily();
   renderFtpBox();
   renderProgress();
