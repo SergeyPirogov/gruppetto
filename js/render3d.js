@@ -744,6 +744,8 @@ const TIMES = {
   evening: { sky: ['#5a7cb6', '#ffcf9e'], fog: '#f1cfae', fogMix: 0.5, sunY: 0.18, light: '#ffd29a', lightI: 2.5, hemi: 0.62, hemiColor: '#b9c8ec', exposure: 1.03, glow: '#ffbe7a', disk: '#ffe2a6', diskSize: 120, dim: 0.85 },
   night: { sky: ['#03050c', '#131c35'], fog: '#0e1526', fogMix: 0.92, sunY: 0.55, light: '#9fb6ff', lightI: 0.7, hemi: 0.2, exposure: 1.25, glow: '#6f86c8', disk: '#e8eefc', diskSize: 34, dim: 0.22, night: true, fogNear: 60, fogFar: 700 },
 };
+// midday on a route whose own look is a sunset (themes.js `sun`): the default theme's day sky
+const MIDDAY = { sky: ['#3f93dc', '#d6ecf8'], fog: [214, 234, 240], haze: '#8ea4b8' };
 /** The hour's look: 'auto' picks it from the sun where you are (sun.js), not from fixed hours. */
 export function timeOfDay(time, date = new Date(), place = placeFromZone()) {
   if (time !== 'auto') return TIMES[time] || time === 'midday' ? time : 'midday';
@@ -755,6 +757,14 @@ export function atmosphereFor(base, time = 'midday', weather = 'clear') {
   const t = { ...base, sky: [...base.sky], fog: [...base.fog] };
   const a = { t, sunY: 0.48, light: base.sun ? '#ffc48f' : '#fff2dc', lightI: base.sun ? 2.3 : 3.0, hemi: 0.8, exposure: 1.05,
     glow: null, disk: null, diskSize: null, dim: 1, night: false, rain: false, fogNear: LOW ? 120 : 150, fogFar: LOW ? 850 : 1500, showSun: true };
+  if (!T && base.sun) {
+    // a route painted at sunset (its own pink sky, orange light): at midday it gets a plain day instead,
+    // a blue sky, white light, and the far hills cooled from pink to a bluish haze
+    t.sky = [...MIDDAY.sky];
+    t.fog = mixRgb(base.fog, MIDDAY.fog, 0.8);
+    t.layers = base.layers.map((l) => (l.kind === 'sea' ? l : { ...l, base: mixHex(l.base, MIDDAY.haze, 0.55), top: mixHex(l.top, MIDDAY.haze, 0.55), ...(l.trees && { trees: { ...l.trees, color: mixHex(l.trees.color, '#2f4a3a', 0.6) } }) }));
+    Object.assign(a, { light: '#fff2dc', lightI: 3.0, glow: '#fff4dc', disk: '#fff5db', diskSize: 38 });
+  }
   if (T) {
     t.sky = [...T.sky];
     t.fog = mixRgb(base.fog, hexRgb(T.fog), T.fogMix);
