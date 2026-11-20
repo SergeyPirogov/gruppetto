@@ -351,6 +351,20 @@ test('a first visit: the welcome, then the lobby (not Devices); Ride goes in the
   await context.close();
 });
 
+test('the Ukrainian link: a Ukrainian preview, then the app in Ukrainian, the channel kept in the address', async () => {
+  const context = await browser.newContext({ serviceWorkers: 'block', locale: 'en-US' });
+  const page = await context.newPage();
+  await page.route(/goatcounter|gc\.zgo\.at|supabase/, (r) => r.abort());
+  const html = await (await fetch(APP + 'uk/')).text();
+  assert.match(html, /<meta property="og:title" content="Gruppetto — крути вдома/);
+  await page.goto(APP + 'uk/?utm_campaign=tg-test');
+  await page.waitForFunction(() => document.getElementById('btn-start')?.onclick);
+  assert.equal(new URL(page.url()).pathname, '/');
+  assert.equal(new URL(page.url()).search, '?utm_campaign=tg-test');
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'uk');
+  await context.close();
+});
+
 test('a first visit from a Ukrainian browser is in Ukrainian', async () => {
   const context = await browser.newContext({ serviceWorkers: 'block', locale: 'uk-UA' });
   const page = await context.newPage();
