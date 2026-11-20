@@ -1086,6 +1086,18 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 .ch-text small { color: var(--muted); }
 .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 640px) { .challenge-box { grid-template-columns: auto 1fr; } .ch-actions { grid-column: 1 / -1; } }
+.daily-box { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin-bottom: 14px; padding: 12px 16px; border-radius: 14px; background: linear-gradient(135deg, rgba(255, 122, 26, .16), rgba(47, 212, 240, .05)); border: 1px solid rgba(255, 122, 26, .45); }
+.daily-box[hidden] { display: none; }
+.daily-box.done { background: linear-gradient(135deg, rgba(34, 197, 94, .12), rgba(47, 212, 240, .04)); border-color: rgba(34, 197, 94, .4); }
+.dl-icon { font-size: 2rem; }
+.dl-text { display: grid; gap: 2px; }
+.dl-text small { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: .72rem; font-weight: 700; }
+.dl-text b { font-size: 1.05rem; color: #fff; }
+.dl-text span { color: var(--muted); font-size: .9rem; }
+.dl-actions { display: flex; gap: 8px; }
+.daily-box.done .dl-actions { display: none; }
+.earn-daily { border-color: rgba(255, 122, 26, .6); }
+@media (max-width: 640px) { .daily-box { grid-template-columns: auto 1fr; } .dl-actions { grid-column: 1 / -1; } }
 .sum-chart-head h2 small { text-transform: none; letter-spacing: 0; font-weight: 400; margin-left: 6px; color: var(--muted); }
 
 /* ---------- Lobby: the side column stays in view; the rider's week and latest rides under Ride ---------- */

@@ -1417,3 +1417,35 @@ test('a ride saved with no summary: its summary comes back from the samples, and
   assert.ok(got.badges.some((b) => b.id === 'climb1000'));
   assert.equal(addSummary(p1, { id: 'other', summary: sum }).progress.xp, 0); // a ride never counted is not this
 });
+
+test('the challenge of the day: one goal a day, the same everywhere, in turn; its progress; the streak', async () => {
+  const { dailyGoal, goalProgress, streakOf, markDone, localDay } = await import('../js/daily.js');
+  const routes = [
+    { id: 'rolling', name: 'Rolling Hills', climbs: [{ id: 'rolling-c1', name: "Shepherd's Rise" }, { id: 'rolling-s1', name: 'Sprint', sprint: true }] },
+    { id: 'mine', name: 'My GPX', custom: true, climbs: [{ id: 'x', name: 'X' }] },
+  ];
+  const a = dailyGoal('2026-11-20', routes), b = dailyGoal('2026-11-20', routes);
+  assert.deepEqual(a, b); // the same goal for the day, every time
+  const kinds = new Set(['2026-11-20', '2026-11-21', '2026-11-22'].map((d) => dailyGoal(d, routes).kind));
+  assert.deepEqual([...kinds].sort(), ['climb', 'km', 'min']); // three days, three kinds
+  for (let i = 0; i < 40; i++) {
+    const g = dailyGoal(`2026-12-${String((i % 28) + 1).padStart(2, '0')}`, routes);
+    if (g.kind === 'climb') { assert.equal(g.climbId, 'rolling-c1'); assert.equal(g.routeId, 'rolling'); } // no sprint, no GPX of yours
+  }
+  assert.ok(['km', 'min'].includes(dailyGoal('2026-11-20', []).kind)); // no climbs: still a goal
+  assert.equal(goalProgress({ kind: 'km', km: 10 }, { dist: 5000 }), 0.5);
+  assert.equal(goalProgress({ kind: 'km', km: 10 }, { dist: 12000 }), 1);
+  assert.equal(goalProgress({ kind: 'min', min: 20 }, { elapsed: 600 }), 0.5);
+  const climb = { kind: 'climb', routeId: 'rolling', climbId: 'rolling-c1' };
+  assert.equal(goalProgress(climb, { routeId: 'rolling', efforts: [{ segId: 'rolling-c1' }] }), 1);
+  assert.equal(goalProgress(climb, { routeId: 'rolling', efforts: [] }), 0);
+  assert.equal(goalProgress(climb, { routeId: 'coast', efforts: [{ segId: 'rolling-c1' }] }), 0);
+  assert.equal(streakOf([], '2026-11-20'), 0);
+  assert.equal(streakOf(['2026-11-18', '2026-11-19', '2026-11-20'], '2026-11-20'), 3);
+  assert.equal(streakOf(['2026-11-18', '2026-11-19'], '2026-11-20'), 2); // today still to ride: alive
+  assert.equal(streakOf(['2026-11-17', '2026-11-18'], '2026-11-20'), 0); // a day missed
+  assert.equal(streakOf(['2026-10-31', '2026-11-01'], '2026-11-01'), 2); // across a month
+  assert.deepEqual(markDone(['2026-11-20'], '2026-11-20'), ['2026-11-20']);
+  assert.equal(markDone(Array.from({ length: 60 }, (_, i) => `d${i}`), 'new').length, 60);
+  assert.match(localDay(new Date(2026, 0, 5, 23, 30)), /^2026-01-05$/); // local, not UTC
+});

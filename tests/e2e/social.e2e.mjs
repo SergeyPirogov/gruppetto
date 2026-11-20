@@ -314,6 +314,33 @@ test('a ride kept with no summary (the bug of 2026-11-20) gets it back from its 
   await context.close();
 });
 
+test('the challenge of the day: in the lobby, done in a ride with a toast, on the summary, and the streak', async () => {
+  const { page, context, errors } = await openApp({ config: false, local: { ...LOCAL, 'gruppetto.daily': { done: [] } } });
+  await page.waitForSelector('#daily-box:not([hidden])');
+  assert.match(await page.textContent('#dl-goal'), /Reach the top|Ride \d+ (km|minutes)/);
+  await page.click('#dl-ride');
+  if (!(await page.evaluate(() => window.__ride))) await page.click('#dl-ride'); // a climb: the route first, then ride
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  await page.evaluate(async () => { // today's goal, met: the distance, the time, the climb
+    const { dailyGoal, localDay } = await import('./js/daily.js');
+    const g = dailyGoal(localDay(), []);
+    const R = window.__ride; R.dist = 20000; R.prevDist = 20000; R.elapsed = Math.max(R.elapsed, 3000);
+    for (const c of R.route.climbs) R.efforts.push({ name: c.name, time: 60, segId: c.id, kind: 'climb' });
+    return g;
+  });
+  await page.waitForFunction(() => /Challenge of the day done/.test(document.getElementById('toast').textContent), null, { timeout: 10000 });
+  await page.evaluate(() => { const f = document.getElementById('btn-finish'); f.click(); f.click(); });
+  await page.waitForSelector('#summary:not([hidden])');
+  assert.match(await page.textContent('#sum-earned'), /Challenge of the day · 🔥 1 day in a row/);
+  const done = await page.evaluate(() => JSON.parse(localStorage.getItem('gruppetto.daily')).done);
+  assert.equal(done.length, 1);
+  await page.click('#btn-again');
+  assert.match(await page.textContent('#dl-streak'), /Done today/);
+  assert.equal(await page.isHidden('#dl-ride'), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
 test('a first visit: the welcome, then the lobby (not Devices); Ride goes in the simulator with no trainer', async () => {
   const { page, context, errors } = await openApp({ config: false });
   assert.equal(await page.isHidden('#drawer'), true);
