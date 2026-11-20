@@ -160,7 +160,7 @@ export const UK = {
   'START': 'Старт', 'FINISH': 'Фініш', 'START · FINISH': 'Старт · Фініш', 'TOP': 'Вершина',
   'Preparing the route…': 'Готую маршрут…',
   '3D graphics are not available in this browser. Using 2D': 'У цьому браузері немає 3D-графіки, показую 2D',
-  'Simulator mode: set power with the slider or ↑/↓': 'Режим симулятора: потужність задаєш повзунком або ↑/↓',
+  'Simulator mode: set power with the slider or ↑/↓': 'Режим симулятора: потужність задаєш повзунком або ↑/↓', 'Simulator mode: tap the screen for the power slider': 'Режим симулятора: торкнись екрана, щоб задати потужність',
   'Camera: drag to orbit, scroll to zoom, double-click to reset': 'Камера: тягни, щоб покрутити, коліщатко для масштабу, подвійний клік, щоб скинути',
   'Camera: chase': 'Камера: ззаду', "Camera: rider's eyes": 'Камера: очима райдера', 'Camera: front view': 'Камера: спереду', 'Next camera': 'Наступна камера',
   "Camera: chase · rider's eyes · isometric · over the shoulder · front": 'Камера: ззаду · очима · ізометрія · через плече · спереду',
