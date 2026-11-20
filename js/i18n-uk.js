@@ -601,4 +601,10 @@ export const UK = {
   'The trainer holds the power': 'Станок тримає потужність',
   // ---- brevets: one long route at a time ----
   'One route over {n} km is kept at a time. Replace “{name}” with this one?': 'Маршрут понад {n} км зберігається лише один. Замінити «{name}» на цей?',
+
+  // ---- the lag log ----
+  'Show FPS': 'Показувати FPS', 'Frames per second on the ride screen': 'Кадри за секунду на екрані заїзду',
+  "Copy the last ride's lag log": 'Скопіювати лог лагів останнього заїзду',
+  "The last ride's frame rate, every 10 s, and this device's graphics card: paste it to us when a ride lags": 'Частота кадрів останнього заїзду кожні 10 с і відеокарта цього пристрою: надішли нам, коли заїзд лагає',
+  'Copied: paste it in a message to us': 'Скопійовано: встав у повідомлення нам', 'Could not copy': 'Не вдалося скопіювати',
 };

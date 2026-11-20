@@ -950,6 +950,14 @@ export class Scene3D {
     if (this.post) this._setupPost();
   }
 
+  /** The graphics card's name as the browser gives it (the lag log), or null where it is hidden. */
+  gpuName() {
+    try {
+      const gl = this.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+      return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    } catch { return null; }
+  }
+
   /** Device pixels per CSS pixel: the screen's, up to 2, times the adaptive quality scale. */
   _pixelRatio() {
     return Math.max(LOW ? 0.6 : 0.6, Math.min(window.devicePixelRatio || 1, LOW ? 1.25 : 2) * (this.quality ?? 1) * (this.qualityCap ?? 1));
@@ -3097,15 +3105,16 @@ export class Scene3D {
     for (const [k, g] of this.chunks) if (k < c - BEHIND || k > c + this._ahead()) { this._dispose(g); this.chunks.delete(k); }
     // build the nearest missing chunk first, at most two per frame while riding
     let built = 0;
+    this.lastBuilds = 0;
     const budget = this.warming ? Infinity : 2; // behind the loading screen: the whole stretch at once
     for (let k = c - BEHIND; k <= c + this._ahead() && built < budget; k++) {
       if (!this.chunks.has(k)) {
-        const g = this._buildChunk(k); this._csmMaterials(g); this.chunks.set(k, g); built++;
+        const g = this._buildChunk(k); this._csmMaterials(g); this.chunks.set(k, g); built++; this.lastBuilds++;
         // a chunk built before this one, beside which this one's road runs, held its land back for it: now it has it
         // to hold back for, and was built without (land over this chunk's road): build it again
         for (const [j, h] of this.chunks) {
           if (j === k || !h.userData.pending?.has(k)) continue;
-          this._dispose(h); const g2 = this._buildChunk(j); this._csmMaterials(g2); this.chunks.set(j, g2);
+          this._dispose(h); const g2 = this._buildChunk(j); this._csmMaterials(g2); this.chunks.set(j, g2); this.lastBuilds++;
         }
       }
     }
@@ -3127,8 +3136,10 @@ export class Scene3D {
 
   render(route, dist, riders, dtDist) {
     if (route.id !== this.routeId) this._setup(route);
+    const t0 = performance.now();
     this._updateChunks(dist);
     const now = performance.now();
+    this.buildMs = this.lastBuilds ? now - t0 : 0; // the road and its scenery built this frame (the lag log)
     const dt = this.lastFrameTime === undefined ? 0 : Math.min(0.1, (now - this.lastFrameTime) / 1000);
     this.lastFrameTime = now;
     this.clock += dt;
