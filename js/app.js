@@ -58,7 +58,7 @@ const DEFAULT_SETTINGS = {
   chainring: 34, cog: 14, shiftMode: 'wheel', graphics: '3d',
   ctlMap: {}, // the Zwift controller buttons you changed (js/controls.js CTL_LAYOUT); the rest keep the Zwift default
   jersey: '#16a0a8', stripe: '#ff8a1f', bikeColor: '', tapeColor: '#141416', decalColor: '', helmetColor: '#f2f2f2', lensColor: '#1c2230', figure: 'male',
-  intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: false, voice: false, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
+  intensity: 100, powerAvg: 3, hudLayout: '', summaryLayout: '', shiftButtons: true, sound: true, voice: true, crowd: true, pacer: false, pacerName: 'Pacer', freePacer: false, freePacerWkg: 2.5, bots: 5, attacks: true, ghost: 'off', style: 'cartoon', camera: 'chase', timeOfDay: 'midday', weather: 'clear', wind: 'light',
 };
 let settings = { ...DEFAULT_SETTINGS };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('powerup.settings') || '{}')); } catch { /* storage unavailable */ }
@@ -69,6 +69,11 @@ window.addEventListener('error', (ev) => track('error', String(ev.message || 'un
 // the workout pacer used to start switched on: once, switch it off (P or the Pacer button brings him back)
 if (!settings.pacerOffByDefault) {
   settings.pacer = false; settings.pacerOffByDefault = true;
+  try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ }
+}
+// workout sounds and voice used to start switched off, so few ever heard an interval's countdown: once, on
+if (!settings.soundOnByDefault) {
+  settings.sound = settings.voice = true; settings.soundOnByDefault = true;
   try { localStorage.setItem('powerup.settings', JSON.stringify(settings)); } catch { /* ignore */ }
 }
 // ?debug: reach the current ride from devtools (jump along the route when testing laps and climbs)
