@@ -1591,6 +1591,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px sol
 }
 @media (max-width: 760px) { .shift-btn { width: 56px; height: 56px; font-size: 30px; } .shifters { top: 58%; } }
 #ride.hud-hidden .shifters { display: none; }
+/* beside the right column, not over it: at the edge they covered the riders ahead (the column is 204 px wide, 16 px
+   in); on a phone and in a short window that column has no list of riders, and they stay at the edge */
+@media (min-width: 761px) and (min-height: 521px) { .shifters { right: calc(max(16px, env(safe-area-inset-right, 0px)) + 204px + 14px); } }
 .g-hand { display: block; margin-top: 4px; color: var(--muted); }
 
 /* ---------- signing in: the first visit's welcome, a guest's locks, the signed-in header and day ---------- */

@@ -438,17 +438,20 @@ function buildModels(theme) {
     g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
     M.grassClump = g;
   }
-  // a block of flats for buildings of four floors and more: 8 × 6 m, 3 m a floor (scaled by floors)
+  // a block of flats for buildings of four floors and more: 8 × 6 m, one 3 m floor of it, stacked floor by floor
+  // (one floor stretched to the whole height made each window a strip from the ground to the roof), and its flat roof
+  M.blockRoof = merge([{ geom: new THREE.BoxGeometry(8.3, 0.25, 6.3), color: '#8b8f96', pos: [0, 0.05, 0], flat: true }]);
   M.block = merge([
     { geom: new THREE.BoxGeometry(8, 3, 6), color: '#d9d2c5', pos: [0, 1.5, 0], flat: true },
-    { geom: new THREE.BoxGeometry(8.3, 0.25, 6.3), color: '#8b8f96', pos: [0, 3.05, 0], flat: true },
     ...[-2.6, 0, 2.6].map((x) => ({ geom: new THREE.BoxGeometry(1.3, 1.1, 0.08), color: '#9cc3d8', pos: [x, 1.6, 3.02], flat: true })),
     ...[-2.6, 0, 2.6].map((x) => ({ geom: new THREE.BoxGeometry(1.3, 1.1, 0.08), color: '#9cc3d8', pos: [x, 1.6, -3.02], flat: true })),
   ]);
   // a house for imported routes' buildings: 8 m wide, 6 m deep, walls and a pitched roof
   M.house = merge([
     { geom: new THREE.BoxGeometry(8, 4.6, 6), color: '#ece3d2', pos: [0, 2.3, 0], flat: true },
-    { geom: new THREE.CylinderGeometry(4.6, 4.6, 8.6, 3), color: '#b5543a', pos: [0, 4.6, 0], rot: [0, 0, Math.PI / 2], scale: [1, 1, 0.78], flat: true },
+    // a gable roof with eaves past the walls (a 3-sided cylinder turned on its side had its ridge pointing sideways:
+    // roofs like bow ties, cutting the walls on the slant)
+    { geom: gable(8.8, 7.0, 2.6), color: '#b5543a', pos: [0, 4.6, 0], flat: true },
     { geom: new THREE.BoxGeometry(1.0, 1.7, 0.08), color: '#6b4a32', pos: [1.6, 0.85, 3.02], flat: true },
     { geom: new THREE.BoxGeometry(1.2, 1.0, 0.08), color: '#9cc3d8', pos: [-1.8, 2.4, 3.02], flat: true },
   ]);
@@ -1953,11 +1956,52 @@ export class Scene3D {
     // the land: under the other road, 0.3 m below it within 1.5 m of its edge
     const pos = terrain.geometry.attributes.position;
     let moved = false;
-    for (let i = 0; i < rows * nc; i++) {
+    if (near.others) for (let i = 0; i < rows * nc; i++) {
       const o = near(pos.getX(i), pos.getZ(i));
       if (o && o.dist < ROAD_HALF + 1.5 && pos.getY(i) > o.y - 0.3) { pos.setY(i, o.y - 0.3); moved = true; }
     }
+    // the land's triangles: away from the road the grid is coarse (columns 20 to 100 m apart, rows 5 m), so the
+    // other stretch can cross a triangle with no vertex within reach of it, and the triangle stays over its asphalt
+    // (a hairpin's other leg, a road coming back beside this one). Every point of that road, across it from edge to
+    // edge, is found in the triangle it falls in, and the triangle goes down till it is under the road there
+    // (the own stretch, by `own`, only against land 10 m out and more: in a hard bend the far columns fold back over
+    // it, while the land right beside it is its verge and stays)
+    const index = terrain.geometry.index.array, tris = [], B = 20, buckets = new Map();
+    for (let t = 0; t < index.length; t += 3) {
+      const [a, b, c] = [index[t], index[t + 1], index[t + 2]];
+      const xa = pos.getX(a), za = pos.getZ(a), xb = pos.getX(b), zb = pos.getZ(b), xc = pos.getX(c), zc = pos.getZ(c);
+      const det = (zb - zc) * (xa - xc) + (xc - xb) * (za - zc);
+      if (Math.abs(det) < 1e-6) continue;
+      const far = Math.min(...[a, b, c].map((v) => Math.abs(COLS[v % nc]))) >= 10;
+      const T = [a, b, c, Math.min(xa, xb, xc), Math.max(xa, xb, xc), Math.min(za, zb, zc), Math.max(za, zb, zc), det, far];
+      tris.push(T);
+      for (let i = Math.floor(T[3] / B); i <= Math.floor(T[4] / B); i++) for (let j = Math.floor(T[5] / B); j <= Math.floor(T[6] / B); j++) {
+        const key = i * 100003 + j;
+        (buckets.get(key) || buckets.set(key, []).get(key)).push(T);
+      }
+    }
+    const edge = ROAD_HALF + 1;
+    for (const [px, pz, py, s, own] of near.points) {
+      const f = this.frame(s);
+      // across the road every metre or so: far out the triangles are slivers (100 m long, a few wide) that slip
+      // between samples farther apart
+      for (let li = 0; li <= 8; li++) {
+        const lat = -edge + li * edge / 4;
+        const x = px + f.rx * lat, z = pz + f.rz * lat, target = py - 0.3;
+        for (const [a, b, c, x0, x1, z0, z1, det, far] of buckets.get(Math.floor(x / B) * 100003 + Math.floor(z / B)) || []) {
+          if ((own && !far) || x < x0 || x > x1 || z < z0 || z > z1) continue;
+          const xc = pos.getX(c), zc = pos.getZ(c);
+          const wa = ((pos.getZ(b) - zc) * (x - xc) + (xc - pos.getX(b)) * (z - zc)) / det;
+          const wb = ((zc - pos.getZ(a)) * (x - xc) + (pos.getX(a) - xc) * (z - zc)) / det;
+          const wc = 1 - wa - wb;
+          if (wa < -1e-4 || wb < -1e-4 || wc < -1e-4) continue;
+          const h = wa * pos.getY(a) + wb * pos.getY(b) + wc * pos.getY(c);
+          if (h > target) { const dh = h - target; for (const v of [a, b, c]) pos.setY(v, pos.getY(v) - dh); moved = true; }
+        }
+      }
+    }
     if (moved) { pos.needsUpdate = true; terrain.geometry.computeVertexNormals(); }
+    if (!near.others) return;
     // the things: each instance's middle, with half its size around it
     const m = new THREE.Matrix4(), c = new THREE.Vector3(), sc = new THREE.Vector3(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
     group.traverse((im) => {
@@ -1976,6 +2020,20 @@ export class Scene3D {
       }
       if (hid) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere?.(); }
     });
+    // a fence: post i carries rails 2i and 2i+1. A rail is long and goes near the other road before its post does:
+    // with both its rails gone the post goes too (posts stood alone in the grass), and the rails with their post
+    let posts, rails;
+    group.traverse((im) => { if (im.isInstancedMesh && im.geometry === this.models.post) posts = im; if (im.isInstancedMesh && im.geometry === this.models.rail) rails = im; });
+    if (posts && rails && rails.count === posts.count * 2) {
+      const gone = (im, i) => { im.getMatrixAt(i, m); sc.setFromMatrixScale(m); return !sc.x; };
+      let hid = 0;
+      for (let i = 0; i < posts.count; i++) {
+        const p = gone(posts, i), r0 = gone(rails, 2 * i), r1 = gone(rails, 2 * i + 1);
+        if (p === r0 && r0 === r1) continue;
+        if (p || (r0 && r1)) { posts.setMatrixAt(i, zero); rails.setMatrixAt(2 * i, zero); rails.setMatrixAt(2 * i + 1, zero); hid++; }
+      }
+      if (hid) { posts.instanceMatrix.needsUpdate = rails.instanceMatrix.needsUpdate = true; posts.computeBoundingSphere?.(); rails.computeBoundingSphere?.(); }
+    }
   }
 
   /**
@@ -1988,15 +2046,26 @@ export class Scene3D {
     const loopLen = this.route.oneWay ? 0 : this.route.length, R = 14, reach = COLS[COLS.length - 1] + R;
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const f of frames) { x0 = Math.min(x0, f.x); x1 = Math.max(x1, f.x); z0 = Math.min(z0, f.z); z1 = Math.max(z1, f.z); }
-    const near = new RoadGrid(R);
+    const near = new RoadGrid(R), points = [], d0 = a0 * SEG, d1 = (a0 + frames.length - 1) * SEG;
     this._roadGrid().inBox(x0 - reach, z0 - reach, x1 + reach, z1 + reach, (bx, bz, by, s) => {
       let r = 0, bd = Infinity; // the chunk's row nearest to this road point
       for (let i = 0; i < frames.length; i++) { const d = (frames[i].x - bx) ** 2 + (frames[i].z - bz) ** 2; if (d < bd) { bd = d; r = i; } }
-      if (isOwnStretch((a0 + r) * SEG, s, Math.sqrt(bd), loopLen)) return; // the chunk's own stretch
+      if (isOwnStretch((a0 + r) * SEG, s, Math.sqrt(bd), loopLen)) {
+        // the chunk's own stretch, but past its ends and out of its rows' way: the road turning hard just past the
+        // chunk runs into the land beside the chunk's last rows (that land lay over it); only the land is kept off it
+        // and anywhere along it, the land far out (10 m and more) folding back over it in a hard bend
+        const w = loopLen ? ((s - d0) % loopLen + loopLen) % loopLen + d0 : s;
+        points.push([bx, bz, by, s, !((w < d0 || w > d1) && bd > 25)]);
+        return;
+      }
       near.add(bx, bz, by, s);
+      points.push([bx, bz, by, s, false]);
     });
-    if (!near.size) return null;
-    return (x, z) => { const o = near.nearest(x, z, R); return o && { dist: o.dist, y: o.y, b: o.s / SEG }; };
+    if (!near.size && !points.length) return null;
+    const lookup = near.size ? (x, z) => { const o = near.nearest(x, z, R); return o && { dist: o.dist, y: o.y, b: o.s / SEG }; } : () => null;
+    lookup.others = near.size; // 0: only the own stretch's points, for the land's triangles; nothing else to clear
+    lookup.points = points; // every point of the other stretches (and of the own one past the chunk's ends), for the land's triangles
+    return lookup;
   }
 
 
@@ -2072,6 +2141,12 @@ export class Scene3D {
       return e;
     });
     const rockyRow = frames.map((_, r) => this._rocky((a0 + r) * SEG)); // 0 on the flat, up to 1 on a steep climb
+    // a lake or a wide river is level: one height for the water along 200 m each way, the lowest the road comes there
+    // less 1.3 m (it was 1.3 m under the road row by row, so a lake beside a climb rose up the hill with it)
+    const WR = 40, roadYs = [];
+    if (this.land) for (let r = -WR; r < rows + WR; r++) roadYs.push(r >= 0 && r < rows ? frames[r].y : this._roadY((a0 + r) * SEG));
+    const waterY = this.land ? frames.map((_, r) => Math.min(...roadYs.slice(r, r + 2 * WR + 1)) - 1.3) : [];
+    const wet = [];
     for (let r = 0; r < rows; r++) {
       const f = frames[r];
       heights.push([]);
@@ -2090,14 +2165,17 @@ export class Scene3D {
         // over a tunnel the hill rises 11 m above the road and slopes away beyond 12 m out
         if (inTunnel((a0 + r) * SEG)) y = Math.max(y, f.y + TUNNEL_HILL - Math.max(0, Math.abs(o) - 12) * 0.28);
         const lc = this.land ? this._landAt(a0 + r, o) : '.';
-        if (lc === 'w') y = Math.min(y, f.y - 1.3); // a lake or a wide river: flat, a little below the road
+        if (lc === 'w') y = Math.min(y, waterY[r] - 0.5); // the bed of a lake or a wide river, under its level surface
+        wet[r * nc + k] = lc === 'w';
         // between two stretches of the same road the land slopes to meet halfway, at the mean height
         if (oy !== null && oy !== undefined) {
           const mid = (f.y + oy) / 2;
           // past: the land goes on, sloping down under the other road's far side, so no pale gap shows where that stretch's own land is not built yet
           y = past ? Math.min(mid, oy) - 1.2 - Math.max(0, Math.abs(o) - reach[r].to[sd]) * 0.06 : this._terrainY(f.y + (mid - f.y) * smooth(ROAD_HALF + 1, lim, Math.abs(o)), o, x, z, dd, gk);
         }
-        if (ao < 5) y -= chord[r] * 2.5; // under the road (the cell's edge columns, 4.3 m out)
+        // under the road (the cell's edge columns, 4.3 m out): never above the asphalt, or a hillside rising right
+        // beside the road shows its grass through the road's edge
+        if (ao < 5) y = inTunnel((a0 + r) * SEG) ? y - chord[r] * 2.5 : Math.min(y - chord[r] * 2.5, f.y - 0.1);
         heights[r].push(y);
         const i = (r * nc + k) * 3;
         pos[i] = x; pos[i + 1] = y; pos[i + 2] = z;
@@ -2106,7 +2184,7 @@ export class Scene3D {
         if (Math.abs(o) < 8) cc = verge.clone();
         if (g > 0.6) cc = cc.lerp(col('#6f6551'), (g - 0.6) * 2.2); // the stream's muddy banks
         if (lc === 'f') cc.multiplyScalar(0.72);
-        if (lc === 'w') cc = waterC.clone().lerp(cc, vnoise(x / 40, z / 40) * 0.08);
+        if (lc === 'w') cc = col('#6f6551').lerp(cc, 0.35); // the bed and the shore under the water's surface
         const rel = y - f.y;
         if (T3c.rock && rel > T3c.rock) cc = rockC.clone().lerp(cc, 0.3);
         // a steep climb's mountainside is bare rock, more the higher it rises above the road
@@ -2136,6 +2214,25 @@ export class Scene3D {
     const terrain = new THREE.Mesh(tg, this.mat);
     terrain.receiveShadow = true;
     group.add(terrain);
+    // the water's surface: flat over each cell with three wet corners or four; the shore is where it meets the land
+    if (wet.some(Boolean)) {
+      const wp = [];
+      for (let r = 0; r < rows - 1; r++) for (let k = 0; k < nc - 1; k++) {
+        const q = [r * nc + k, r * nc + k + 1, (r + 1) * nc + k, (r + 1) * nc + k + 1];
+        if (q.filter((i) => wet[i]).length < 3) continue;
+        const v = (i) => [pos[i * 3], waterY[Math.floor(i / nc)], pos[i * 3 + 2]];
+        wp.push(...v(q[0]), ...v(q[1]), ...v(q[2]), ...v(q[1]), ...v(q[3]), ...v(q[2]));
+      }
+      if (wp.length) {
+        const wg = new THREE.BufferGeometry();
+        wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+        wg.computeVertexNormals();
+        this.lakeMat ||= new THREE.MeshLambertMaterial({ color: waterC, side: THREE.DoubleSide });
+        const lake = new THREE.Mesh(wg, this.lakeMat);
+        lake.receiveShadow = true;
+        group.add(lake);
+      }
+    }
     this._bridges(group, a0, rows);
     this._tunnels(group, a0, rows);
 
@@ -2426,9 +2523,13 @@ export class Scene3D {
         // hill uphill rather than hanging over it downhill
         const hf = size / 2, dr = Math.round(hf / SEG), rr = (k) => Math.max(0, Math.min(rows - 1, k));
         const ground = Math.min(heightAt(r, o), ...[-1, 1].flatMap((sr) => [-1, 1].map((so) => heightAt(rr(r + sr * dr), o + so * hf))));
-        const m = new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * o, ground - 0.2, f.z + f.rz * o),
-          q.setFromAxisAngle(up, -f.h - ang), new THREE.Vector3(s, sy, s));
-        put(tall ? 'block' : kind, m);
+        q.setFromAxisAngle(up, -f.h - ang);
+        const at = (y, syy) => new THREE.Matrix4().compose(new THREE.Vector3(f.x + f.rx * o, ground - 0.2 + y, f.z + f.rz * o), q, new THREE.Vector3(s, syy, s));
+        if (tall) {
+          const nf = Math.min(40, Math.round(floors));
+          for (let i = 0; i < nf; i++) put('block', at(i * 3, 1));
+          put('blockRoof', at(nf * 3, 1));
+        } else put(kind, at(0, sy));
       }
     }
 
