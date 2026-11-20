@@ -1382,3 +1382,15 @@ test('an ordinary climbing cadence (65-70 rpm) keeps the rider seated', () => {
   assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 68 }, 2), false);
   assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 60 }, 0.5), true);
 });
+
+test('language of a first visit: Ukrainian for a Ukrainian browser, or a Russian one on Kyiv time; else English', async () => {
+  const { pickLang } = await import('../js/i18n.js');
+  assert.equal(pickLang(['uk-UA', 'en']), 'uk');
+  assert.equal(pickLang(['en-US', 'uk']), 'uk'); // Ukrainian anywhere in the list
+  assert.equal(pickLang(['ru-RU'], 'Europe/Kyiv'), 'uk');
+  assert.equal(pickLang(['ru'], 'Europe/Kiev'), 'uk'); // the old name of the zone
+  assert.equal(pickLang(['ru-RU'], 'Europe/Moscow'), 'en');
+  assert.equal(pickLang(['en-US'], 'Europe/Kyiv'), 'en'); // a chosen English stays English
+  assert.equal(pickLang(['pl-PL'], 'Europe/Warsaw'), 'en');
+  assert.equal(pickLang([], ''), 'en');
+});

@@ -1591,10 +1591,12 @@ function initDrawer() {
   });
   $('wk-detail').addEventListener('click', (e) => { if (e.target.closest('[data-wkd-close]')) closeWorkoutDetail(); });
   $('wk-menu').addEventListener('click', (e) => { if (e.target.closest('[data-wk-close]')) closeWorkoutMenu(); });
-  // first visit with nothing to ride on: the welcome (a guest at once, or signed in), then the devices
+  // first visit: the welcome (a guest at once, or signed in), then the lobby itself. Not the Devices page: most
+  // first visitors have no trainer by them (a phone, a look first), and Ride works without one, in the simulator;
+  // the header's + Trainer chips are one tap away for those who have
   if (!trainer.connected && !$('sim').checked && !localStorage.getItem('powerup-seen-drawer')) {
     try { localStorage.setItem('powerup-seen-drawer', '1'); } catch { /* private mode */ }
-    if (socialOn() && !localStorage.getItem(WELCOME_KEY) && !history.length) showWelcome(() => open('devices')); else open('devices');
+    if (socialOn() && !localStorage.getItem(WELCOME_KEY) && !history.length) showWelcome(() => {});
   }
 }
 

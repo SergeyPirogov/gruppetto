@@ -283,6 +283,26 @@ test('a finished ride keeps its numbers: time, distance and power on the finish 
   await context.close();
 });
 
+test('a first visit: the welcome, then the lobby (not Devices); Ride goes in the simulator with no trainer', async () => {
+  const { page, context, errors } = await openApp({ config: false });
+  assert.equal(await page.isHidden('#drawer'), true);
+  await page.click('#btn-start');
+  await page.waitForFunction(() => window.__ride && !document.getElementById('ride').hidden);
+  assert.equal(await page.evaluate(() => window.__ride.simulated), true);
+  assert.deepEqual(errors, []);
+  await context.close();
+});
+
+test('a first visit from a Ukrainian browser is in Ukrainian', async () => {
+  const context = await browser.newContext({ serviceWorkers: 'block', locale: 'uk-UA' });
+  const page = await context.newPage();
+  await page.route(/goatcounter|gc\.zgo\.at|supabase/, (r) => r.abort());
+  await page.goto(APP + '?debug');
+  await page.waitForFunction(() => document.getElementById('btn-start')?.onclick);
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'uk');
+  await context.close();
+});
+
 test('a ride with power: its sprint goes to the table and the finish screen shows the place', async () => {
   const mock = mockSupabase({ profile: PROFILE() });
   const { page, context, errors } = await openApp({ mock, local: LOCAL, signedIn: true });
