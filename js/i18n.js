@@ -1,13 +1,28 @@
-// Interface language (#31): English (default) or Ukrainian. English text is the key; a missing translation
+// Interface language (#31): English or Ukrainian, picked from the browser until chosen in Profile. English text is the key; a missing translation
 // falls back to English. The language is fixed for the page's life: switching saves it and reloads.
 import { UK } from './i18n-uk.js';
 
 const KEY = 'gruppetto.lang';
 export const LANGS = [{ id: 'en', name: 'English' }, { id: 'uk', name: 'Українська' }];
 
+/**
+ * The language a first visit gets, before one is chosen in Profile: Ukrainian for a browser in Ukrainian, or in
+ * Russian on a clock set to Kyiv (most riders come from Ukraine); English for everyone else.
+ */
+export function pickLang(languages = [], timeZone = '') {
+  const codes = languages.map((l) => String(l).toLowerCase().slice(0, 2));
+  if (codes.includes('uk')) return 'uk';
+  if (codes.includes('ru') && /^Europe\/(Kyiv|Kiev|Zaporozhye|Uzhgorod|Simferopol)$/.test(timeZone)) return 'uk';
+  return 'en';
+}
+
 export const lang = (() => {
   try { const v = localStorage.getItem(KEY); if (v === 'en' || v === 'uk') return v; } catch { /* storage blocked */ }
-  return 'en'; // English unless chosen in Profile
+  let tz = '';
+  try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* no Intl */ }
+  // not a page (the tests in Node): English
+  const langs = typeof window === 'undefined' ? [] : (navigator.languages?.length ? navigator.languages : [navigator.language || '']);
+  return pickLang(langs, tz);
 })();
 const dict = lang === 'uk' ? UK : {};
 
