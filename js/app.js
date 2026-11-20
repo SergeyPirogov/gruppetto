@@ -8,6 +8,7 @@ import { routes, Route, ROUTE_GROUPS, SEG } from './routes.js';
 import { parseGpx, routeFromTrack } from './gpx.js';
 import { loadTerrain } from './dem.js';
 import { fetchOsm } from './osm.js';
+import { PerfLog } from './perf.js';
 import { t as tr, tIn, lang, locale, plural, setLang, LANGS, translateDom } from './i18n.js';
 import { WORKOUT_KINDS, workouts, targetAt, totalDuration, stepWatts, zoneColor, powerZone, workoutStats, POWER_ZONES } from './workouts.js';
 import { rideIntervals, timeInZones, hrZonesBpm } from './analysis.js';
@@ -2186,6 +2187,48 @@ function crowdLevel() {
   return best;
 }
 
+// ---------- the lag log: how smooth the ride ran here, to send when it lagged ----------
+const PERF_KEY = 'gruppetto.perf-last';
+const fpsOn = () => settings.fps || new URLSearchParams(location.search).has('fps');
+/** One drawn frame: into the ride's log, and the corner counter (twice a second) when it is on. */
+function perfFrame(t0, t1) {
+  const P = ride.perfLog ||= { log: new PerfLog(), last: 0, t: t0, n: 0, show: 0 };
+  const gap = P.last ? t0 - P.last : 0;
+  P.last = t0;
+  P.log.frame((t0 - P.t) / 1000, gap, t1 - t0, scene.buildMs || 0, scene.lastBuilds || 0,
+    { q: Math.round((scene._pixelRatio?.() ?? 0) * 100) / 100 || undefined, km: Math.round(ride.dist / 100) / 10 });
+  const hud = $('fps-hud');
+  if (!fpsOn()) { hud.hidden = true; return; }
+  P.n++;
+  if (t0 - P.show < 500) return;
+  const fps = (P.n * 1000) / (t0 - P.show || 1), w = P.log.w;
+  hud.textContent = `${Math.round(fps)} fps · ${Math.round(t1 - t0)} ms · worst ${Math.round(w.worst)} ms`;
+  hud.hidden = false; P.show = t0; P.n = 0;
+}
+/** At the ride's end: the log, with this device and its graphics, for "Copy the last ride's lag log". */
+function savePerf() {
+  const L = ride.perfLog?.log;
+  if (!L) return;
+  L._close(L.w.t0 + 1e-9);
+  const env = { when: new Date().toISOString().slice(0, 16), route: `${ride.route.name} (${(ride.route.length / 1000).toFixed(1)} km)`,
+    gpu: scene?.gpuName?.(), quality: settings.quality, screen: `${screen.width}x${screen.height} @${devicePixelRatio}`,
+    window: `${innerWidth}x${innerHeight}`, riders: ride.bots.length + (ride.group ? ride.group.mates.list(Date.now()).length : 0), agent: navigator.userAgent };
+  try { localStorage.setItem(PERF_KEY, L.report(env)); } catch { /* full or private mode: the log is only for sending */ }
+  $('btn-perf-copy').disabled = false;
+}
+$('f-fps').checked = !!settings.fps;
+$('f-fps').onchange = () => { settings.fps = $('f-fps').checked; saveSettings(); };
+try { $('btn-perf-copy').disabled = !localStorage.getItem(PERF_KEY); } catch { /* private mode */ }
+$('btn-perf-copy').onclick = async () => {
+  let text = '';
+  try { text = localStorage.getItem(PERF_KEY) || ''; } catch { /* private mode */ }
+  if (!text) return;
+  const b = $('btn-perf-copy'), was = b.textContent;
+  try { await navigator.clipboard.writeText(text); b.textContent = `✓ ${tr('Copied: paste it in a message to us')}`; }
+  catch { b.textContent = tr('Could not copy'); }
+  setTimeout(() => { b.textContent = was; }, 2500);
+};
+
 function frame(now) {
   if (!ride) return;
   advance(now);
@@ -2221,7 +2264,9 @@ function frame(now) {
   $('pip-rest').hidden = !inPip;
   $('ride').classList.toggle('resting', inPip); // the numbers are in the mini window: the board here goes too
   if (inPip) { ride.moved = 0; requestAnimationFrame(frame); return; }
+  const t0 = performance.now();
   scene.render(ride.route, ride.dist, riders, ride.moved);
+  perfFrame(t0, performance.now());
   ride.moved = 0;
   // the ghost's gap rides over your head, where the bots carry their names
   const tag = $('ghost-tag'), at = scene.selfScreen;
@@ -3287,6 +3332,7 @@ function finishRide() {
   });
   const socialSim = ride.simulated && !window.__pretendTrainer;
   const socialTimed = !ride.route.custom && (ride.lapEfforts.length + ride.efforts.length) > 0;
+  savePerf();
   ride.group?.live?.leave();
   chatOpen(false); $('chat-box').hidden = true;
   const socialFirst = ride.efforts.find((x) => socialItems.some((i) => i.segment_id === x.segId))?.name.replace(/^\S+\s/, '') || ride.route.name;

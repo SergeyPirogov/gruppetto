@@ -362,6 +362,8 @@
                 <option value="high" data-short="High">High: glow and color grading</option>
               </select>
             </label>
+            <label class="check set-toggle"><input type="checkbox" id="f-fps"><span class="st-text"><b>Show FPS</b><small>Frames per second on the ride screen</small></span></label>
+            <button type="button" class="pill-btn" id="btn-perf-copy" disabled title="The last ride's frame rate, every 10 s, and this device's graphics card: paste it to us when a ride lags">Copy the last ride's lag log</button>
           </div>
           <div class="set-box">
             <h3>Dashboard</h3>
@@ -596,6 +598,7 @@
 
   <!-- ===== Ride ===== -->
   <section id="ride" class="screen" hidden>
+    <div id="fps-hud" class="fps-hud" hidden aria-hidden="true"></div>
     <canvas id="scene"></canvas>
     <!-- the mini window is open: the road rests, the ride goes on -->
     <div id="pip-rest" class="pip-rest" hidden><b>Riding in the mini window</b><small>The road is paused to keep your computer cool. Your ride continues.</small><button id="pip-show-road" class="pill-btn">Show the road</button></div>
