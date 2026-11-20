@@ -27,6 +27,7 @@ import { placeFromZone, phasesOfDay, sunAt, phaseOf } from './sun.js';
 import { overlayStart, overlayStop, overlayOn, overlaySend } from './overlay.js';
 import { initStats, stopStats, track, minutesBucket, rideMilestone } from './stats.js';
 import { BADGES, addRide, addSummary, progressFrom, levelOf } from './progress.js';
+import { dailyGoal, goalProgress, streakOf, markDone, localDay } from './daily.js';
 import { encodeChallenge, decodeChallenge, challengeIn } from './challenge.js';
 import { averages, rideItems, categoryOf, stampChanged, rideTotal } from './social-core.js';
 import { CLIENT as SOCIAL_CLIENT } from './social.js';
@@ -2632,6 +2633,7 @@ function tick(power, cadence, hr) {
     altitude: elev, elevationGain: ride.gain,
     target: onPlan ? ride.target : null, step: onPlan ? ride.stepIndex ?? null : null, // the plan, for the summary
   });
+  dailyTick();
 
   ride.powerHist.push(power);
   if (ride.powerHist.length > 10) ride.powerHist.shift(); // up to the longest average the board can show
@@ -3378,8 +3380,9 @@ function finishRide() {
   keepAwake(false);
   crowdOff();
   const sum = recorder.summary();
+  const dailyStreak = ride.dailyStreak || 0;
   const ghostGap = ride.ghost ? Math.round(ride.dist - ride.ghost.dist) : null;
-  lastRide = { race: raceResults(), raceLaps: ride.race?.laps, groupRace: ride.group && ride.race ? { id: ride.group.id, title: ride.group.title, sent: ride.group.sent || null } : null, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
+  lastRide = { race: raceResults(), raceLaps: ride.race?.laps, groupRace: ride.group && ride.race ? { id: ride.group.id, title: ride.group.title, sent: ride.group.sent || null } : null, workout: ride.workout, intensity: settings.intensity, route: ride.route, summary: sum, daily: dailyStreak, uploadedId: null, lapTimes: ride.lapTimes, splits: ride.splits, efforts: ride.efforts, ramp: !!ride.workout?.ramp, ghostGap, ghostName: ride.ghost?.name };
   // the ride's laps, climbs and sprints for the leaderboards (a real ride on a built-in route only)
   const socialItems = ride.route.custom ? [] : rideItems({
     route: ride.route, version: versionOf(ride.route), simulated: ride.simulated && !window.__pretendTrainer,
@@ -3452,7 +3455,7 @@ function historyEntry(r, samples) {
     id: `r${Date.now()}`, date: new Date().toISOString(), routeId: r.route?.id, routeName: r.route?.name,
     workoutName: r.workout?.name || null, ramp: r.ramp, ftp: settings.ftp, wPrime, wbalMin: wbal.length ? Math.round(wbal.reduce((m, v) => Math.min(m, v), Infinity)) : wPrime, summary: r.summary, // reduce, not Math.min(...): a 24 h brevet is 86 400 seconds, too many arguments for one call
     tss: r.summary ? tss(r.summary, settings.ftp) : 0, ghostGap: r.ghostGap ?? null, ghostName: r.ghostName || null, lapTimes: r.lapTimes || [], splits: r.splits || [], efforts: r.efforts || [],
-    race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
+    daily: r.daily || 0, race: r.race || null, raceLaps: r.raceLaps || null, groupRace: r.groupRace ? { id: r.groupRace.id, title: r.groupRace.title } : null,
     maxHr: settings.maxHr || 0, lthr: settings.lthr || 0, hrZones: settings.hrZones || null, hrZoneNames: settings.hrZoneNames || [], eventId: r.workout?.source === 'intervals' ? r.workout.eventId : null, uploadedId: null,
     bests: bestsFromSamples(samples.map((x) => x.power || 0)), // best 5 s ... 60 min, for the power curve
     stops: stopsOf(samples.map((x) => x.power || 0)), // short pauses: how many and how long in all
@@ -3551,8 +3554,65 @@ function renderEarned(e) {
   const box = $('sum-earned'), got = e.earned;
   const items = got ? [...(got.levelUp ? [`<span class="earn-lvl">⬆ ${tr('Level {n}!', { n: got.levelUp })}</span>`] : []),
     ...got.badges.map((id) => BADGES.find((b) => b.id === id)).filter(Boolean).map((b) => `<span class="earn-badge" title="${esc(tr(b.how))}">${badgeName(b)}</span>`)] : [];
+  if (e.daily) items.unshift(`<span class="earn-badge earn-daily">🎯 ${esc(tr('Challenge of the day'))} · ${esc(streakText(e.daily))}</span>`);
   box.hidden = !items.length;
   box.innerHTML = items.length ? `<span class="pr-head">${tr('Earned on this ride')}</span>${items.join('')}` : '';
+}
+
+// ---------- The challenge of the day (#55) ----------
+// One small goal a day, the same for everyone (js/daily.js), and a streak of days in a row; a simulator ride
+// counts too. Done in the ride: a toast at once, and a chip on the ride's summary.
+const DAILY_KEY = 'gruppetto.daily';
+let daily = readJson(DAILY_KEY, { done: [] });
+const saveDaily = () => { try { localStorage.setItem(DAILY_KEY, JSON.stringify(daily)); } catch { /* private mode */ } };
+const todayGoal = () => dailyGoal(localDay(), routes.filter((r) => !r.custom));
+const dailyDoneToday = () => daily.done.includes(localDay());
+
+function goalText(g) {
+  if (g.kind === 'climb') return tr('Reach the top of {climb} on {route}', { climb: g.climb, route: tr(g.route) });
+  if (g.kind === 'km') return tr('Ride {km} km, any route', { km: g.km });
+  return tr('Ride {min} minutes, any route', { min: g.min });
+}
+function streakText(n) {
+  if (!n) return tr('Start a streak: one a day');
+  return lang === 'uk' ? `🔥 ${n} ${plural(n, ['день', 'дні', 'днів'])} поспіль` : `🔥 ${n} ${n === 1 ? 'day' : 'days'} in a row`;
+}
+
+function renderDaily() {
+  const box = $('daily-box');
+  if (!box) return;
+  const g = todayGoal(), done = dailyDoneToday(), n = streakOf(daily.done);
+  box.hidden = false;
+  box.classList.toggle('done', done);
+  $('dl-icon').textContent = done ? '✅' : '🎯';
+  $('dl-goal').textContent = goalText(g);
+  $('dl-streak').textContent = done ? `${tr('Done today. A new one tomorrow')} · ${streakText(n)}` : streakText(n);
+  $('dl-ride').hidden = done;
+  $('dl-ride').textContent = g.kind === 'climb' && settings.routeId !== g.routeId ? tr('Pick the route ▶') : tr('Take it ▶');
+}
+
+$('dl-ride').onclick = () => {
+  const g = todayGoal();
+  track('daily', `take-${g.kind}`);
+  if (g.kind === 'climb' && settings.routeId !== g.routeId) {
+    settings.routeId = g.routeId; saveSettings(); markRoute(); showRoute(); updateSummary(); renderChallenge(); renderDaily();
+    $('sec-routes').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  $('btn-start').click();
+};
+
+/** Once a second in a ride: today's goal reached? Then it is done, with a toast and the streak. */
+function dailyTick() {
+  if (!ride || ride.dailyStreak || ride.group || dailyDoneToday()) return;
+  const g = todayGoal();
+  if (goalProgress(g, { dist: ride.dist, elapsed: ride.elapsed, efforts: ride.efforts, routeId: ride.route.id }) < 1) return;
+  daily.done = markDone(daily.done, localDay()); saveDaily();
+  ride.dailyStreak = streakOf(daily.done);
+  toast(`🎯 ${tr('Challenge of the day done!')} ${streakText(ride.dailyStreak)}`);
+  if (settings.sound) beep(1320, 0.15);
+  track('daily', `done-${g.kind}`);
+  if (ride.dailyStreak > 1) track('daily-streak', String(Math.min(ride.dailyStreak, 30)));
 }
 
 // ---------- A friend's ride from a link (#challenge) ----------
@@ -4007,6 +4067,7 @@ function renderFitness() {
 
 function renderHistory() {
   renderWhy();
+  renderDaily();
   renderFtpBox();
   renderProgress();
   renderChallenge();

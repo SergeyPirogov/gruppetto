@@ -83,6 +83,12 @@
         <span id="draft-text"></span>
         <span class="draft-actions"><button id="draft-continue" class="primary">Continue riding</button><button id="draft-save">Save ride</button><button id="draft-drop" class="ghost">Discard</button></span>
       </div>
+        <!-- the challenge of the day (#55): one small goal, the same for everyone, and the streak (js/daily.js) -->
+        <div id="daily-box" class="daily-box" hidden>
+          <div class="dl-icon" id="dl-icon">🎯</div>
+          <div class="dl-text"><small>Challenge of the day</small><b id="dl-goal"></b><span id="dl-streak"></span></div>
+          <div class="dl-actions"><button id="dl-ride" class="primary">Take it ▶</button></div>
+        </div>
         <!-- for a new rider (no rides yet), until closed: what Gruppetto gives, for one coming from Zwift -->
         <div id="why-box" class="why-box" hidden>
           <button class="why-close" id="why-close" aria-label="Close">✕</button>
@@ -109,6 +115,7 @@
           <div class="ch-text"><b id="ch-title"></b><span id="ch-goal"></span><small id="ch-how"></small></div>
           <div class="ch-actions"><button id="ch-ride" class="primary">Ride now ▶</button><button id="ch-drop" class="ghost">Dismiss</button></div>
         </div>
+
 
 
 

@@ -607,4 +607,9 @@ export const UK = {
   "Copy the last ride's lag log": 'Скопіювати лог лагів останнього заїзду',
   "The last ride's frame rate, every 10 s, and this device's graphics card: paste it to us when a ride lags": 'Частота кадрів останнього заїзду кожні 10 с і відеокарта цього пристрою: надішли нам, коли заїзд лагає',
   'ms': 'мс', 'worst {n} ms': 'найгірший {n} мс', 'Copied: paste it in a message to us': 'Скопійовано: встав у повідомлення нам', 'Could not copy': 'Не вдалося скопіювати',
+  // the challenge of the day (#55)
+  'Challenge of the day': 'Челендж дня', 'Reach the top of {climb} on {route}': 'Вершина {climb} на маршруті «{route}»',
+  'Ride {km} km, any route': 'Проїдь {km} км, будь-який маршрут', 'Ride {min} minutes, any route': 'Крути {min} хвилин, будь-який маршрут',
+  'Start a streak: one a day': 'Почни серію: один на день', 'Done today. A new one tomorrow': 'Сьогодні виконано. Завтра новий',
+  'Take it ▶': 'Вперед ▶', 'Pick the route ▶': 'Обрати маршрут ▶', 'Challenge of the day done!': 'Челендж дня виконано!',
 };
