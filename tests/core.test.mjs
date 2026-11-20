@@ -1224,8 +1224,8 @@ test('standing: a surge stands after 0.4 s', () => {
   assert.equal(runStand({}, { power: 300, ftp: 250, cadence: 95 }, 0.5), true);
 });
 test('standing: a grind stands', () => {
-  assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 65 }, 0.5), true);
-  assert.equal(runStand({}, { power: 100, ftp: 250, cadence: 65 }, 2), false); // under half of FTP: soft-pedalling
+  assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 55 }, 0.5), true);
+  assert.equal(runStand({}, { power: 100, ftp: 250, cadence: 55 }, 2), false); // under half of FTP: soft-pedalling
 });
 test('standing: sits after 0.8 s of easy riding', () => {
   assert.equal(runStand({ up: true }, { power: 200, ftp: 250, cadence: 90 }, 0.7), true);
@@ -1282,7 +1282,7 @@ test('standing: soft-pedalling after a grind sits down', () => {
 });
 test('standing: a grind right at the power floor does not bob', () => {
   const s = { up: true };
-  for (let i = 0; i < 100; i++) assert.equal(standStep(s, { power: (i % 6 < 3) ? 120 : 130, ftp: 250, cadence: 65 }, 0.1), true, `step ${i}`);
+  for (let i = 0; i < 100; i++) assert.equal(standStep(s, { power: (i % 6 < 3) ? 120 : 130, ftp: 250, cadence: 55 }, 0.1), true, `step ${i}`);
 });
 import { gradeColor, gradeRuns } from '../js/grade-color.js';
 test('grade colours: stops, blend, clamp', () => {
@@ -1376,4 +1376,9 @@ test('controller buttons: one by one, your map wins, untouched ones keep the Zwi
   assert.equal(ctlDevice('Zwift Ride'), 'ride');
   // the first version's pairs spread over their buttons; defaults drop out
   assert.deepEqual(ctlMigrate({ updown: 'easier|harder', y: 'skip', powerup: 'pacer|none' }), { up: 'easier', down: 'harder', y: 'skip', powerUpR: 'none' });
+});
+
+test('an ordinary climbing cadence (65-70 rpm) keeps the rider seated', () => {
+  assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 68 }, 2), false);
+  assert.equal(runStand({}, { power: 200, ftp: 250, cadence: 60 }, 0.5), true);
 });

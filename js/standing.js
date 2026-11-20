@@ -4,9 +4,9 @@
 
 const UP_POWER = 1.2;    // × FTP: a surge
 const DOWN_POWER = 1.05; // × FTP
-const GRIND_RPM = 70;    // at or under: a grind...
+const GRIND_RPM = 60;    // at or under: a grind (70 had riders up at an ordinary climbing cadence)...
 const GRIND_POWER = 0.5; // ...when pushing at least this × FTP
-const EASY_RPM = 76;     // over: spinning again
+const EASY_RPM = 66;     // over: spinning again
 const COAST_RPM = 20;    // under: not really pedalling (unless still pushing a surge: some trainers read 0 rpm when slow)
 const SOFT_POWER = 0.4;  // × FTP: under it the rider sits whatever the cadence (soft-pedalling after a grind)
 const UP_HOLD = 0.4;     // s the reason to stand has to last
